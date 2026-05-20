@@ -1,41 +1,116 @@
 import Link from "next/link";
+import { BriefLayout } from "@/components/BriefLayout";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { Card, buttonClasses } from "@/components/ui";
+import { SAMPLE_BRIEF } from "@/lib/sample-brief";
 
-const primaryLinkClasses =
-  "inline-flex min-h-11 items-center justify-center rounded-md bg-accent px-5 py-2.5 text-body-sm font-medium text-accent-fg shadow-sm transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-page";
-
-const secondaryLinkClasses =
-  "inline-flex min-h-11 items-center justify-center rounded-md border border-border-strong bg-surface px-5 py-2.5 text-body-sm font-medium text-primary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-page";
+const steps = [
+  {
+    n: "1",
+    title: "Pick interests",
+    body: "Tell Notiva the topics, beats, and questions you actually care about.",
+  },
+  {
+    n: "2",
+    title: "Agents fetch",
+    body: "Agents search the web in parallel, dedupe, and read the sources behind each story.",
+  },
+  {
+    n: "3",
+    title: "Brief arrives",
+    body: "You get one clean, editorial brief — only the news that matches what you asked for.",
+  },
+];
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-page px-4 py-16 font-sans text-primary sm:px-6 sm:py-24">
-      <div className="flex w-full max-w-2xl flex-col gap-6">
-        <p className="text-caption font-medium uppercase text-muted">Notiva</p>
-        <h1 className="text-display text-primary">
-          Personalized news, delivered by agents.
-        </h1>
-        <p className="max-w-xl text-body text-secondary">
-          Set your interests once. Our agents read the web and deliver a brief
-          with only the news you care about.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Link href="/app" className={primaryLinkClasses}>
-            Open the app
-          </Link>
-          <a
-            href="https://github.com/hakon1233/notiva"
-            target="_blank"
-            rel="noreferrer"
-            className={secondaryLinkClasses}
-          >
-            View on GitHub
-          </a>
-        </div>
-        <p className="text-caption text-muted">
-          MVP runs entirely in your browser with your own Anthropic and Exa API
-          keys. Hosted Supabase backend is the next milestone.
-        </p>
+    <main className="relative min-h-screen bg-page font-sans text-primary">
+      <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
+        <ThemeToggle />
       </div>
+
+      <section className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pt-20 pb-16 sm:px-6 sm:pt-24 lg:grid lg:grid-cols-12 lg:gap-10 lg:pt-28">
+        <div className="flex flex-col gap-6 lg:col-span-7 lg:justify-center">
+          <p className="text-caption font-medium uppercase text-muted">
+            Notiva
+          </p>
+          <h1 className="text-display text-primary">
+            Personalized news, delivered by agents.
+          </h1>
+          <p className="max-w-xl text-body text-secondary">
+            Set your interests once. Our agents read the web and deliver a
+            brief with only the news you care about.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <Link
+              href="/app"
+              className={`${buttonClasses("primary", "md")} w-full sm:w-auto`}
+            >
+              Open the app
+            </Link>
+            <a
+              href="https://github.com/hakon1233/notiva"
+              target="_blank"
+              rel="noreferrer"
+              className={`${buttonClasses("ghost", "md")} w-full sm:w-auto`}
+            >
+              View on GitHub
+            </a>
+            <a
+              href="#how-it-works"
+              className="inline-flex items-center justify-center px-1 py-2 text-body-sm font-medium text-primary underline underline-offset-4 hover:opacity-80"
+            >
+              How it works
+            </a>
+          </div>
+          <p className="text-caption text-muted">
+            MVP runs entirely in your browser with your own Anthropic and Exa
+            API keys. Hosted Supabase backend is the next milestone.
+          </p>
+        </div>
+
+        <div className="mt-6 lg:col-span-5 lg:mt-0">
+          <Card
+            tone="default"
+            padding="lg"
+            aria-label="Sample brief preview"
+            className="overflow-hidden"
+          >
+            <BriefLayout
+              brief={SAMPLE_BRIEF}
+              name="Alex"
+              preview
+            />
+          </Card>
+        </div>
+      </section>
+
+      <section
+        id="how-it-works"
+        className="mx-auto w-full max-w-6xl px-4 pb-24 sm:px-6"
+      >
+        <div className="flex flex-col gap-2 pb-8">
+          <p className="text-caption font-medium uppercase text-muted">
+            How it works
+          </p>
+          <h2 className="text-title-1 text-primary">
+            From interests to brief in three steps.
+          </h2>
+        </div>
+        <ol className="grid gap-4 sm:grid-cols-3">
+          {steps.map((step) => (
+            <li key={step.n}>
+              <Card tone="default" padding="lg" className="flex h-full flex-col gap-3">
+                <span className="inline-flex size-8 items-center justify-center rounded-pill bg-surface-muted text-body-sm font-medium text-muted">
+                  {step.n}
+                </span>
+                <h3 className="text-title-3 text-primary">{step.title}</h3>
+                <p className="text-body-sm text-secondary">{step.body}</p>
+              </Card>
+            </li>
+          ))}
+        </ol>
+      </section>
     </main>
   );
 }

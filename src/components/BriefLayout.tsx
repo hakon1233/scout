@@ -9,14 +9,16 @@ type Props = {
   brief: Brief;
   name: string;
   running?: boolean;
-  onRegenerate: () => void;
-  onEditInterests: () => void;
+  preview?: boolean;
+  onRegenerate?: () => void;
+  onEditInterests?: () => void;
 };
 
 export function BriefLayout({
   brief,
   name,
   running = false,
+  preview = false,
   onRegenerate,
   onEditInterests,
 }: Props) {
@@ -62,30 +64,32 @@ export function BriefLayout({
         </div>
       </Card>
 
-      <Card
-        tone="muted"
-        padding="md"
-        className="measure-prose flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div className="flex flex-col gap-1">
-          <p className="text-body-sm font-medium text-primary">End of brief</p>
-          <p className="text-caption text-muted">
-            Want fresher items or different topics?
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 min-[480px]:flex-row">
-          <Button variant="link" onClick={onEditInterests}>
-            Edit interests
-          </Button>
-          <Button
-            variant="secondary"
-            loading={running}
-            onClick={onRegenerate}
-          >
-            {running ? "Working…" : "Regenerate"}
-          </Button>
-        </div>
-      </Card>
+      {!preview && (
+        <Card
+          tone="muted"
+          padding="md"
+          className="measure-prose flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex flex-col gap-1">
+            <p className="text-body-sm font-medium text-primary">End of brief</p>
+            <p className="text-caption text-muted">
+              Want fresher items or different topics?
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 min-[480px]:flex-row">
+            <Button variant="link" onClick={onEditInterests}>
+              Edit interests
+            </Button>
+            <Button
+              variant="secondary"
+              loading={running}
+              onClick={onRegenerate}
+            >
+              {running ? "Working…" : "Regenerate"}
+            </Button>
+          </div>
+        </Card>
+      )}
     </article>
   );
 }

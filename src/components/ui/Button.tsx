@@ -27,6 +27,11 @@ const sizeStyles: Record<Size, string> = {
   md: "min-h-11 px-4 py-2 text-body-sm",
 };
 
+export function buttonClasses(variant: Variant = "primary", size: Size = "md") {
+  const sizing = variant === "link" ? "text-body-sm" : sizeStyles[size];
+  return `${base} ${variantStyles[variant]} ${sizing}`;
+}
+
 export function Button({
   variant = "primary",
   size = "md",
