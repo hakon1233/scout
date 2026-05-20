@@ -1,11 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { Banner, Button, Card, Field } from "@/components/ui";
+import {
+  Banner,
+  Button,
+  Field,
+  KeyInput,
+  validateAnthropicKey,
+  validateExaKey,
+} from "@/components/ui";
 import type { Settings } from "@/lib/types";
+
+type Step = 1 | 2;
 
 type Props = {
   initial?: Settings | null;
+  initialStep?: Step;
   onSave: (s: Settings) => void;
 };
 
@@ -17,82 +27,119 @@ const SAMPLE_INTERESTS = [
   "Frontend performance",
 ];
 
-export function SetupForm({ initial, onSave }: Props) {
+function keysReadyFor(anthropic: string, exa: string) {
+  return (
+    validateAnthropicKey(anthropic) === null && validateExaKey(exa) === null
+  );
+}
+
+export function SetupForm({ initial, initialStep = 1, onSave }: Props) {
+  const [step, setStep] = useState<Step>(initialStep);
   const [name, setName] = useState(initial?.name ?? "");
   const [interestText, setInterestText] = useState(
     (initial?.interests ?? []).map((i) => i.topic).join("\n"),
   );
-  const [anthropicKey, setAnthropicKey] = useState(initial?.anthropicKey ?? "");
-  const [exaKey, setExaKey] = useState(initial?.exaKey ?? "");
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [exaKey, setExaKey] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const interests = interestText
+  const hasSavedAnthropic = Boolean(initial?.anthropicKey);
+  const hasSavedExa = Boolean(initial?.exaKey);
+
+  function parseInterests() {
+    return interestText
       .split(/\n|,/)
       .map((t) => t.trim())
       .filter(Boolean)
       .slice(0, 6)
       .map((topic, i) => ({ id: `int_${i}_${topic.slice(0, 12)}`, topic }));
+  }
 
+  function submitStep1(e: React.FormEvent) {
+    e.preventDefault();
     if (!name.trim()) return setError("Please enter your name.");
-    if (interests.length === 0)
+    if (parseInterests().length === 0)
       return setError("Add at least one interest (one per line).");
-    if (!anthropicKey.startsWith("sk-ant-"))
-      return setError("Anthropic key should start with sk-ant-.");
-    if (exaKey.trim().length < 10)
-      return setError("Exa key looks too short. Paste your full key.");
+    setError(null);
+    setStep(2);
+  }
 
+  // Empty key input on step 2 means "keep the saved value" (per PER-7h trust block).
+  const effectiveAnthropic = anthropicKey || initial?.anthropicKey || "";
+  const effectiveExa = exaKey || initial?.exaKey || "";
+  const keysReady = keysReadyFor(effectiveAnthropic, effectiveExa);
+
+  function submitStep2(e: React.FormEvent) {
+    e.preventDefault();
+    const anthropicErr = validateAnthropicKey(effectiveAnthropic);
+    if (anthropicErr) return setError(anthropicErr);
+    const exaErr = validateExaKey(effectiveExa);
+    if (exaErr) return setError(exaErr);
     setError(null);
     onSave({
       name: name.trim(),
-      interests,
-      anthropicKey: anthropicKey.trim(),
-      exaKey: exaKey.trim(),
+      interests: parseInterests(),
+      anthropicKey: effectiveAnthropic.trim(),
+      exaKey: effectiveExa.trim(),
     });
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-title-1 text-primary">Set up your brief</h2>
-        <p className="mt-2 text-body-sm text-secondary">
-          MVP runs entirely in your browser. Your API keys stay in this
-          device&apos;s local storage and are sent only to Anthropic and Exa.
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <p className="text-caption uppercase text-muted">Step {step} of 2</p>
 
-      {error && <Banner tone="danger">{error}</Banner>}
+      {step === 1 ? (
+        <form onSubmit={submitStep1} className="flex flex-col gap-6">
+          <div>
+            <h2 className="text-title-1 text-primary">Set up your brief</h2>
+            <p className="mt-2 text-body-sm text-secondary">
+              Next: paste two API keys (kept on your device).
+            </p>
+          </div>
 
-      <Field
-        label="Your name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Alex"
-        autoComplete="name"
-      />
+          {error && <Banner tone="danger">{error}</Banner>}
 
-      <Field
-        as="textarea"
-        label={
-          <>
-            Interests{" "}
-            <span className="text-muted">(one per line, up to 6)</span>
-          </>
-        }
-        helper={`Try: ${SAMPLE_INTERESTS.slice(0, 3).join(", ")}.`}
-        value={interestText}
-        onChange={(e) => setInterestText(e.target.value)}
-        placeholder={SAMPLE_INTERESTS.join("\n")}
-      />
-
-      <Card padding="md" tone="default">
-        <p className="mb-3 text-caption font-medium uppercase text-muted">
-          API keys (MVP — stored locally)
-        </p>
-        <div className="flex flex-col gap-4">
           <Field
-            type="password"
+            label="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Alex"
+            autoComplete="name"
+          />
+
+          <Field
+            as="textarea"
+            label={
+              <>
+                Interests{" "}
+                <span className="text-muted">(one per line, up to 6)</span>
+              </>
+            }
+            helper={`Try: ${SAMPLE_INTERESTS.slice(0, 3).join(", ")}.`}
+            value={interestText}
+            onChange={(e) => setInterestText(e.target.value)}
+            placeholder={SAMPLE_INTERESTS.join("\n")}
+          />
+
+          <Button type="submit" variant="primary" className="self-start">
+            Continue
+          </Button>
+        </form>
+      ) : (
+        <form onSubmit={submitStep2} className="flex flex-col gap-6">
+          <div>
+            <h2 className="text-title-1 text-primary">
+              Connect your providers
+            </h2>
+            <p className="mt-2 text-body-sm text-secondary">
+              Your API keys stay in this device&apos;s local storage and are
+              sent only to Anthropic and Exa.
+            </p>
+          </div>
+
+          {error && <Banner tone="danger">{error}</Banner>}
+
+          <KeyInput
             label="Anthropic API key"
             helper={
               <>
@@ -108,15 +155,13 @@ export function SetupForm({ initial, onSave }: Props) {
                 .
               </>
             }
-            className="font-mono text-mono-xs"
+            hasSavedValue={hasSavedAnthropic}
             value={anthropicKey}
-            onChange={(e) => setAnthropicKey(e.target.value)}
+            onChange={setAnthropicKey}
             placeholder="sk-ant-…"
-            autoComplete="off"
-            spellCheck={false}
           />
-          <Field
-            type="password"
+
+          <KeyInput
             label="Exa API key"
             helper={
               <>
@@ -132,19 +177,29 @@ export function SetupForm({ initial, onSave }: Props) {
                 .
               </>
             }
-            className="font-mono text-mono-xs"
+            hasSavedValue={hasSavedExa}
             value={exaKey}
-            onChange={(e) => setExaKey(e.target.value)}
+            onChange={setExaKey}
             placeholder="…"
-            autoComplete="off"
-            spellCheck={false}
           />
-        </div>
-      </Card>
 
-      <Button type="submit" variant="primary" className="self-start">
-        Save and continue
-      </Button>
-    </form>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setError(null);
+                setStep(1);
+              }}
+            >
+              Back
+            </Button>
+            <Button type="submit" variant="primary" disabled={!keysReady}>
+              Save and continue
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }
