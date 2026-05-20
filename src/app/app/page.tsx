@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentProgressPanel } from "@/components/AgentProgressPanel";
 import { BriefLayout } from "@/components/BriefLayout";
 import { BriefSkeleton } from "@/components/BriefSkeleton";
+import { InterestChips } from "@/components/InterestChips";
 import { SetupForm } from "@/components/SetupForm";
 import { Banner, Button, Card } from "@/components/ui";
 import { runAgent, type AgentProgress } from "@/lib/agent";
@@ -14,7 +15,7 @@ import {
   saveLastBrief,
   saveSettings,
 } from "@/lib/storage";
-import type { Brief, Settings } from "@/lib/types";
+import type { Brief, Interest, Settings } from "@/lib/types";
 
 const STICKY_THRESHOLD_PX = 480;
 
@@ -27,7 +28,21 @@ export default function AppPage() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
+  const [interestsChanged, setInterestsChanged] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  const updateInterests = useCallback(
+    (next: Interest[]) => {
+      setSettings((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, interests: next };
+        saveSettings(updated);
+        return updated;
+      });
+      setInterestsChanged(true);
+    },
+    [],
+  );
 
   useEffect(() => {
     // Hydrate from localStorage on mount. Static export means first render runs
@@ -47,6 +62,7 @@ export default function AppPage() {
     setRunning(true);
     setError(null);
     setCancelled(false);
+    setInterestsChanged(false);
     setProgress({
       stage: "searching",
       message: "Starting agent…",
@@ -125,19 +141,20 @@ export default function AppPage() {
         />
       )}
 
-      <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <div>
+      <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-2">
           <p className="text-caption uppercase text-muted">Notiva · MVP</p>
           <h1 className="text-title-1 text-primary">
             {settings.name}&apos;s brief
           </h1>
-          <p className="mt-1 break-words text-caption text-muted">
-            Topics: {settings.interests.map((i) => i.topic).join(", ")}
-          </p>
+          <InterestChips
+            interests={settings.interests}
+            onChange={updateInterests}
+          />
         </div>
         <div className="flex flex-col gap-2 min-[480px]:flex-row">
           <Button variant="secondary" onClick={() => setEditing(true)}>
-            Edit interests
+            Manage interests &amp; keys
           </Button>
           <Button variant="primary" loading={running} onClick={generate}>
             {running
@@ -148,6 +165,22 @@ export default function AppPage() {
           </Button>
         </div>
       </header>
+
+      {interestsChanged && !running && (
+        <Banner tone="info">
+          <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>Interests updated. Your brief is out of date.</span>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={generate}
+              loading={running}
+            >
+              Regenerate brief now
+            </Button>
+          </span>
+        </Banner>
+      )}
 
       {progress && (
         <AgentProgressPanel progress={progress} onCancel={cancel} />
@@ -236,7 +269,7 @@ function StickyUtilityBar({
         </p>
         <div className="flex flex-row gap-2">
           <Button variant="ghost" size="sm" onClick={onEditInterests}>
-            Edit interests
+            Manage
           </Button>
           <Button
             variant="primary"
