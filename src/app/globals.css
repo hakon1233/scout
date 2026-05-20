@@ -198,6 +198,18 @@ body {
   font-family: var(--font-sans);
 }
 
+/*
+  PER-19 a11y baseline focus ring. Catches primitives that don't opt into
+  their own focus-visible utilities (Field, raw <a>, <summary>, …) so every
+  keyboard-focused interactive meets WCAG 2.4.7 / 1.4.11. Components with
+  bespoke focus styling override via their own focus-visible utilities.
+*/
+:where(a, button, summary, [role="button"], input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -263,4 +275,11 @@ body {
   padding-left: var(--space-3);
   color: var(--text-secondary);
   margin: var(--space-3) 0;
+}
+
+/* Editorial measure for long-form prose — ~68 characters wide. */
+.measure-prose {
+  max-width: 68ch;
+  margin-left: auto;
+  margin-right: auto;
 }

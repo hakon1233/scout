@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { BriefView } from "@/components/BriefView";
+import { useCallback, useEffect, useState } from "react";
+import { BriefLayout } from "@/components/BriefLayout";
 import { SetupForm } from "@/components/SetupForm";
 import { Banner, Button, Card } from "@/components/ui";
 import { runAgent, type AgentProgress } from "@/lib/agent";
@@ -13,6 +13,8 @@ import {
   saveSettings,
 } from "@/lib/storage";
 import type { Brief, Settings } from "@/lib/types";
+
+const STICKY_THRESHOLD_PX = 480;
 
 export default function AppPage() {
   const [hydrated, setHydrated] = useState(false);
@@ -33,6 +35,24 @@ export default function AppPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
+
+  const generate = useCallback(async () => {
+    if (!settings) return;
+    setRunning(true);
+    setError(null);
+    setProgress({ stage: "searching", message: "Starting agent…" });
+    try {
+      const next = await runAgent(settings, setProgress);
+      saveLastBrief(next);
+      setBrief(next);
+      setProgress(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setProgress(null);
+    } finally {
+      setRunning(false);
+    }
+  }, [settings]);
 
   if (!hydrated) {
     return (
@@ -67,26 +87,16 @@ export default function AppPage() {
     );
   }
 
-  async function generate() {
-    if (!settings) return;
-    setRunning(true);
-    setError(null);
-    setProgress({ stage: "searching", message: "Starting agent…" });
-    try {
-      const next = await runAgent(settings, setProgress);
-      saveLastBrief(next);
-      setBrief(next);
-      setProgress(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setProgress(null);
-    } finally {
-      setRunning(false);
-    }
-  }
-
   return (
     <Shell>
+      {brief && (
+        <StickyUtilityBar
+          running={running}
+          onRegenerate={generate}
+          onEditInterests={() => setEditing(true)}
+        />
+      )}
+
       <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="text-caption uppercase text-muted">Notiva · MVP</p>
@@ -128,7 +138,13 @@ export default function AppPage() {
       {error && <Banner tone="danger">{error}</Banner>}
 
       {brief ? (
-        <BriefView brief={brief} />
+        <BriefLayout
+          brief={brief}
+          name={settings.name}
+          running={running}
+          onRegenerate={generate}
+          onEditInterests={() => setEditing(true)}
+        />
       ) : (
         !running && (
           <Card tone="dashed" padding="lg" className="text-center">
@@ -159,5 +175,56 @@ function Shell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
     </main>
+  );
+}
+
+function StickyUtilityBar({
+  running,
+  onRegenerate,
+  onEditInterests,
+}: {
+  running: boolean;
+  onRegenerate: () => void;
+  onEditInterests: () => void;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    function onScroll() {
+      setVisible(window.scrollY > STICKY_THRESHOLD_PX);
+    }
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <div
+      aria-hidden={!visible}
+      className={`fixed inset-x-0 top-0 z-40 border-b border-border-default bg-surface/90 backdrop-blur transition-opacity ${
+        visible
+          ? "pointer-events-auto opacity-100"
+          : "pointer-events-none opacity-0"
+      }`}
+    >
+      <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-2 px-4 py-2 sm:px-6">
+        <p className="truncate text-caption uppercase text-muted">
+          Notiva · brief
+        </p>
+        <div className="flex flex-row gap-2">
+          <Button variant="ghost" size="sm" onClick={onEditInterests}>
+            Edit interests
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={running}
+            onClick={onRegenerate}
+          >
+            {running ? "Working…" : "Regenerate brief"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

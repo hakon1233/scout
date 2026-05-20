@@ -1,41 +1,65 @@
 "use client";
 
+import * as React from "react";
 import ReactMarkdown from "react-markdown";
-import { Card } from "@/components/ui";
 import type { Brief } from "@/lib/types";
 
 export function BriefView({ brief }: { brief: Brief }) {
-  const generated = new Date(brief.generatedAt);
+  const countsByTopicSlug = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of brief.articles) {
+      const key = slugify(a.interest);
+      m.set(key, (m.get(key) ?? 0) + 1);
+    }
+    return m;
+  }, [brief.articles]);
+
+  function sourceCountFor(headingText: string): number {
+    const slug = slugify(headingText);
+    if (countsByTopicSlug.has(slug)) return countsByTopicSlug.get(slug)!;
+    for (const [k, v] of countsByTopicSlug) {
+      if (slug.includes(k) || k.includes(slug)) return v;
+    }
+    return 0;
+  }
+
   return (
-    <article className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <p className="text-caption uppercase text-muted">
-          Generated {generated.toLocaleString()}
-        </p>
-        <p className="text-caption text-muted">
-          {brief.articles.length} source
-          {brief.articles.length === 1 ? "" : "s"} · topics:{" "}
-          {brief.interests.join(", ")}
-        </p>
-      </header>
+    <div className="flex flex-col gap-6">
+      <div className="notiva-md">
+        <ReactMarkdown
+          components={{
+            // BriefLayout owns the editorial title; suppress the LLM's H1.
+            h1: () => null,
+            h2: ({ children }) => {
+              const text = nodeToString(children);
+              const id = slugify(text) || undefined;
+              const count = sourceCountFor(text);
+              return (
+                <h2
+                  id={id}
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+                >
+                  <span>{children}</span>
+                  {count > 0 && (
+                    <span className="inline-flex items-center rounded-pill border border-border-default bg-surface-muted px-2 py-0.5 text-caption uppercase tracking-wide text-muted">
+                      {count} source{count === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </h2>
+              );
+            },
+            a: ({ href, children }) => (
+              <a href={href} target="_blank" rel="noreferrer">
+                {children}
+              </a>
+            ),
+          }}
+        >
+          {brief.markdown}
+        </ReactMarkdown>
+      </div>
 
-      <Card tone="default" padding="lg">
-        <div className="notiva-md">
-          <ReactMarkdown
-            components={{
-              a: ({ href, children }) => (
-                <a href={href} target="_blank" rel="noreferrer">
-                  {children}
-                </a>
-              ),
-            }}
-          >
-            {brief.markdown}
-          </ReactMarkdown>
-        </div>
-      </Card>
-
-      <details className="mt-4 rounded-md border border-border-default bg-surface p-3 text-body-sm">
+      <details className="rounded-md border border-border-default bg-surface-muted p-3 text-body-sm">
         <summary className="cursor-pointer font-medium text-primary">
           Sources used ({brief.articles.length})
         </summary>
@@ -55,6 +79,25 @@ export function BriefView({ brief }: { brief: Brief }) {
           ))}
         </ul>
       </details>
-    </article>
+    </div>
   );
+}
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function nodeToString(node: React.ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(nodeToString).join("");
+  if (React.isValidElement(node)) {
+    const props = node.props as { children?: React.ReactNode };
+    return nodeToString(props.children);
+  }
+  return "";
 }
