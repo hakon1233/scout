@@ -22,15 +22,21 @@ type SynthesizeOptions = {
   interests: string[];
   articles: Article[];
   timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 export async function synthesizeBrief(opts: SynthesizeOptions): Promise<string> {
-  const { apiKey, name, interests, articles, timeoutMs = 60_000 } = opts;
+  const { apiKey, name, interests, articles, timeoutMs = 60_000, signal } = opts;
 
   const userBlock = renderUserPrompt(name, interests, articles);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", onExternalAbort);
+  }
 
   try {
     const res = await fetch(ANTHROPIC_URL, {
@@ -74,6 +80,7 @@ export async function synthesizeBrief(opts: SynthesizeOptions): Promise<string> 
     return text;
   } finally {
     clearTimeout(timer);
+    if (signal) signal.removeEventListener("abort", onExternalAbort);
   }
 }
 

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
   Notiva design tokens (PER-9)
 
@@ -96,8 +98,7 @@
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+:root.dark {
     --bg-page: #000000;
     --bg-surface: var(--zinc-950);
     --bg-surface-muted: var(--zinc-900);
@@ -122,7 +123,6 @@
     --warning-fg: var(--amber-300);
     --warning-border: var(--amber-800);
     --focus-ring: var(--zinc-100);
-  }
 }
 
 @theme {
@@ -275,6 +275,59 @@ body {
   padding-left: var(--space-3);
   color: var(--text-secondary);
   margin: var(--space-3) 0;
+}
+
+/*
+  Skeleton + shimmer (PER-14)
+
+  Wrapped in @media (prefers-reduced-motion: no-preference) so users with the
+  reduce-motion OS preference see a static muted block instead of animation.
+  The global reduce-motion rule above is a belt-and-suspenders fallback.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  .notiva-skeleton {
+    background-image: linear-gradient(
+      90deg,
+      var(--bg-surface-muted) 0%,
+      var(--border-default) 50%,
+      var(--bg-surface-muted) 100%
+    );
+    background-size: 200% 100%;
+    animation: notiva-shimmer 1.4s ease-in-out infinite;
+  }
+  .notiva-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .notiva-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.18) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: notiva-shimmer-sweep 1.4s ease-in-out infinite;
+  }
+}
+@keyframes notiva-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+@keyframes notiva-shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 /* Editorial measure for long-form prose — ~68 characters wide. */

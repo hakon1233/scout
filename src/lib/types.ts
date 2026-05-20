@@ -5,6 +5,7 @@ export type Article = {
   title: string;
   url: string;
   publishedDate?: string;
+  publishedAt?: string;
   author?: string;
   source?: string;
   text?: string;

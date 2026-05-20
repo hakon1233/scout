@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AgentProgressPanel } from "@/components/AgentProgressPanel";
 import { BriefLayout } from "@/components/BriefLayout";
+import { BriefSkeleton } from "@/components/BriefSkeleton";
 import { SetupForm } from "@/components/SetupForm";
 import { Banner, Button, Card } from "@/components/ui";
 import { runAgent, type AgentProgress } from "@/lib/agent";
@@ -24,6 +26,8 @@ export default function AppPage() {
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cancelled, setCancelled] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     // Hydrate from localStorage on mount. Static export means first render runs
@@ -38,21 +42,43 @@ export default function AppPage() {
 
   const generate = useCallback(async () => {
     if (!settings) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     setError(null);
-    setProgress({ stage: "searching", message: "Starting agent…" });
+    setCancelled(false);
+    setProgress({
+      stage: "searching",
+      message: "Starting agent…",
+      perInterest: settings.interests.map((i) => ({
+        topic: i.topic,
+        state: "pending",
+      })),
+    });
     try {
-      const next = await runAgent(settings, setProgress);
+      const next = await runAgent(settings, setProgress, {
+        signal: controller.signal,
+      });
       saveLastBrief(next);
       setBrief(next);
       setProgress(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setProgress(null);
+      if (controller.signal.aborted) {
+        setCancelled(true);
+        setProgress(null);
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+        setProgress(null);
+      }
     } finally {
       setRunning(false);
+      if (abortRef.current === controller) abortRef.current = null;
     }
   }, [settings]);
+
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   if (!hydrated) {
     return (
@@ -86,6 +112,8 @@ export default function AppPage() {
       </Shell>
     );
   }
+
+  const showSkeleton = progress?.stage === "synthesizing";
 
   return (
     <Shell>
@@ -121,25 +149,17 @@ export default function AppPage() {
         </div>
       </header>
 
-      <div aria-live="polite" aria-atomic="true" className="contents">
-        {progress && (
-          <Card tone="muted" padding="sm">
-            <span className="font-medium text-primary">
-              {progress.stage === "searching"
-                ? "Searching"
-                : progress.stage === "synthesizing"
-                  ? "Synthesizing"
-                  : "…"}
-              :
-            </span>{" "}
-            <span className="text-secondary">{progress.message}</span>
-          </Card>
-        )}
-      </div>
+      {progress && (
+        <AgentProgressPanel progress={progress} onCancel={cancel} />
+      )}
+
+      {showSkeleton && <BriefSkeleton />}
+
+      {cancelled && !running && <Banner tone="info">Cancelled.</Banner>}
 
       {error && <Banner tone="danger">{error}</Banner>}
 
-      {brief ? (
+      {brief && !showSkeleton ? (
         <BriefLayout
           brief={brief}
           name={settings.name}
@@ -148,7 +168,8 @@ export default function AppPage() {
           onEditInterests={() => setEditing(true)}
         />
       ) : (
-        !running && (
+        !running &&
+        !brief && (
           <Card tone="dashed" padding="lg" className="text-center">
             <p className="text-body-sm text-muted">
               No brief yet. Click{" "}
@@ -203,7 +224,6 @@ function StickyUtilityBar({
   return (
     <div
       aria-hidden={!visible}
-      inert={!visible}
       className={`fixed inset-x-0 top-0 z-40 border-b border-border-default bg-surface/90 backdrop-blur transition-opacity ${
         visible
           ? "pointer-events-auto opacity-100"

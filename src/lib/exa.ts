@@ -14,13 +14,19 @@ type ExaResult = {
 export async function searchInterest(
   interest: string,
   apiKey: string,
-  opts: { numResults?: number; timeoutMs?: number } = {},
+  opts: { numResults?: number; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<Article[]> {
   const numResults = opts.numResults ?? 5;
   const timeoutMs = opts.timeoutMs ?? 15_000;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const external = opts.signal;
+  const onExternalAbort = () => controller.abort();
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener("abort", onExternalAbort);
+  }
 
   try {
     const res = await fetch(EXA_URL, {
@@ -52,6 +58,7 @@ export async function searchInterest(
       title: r.title ?? r.url,
       url: r.url,
       publishedDate: r.publishedDate,
+      publishedAt: r.publishedDate,
       author: r.author,
       source: hostname(r.url),
       text: r.text,
@@ -59,6 +66,7 @@ export async function searchInterest(
     }));
   } finally {
     clearTimeout(timer);
+    if (external) external.removeEventListener("abort", onExternalAbort);
   }
 }
 
