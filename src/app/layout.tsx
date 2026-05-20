@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     description,
     images: [
       {
-        url: `${basePath}/og.png`,
+        url: "og.png",
         width: 1200,
         height: 630,
         alt: "Notiva — Personalized AI news, delivered by agents.",
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title,
     description,
-    images: [`${basePath}/og.png`],
+    images: ["og.png"],
   },
   icons: {
     icon: [
