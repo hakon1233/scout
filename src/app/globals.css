@@ -1,64 +1,247 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+  Notiva design tokens (PER-9)
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  Two-layer model:
+    1. Primitive ramp values (zinc, red, etc.) live below and feed
+    2. Semantic tokens (--bg-page, --text-primary, ...) that component
+       code consumes. Component code must NOT reach into primitives
+       or use raw Tailwind ramp utilities.
+
+  Tailwind v4 utility surface: any --color-X, --text-X, --radius-X,
+  or --font-X declared inside @theme becomes a utility class
+  (e.g. bg-page, text-primary, text-display, rounded-md).
+*/
+
+:root {
+  /* Primitive ramps — only the token layer should reference these. */
+  --zinc-50: #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-800: #27272a;
+  --zinc-900: #18181b;
+  --zinc-950: #09090b;
+
+  --red-50: #fef2f2;
+  --red-300: #fca5a5;
+  --red-800: #991b1b;
+  --red-900: #7f1d1d;
+  --red-950: #450a0a;
+
+  --green-50: #f0fdf4;
+  --green-300: #86efac;
+  --green-800: #166534;
+  --green-950: #052e16;
+
+  --amber-50: #fffbeb;
+  --amber-300: #fcd34d;
+  --amber-800: #92400e;
+  --amber-950: #451a03;
+
+  --blue-50: #eff6ff;
+  --blue-300: #93c5fd;
+  --blue-800: #1e40af;
+  --blue-950: #172554;
+
+  /* Semantic — light */
+  --bg-page: var(--zinc-50);
+  --bg-surface: #ffffff;
+  --bg-surface-muted: var(--zinc-100);
+  --border-default: var(--zinc-200);
+  --border-strong: var(--zinc-300);
+  --text-primary: var(--zinc-900);
+  --text-secondary: var(--zinc-600);
+  --text-muted: var(--zinc-500);
+  --accent-bg: var(--zinc-900);
+  --accent-fg: var(--zinc-50);
+  --accent-bg-hover: var(--zinc-800);
+  --danger-bg: var(--red-50);
+  --danger-fg: var(--red-800);
+  --danger-border: var(--red-300);
+  --info-bg: var(--blue-50);
+  --info-fg: var(--blue-800);
+  --info-border: var(--blue-300);
+  --success-bg: var(--green-50);
+  --success-fg: var(--green-800);
+  --success-border: var(--green-300);
+  --warning-bg: var(--amber-50);
+  --warning-fg: var(--amber-800);
+  --warning-border: var(--amber-300);
+  --focus-ring: var(--zinc-900);
+
+  /* Space — 4px base */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 1.75rem;
+  --space-8: 2rem;
+  --space-9: 2.25rem;
+  --space-10: 2.5rem;
+  --space-11: 2.75rem;
+  --space-12: 3rem;
+
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-emphatic: 320ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg-page: #000000;
+    --bg-surface: var(--zinc-950);
+    --bg-surface-muted: var(--zinc-900);
+    --border-default: var(--zinc-800);
+    --border-strong: var(--zinc-700);
+    --text-primary: var(--zinc-50);
+    --text-secondary: var(--zinc-400);
+    --text-muted: var(--zinc-500);
+    --accent-bg: var(--zinc-100);
+    --accent-fg: var(--zinc-900);
+    --accent-bg-hover: var(--zinc-200);
+    --danger-bg: var(--red-950);
+    --danger-fg: #fecaca;
+    --danger-border: var(--red-900);
+    --info-bg: var(--blue-950);
+    --info-fg: var(--blue-300);
+    --info-border: var(--blue-800);
+    --success-bg: var(--green-950);
+    --success-fg: var(--green-300);
+    --success-border: var(--green-800);
+    --warning-bg: var(--amber-950);
+    --warning-fg: var(--amber-300);
+    --warning-border: var(--amber-800);
+    --focus-ring: var(--zinc-100);
   }
 }
 
+@theme {
+  --color-page: var(--bg-page);
+  --color-surface: var(--bg-surface);
+  --color-surface-muted: var(--bg-surface-muted);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent-bg);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-hover: var(--accent-bg-hover);
+  --color-danger: var(--danger-fg);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-border: var(--danger-border);
+  --color-info: var(--info-fg);
+  --color-info-bg: var(--info-bg);
+  --color-info-border: var(--info-border);
+  --color-success: var(--success-fg);
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning-fg);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-focus-ring: var(--focus-ring);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-pill: 9999px;
+
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.1;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 600;
+
+  --text-title-1: 1.875rem;
+  --text-title-1--line-height: 1.2;
+  --text-title-1--letter-spacing: -0.02em;
+  --text-title-1--font-weight: 600;
+
+  --text-title-2: 1.5rem;
+  --text-title-2--line-height: 1.25;
+  --text-title-2--letter-spacing: -0.015em;
+  --text-title-2--font-weight: 600;
+
+  --text-title-3: 1.125rem;
+  --text-title-3--line-height: 1.35;
+  --text-title-3--font-weight: 600;
+
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.5;
+
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.45;
+  --text-caption--letter-spacing: 0.04em;
+
+  --text-mono-xs: 0.75rem;
+  --text-mono-xs--line-height: 1.4;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 .notiva-md h1 {
-  font-size: 1.875rem;
+  font-size: var(--text-title-1);
   font-weight: 600;
   letter-spacing: -0.02em;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-3);
 }
 .notiva-md h2 {
-  font-size: 1.25rem;
+  font-size: var(--text-title-2);
   font-weight: 600;
-  margin-top: 1.75rem;
-  margin-bottom: 0.5rem;
+  margin-top: var(--space-7);
+  margin-bottom: var(--space-2);
 }
 .notiva-md h3 {
-  font-size: 1rem;
+  font-size: var(--text-title-3);
   font-weight: 600;
-  margin-top: 1.25rem;
-  margin-bottom: 0.25rem;
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-1);
 }
 .notiva-md p {
-  margin: 0.5rem 0;
+  margin: var(--space-2) 0;
   line-height: 1.6;
 }
 .notiva-md ul {
   list-style: disc;
   padding-left: 1.25rem;
-  margin: 0.5rem 0;
+  margin: var(--space-2) 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .notiva-md ol {
   list-style: decimal;
   padding-left: 1.25rem;
-  margin: 0.5rem 0;
+  margin: var(--space-2) 0;
 }
 .notiva-md li {
   line-height: 1.55;
@@ -66,21 +249,18 @@ body {
 .notiva-md a {
   text-decoration: underline;
   text-underline-offset: 2px;
+  color: var(--text-primary);
 }
 .notiva-md em {
   font-style: italic;
-  color: #71717a;
+  color: var(--text-muted);
 }
 .notiva-md strong {
   font-weight: 600;
 }
 .notiva-md blockquote {
-  border-left: 3px solid #d4d4d8;
-  padding-left: 0.75rem;
-  color: #52525b;
-  margin: 0.75rem 0;
-}
-@media (prefers-color-scheme: dark) {
-  .notiva-md em { color: #a1a1aa; }
-  .notiva-md blockquote { border-color: #3f3f46; color: #a1a1aa; }
+  border-left: 3px solid var(--border-strong);
+  padding-left: var(--space-3);
+  color: var(--text-secondary);
+  margin: var(--space-3) 0;
 }
