@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BriefView } from "@/components/BriefView";
 import { SetupForm } from "@/components/SetupForm";
+import { Banner, Button, Card } from "@/components/ui";
 import { runAgent, type AgentProgress } from "@/lib/agent";
 import {
   loadLastBrief,
@@ -36,7 +37,7 @@ export default function AppPage() {
   if (!hydrated) {
     return (
       <Shell>
-        <p className="text-sm text-zinc-500">Loading…</p>
+        <p className="text-body-sm text-muted">Loading…</p>
       </Shell>
     );
   }
@@ -53,13 +54,14 @@ export default function AppPage() {
           }}
         />
         {settings && (
-          <button
-            type="button"
-            className="mt-3 self-start text-sm text-zinc-500 underline"
+          <Button
+            variant="link"
+            size="sm"
+            className="mt-3 self-start"
             onClick={() => setEditing(false)}
           >
             Cancel
-          </button>
+          </Button>
         )}
       </Shell>
     );
@@ -85,40 +87,33 @@ export default function AppPage() {
 
   return (
     <Shell>
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-zinc-800">
+      <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-widest text-zinc-500">
-            Notiva · MVP
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <p className="text-caption uppercase text-muted">Notiva · MVP</p>
+          <h1 className="text-title-1 text-primary">
             {settings.name}&apos;s brief
           </h1>
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="mt-1 break-words text-caption text-muted">
             Topics: {settings.interests.map((i) => i.topic).join(", ")}
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-            onClick={() => setEditing(true)}
-          >
+        <div className="flex flex-col gap-2 min-[480px]:flex-row">
+          <Button variant="secondary" onClick={() => setEditing(true)}>
             Edit interests
-          </button>
-          <button
-            type="button"
-            disabled={running}
-            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-            onClick={generate}
-          >
-            {running ? "Working…" : brief ? "Regenerate brief" : "Generate brief"}
-          </button>
+          </Button>
+          <Button variant="primary" loading={running} onClick={generate}>
+            {running
+              ? "Working…"
+              : brief
+                ? "Regenerate brief"
+                : "Generate brief"}
+          </Button>
         </div>
       </header>
 
       {progress && (
-        <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <span className="font-medium">
+        <Card tone="muted" padding="sm">
+          <span className="font-medium text-primary">
             {progress.stage === "searching"
               ? "Searching"
               : progress.stage === "synthesizing"
@@ -126,24 +121,23 @@ export default function AppPage() {
                 : "…"}
             :
           </span>{" "}
-          {progress.message}
-        </div>
+          <span className="text-secondary">{progress.message}</span>
+        </Card>
       )}
 
-      {error && (
-        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-          {error}
-        </div>
-      )}
+      {error && <Banner tone="danger">{error}</Banner>}
 
       {brief ? (
         <BriefView brief={brief} />
       ) : (
         !running && (
-          <div className="rounded-md border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">
-            No brief yet. Click <span className="font-medium">Generate brief</span>{" "}
-            to run the agent on your topics.
-          </div>
+          <Card tone="dashed" padding="lg" className="text-center">
+            <p className="text-body-sm text-muted">
+              No brief yet. Click{" "}
+              <span className="font-medium text-primary">Generate brief</span>{" "}
+              to run the agent on your topics.
+            </p>
+          </Card>
         )
       )}
     </Shell>
@@ -152,12 +146,12 @@ export default function AppPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="min-h-screen bg-zinc-50 px-6 py-12 text-zinc-900 dark:bg-black dark:text-zinc-50">
+    <main className="min-h-screen bg-page px-4 py-8 text-primary sm:px-6 sm:py-12">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <nav className="flex items-center justify-between">
           <Link
             href="/"
-            className="text-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+            className="text-caption uppercase text-muted transition hover:text-primary"
           >
             ← Notiva
           </Link>

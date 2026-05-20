@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Banner, Button, Card, Field } from "@/components/ui";
 import type { Settings } from "@/lib/types";
 
 type Props = {
@@ -19,9 +20,7 @@ const SAMPLE_INTERESTS = [
 export function SetupForm({ initial, onSave }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
   const [interestText, setInterestText] = useState(
-    (initial?.interests ?? [])
-      .map((i) => i.topic)
-      .join("\n"),
+    (initial?.interests ?? []).map((i) => i.topic).join("\n"),
   );
   const [anthropicKey, setAnthropicKey] = useState(initial?.anthropicKey ?? "");
   const [exaKey, setExaKey] = useState(initial?.exaKey ?? "");
@@ -56,109 +55,96 @@ export function SetupForm({ initial, onSave }: Props) {
   return (
     <form onSubmit={submit} className="flex flex-col gap-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Set up your brief
-        </h2>
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          MVP runs entirely in your browser. Your API keys stay in this device&apos;s
-          local storage and are sent only to Anthropic and Exa.
+        <h2 className="text-title-1 text-primary">Set up your brief</h2>
+        <p className="mt-2 text-body-sm text-secondary">
+          MVP runs entirely in your browser. Your API keys stay in this
+          device&apos;s local storage and are sent only to Anthropic and Exa.
         </p>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-          {error}
-        </div>
-      )}
+      {error && <Banner tone="danger">{error}</Banner>}
 
-      <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">Your name</span>
-        <input
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Alex"
-          autoComplete="name"
-        />
-      </label>
+      <Field
+        label="Your name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Alex"
+        autoComplete="name"
+      />
 
-      <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">
-          Interests <span className="text-zinc-500">(one per line, up to 6)</span>
-        </span>
-        <textarea
-          className="min-h-32 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
-          value={interestText}
-          onChange={(e) => setInterestText(e.target.value)}
-          placeholder={SAMPLE_INTERESTS.join("\n")}
-        />
-        <span className="text-xs text-zinc-500">
-          Try: {SAMPLE_INTERESTS.slice(0, 3).join(", ")}.
-        </span>
-      </label>
+      <Field
+        as="textarea"
+        label={
+          <>
+            Interests{" "}
+            <span className="text-muted">(one per line, up to 6)</span>
+          </>
+        }
+        helper={`Try: ${SAMPLE_INTERESTS.slice(0, 3).join(", ")}.`}
+        value={interestText}
+        onChange={(e) => setInterestText(e.target.value)}
+        placeholder={SAMPLE_INTERESTS.join("\n")}
+      />
 
-      <fieldset className="flex flex-col gap-4 rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
-        <legend className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
+      <Card padding="md" tone="default">
+        <p className="mb-3 text-caption font-medium uppercase text-muted">
           API keys (MVP — stored locally)
-        </legend>
-
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Anthropic API key</span>
-          <input
+        </p>
+        <div className="flex flex-col gap-4">
+          <Field
             type="password"
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs shadow-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
+            label="Anthropic API key"
+            helper={
+              <>
+                Get one at{" "}
+                <a
+                  className="underline"
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  console.anthropic.com
+                </a>
+                .
+              </>
+            }
+            className="font-mono text-mono-xs"
             value={anthropicKey}
             onChange={(e) => setAnthropicKey(e.target.value)}
             placeholder="sk-ant-…"
             autoComplete="off"
             spellCheck={false}
           />
-          <span className="text-xs text-zinc-500">
-            Get one at{" "}
-            <a
-              className="underline"
-              href="https://console.anthropic.com/settings/keys"
-              target="_blank"
-              rel="noreferrer"
-            >
-              console.anthropic.com
-            </a>
-            .
-          </span>
-        </label>
-
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Exa API key</span>
-          <input
+          <Field
             type="password"
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs shadow-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
+            label="Exa API key"
+            helper={
+              <>
+                Get one at{" "}
+                <a
+                  className="underline"
+                  href="https://dashboard.exa.ai/api-keys"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  dashboard.exa.ai
+                </a>
+                .
+              </>
+            }
+            className="font-mono text-mono-xs"
             value={exaKey}
             onChange={(e) => setExaKey(e.target.value)}
             placeholder="…"
             autoComplete="off"
             spellCheck={false}
           />
-          <span className="text-xs text-zinc-500">
-            Get one at{" "}
-            <a
-              className="underline"
-              href="https://dashboard.exa.ai/api-keys"
-              target="_blank"
-              rel="noreferrer"
-            >
-              dashboard.exa.ai
-            </a>
-            .
-          </span>
-        </label>
-      </fieldset>
+        </div>
+      </Card>
 
-      <button
-        type="submit"
-        className="rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-      >
+      <Button type="submit" variant="primary" className="self-start">
         Save and continue
-      </button>
+      </Button>
     </form>
   );
 }
