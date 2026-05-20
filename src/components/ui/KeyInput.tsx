@@ -44,7 +44,7 @@ export function KeyInput({
   const [revealed, setRevealed] = React.useState(false);
 
   const effectivePlaceholder = hasSavedValue
-    ? "Saved on this device — leave blank to keep"
+    ? "Saved — leave blank to keep"
     : placeholder;
 
   const helperWithToggle = (
@@ -71,6 +71,7 @@ export function KeyInput({
       data-1p-ignore="true"
       data-lpignore="true"
       className={className}
+      data-saved={hasSavedValue ? "true" : undefined}
       placeholder={effectivePlaceholder}
       helper={helperWithToggle}
       successHint={successHint}

@@ -35,3 +35,9 @@ export function saveLastBrief(b: Brief): void {
 export function clearLastBrief(): void {
   window.localStorage.removeItem(BRIEF_KEY);
 }
+
+export function clearSettings(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(SETTINGS_KEY);
+  window.localStorage.removeItem(BRIEF_KEY);
+}

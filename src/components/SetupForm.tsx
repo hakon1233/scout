@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import {
   Banner,
   Button,
+  Card,
   Field,
   KeyInput,
   validateAnthropicKey,
   validateExaKey,
 } from "@/components/ui";
+import { clearSettings } from "@/lib/storage";
 import type { Settings } from "@/lib/types";
 
 type Step = 1 | 2;
@@ -17,6 +19,8 @@ type Props = {
   initial?: Settings | null;
   initialStep?: Step;
   onSave: (s: Settings) => void;
+  /** Wipe stored settings + last brief, then reset wizard to step 1. */
+  onClearStoredKeys?: () => void;
 };
 
 const SAMPLE_INTERESTS = [
@@ -49,7 +53,12 @@ function validateInterests(v: string): string | null {
   return null;
 }
 
-export function SetupForm({ initial, initialStep = 1, onSave }: Props) {
+export function SetupForm({
+  initial,
+  initialStep = 1,
+  onSave,
+  onClearStoredKeys,
+}: Props) {
   const [step, setStep] = useState<Step>(initialStep);
   const [name, setName] = useState(initial?.name ?? "");
   const [interestText, setInterestText] = useState(
@@ -64,6 +73,9 @@ export function SetupForm({ initial, initialStep = 1, onSave }: Props) {
 
   const [submittedStep1, setSubmittedStep1] = useState(false);
   const [submittedStep2, setSubmittedStep2] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const hasStoredKeys = Boolean(initial?.anthropicKey || initial?.exaKey);
 
   // Mirror each field's validity for the disabled-on-invalid Continue button.
   const [nameErr, setNameErr] = useState<string | null>(
@@ -217,6 +229,70 @@ export function SetupForm({ initial, initialStep = 1, onSave }: Props) {
 
           {transportError && <Banner tone="danger">{transportError}</Banner>}
 
+          <Card tone="muted" padding="md" aria-label="How your keys are handled">
+            <ul className="flex flex-col gap-2 text-caption text-secondary">
+              <li className="flex gap-2">
+                <span aria-hidden className="shrink-0">🔒</span>
+                <span>
+                  Keys are stored in this browser&apos;s{" "}
+                  <code className="font-mono text-mono-xs">localStorage</code>{" "}
+                  — not on any Notiva server.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span aria-hidden className="shrink-0">↗</span>
+                <span>
+                  Requests go directly from your browser to Anthropic and Exa.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span aria-hidden className="shrink-0">🗑</span>
+                <span>Clear stored keys any time below.</span>
+              </li>
+            </ul>
+          </Card>
+
+          {confirmClear && (
+            <Banner tone="warning">
+              <span className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  Clear stored name, interests, keys, and last brief from this
+                  browser?
+                </span>
+                <span className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirmClear(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      clearSettings();
+                      setConfirmClear(false);
+                      setAnthropicKey("");
+                      setExaKey("");
+                      setName("");
+                      setInterestText("");
+                      setSubmittedStep1(false);
+                      setSubmittedStep2(false);
+                      setTransportError(null);
+                      setStep(1);
+                      onClearStoredKeys?.();
+                    }}
+                  >
+                    Clear stored keys
+                  </Button>
+                </span>
+              </span>
+            </Banner>
+          )}
+
           <KeyInput
             label="Anthropic API key"
             helper={
@@ -305,6 +381,23 @@ export function SetupForm({ initial, initialStep = 1, onSave }: Props) {
               </span>
             )}
           </div>
+
+          {hasStoredKeys && (
+            <div className="flex items-center justify-between border-t border-border-default pt-4">
+              <span className="text-caption text-muted">
+                Stored on this device.
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmClear(true)}
+                aria-expanded={confirmClear}
+              >
+                Clear stored keys
+              </Button>
+            </div>
+          )}
         </form>
       )}
       {/* Reference unused validity state for lint-friendliness — the
