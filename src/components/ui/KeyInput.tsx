@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Field } from "./Field";
+import { Field, type FieldValidateOn } from "./Field";
 
 type KeyInputProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
@@ -9,10 +9,15 @@ type KeyInputProps = Omit<
 > & {
   label: React.ReactNode;
   helper?: React.ReactNode;
+  successHint?: React.ReactNode;
   error?: React.ReactNode;
   hasSavedValue?: boolean;
   value: string;
   onChange: (next: string) => void;
+  validate?: (value: string) => string | null;
+  validateOn?: FieldValidateOn;
+  onValidityChange?: (error: string | null) => void;
+  showSubmitErrors?: boolean;
 };
 
 /** Trim surrounding whitespace and a pasted "Bearer " prefix. */
@@ -26,9 +31,14 @@ export function KeyInput({
   hasSavedValue = false,
   placeholder,
   helper,
+  successHint,
   className = "font-mono text-mono-xs",
   value,
   onChange,
+  validate,
+  validateOn = "blur",
+  onValidityChange,
+  showSubmitErrors,
   ...rest
 }: KeyInputProps) {
   const [revealed, setRevealed] = React.useState(false);
@@ -55,6 +65,7 @@ export function KeyInput({
   return (
     <Field
       type={revealed ? "text" : "password"}
+      inputMode="text"
       autoComplete="off"
       spellCheck={false}
       data-1p-ignore="true"
@@ -62,6 +73,7 @@ export function KeyInput({
       className={className}
       placeholder={effectivePlaceholder}
       helper={helperWithToggle}
+      successHint={successHint}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onPaste={(e) => {
@@ -70,6 +82,10 @@ export function KeyInput({
         e.preventDefault();
         onChange(sanitizeKey(text));
       }}
+      validate={validate}
+      validateOn={validateOn}
+      onValidityChange={onValidityChange}
+      showSubmitErrors={showSubmitErrors}
       {...rest}
     />
   );

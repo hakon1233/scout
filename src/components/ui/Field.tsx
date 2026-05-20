@@ -1,10 +1,23 @@
 import * as React from "react";
 
+export type FieldValidateOn = "blur" | "change" | "submit";
+
 type Common = {
   label: React.ReactNode;
   helper?: React.ReactNode;
+  /** Externally-controlled error. If omitted, derived from `validate`. */
   error?: React.ReactNode;
+  /** Helper rendered in success tone when valid + touched + non-empty. */
+  successHint?: React.ReactNode;
   id?: string;
+  /** Pure validator. Returns null when valid, or a short message. */
+  validate?: (value: string) => string | null;
+  /** When to evaluate `validate`. Defaults to `blur`. */
+  validateOn?: FieldValidateOn;
+  /** Called whenever the underlying validation result changes. */
+  onValidityChange?: (error: string | null) => void;
+  /** Set true on submit to surface previously-suppressed errors. */
+  showSubmitErrors?: boolean;
 };
 
 type InputProps = Common &
@@ -17,7 +30,7 @@ type TextareaProps = Common &
     as: "textarea";
   };
 
-type FieldProps = InputProps | TextareaProps;
+export type FieldProps = InputProps | TextareaProps;
 
 const controlBase =
   "w-full rounded-md border bg-surface px-3 py-2 text-body-sm text-primary shadow-sm outline-none transition " +
@@ -35,20 +48,79 @@ function useFieldId(provided?: string) {
 }
 
 export function Field(props: FieldProps) {
-  const { label, helper, error, id: providedId, ...rest } = props;
+  const {
+    label,
+    helper,
+    error: errorProp,
+    successHint,
+    id: providedId,
+    validate,
+    validateOn = "blur",
+    onValidityChange,
+    showSubmitErrors,
+    ...rest
+  } = props;
+
   const id = useFieldId(providedId);
+  const isTextarea = (props as TextareaProps).as === "textarea";
+
+  const [touched, setTouched] = React.useState(false);
+  const value = (rest as { value?: string }).value ?? "";
+  const valueStr = String(value);
+
+  const computedError = React.useMemo(
+    () => (validate ? validate(valueStr) : null),
+    [validate, valueStr],
+  );
+
+  const lastReportedRef = React.useRef<string | null | undefined>(undefined);
+  React.useEffect(() => {
+    if (lastReportedRef.current !== computedError) {
+      lastReportedRef.current = computedError;
+      onValidityChange?.(computedError);
+    }
+  }, [computedError, onValidityChange]);
+
+  const surface = validateOn === "change" || showSubmitErrors || touched;
+  const derivedError = surface ? computedError : null;
+  const error = errorProp ?? derivedError;
+  const invalid = Boolean(error);
+
+  const showSuccess =
+    !invalid && touched && Boolean(successHint) && valueStr.length > 0;
+
   const helperId = helper ? `${id}-helper` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [helperId, errorId].filter(Boolean).join(" ") || undefined;
-  const invalid = Boolean(error);
-  const borderClass = invalid ? "border-danger-border" : "border-border-strong";
+  const describedBy =
+    [helperId, errorId].filter(Boolean).join(" ") || undefined;
+  const borderClass = invalid
+    ? "border-danger-border"
+    : showSuccess
+      ? "border-success-border"
+      : "border-border-strong";
 
-  const isTextarea = (props as TextareaProps).as === "textarea";
-  const { as: _as, className = "", ...controlRest } = rest as {
+  const {
+    as: _as,
+    className = "",
+    onBlur: onBlurProp,
+    ...controlRest
+  } = rest as {
     as?: string;
     className?: string;
+    onBlur?: React.FocusEventHandler<HTMLInputElement | HTMLTextAreaElement>;
   } & Record<string, unknown>;
   void _as;
+
+  function handleBlur(
+    e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) {
+    if (!touched) setTouched(true);
+    (
+      onBlurProp as
+        | React.FocusEventHandler<HTMLInputElement | HTMLTextAreaElement>
+        | undefined
+    )?.(e);
+  }
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -60,6 +132,7 @@ export function Field(props: FieldProps) {
           id={id}
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
+          onBlur={handleBlur}
           className={`${controlBase} ${borderClass} min-h-32 ${className}`}
           {...(controlRest as React.TextareaHTMLAttributes<HTMLTextAreaElement>)}
         />
@@ -68,20 +141,24 @@ export function Field(props: FieldProps) {
           id={id}
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
+          onBlur={handleBlur}
           className={`${controlBase} ${borderClass} ${className}`}
           {...(controlRest as React.InputHTMLAttributes<HTMLInputElement>)}
         />
       )}
-      {helper && !error && (
-        <span id={helperId} className="text-caption text-muted">
-          {helper}
-        </span>
-      )}
-      {error && (
+      {error ? (
         <span id={errorId} className="text-caption text-danger">
           {error}
         </span>
-      )}
+      ) : showSuccess ? (
+        <span id={helperId} className="text-caption text-success">
+          {successHint}
+        </span>
+      ) : helper ? (
+        <span id={helperId} className="text-caption text-muted">
+          {helper}
+        </span>
+      ) : null}
     </div>
   );
 }

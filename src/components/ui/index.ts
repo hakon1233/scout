@@ -1,5 +1,5 @@
 export { Button } from "./Button";
-export { Field } from "./Field";
+export { Field, type FieldValidateOn, type FieldProps } from "./Field";
 export {
   KeyInput,
   sanitizeKey,
