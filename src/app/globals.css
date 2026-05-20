@@ -24,3 +24,63 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.notiva-md h1 {
+  font-size: 1.875rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.75rem;
+}
+.notiva-md h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+.notiva-md h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+.notiva-md p {
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+.notiva-md ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.notiva-md ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+}
+.notiva-md li {
+  line-height: 1.55;
+}
+.notiva-md a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.notiva-md em {
+  font-style: italic;
+  color: #71717a;
+}
+.notiva-md strong {
+  font-weight: 600;
+}
+.notiva-md blockquote {
+  border-left: 3px solid #d4d4d8;
+  padding-left: 0.75rem;
+  color: #52525b;
+  margin: 0.75rem 0;
+}
+@media (prefers-color-scheme: dark) {
+  .notiva-md em { color: #a1a1aa; }
+  .notiva-md blockquote { border-color: #3f3f46; color: #a1a1aa; }
+}
