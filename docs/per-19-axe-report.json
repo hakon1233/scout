@@ -1,0 +1,32 @@
+{
+  "landing": {
+    "url": "http://localhost:4311/",
+    "counts": {
+      "violations": 0,
+      "passes": 28,
+      "incomplete": 0,
+      "inapplicable": 61
+    },
+    "violations": []
+  },
+  "app_setup": {
+    "url": "http://localhost:4311/app/",
+    "counts": {
+      "violations": 0,
+      "passes": 35,
+      "incomplete": 0,
+      "inapplicable": 54
+    },
+    "violations": []
+  },
+  "app_brief": {
+    "url": "http://localhost:4311/app/",
+    "counts": {
+      "violations": 0,
+      "passes": 33,
+      "incomplete": 0,
+      "inapplicable": 56
+    },
+    "violations": []
+  }
+}

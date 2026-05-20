@@ -56,8 +56,8 @@
   --border-default: var(--zinc-200);
   --border-strong: var(--zinc-300);
   --text-primary: var(--zinc-900);
-  --text-secondary: var(--zinc-600);
-  --text-muted: var(--zinc-500);
+  --text-secondary: var(--zinc-700);
+  --text-muted: var(--zinc-600);
   --accent-bg: var(--zinc-900);
   --accent-fg: var(--zinc-50);
   --accent-bg-hover: var(--zinc-800);
@@ -104,8 +104,8 @@
     --border-default: var(--zinc-800);
     --border-strong: var(--zinc-700);
     --text-primary: var(--zinc-50);
-    --text-secondary: var(--zinc-400);
-    --text-muted: var(--zinc-500);
+    --text-secondary: var(--zinc-300);
+    --text-muted: var(--zinc-400);
     --accent-bg: var(--zinc-100);
     --accent-fg: var(--zinc-900);
     --accent-bg-hover: var(--zinc-200);

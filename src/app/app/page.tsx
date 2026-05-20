@@ -121,19 +121,21 @@ export default function AppPage() {
         </div>
       </header>
 
-      {progress && (
-        <Card tone="muted" padding="sm">
-          <span className="font-medium text-primary">
-            {progress.stage === "searching"
-              ? "Searching"
-              : progress.stage === "synthesizing"
-                ? "Synthesizing"
-                : "…"}
-            :
-          </span>{" "}
-          <span className="text-secondary">{progress.message}</span>
-        </Card>
-      )}
+      <div aria-live="polite" aria-atomic="true" className="contents">
+        {progress && (
+          <Card tone="muted" padding="sm">
+            <span className="font-medium text-primary">
+              {progress.stage === "searching"
+                ? "Searching"
+                : progress.stage === "synthesizing"
+                  ? "Synthesizing"
+                  : "…"}
+              :
+            </span>{" "}
+            <span className="text-secondary">{progress.message}</span>
+          </Card>
+        )}
+      </div>
 
       {error && <Banner tone="danger">{error}</Banner>}
 
@@ -201,6 +203,7 @@ function StickyUtilityBar({
   return (
     <div
       aria-hidden={!visible}
+      inert={!visible}
       className={`fixed inset-x-0 top-0 z-40 border-b border-border-default bg-surface/90 backdrop-blur transition-opacity ${
         visible
           ? "pointer-events-auto opacity-100"

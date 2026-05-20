@@ -136,7 +136,7 @@ export function SetupForm({ initial, initialStep = 1, onSave }: Props) {
       {step === 1 ? (
         <form onSubmit={submitStep1} className="flex flex-col gap-6" noValidate>
           <div>
-            <h2 className="text-title-1 text-primary">Set up your brief</h2>
+            <h1 className="text-title-1 text-primary">Set up your brief</h1>
             <p className="mt-2 text-body-sm text-secondary">
               Next: paste two API keys (kept on your device).
             </p>
@@ -206,9 +206,9 @@ export function SetupForm({ initial, initialStep = 1, onSave }: Props) {
       ) : (
         <form onSubmit={submitStep2} className="flex flex-col gap-6" noValidate>
           <div>
-            <h2 className="text-title-1 text-primary">
+            <h1 className="text-title-1 text-primary">
               Connect your providers
-            </h2>
+            </h1>
             <p className="mt-2 text-body-sm text-secondary">
               Your API keys stay in this device&apos;s local storage and are
               sent only to Anthropic and Exa.
