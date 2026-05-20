@@ -1,3 +1,4 @@
+import { fromHttp, fromTransport, NotivaError } from "./errors";
 import type { Article } from "./types";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -38,8 +39,9 @@ export async function synthesizeBrief(opts: SynthesizeOptions): Promise<string> 
     else signal.addEventListener("abort", onExternalAbort);
   }
 
+  let res: Response;
   try {
-    const res = await fetch(ANTHROPIC_URL, {
+    res = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -61,10 +63,22 @@ export async function synthesizeBrief(opts: SynthesizeOptions): Promise<string> 
       }),
       signal: controller.signal,
     });
+  } catch (err) {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener("abort", onExternalAbort);
+    if (signal?.aborted) throw err;
+    throw fromTransport("anthropic", err);
+  }
 
+  try {
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`Anthropic ${res.status}: ${body.slice(0, 300)}`);
+      throw fromHttp(
+        "anthropic",
+        res.status,
+        body,
+        res.headers.get("retry-after"),
+      );
     }
 
     const json = (await res.json()) as {
@@ -76,7 +90,13 @@ export async function synthesizeBrief(opts: SynthesizeOptions): Promise<string> 
       .join("\n")
       .trim();
 
-    if (!text) throw new Error("Anthropic returned empty brief");
+    if (!text) {
+      throw new NotivaError({
+        kind: "unknown",
+        provider: "anthropic",
+        message: "Anthropic returned an empty brief.",
+      });
+    }
     return text;
   } finally {
     clearTimeout(timer);

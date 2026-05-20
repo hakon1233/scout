@@ -1,3 +1,4 @@
+import { fromHttp, fromTransport } from "./errors";
 import type { Article } from "./types";
 
 const EXA_URL = "https://api.exa.ai/search";
@@ -28,8 +29,9 @@ export async function searchInterest(
     else external.addEventListener("abort", onExternalAbort);
   }
 
+  let res: Response;
   try {
-    const res = await fetch(EXA_URL, {
+    res = await fetch(EXA_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -45,10 +47,17 @@ export async function searchInterest(
       }),
       signal: controller.signal,
     });
+  } catch (err) {
+    clearTimeout(timer);
+    if (external) external.removeEventListener("abort", onExternalAbort);
+    if (external?.aborted) throw err;
+    throw fromTransport("exa", err);
+  }
 
+  try {
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`Exa ${res.status}: ${body.slice(0, 200)}`);
+      throw fromHttp("exa", res.status, body, res.headers.get("retry-after"));
     }
 
     const json = (await res.json()) as { results?: ExaResult[] };

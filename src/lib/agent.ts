@@ -1,4 +1,5 @@
 import { synthesizeBrief } from "./anthropic";
+import { NotivaError } from "./errors";
 import { dedupeArticles, searchInterest } from "./exa";
 import type { Article, Brief, Settings } from "./types";
 
@@ -23,22 +24,50 @@ export type AgentProgress = {
 
 export type RunAgentOptions = {
   signal?: AbortSignal;
+  /** Restrict the run to a subset of the settings' topics (used by Retry failed). */
+  onlyTopics?: string[];
 };
+
+export class NoArticlesError extends NotivaError {
+  failedTopics: string[];
+  constructor(failedTopics: string[]) {
+    super({
+      kind: "unknown",
+      provider: failedTopics.length ? "exa" : "app",
+      message: failedTopics.length
+        ? `Exa returned no results for ${failedTopics.length} topic${
+            failedTopics.length === 1 ? "" : "s"
+          }.`
+        : "No articles found for your topics.",
+    });
+    this.name = "NoArticlesError";
+    this.failedTopics = failedTopics;
+  }
+}
 
 export async function runAgent(
   settings: Settings,
   onProgress: (p: AgentProgress) => void,
   options: RunAgentOptions = {},
 ): Promise<Brief> {
-  const { signal } = options;
+  const { signal, onlyTopics } = options;
+
+  const restrictSet = onlyTopics
+    ? new Set(onlyTopics.map((t) => t.trim()).filter(Boolean))
+    : null;
 
   const interests = settings.interests
     .slice(0, MAX_INTERESTS)
     .map((i) => i.topic.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((t) => (restrictSet ? restrictSet.has(t) : true));
 
   if (interests.length === 0) {
-    throw new Error("Add at least one interest before generating a brief.");
+    throw new NotivaError({
+      kind: "unknown",
+      provider: "app",
+      message: "Add at least one interest before generating a brief.",
+    });
   }
 
   // All Exa fetches kick off in parallel via Promise.allSettled below, so the
@@ -104,11 +133,13 @@ export async function runAgent(
   });
 
   if (articles.length === 0) {
-    throw new Error(
-      failedTopics.length
-        ? `Exa search failed for all topics (e.g. "${failedTopics[0]}"). Check your Exa key.`
-        : "No articles found for your topics. Try broader or different interests.",
+    const firstFailure = searches.find(
+      (s): s is PromiseRejectedResult => s.status === "rejected",
     );
+    if (firstFailure && firstFailure.reason instanceof NotivaError) {
+      throw firstFailure.reason;
+    }
+    throw new NoArticlesError(failedTopics);
   }
 
   const unique = dedupeArticles(articles).slice(0, MAX_ARTICLES_TO_SYNTHESIZE);
@@ -141,6 +172,7 @@ export async function runAgent(
     interests,
     articles: unique,
     markdown,
+    failedTopics: failedTopics.length ? failedTopics : undefined,
   };
 
   onProgress({

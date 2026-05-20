@@ -3,13 +3,18 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentProgressPanel } from "@/components/AgentProgressPanel";
+import { AppSkeleton } from "@/components/AppSkeleton";
 import { BriefLayout } from "@/components/BriefLayout";
 import { BriefSkeleton } from "@/components/BriefSkeleton";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import { InterestChips } from "@/components/InterestChips";
 import { SetupForm } from "@/components/SetupForm";
-import { Banner, Button, Card } from "@/components/ui";
+import { Banner, Button, EmptyState } from "@/components/ui";
 import { runAgent, type AgentProgress } from "@/lib/agent";
+import { classifyError, type ClassifiedError } from "@/lib/errors";
+import { SAMPLE_BRIEF } from "@/lib/sample-brief";
 import {
+  clearSettings,
   loadLastBrief,
   loadSettings,
   saveLastBrief,
@@ -19,14 +24,17 @@ import type { Brief, Interest, Settings } from "@/lib/types";
 
 const STICKY_THRESHOLD_PX = 480;
 
+type EditTarget = "interests" | "keys";
+
 export default function AppPage() {
   const [hydrated, setHydrated] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<EditTarget | null>(null);
   const [brief, setBrief] = useState<Brief | null>(null);
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ClassifiedError | null>(null);
+  const [zeroResults, setZeroResults] = useState(false);
   const [cancelled, setCancelled] = useState(false);
   const [interestsChanged, setInterestsChanged] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -55,42 +63,64 @@ export default function AppPage() {
     setHydrated(true);
   }, []);
 
-  const generate = useCallback(async () => {
-    if (!settings) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setRunning(true);
-    setError(null);
-    setCancelled(false);
-    setInterestsChanged(false);
-    setProgress({
-      stage: "searching",
-      message: "Starting agent…",
-      perInterest: settings.interests.map((i) => ({
-        topic: i.topic,
-        state: "pending",
-      })),
-    });
-    try {
-      const next = await runAgent(settings, setProgress, {
-        signal: controller.signal,
+  const runGeneration = useCallback(
+    async (onlyTopics?: string[]) => {
+      if (!settings) return;
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setRunning(true);
+      setError(null);
+      setZeroResults(false);
+      setCancelled(false);
+      setInterestsChanged(false);
+      const activeTopics = onlyTopics
+        ? settings.interests.filter((i) => onlyTopics.includes(i.topic))
+        : settings.interests;
+      setProgress({
+        stage: "searching",
+        message: "Starting agent…",
+        perInterest: activeTopics.map((i) => ({
+          topic: i.topic,
+          state: "pending",
+        })),
       });
-      saveLastBrief(next);
-      setBrief(next);
-      setProgress(null);
-    } catch (e) {
-      if (controller.signal.aborted) {
-        setCancelled(true);
+      try {
+        const next = await runAgent(settings, setProgress, {
+          signal: controller.signal,
+          onlyTopics,
+        });
+        saveLastBrief(next);
+        setBrief(next);
         setProgress(null);
-      } else {
-        setError(e instanceof Error ? e.message : String(e));
-        setProgress(null);
+      } catch (e) {
+        if (controller.signal.aborted) {
+          setCancelled(true);
+          setProgress(null);
+        } else {
+          const classified = classifyError(e);
+          if (
+            classified.kind === "unknown" &&
+            (e as Error)?.name === "NoArticlesError"
+          ) {
+            setZeroResults(true);
+          } else {
+            setError(classified);
+          }
+          setProgress(null);
+        }
+      } finally {
+        setRunning(false);
+        if (abortRef.current === controller) abortRef.current = null;
       }
-    } finally {
-      setRunning(false);
-      if (abortRef.current === controller) abortRef.current = null;
-    }
-  }, [settings]);
+    },
+    [settings],
+  );
+
+  const generate = useCallback(() => runGeneration(), [runGeneration]);
+  const retryFailedTopics = useCallback(
+    (topics: string[]) => runGeneration(topics),
+    [runGeneration],
+  );
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -99,7 +129,7 @@ export default function AppPage() {
   if (!hydrated) {
     return (
       <Shell>
-        <p className="text-body-sm text-muted">Loading…</p>
+        <AppSkeleton />
       </Shell>
     );
   }
@@ -109,10 +139,17 @@ export default function AppPage() {
       <Shell>
         <SetupForm
           initial={settings}
+          initialStep={editing === "keys" ? 2 : 1}
           onSave={(s) => {
             saveSettings(s);
             setSettings(s);
-            setEditing(false);
+            setEditing(null);
+          }}
+          onClearStoredKeys={() => {
+            clearSettings();
+            setSettings(null);
+            setBrief(null);
+            setEditing(null);
           }}
         />
         {settings && (
@@ -120,7 +157,7 @@ export default function AppPage() {
             variant="link"
             size="sm"
             className="mt-3 self-start"
-            onClick={() => setEditing(false)}
+            onClick={() => setEditing(null)}
           >
             Cancel
           </Button>
@@ -137,7 +174,7 @@ export default function AppPage() {
         <StickyUtilityBar
           running={running}
           onRegenerate={generate}
-          onEditInterests={() => setEditing(true)}
+          onEditInterests={() => setEditing("interests")}
         />
       )}
 
@@ -153,7 +190,7 @@ export default function AppPage() {
           />
         </div>
         <div className="flex flex-col gap-2 min-[480px]:flex-row">
-          <Button variant="secondary" onClick={() => setEditing(true)}>
+          <Button variant="secondary" onClick={() => setEditing("interests")}>
             Manage interests &amp; keys
           </Button>
           <Button variant="primary" loading={running} onClick={generate}>
@@ -190,7 +227,46 @@ export default function AppPage() {
 
       {cancelled && !running && <Banner tone="info">Cancelled.</Banner>}
 
-      {error && <Banner tone="danger">{error}</Banner>}
+      {error && (
+        <ErrorBanner
+          error={error}
+          onRetry={generate}
+          onEditKeys={() => setEditing("keys")}
+        />
+      )}
+
+      {zeroResults && !running && (
+        <EmptyState
+          title="No articles found"
+          body="Try broader interests or fewer constraints."
+          primary={{
+            label: "Edit interests",
+            onClick: () => setEditing("interests"),
+          }}
+          secondary={{ label: "Try again", onClick: generate }}
+        />
+      )}
+
+      {brief?.failedTopics && brief.failedTopics.length > 0 && !running && (
+        <Banner tone="warning">
+          <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Some topics didn&apos;t come back:{" "}
+              <span className="font-medium">
+                {brief.failedTopics.join(", ")}
+              </span>
+              .
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => retryFailedTopics(brief.failedTopics ?? [])}
+            >
+              Retry failed
+            </Button>
+          </span>
+        </Banner>
+      )}
 
       {brief && !showSkeleton ? (
         <BriefLayout
@@ -198,18 +274,24 @@ export default function AppPage() {
           name={settings.name}
           running={running}
           onRegenerate={generate}
-          onEditInterests={() => setEditing(true)}
+          onEditInterests={() => setEditing("interests")}
         />
       ) : (
         !running &&
-        !brief && (
-          <Card tone="dashed" padding="lg" className="text-center">
-            <p className="text-body-sm text-muted">
-              No brief yet. Click{" "}
-              <span className="font-medium text-primary">Generate brief</span>{" "}
-              to run the agent on your topics.
-            </p>
-          </Card>
+        !brief &&
+        !zeroResults &&
+        !error && (
+          <div className="flex flex-col gap-3">
+            <Banner tone="info">
+              Example brief — click{" "}
+              <span className="font-medium">Generate</span> to make your own.
+            </Banner>
+            <BriefLayout
+              brief={SAMPLE_BRIEF}
+              name={settings.name}
+              preview
+            />
+          </div>
         )
       )}
     </Shell>

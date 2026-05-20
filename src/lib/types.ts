@@ -18,6 +18,7 @@ export type Brief = {
   interests: string[];
   articles: Article[];
   markdown: string;
+  failedTopics?: string[];
 };
 
 export type Settings = {
