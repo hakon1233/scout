@@ -40,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# companion package build output
+/packages/*/dist
+/packages/*/node_modules
+
+# supabase local dev artifacts
+/supabase/.branches
+/supabase/.temp

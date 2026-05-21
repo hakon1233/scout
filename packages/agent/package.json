@@ -1,0 +1,33 @@
+{
+  "name": "@notiva/agent",
+  "version": "0.1.0",
+  "description": "Local news-brief agent for Notiva. Reads your interests from Supabase, fetches articles via Exa, shells out to your local `claude` CLI for synthesis, and writes the result back. Your Anthropic OAuth token never leaves your machine.",
+  "bin": {
+    "notiva-agent": "./dist/cli.js"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^20.0.0"
+  },
+  "license": "UNLICENSED",
+  "publishConfig": {
+    "access": "public"
+  }
+}
