@@ -23,7 +23,7 @@ export default function Home() {
             Open the app
           </Link>
           <a
-            href="https://github.com/hakon1233/notiva"
+            href="https://github.com/hakon1233/scout"
             target="_blank"
             rel="noreferrer"
             className={secondaryLinkClasses}
