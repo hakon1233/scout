@@ -10,7 +10,7 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-page px-4 py-16 font-sans text-primary sm:px-6 sm:py-24">
       <div className="flex w-full max-w-2xl flex-col gap-6">
-        <p className="text-caption font-medium uppercase text-muted">Notiva</p>
+        <p className="text-caption font-medium uppercase text-muted">Scout</p>
         <h1 className="text-display text-primary">
           Personalized news, delivered by agents.
         </h1>
