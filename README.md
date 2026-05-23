@@ -1,7 +1,9 @@
 # Notiva
 
-Personalized AI news platform. Set your interests, agents fetch and synthesize
-a brief with only the news you care about.
+> Scout is a personalised AI news platform.
+
+Set your interests, agents fetch and synthesize a brief with only the news you
+care about.
 
 Stack (see PER-2 architecture doc, v2): Next.js 15 (App Router, static export)
 hosted on GitHub Pages, Supabase for Postgres + Auth + Edge Functions, Anthropic
