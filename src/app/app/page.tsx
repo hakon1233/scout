@@ -11,6 +11,11 @@ import { InterestChips } from "@/components/InterestChips";
 import { SetupForm } from "@/components/SetupForm";
 import { Banner, Button, EmptyState } from "@/components/ui";
 import { runAgent, type AgentProgress } from "@/lib/agent";
+import {
+  loadCompanionToken,
+  pingCompanion,
+  refreshBriefViaCompanion,
+} from "@/lib/companion";
 import { classifyError, type ClassifiedError } from "@/lib/errors";
 import { SAMPLE_BRIEF } from "@/lib/sample-brief";
 import {
@@ -37,6 +42,7 @@ export default function AppPage() {
   const [zeroResults, setZeroResults] = useState(false);
   const [cancelled, setCancelled] = useState(false);
   const [interestsChanged, setInterestsChanged] = useState(false);
+  const [companionReady, setCompanionReady] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const updateInterests = useCallback(
@@ -62,6 +68,59 @@ export default function AppPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    let cancelled = false;
+    const check = async () => {
+      const ok = loadCompanionToken() ? await pingCompanion() : false;
+      if (!cancelled) setCompanionReady(ok);
+    };
+    check();
+    const id = setInterval(check, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [hydrated]);
+
+  const refreshViaCompanion = useCallback(async () => {
+    if (!settings) return;
+    const token = loadCompanionToken();
+    if (!token) {
+      setError(classifyError(new Error("No pairing token. Visit /app/connect to pair.")));
+      return;
+    }
+    setRunning(true);
+    setError(null);
+    setZeroResults(false);
+    setCancelled(false);
+    setInterestsChanged(false);
+    setProgress({
+      stage: "synthesizing",
+      message: "Companion is fetching & synthesizing your brief…",
+      perInterest: settings.interests.map((i) => ({ topic: i.topic, state: "pending" })),
+    });
+    try {
+      const since = brief?.generatedAt ?? new Date(0).toISOString();
+      const next = await refreshBriefViaCompanion(
+        settings.interests.map((i) => i.topic),
+        token,
+        { sinceTs: since },
+      );
+      next.failedTopics = settings.interests
+        .map((i) => i.topic)
+        .filter((t) => !next.interests.includes(t));
+      saveLastBrief(next);
+      setBrief(next);
+      setProgress(null);
+    } catch (e) {
+      setError(classifyError(e));
+      setProgress(null);
+    } finally {
+      setRunning(false);
+    }
+  }, [settings, brief]);
 
   const runGeneration = useCallback(
     async (onlyTopics?: string[]) => {
@@ -193,6 +252,16 @@ export default function AppPage() {
           <Button variant="secondary" onClick={() => setEditing("interests")}>
             Manage interests &amp; keys
           </Button>
+          {companionReady && (
+            <Button
+              variant="secondary"
+              loading={running}
+              onClick={refreshViaCompanion}
+              title="Use the local @notiva/agent companion"
+            >
+              {running ? "Working…" : "Refresh brief (companion)"}
+            </Button>
+          )}
           <Button variant="primary" loading={running} onClick={generate}>
             {running
               ? "Working…"

@@ -12,7 +12,7 @@
 // `claude` CLI; we never read or forward that token.
 
 import { loadState, newPairingToken, saveState, STATE_FILE } from "./state.js";
-import { PKG_VERSION, startServer } from "./server.js";
+import { DEFAULT_PORT, PKG_VERSION, startServer } from "./server.js";
 
 async function cmdPair(): Promise<void> {
   const state = await loadState();
@@ -42,8 +42,8 @@ async function cmdRun(portArg?: string): Promise<void> {
     console.error("not paired. run `notiva-agent pair` first.");
     process.exit(1);
   }
-  const port = portArg ? Number(portArg) : Number(process.env.NOTIVA_AGENT_PORT ?? 0);
-  const { port: bound } = await startServer(Number.isFinite(port) ? port : 0);
+  const port = portArg ? Number(portArg) : DEFAULT_PORT;
+  const { port: bound } = await startServer(Number.isFinite(port) ? port : DEFAULT_PORT);
   console.log(`@notiva/agent v${PKG_VERSION} listening on http://127.0.0.1:${bound}`);
   console.log("Endpoints: GET /healthz, POST /v0/interests, GET /v0/briefs?since=<iso>");
 }

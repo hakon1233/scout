@@ -31,7 +31,10 @@ test("loopback round-trip: pair → POST interests → poll briefs", async () =>
   const claudeBin = await makeStubClaude();
 
   const exaCalls: string[] = [];
-  const exaFetcher = async (_url: any, init?: any): Promise<Response> => {
+  const exaFetcher = async (
+    _url: string | URL,
+    init?: { body?: string },
+  ): Promise<Response> => {
     const body = JSON.parse(init?.body ?? "{}");
     exaCalls.push(body.query);
     return new Response(
@@ -54,7 +57,7 @@ test("loopback round-trip: pair → POST interests → poll briefs", async () =>
 
   const { server, port } = await startServer(0, {
     stateFile,
-    exaFetcher: exaFetcher as any,
+    exaFetcher: exaFetcher as unknown as typeof fetch,
     claudeBin,
     onSynthesisDone: (b) => synthesisDone(b),
   });
