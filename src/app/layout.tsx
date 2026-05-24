@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-const siteUrl = "https://hakon1233.github.io/notiva/";
-const title = "Notiva — Personalized AI news, delivered by agents.";
+const siteUrl = "https://hakon1233.github.io/scout/";
+const title = "Scout — Personalized AI news, delivered by agents.";
 const description =
   "Set your interests, get a brief from agents covering only the news you care about.";
 
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: siteUrl,
-    siteName: "Notiva",
+    siteName: "Scout",
     title,
     description,
     images: [
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
         url: "og.png",
         width: 1200,
         height: 630,
-        alt: "Notiva — Personalized AI news, delivered by agents.",
+        alt: "Scout — Personalized AI news, delivered by agents.",
       },
     ],
   },

@@ -2,8 +2,10 @@
 
 import type { Brief, Settings } from "./types";
 
-const SETTINGS_KEY = "notiva.settings.v1";
-const BRIEF_KEY = "notiva.lastBrief.v1";
+const SETTINGS_KEY = "scout.settings.v1";
+const BRIEF_KEY = "scout.lastBrief.v1";
+const LEGACY_SETTINGS_KEY = "notiva.settings.v1";
+const LEGACY_BRIEF_KEY = "notiva.lastBrief.v1";
 
 function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null;
@@ -14,9 +16,23 @@ function safeParse<T>(raw: string | null): T | null {
   }
 }
 
+function readWithMigration(key: string, legacyKey: string): string | null {
+  const current = window.localStorage.getItem(key);
+  if (current !== null) return current;
+  const legacy = window.localStorage.getItem(legacyKey);
+  if (legacy !== null) {
+    window.localStorage.setItem(key, legacy);
+    window.localStorage.removeItem(legacyKey);
+    return legacy;
+  }
+  return null;
+}
+
 export function loadSettings(): Settings | null {
   if (typeof window === "undefined") return null;
-  return safeParse<Settings>(window.localStorage.getItem(SETTINGS_KEY));
+  return safeParse<Settings>(
+    readWithMigration(SETTINGS_KEY, LEGACY_SETTINGS_KEY),
+  );
 }
 
 export function saveSettings(s: Settings): void {
@@ -25,7 +41,7 @@ export function saveSettings(s: Settings): void {
 
 export function loadLastBrief(): Brief | null {
   if (typeof window === "undefined") return null;
-  return safeParse<Brief>(window.localStorage.getItem(BRIEF_KEY));
+  return safeParse<Brief>(readWithMigration(BRIEF_KEY, LEGACY_BRIEF_KEY));
 }
 
 export function saveLastBrief(b: Brief): void {

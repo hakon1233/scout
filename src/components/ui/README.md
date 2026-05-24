@@ -1,4 +1,4 @@
-# Notiva UI primitives (PER-9 seed)
+# Scout UI primitives (PER-9 seed)
 
 The MVP UI is built on a small set of primitives and a token layer in `src/app/globals.css`. Component code must never reach into primitive ramps (`zinc-*`, `red-*`, …) — only semantic tokens or the primitives below.
 

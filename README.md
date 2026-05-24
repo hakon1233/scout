@@ -1,4 +1,4 @@
-# Notiva
+# Scout
 
 > Scout is a personalised AI news platform.
 

@@ -4,7 +4,7 @@ import type { Article } from "./types";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-opus-4-7";
 
-const SYSTEM_BRIEF = `You are Notiva, an agent that writes personalized news briefs.
+const SYSTEM_BRIEF = `You are Scout, an agent that writes personalized news briefs.
 
 Goal: turn a batch of recent articles into a short, scannable brief for the reader, focused only on the topics they care about.
 
