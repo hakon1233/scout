@@ -41,7 +41,7 @@ export function BriefView({ brief }: { brief: Brief }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="notiva-md">
+      <div className="scout-md">
         <ReactMarkdown
           components={{
             h1: () => null,

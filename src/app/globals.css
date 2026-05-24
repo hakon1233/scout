@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
-  Notiva design tokens (PER-9)
+  Scout design tokens (PER-9)
 
   Two-layer model:
     1. Primitive ramp values (zinc, red, etc.) live below and feed
@@ -220,29 +220,29 @@ body {
   }
 }
 
-.notiva-md h1 {
+.scout-md h1 {
   font-size: var(--text-title-1);
   font-weight: 600;
   letter-spacing: -0.02em;
   margin-bottom: var(--space-3);
 }
-.notiva-md h2 {
+.scout-md h2 {
   font-size: var(--text-title-2);
   font-weight: 600;
   margin-top: var(--space-7);
   margin-bottom: var(--space-2);
 }
-.notiva-md h3 {
+.scout-md h3 {
   font-size: var(--text-title-3);
   font-weight: 600;
   margin-top: var(--space-5);
   margin-bottom: var(--space-1);
 }
-.notiva-md p {
+.scout-md p {
   margin: var(--space-2) 0;
   line-height: 1.6;
 }
-.notiva-md ul {
+.scout-md ul {
   list-style: disc;
   padding-left: 1.25rem;
   margin: var(--space-2) 0;
@@ -250,27 +250,27 @@ body {
   flex-direction: column;
   gap: var(--space-2);
 }
-.notiva-md ol {
+.scout-md ol {
   list-style: decimal;
   padding-left: 1.25rem;
   margin: var(--space-2) 0;
 }
-.notiva-md li {
+.scout-md li {
   line-height: 1.55;
 }
-.notiva-md a {
+.scout-md a {
   text-decoration: underline;
   text-underline-offset: 2px;
   color: var(--text-primary);
 }
-.notiva-md em {
+.scout-md em {
   font-style: italic;
   color: var(--text-muted);
 }
-.notiva-md strong {
+.scout-md strong {
   font-weight: 600;
 }
-.notiva-md blockquote {
+.scout-md blockquote {
   border-left: 3px solid var(--border-strong);
   padding-left: var(--space-3);
   color: var(--text-secondary);
