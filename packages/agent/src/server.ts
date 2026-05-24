@@ -39,6 +39,7 @@ const CORS_ALLOWED_ORIGINS = [
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
   /^https:\/\/[a-z0-9-]+\.vercel\.app$/,
   /^https:\/\/notiva\.[a-z.]+$/,
+  /^https:\/\/[a-z0-9-]+\.github\.io$/,
 ];
 
 function corsHeaders(origin: string | undefined): Record<string, string> {
