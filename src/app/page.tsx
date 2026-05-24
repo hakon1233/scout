@@ -32,7 +32,7 @@ export default function Home() {
       <section className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pt-20 pb-16 sm:px-6 sm:pt-24 lg:grid lg:grid-cols-12 lg:gap-10 lg:pt-28">
         <div className="flex flex-col gap-6 lg:col-span-7 lg:justify-center">
           <p className="text-caption font-medium uppercase text-muted">
-            Notiva
+            Scout
           </p>
           <h1 className="text-display text-primary">
             Personalized news, delivered by agents.
@@ -49,7 +49,7 @@ export default function Home() {
               Open the app
             </Link>
             <a
-              href="https://github.com/hakon1233/notiva"
+              href="https://github.com/hakon1233/scout"
               target="_blank"
               rel="noreferrer"
               className={`${buttonClasses("ghost", "md")} w-full sm:w-auto`}
