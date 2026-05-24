@@ -23,8 +23,8 @@ binary on your `PATH`; the binary handles its own auth.
 # one-time: generate a pairing token, paste it into the Notiva Connect page
 npx @notiva/agent pair
 
-# start the loopback server (default: OS-picked port; override with --port or NOTIVA_AGENT_PORT)
-npx @notiva/agent run --port 17893
+# start the loopback server (default port: 47821; override with --port or NOTIVA_AGENT_PORT)
+npx @notiva/agent run
 
 # check state
 npx @notiva/agent status
@@ -64,5 +64,5 @@ Delete the file to un-pair.
 
 ## Environment overrides
 
-- `NOTIVA_AGENT_PORT` — bind port (default 0, OS-picked).
+- `NOTIVA_AGENT_PORT` — bind port (default 47821).
 - `NOTIVA_CLAUDE_BIN` — path to the `claude` binary (default `claude` from `PATH`).

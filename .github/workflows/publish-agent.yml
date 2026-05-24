@@ -1,0 +1,29 @@
+name: Publish @notiva/agent to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "npm tag (e.g. latest, next)"
+        required: false
+        default: latest
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @notiva/agent test
+      - run: pnpm --filter @notiva/agent build
+      - run: pnpm --filter @notiva/agent publish --access public --tag ${{ inputs.tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
