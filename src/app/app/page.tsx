@@ -239,7 +239,7 @@ export default function AppPage() {
 
       <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="flex flex-col gap-2">
-          <p className="text-caption uppercase text-muted">Notiva · MVP</p>
+          <p className="text-caption uppercase text-muted">Scout · MVP</p>
           <h1 className="text-title-1 text-primary">
             {settings.name}&apos;s brief
           </h1>
@@ -376,7 +376,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             href="/"
             className="text-caption uppercase text-muted transition hover:text-primary"
           >
-            ← Notiva
+            ← Scout
           </Link>
         </nav>
         {children}
@@ -416,7 +416,7 @@ function StickyUtilityBar({
     >
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-2 px-4 py-2 sm:px-6">
         <p className="truncate text-caption uppercase text-muted">
-          Notiva · brief
+          Scout · brief
         </p>
         <div className="flex flex-row gap-2">
           <Button variant="ghost" size="sm" onClick={onEditInterests}>
