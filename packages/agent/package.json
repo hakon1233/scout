@@ -1,7 +1,7 @@
 {
   "name": "@notiva/agent",
-  "version": "0.1.0",
-  "description": "Local news-brief agent for Notiva. Reads your interests from Supabase, fetches articles via Exa, shells out to your local `claude` CLI for synthesis, and writes the result back. Your Anthropic OAuth token never leaves your machine.",
+  "version": "0.2.0",
+  "description": "Local loopback companion for Notiva. Runs an HTTP server on 127.0.0.1 that the Notiva web app talks to, fetches articles via Exa, and shells out to your local `claude` CLI for synthesis. Your Anthropic OAuth token never leaves your machine.",
   "bin": {
     "notiva-agent": "./dist/cli.js"
   },
@@ -16,11 +16,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
+    "test": "tsx test/loopback.test.ts",
     "prepublishOnly": "npm run build"
   },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.45.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",

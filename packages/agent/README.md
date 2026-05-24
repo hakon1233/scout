@@ -1,56 +1,68 @@
 # @notiva/agent
 
-Local news-brief companion for [Notiva](https://github.com/notiva). Runs entirely on your
-machine. Reads your interests from Notiva (via Supabase), fetches recent articles via Exa,
-and shells out to your locally-authenticated `claude` CLI for synthesis. The resulting
-brief is written back to your Notiva account where the web reader picks it up.
+Local loopback companion for [Notiva](https://github.com/notiva). Runs an HTTP
+server on `127.0.0.1` only. The Notiva web app talks to it directly from your
+browser — there is no Supabase, no backend, no data leaving your machine
+except outbound calls you authorize (Exa search, your local `claude` CLI).
 
 ## Why local
 
-Your Anthropic OAuth token (`sk-ant-oat01-…`) never leaves your machine. Notiva's servers
-never see it, store it, or relay it. We just talk to the `claude` binary on your `PATH`.
+Your Anthropic OAuth token (`sk-ant-oat01-…`) never leaves your machine. Notiva
+never sees, stores, or relays it. The companion shells out to the `claude`
+binary on your `PATH`; the binary handles its own auth.
 
 ## Requires
 
 - Node 20+
 - The Claude Code CLI installed and authenticated (`claude --version` should work)
-- A Notiva account at the deployed web URL — sign in, set 3+ interests, click **Connect
-  your agent**, copy the pairing code
+- An Exa API key (the v0 companion uses BYO Exa — no shared proxy)
 
 ## Use
 
 ```bash
-# one-time pairing
-npx @notiva/agent pair        # paste the pairing code
+# one-time: generate a pairing token, paste it into the Notiva Connect page
+npx @notiva/agent pair
 
-# generate a brief once
-npx @notiva/agent run --once
+# start the loopback server (default: OS-picked port; override with --port or NOTIVA_AGENT_PORT)
+npx @notiva/agent run --port 17893
 
-# poll every 15 minutes
-npx @notiva/agent run
+# check state
+npx @notiva/agent status
 ```
 
-## Files
+## Endpoints
 
-- Config + JWT live at `~/.config/notiva/agent.json` (chmod 600). Delete the file to
-  un-pair.
+The companion exposes three endpoints, all bound to `127.0.0.1`:
 
-## Configuration
+| Method | Path                      | Auth   | Body / Query                        |
+| ------ | ------------------------- | ------ | ----------------------------------- |
+| GET    | `/healthz`                | none   | —                                   |
+| POST   | `/v0/interests`           | Bearer | `{ "interests": ["topic", ...] }`   |
+| GET    | `/v0/briefs?since=<iso>`  | Bearer | —                                   |
 
-Defaults are baked in at publish time. To point at a self-hosted Supabase, override:
+Auth is `Authorization: Bearer <pairing-token>`.
 
-```bash
-NOTIVA_SUPABASE_URL=…  NOTIVA_SUPABASE_ANON_KEY=…  npx @notiva/agent run --once
-```
+## State
 
-If Notiva is operating under "BYO Exa" mode (no shared Exa key configured upstream),
-add your own Exa key to `~/.config/notiva/agent.json`:
+Everything lives at `~/.config/notiva/state.json` (chmod 0600):
 
 ```json
 {
-  "user_id": "…",
-  "access_token": "…",
-  "expires_at": 0,
-  "exa_key": "exa_…"
+  "pairing_token": "…",
+  "exa_key": "exa_…",
+  "last_brief": {
+    "id": "…",
+    "status": "ready",
+    "generated_at": "2026-05-24T12:00:00.000Z",
+    "summary_md": "# Your brief\n…",
+    "articles": [{ "interest": "…", "title": "…", "url": "…" }]
+  }
 }
 ```
+
+Delete the file to un-pair.
+
+## Environment overrides
+
+- `NOTIVA_AGENT_PORT` — bind port (default 0, OS-picked).
+- `NOTIVA_CLAUDE_BIN` — path to the `claude` binary (default `claude` from `PATH`).
