@@ -24,7 +24,7 @@ import { exaSearch, type Fetcher } from "./exa.js";
 import { synthesizeWithClaude } from "./synthesize.js";
 
 export const PKG_VERSION = "0.2.0";
-export const DEFAULT_PORT = Number(process.env.NOTIVA_AGENT_PORT ?? 0); // 0 => let OS pick
+export const DEFAULT_PORT = Number(process.env.NOTIVA_AGENT_PORT ?? 47821);
 
 export type ServerDeps = {
   stateFile?: string;

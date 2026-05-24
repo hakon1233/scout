@@ -1,0 +1,161 @@
+// Loopback client for the @notiva/agent companion.
+// The companion binds to 127.0.0.1:47821 by default; we try that first
+// then fall back to a small known-port sweep so a user who started the
+// agent on a different port can still pair.
+
+import type { Brief as AppBrief, Article } from "./types";
+
+export const COMPANION_PORT = 47821;
+// Tried in order. Keep small — this only runs on the Connect page ping.
+export const COMPANION_PORT_SWEEP = [47821, 47822, 47823, 47830, 47840];
+const TOKEN_KEY = "notiva.companion.token";
+
+let cachedBase: string | null = null;
+
+function baseFor(port: number): string {
+  return `http://127.0.0.1:${port}`;
+}
+
+export function loadCompanionToken(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(TOKEN_KEY) ?? "";
+}
+
+export function saveCompanionToken(token: string): void {
+  window.localStorage.setItem(TOKEN_KEY, token.trim());
+}
+
+async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
+  try {
+    const res = await fetch(`${baseFor(port)}/healthz`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Returns the base URL of the live companion, or null. Caches the result
+// so subsequent calls in the same session skip the sweep.
+export async function discoverCompanion(): Promise<string | null> {
+  if (cachedBase) {
+    if (await pingPort(new URL(cachedBase).port ? Number(new URL(cachedBase).port) : COMPANION_PORT)) {
+      return cachedBase;
+    }
+    cachedBase = null;
+  }
+  for (const port of COMPANION_PORT_SWEEP) {
+    if (await pingPort(port)) {
+      cachedBase = baseFor(port);
+      return cachedBase;
+    }
+  }
+  return null;
+}
+
+export async function pingCompanion(): Promise<boolean> {
+  return (await discoverCompanion()) !== null;
+}
+
+async function requireBase(): Promise<string> {
+  const base = await discoverCompanion();
+  if (!base) throw new Error("Companion not reachable. Start `npx @notiva/agent run` and try again.");
+  return base;
+}
+
+export async function postInterests(
+  interests: string[],
+  token: string,
+): Promise<{ brief_id: string; status: string }> {
+  const base = await requireBase();
+  const res = await fetch(`${base}/v0/interests`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify({ interests }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
+      error: string;
+      hint?: string;
+    };
+    throw new Error(err.hint ?? err.error);
+  }
+  return res.json() as Promise<{ brief_id: string; status: string }>;
+}
+
+type AgentBrief = {
+  id: string;
+  generated_at: string;
+  status: string;
+  summary_md?: string;
+  error_msg?: string;
+  articles: Array<{
+    interest: string;
+    title: string;
+    url: string;
+    snippet?: string;
+    published?: string;
+  }>;
+};
+
+function adaptBrief(b: AgentBrief): AppBrief {
+  return {
+    id: b.id,
+    generatedAt: b.generated_at,
+    interests: [...new Set(b.articles.map((a) => a.interest))],
+    articles: b.articles.map(
+      (a, i): Article => ({
+        id: `${b.id}-${i}`,
+        title: a.title,
+        url: a.url,
+        publishedDate: a.published,
+        interest: a.interest,
+        text: a.snippet,
+      }),
+    ),
+    markdown: b.summary_md ?? "",
+  };
+}
+
+// Returns ready briefs strictly newer than `sinceTs`. Pending/failed are surfaced
+// via `pollBriefsRaw` for the polling loop.
+export async function pollBriefs(sinceTs: string, token: string): Promise<AppBrief[]> {
+  const briefs = await pollBriefsRaw(sinceTs, token);
+  return briefs.filter((b) => b.status === "ready" && b.summary_md).map(adaptBrief);
+}
+
+export async function pollBriefsRaw(sinceTs: string, token: string): Promise<AgentBrief[]> {
+  const base = await requireBase();
+  const url = `${base}/v0/briefs?since=${encodeURIComponent(sinceTs)}`;
+  const res = await fetch(url, {
+    headers: { authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as { briefs: AgentBrief[] };
+  return json.briefs;
+}
+
+// Kick a synthesis pass on the companion and poll until a fresh brief
+// (newer than `sinceTs`) lands or `timeoutMs` elapses. Throws on failure.
+export async function refreshBriefViaCompanion(
+  interests: string[],
+  token: string,
+  opts: { sinceTs?: string; timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<AppBrief> {
+  const since = opts.sinceTs ?? new Date(0).toISOString();
+  const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
+  await postInterests(interests, token);
+  while (Date.now() < deadline) {
+    if (opts.signal?.aborted) throw new Error("aborted");
+    await new Promise((r) => setTimeout(r, 2000));
+    const briefs = await pollBriefsRaw(since, token);
+    const latest = briefs[0];
+    if (!latest) continue;
+    if (latest.status === "ready" && latest.summary_md) return adaptBrief(latest);
+    if (latest.status === "failed") throw new Error(latest.error_msg ?? "synthesis failed");
+  }
+  throw new Error("Timed out waiting for the companion brief.");
+}

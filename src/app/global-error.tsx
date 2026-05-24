@@ -1,23 +1,21 @@
 "use client";
 
 export default function GlobalError({
-  reset,
+  unstable_retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  unstable_retry: () => void;
 }) {
   return (
     <html lang="en">
-      <body className="flex min-h-screen flex-col items-center justify-center bg-page px-6 py-24 font-sans text-primary">
-        <div className="flex w-full max-w-2xl flex-col gap-4">
-          <h1 className="text-title-1 text-primary">Something went wrong</h1>
-          <p className="text-secondary">
-            An unexpected error occurred. Please try again.
-          </p>
+      <body style={{ display: "flex", minHeight: "100vh", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "4rem 1.5rem", fontFamily: "sans-serif" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: "40rem", width: "100%" }}>
+          <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>Something went wrong</h1>
+          <p style={{ color: "#666" }}>An unexpected error occurred. Please try again.</p>
           <button
             type="button"
-            onClick={() => reset()}
-            className="w-fit rounded-pill bg-accent px-5 py-2 text-body-sm font-medium text-accent-fg"
+            onClick={() => unstable_retry()}
+            style={{ width: "fit-content", borderRadius: "9999px", background: "#2563eb", color: "#fff", padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 500, border: "none", cursor: "pointer" }}
           >
             Retry
           </button>
