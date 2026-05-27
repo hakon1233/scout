@@ -180,6 +180,13 @@ export default function ConnectPage() {
           Run this once in your terminal to install and generate a pairing token:
         </p>
         <CmdBlock cmd={`${INSTALL_CMD}\n${PAIR_CMD}`} copyKey="pair" copied={copied} onCopy={copy} />
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          Note: the npm package is still published under the legacy{" "}
+          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">@notiva/</code>{" "}
+          scope. A republish under{" "}
+          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">@scout/</code>{" "}
+          is tracked separately.
+        </p>
         <p className="text-sm text-gray-600 dark:text-gray-300">
           The command prints a token. Paste it below:
         </p>
