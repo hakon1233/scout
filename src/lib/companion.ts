@@ -3,7 +3,7 @@
 // then fall back to a small known-port sweep so a user who started the
 // agent on a different port can still pair.
 
-import type { Brief as AppBrief, Article } from "./types";
+import type { Brief as AppBrief } from "./types";
 
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
@@ -91,31 +91,51 @@ type AgentBrief = {
   status: string;
   summary_md?: string;
   error_msg?: string;
-  articles: Array<{
-    interest: string;
-    title: string;
-    url: string;
-    snippet?: string;
-    published?: string;
-  }>;
 };
 
+// The companion no longer returns a structured `articles` list — the model
+// emits the brief markdown directly, with citations inline as `[domain — Title](url)`.
+// We parse those out so the rest of the UI (Sources panel, interest chips) keeps
+// working without changing its data shape.
+const LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+const TOPIC_HEADING_RE = /^##\s+(.+?)\s*$/;
+
+function parseArticlesFromMarkdown(markdown: string, briefId: string) {
+  const articles: AppBrief["articles"] = [];
+  const interests = new Set<string>();
+  let currentTopic = "general";
+  let idx = 0;
+
+  for (const line of markdown.split("\n")) {
+    const heading = TOPIC_HEADING_RE.exec(line);
+    if (heading) {
+      currentTopic = heading[1].trim();
+      interests.add(currentTopic);
+      continue;
+    }
+    let m: RegExpExecArray | null;
+    while ((m = LINK_RE.exec(line)) !== null) {
+      const [, label, url] = m;
+      articles.push({
+        id: `${briefId}-${idx++}`,
+        title: label.trim(),
+        url,
+        interest: currentTopic,
+      });
+    }
+  }
+  return { articles, interests: [...interests] };
+}
+
 function adaptBrief(b: AgentBrief): AppBrief {
+  const markdown = b.summary_md ?? "";
+  const { articles, interests } = parseArticlesFromMarkdown(markdown, b.id);
   return {
     id: b.id,
     generatedAt: b.generated_at,
-    interests: [...new Set(b.articles.map((a) => a.interest))],
-    articles: b.articles.map(
-      (a, i): Article => ({
-        id: `${b.id}-${i}`,
-        title: a.title,
-        url: a.url,
-        publishedDate: a.published,
-        interest: a.interest,
-        text: a.snippet,
-      }),
-    ),
-    markdown: b.summary_md ?? "",
+    interests,
+    articles,
+    markdown,
   };
 }
 

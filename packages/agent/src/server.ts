@@ -10,26 +10,26 @@
 // it into the Connect page.
 
 import http from "node:http";
+import { spawn } from "node:child_process";
 import { URL } from "node:url";
 import {
   loadState,
   newBriefId,
   saveState,
   STATE_FILE,
-  type Article,
   type Brief,
   type State,
 } from "./state.js";
-import { exaSearch, type Fetcher } from "./exa.js";
-import { synthesizeWithClaude } from "./synthesize.js";
+import { researchAndSynthesize } from "./research.js";
 
-export const PKG_VERSION = "0.2.0";
+export const PKG_VERSION = "0.3.0";
 export const DEFAULT_PORT = Number(process.env.NOTIVA_AGENT_PORT ?? 47821);
 
 export type ServerDeps = {
   stateFile?: string;
-  exaFetcher?: Fetcher;
   claudeBin?: string;
+  // Injected for tests; production uses node:child_process spawn.
+  spawnFn?: typeof spawn;
   // The synth pass is async; tests can wait on this to know when it finishes.
   onSynthesisDone?: (brief: Brief) => void;
 };
@@ -79,8 +79,8 @@ function bearer(req: http.IncomingMessage): string | null {
 
 export function createServer(deps: ServerDeps = {}): http.Server {
   const stateFile = deps.stateFile ?? STATE_FILE;
-  const exaFetcher = deps.exaFetcher;
   const claudeBin = deps.claudeBin;
+  const spawnFn = deps.spawnFn;
 
   async function authed(req: http.IncomingMessage): Promise<State | null> {
     const token = bearer(req);
@@ -128,23 +128,12 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             : [];
           if (interests.length === 0)
             return json(res, 400, { error: "interests required" }, cors);
-          if (!state.exa_key)
-            return json(
-              res,
-              412,
-              {
-                error: "missing exa_key",
-                hint: "add `exa_key` to ~/.config/notiva/state.json",
-              },
-              cors,
-            );
 
           const briefId = newBriefId();
           const pending: Brief = {
             id: briefId,
             generated_at: new Date().toISOString(),
             status: "pending",
-            articles: [],
           };
           await saveState({ ...state, last_brief: pending }, stateFile);
 
@@ -152,10 +141,9 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           void runSynthesis({
             interests,
             briefId,
-            state,
             stateFile,
-            exaFetcher,
             claudeBin,
+            spawnFn,
             onSynthesisDone: deps.onSynthesisDone,
           });
 
@@ -184,41 +172,21 @@ export function createServer(deps: ServerDeps = {}): http.Server {
 async function runSynthesis(args: {
   interests: string[];
   briefId: string;
-  state: State;
   stateFile: string;
-  exaFetcher?: Fetcher;
   claudeBin?: string;
+  spawnFn?: typeof spawn;
   onSynthesisDone?: (brief: Brief) => void;
 }): Promise<void> {
-  const { interests, briefId, state, stateFile, exaFetcher, claudeBin } = args;
-  let brief: Brief = {
-    id: briefId,
-    generated_at: new Date().toISOString(),
-    status: "pending",
-    articles: [],
-  };
+  const { interests, briefId, stateFile, claudeBin, spawnFn } = args;
+  let brief: Brief;
 
   try {
-    const articles: Article[] = [];
-    for (const topic of interests) {
-      const results = await exaSearch(topic, state.exa_key!, exaFetcher);
-      for (const r of results) {
-        articles.push({
-          interest: topic,
-          title: r.title ?? r.url,
-          url: r.url,
-          snippet: r.text?.slice(0, 600),
-          published: r.publishedDate,
-        });
-      }
-    }
-    const summary = await synthesizeWithClaude(interests, articles, claudeBin);
+    const summary = await researchAndSynthesize(interests, { claudeBin, spawnFn });
     brief = {
       id: briefId,
       generated_at: new Date().toISOString(),
       status: "ready",
       summary_md: summary,
-      articles,
     };
   } catch (err) {
     brief = {
@@ -226,7 +194,6 @@ async function runSynthesis(args: {
       generated_at: new Date().toISOString(),
       status: "failed",
       error_msg: String(err),
-      articles: [],
     };
   }
 

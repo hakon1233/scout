@@ -219,10 +219,8 @@ export default function ConnectPage() {
         <p className="text-xs text-gray-400 dark:text-gray-500">
           Needs{" "}
           <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">claude</code>{" "}
-          on your PATH and{" "}
-          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">exa_key</code>{" "}
-          set in{" "}
-          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">~/.config/notiva/state.json</code>.
+          on your PATH, signed in to an account with WebSearch (anthropic.com Pro / Max).
+          No third-party search key required.
         </p>
       </section>
 
