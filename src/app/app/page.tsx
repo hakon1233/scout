@@ -257,7 +257,7 @@ export default function AppPage() {
               variant="secondary"
               loading={running}
               onClick={refreshViaCompanion}
-              title="Use the local @notiva/agent companion"
+              title="Use the local Scout companion"
             >
               {running ? "Working…" : "Refresh brief (companion)"}
             </Button>

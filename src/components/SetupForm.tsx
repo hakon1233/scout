@@ -236,7 +236,7 @@ export function SetupForm({
                 <span>
                   Keys are stored in this browser&apos;s{" "}
                   <code className="font-mono text-mono-xs">localStorage</code>{" "}
-                  — not on any Notiva server.
+                  — not on any Scout server.
                 </span>
               </li>
               <li className="flex gap-2">
