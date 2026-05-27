@@ -30,7 +30,6 @@ async function cmdStatus(): Promise<void> {
     return;
   }
   console.log(`paired (token: ${state.pairing_token.slice(0, 8)}…)`);
-  console.log(`exa key: ${state.exa_key ? "configured" : "missing — add to state.json"}`);
   const b = state.last_brief;
   if (!b) console.log("no briefs yet.");
   else console.log(`last brief: ${b.status} @ ${b.generated_at} (${b.id})`);

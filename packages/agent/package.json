@@ -1,7 +1,7 @@
 {
   "name": "@notiva/agent",
-  "version": "0.2.0",
-  "description": "Local loopback companion for Notiva. Runs an HTTP server on 127.0.0.1 that the Notiva web app talks to, fetches articles via Exa, and shells out to your local `claude` CLI for synthesis. Your Anthropic OAuth token never leaves your machine.",
+  "version": "0.3.0",
+  "description": "Local loopback companion for Scout. Runs an HTTP server on 127.0.0.1 that the Scout web app talks to, and shells out to your local Claude Code CLI (using its built-in WebSearch + WebFetch tools) for research and synthesis. Your Anthropic OAuth token never leaves your machine.",
   "bin": {
     "notiva-agent": "./dist/cli.js"
   },

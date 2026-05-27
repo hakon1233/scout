@@ -1,5 +1,8 @@
-// End-to-end loopback test: boots the server with a stubbed `claude` binary
-// and a mocked Exa fetcher, then drives POST /v0/interests → poll GET /v0/briefs.
+// End-to-end loopback test: boots the server with a stubbed `claude` binary,
+// then drives POST /v0/interests → poll GET /v0/briefs.
+//
+// The stub `claude` ignores its args and prints a fixed brief, so we don't
+// hit the real network or require the user's Claude Code OAuth.
 //
 // Run with: pnpm --filter @notiva/agent test
 //
@@ -16,8 +19,9 @@ import { startServer } from "../src/server.js";
 async function makeStubClaude(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-stub-"));
   const bin = path.join(dir, "claude");
-  // Echoes a fixed brief regardless of stdin. Behaves like `claude --print`.
-  const script = `#!/usr/bin/env bash\ncat >/dev/null\nprintf '# Your brief\\n\\n## test\\n- stubbed synthesis\\n'\n`;
+  // Drains stdin (the prompt) and prints a canned brief. The shape mirrors
+  // what `claude --print` would emit so the companion's parse path is real.
+  const script = `#!/usr/bin/env bash\ncat >/dev/null\nprintf '# Your brief\\n\\n## test\\n- stubbed research run\\n  [example.com — Demo](https://example.com)\\n'\n`;
   await fs.writeFile(bin, script, { mode: 0o755 });
   return bin;
 }
@@ -26,38 +30,15 @@ test("loopback round-trip: pair → POST interests → poll briefs", async () =>
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
-  await saveState({ pairing_token: token, exa_key: "test-key" }, stateFile);
+  await saveState({ pairing_token: token }, stateFile);
 
   const claudeBin = await makeStubClaude();
-
-  const exaCalls: string[] = [];
-  const exaFetcher = async (
-    _url: string | URL,
-    init?: { body?: string },
-  ): Promise<Response> => {
-    const body = JSON.parse(init?.body ?? "{}");
-    exaCalls.push(body.query);
-    return new Response(
-      JSON.stringify({
-        results: [
-          {
-            url: `https://example.com/${encodeURIComponent(body.query)}`,
-            title: `${body.query} headline`,
-            text: `Story about ${body.query}.`,
-            publishedDate: "2026-05-20",
-          },
-        ],
-      }),
-      { status: 200, headers: { "content-type": "application/json" } },
-    );
-  };
 
   let synthesisDone: (b: Brief) => void;
   const doneP = new Promise<Brief>((r) => (synthesisDone = r));
 
   const { server, port } = await startServer(0, {
     stateFile,
-    exaFetcher: exaFetcher as unknown as typeof fetch,
     claudeBin,
     onSynthesisDone: (b) => synthesisDone(b),
   });
@@ -94,7 +75,6 @@ test("loopback round-trip: pair → POST interests → poll briefs", async () =>
     const brief = await doneP;
     assert.equal(brief.status, "ready");
     assert.match(brief.summary_md ?? "", /Your brief/);
-    assert.deepEqual(exaCalls.sort(), ["ai safety", "llm research"]);
 
     // 5. Poll GET /v0/briefs?since=...
     const poll = await fetch(

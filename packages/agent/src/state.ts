@@ -12,26 +12,16 @@ import crypto from "node:crypto";
 export const CONFIG_DIR = path.join(os.homedir(), ".config", "notiva");
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
 
-export type Article = {
-  interest: string;
-  title: string;
-  url: string;
-  snippet?: string;
-  published?: string;
-};
-
 export type Brief = {
   id: string;
   generated_at: string;
   status: "pending" | "ready" | "failed";
   summary_md?: string;
   error_msg?: string;
-  articles: Article[];
 };
 
 export type State = {
   pairing_token?: string;
-  exa_key?: string;
   last_brief?: Brief;
 };
 
