@@ -10,6 +10,7 @@ import {
   validateAnthropicKey,
   validateExaKey,
 } from "@/components/ui";
+import { BACKEND_NEEDS_USER_KEYS } from "@/lib/backend";
 import { clearSettings } from "@/lib/storage";
 import type { Settings } from "@/lib/types";
 
@@ -122,6 +123,20 @@ export function SetupForm({
     setSubmittedStep1(true);
     if (step1Invalid) return;
     setTransportError(null);
+    if (!BACKEND_NEEDS_USER_KEYS) {
+      // Local sidecar mode: the sidecar holds Anthropic OAuth + Exa key, so
+      // we save the rest of the settings now and skip the key-entry step.
+      const interests = parseInterestLines(interestText)
+        .slice(0, MAX_INTERESTS)
+        .map((topic, i) => ({ id: `int_${i}_${topic.slice(0, 12)}`, topic }));
+      onSave({
+        name: name.trim(),
+        interests,
+        anthropicKey: "",
+        exaKey: "",
+      });
+      return;
+    }
     setStep(2);
   }
 

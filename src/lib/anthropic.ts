@@ -1,7 +1,7 @@
+import { ANTHROPIC_ENDPOINT, SCOUT_BACKEND } from "./backend";
 import { fromHttp, fromTransport, NotivaError } from "./errors";
 import type { Article } from "./types";
 
-const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-opus-4-7";
 
 const SYSTEM_BRIEF = `You are Scout, an agent that writes personalized news briefs.
@@ -41,14 +41,17 @@ export async function synthesizeBrief(opts: SynthesizeOptions): Promise<string> 
 
   let res: Response;
   try {
-    res = await fetch(ANTHROPIC_URL, {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (SCOUT_BACKEND === "byo-key") {
+      headers["x-api-key"] = apiKey;
+      headers["anthropic-version"] = "2023-06-01";
+      headers["anthropic-dangerous-direct-browser-access"] = "true";
+    }
+    res = await fetch(ANTHROPIC_ENDPOINT, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
+      headers,
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 2000,

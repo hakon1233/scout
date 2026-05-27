@@ -1,7 +1,6 @@
+import { EXA_ENDPOINT, SCOUT_BACKEND } from "./backend";
 import { fromHttp, fromTransport } from "./errors";
 import type { Article } from "./types";
-
-const EXA_URL = "https://api.exa.ai/search";
 
 type ExaResult = {
   id?: string;
@@ -31,12 +30,13 @@ export async function searchInterest(
 
   let res: Response;
   try {
-    res = await fetch(EXA_URL, {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (SCOUT_BACKEND === "byo-key") {
+      headers["x-api-key"] = apiKey;
+    }
+    res = await fetch(EXA_ENDPOINT, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
+      headers,
       body: JSON.stringify({
         query: interest,
         numResults,

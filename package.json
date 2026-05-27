@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "NEXT_PUBLIC_SCOUT_BACKEND=local next dev",
+    "dev:byo": "NEXT_PUBLIC_SCOUT_BACKEND=byo-key next dev",
+    "sidecar": "pnpm --filter @scout/sidecar dev",
     "build": "NODE_ENV=production next build",
     "start": "next start",
     "lint": "eslint",
