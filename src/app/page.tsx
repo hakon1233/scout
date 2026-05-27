@@ -8,7 +8,7 @@ const steps = [
   {
     n: "1",
     title: "Pick interests",
-    body: "Tell Notiva the topics, beats, and questions you actually care about.",
+    body: "Tell Scout the topics, beats, and questions you actually care about.",
   },
   {
     n: "2",

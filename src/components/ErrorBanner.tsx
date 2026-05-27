@@ -13,7 +13,7 @@ type Props = {
 const providerLabel: Record<NotivaErrorProvider, string> = {
   anthropic: "Anthropic",
   exa: "Exa",
-  app: "Notiva",
+  app: "Scout",
 };
 
 export function ErrorBanner({ error, onRetry, onEditKeys }: Props) {
@@ -105,7 +105,7 @@ function RetryCountdown({ seconds }: { seconds: number }) {
 
 function formatDetails(e: ClassifiedError): string {
   return [
-    `Notiva error`,
+    `Scout error`,
     `kind: ${e.kind}`,
     `provider: ${e.provider}`,
     `message: ${e.message}`,

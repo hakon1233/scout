@@ -143,7 +143,7 @@ export default function ConnectPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight mb-1">Connect your agent</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-          The Notiva companion runs on your laptop and uses your own{" "}
+          The Scout companion runs on your laptop and uses your own{" "}
           <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">claude</code> CLI
           and Exa key. Your Anthropic token never leaves your machine.
         </p>
