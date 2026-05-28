@@ -285,7 +285,7 @@ body {
   The global reduce-motion rule above is a belt-and-suspenders fallback.
 */
 @media (prefers-reduced-motion: no-preference) {
-  .notiva-skeleton {
+  .scout-skeleton {
     background-image: linear-gradient(
       90deg,
       var(--bg-surface-muted) 0%,
@@ -293,13 +293,13 @@ body {
       var(--bg-surface-muted) 100%
     );
     background-size: 200% 100%;
-    animation: notiva-shimmer 1.4s ease-in-out infinite;
+    animation: scout-shimmer 1.4s ease-in-out infinite;
   }
-  .notiva-shimmer {
+  .scout-shimmer {
     position: relative;
     overflow: hidden;
   }
-  .notiva-shimmer::after {
+  .scout-shimmer::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -310,10 +310,10 @@ body {
       transparent 100%
     );
     transform: translateX(-100%);
-    animation: notiva-shimmer-sweep 1.4s ease-in-out infinite;
+    animation: scout-shimmer-sweep 1.4s ease-in-out infinite;
   }
 }
-@keyframes notiva-shimmer {
+@keyframes scout-shimmer {
   0% {
     background-position: 100% 0;
   }
@@ -321,7 +321,7 @@ body {
     background-position: -100% 0;
   }
 }
-@keyframes notiva-shimmer-sweep {
+@keyframes scout-shimmer-sweep {
   0% {
     transform: translateX(-100%);
   }
