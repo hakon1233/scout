@@ -99,3 +99,43 @@ test("loopback round-trip: pair → POST interests → poll briefs", async () =>
     await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
   }
 });
+
+test("POST /v0/interests returns 409 while a brief is pending (PER-92)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  // Seed state with a pending brief — simulates an in-flight synth.
+  await saveState(
+    {
+      pairing_token: token,
+      last_brief: {
+        id: "in-flight-id",
+        generated_at: new Date().toISOString(),
+        status: "pending",
+      },
+    },
+    stateFile,
+  );
+
+  const claudeBin = await makeStubClaude();
+  const { server, port } = await startServer(0, { stateFile, claudeBin });
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ interests: ["llm research"] }),
+    });
+    assert.equal(res.status, 409);
+    const body = await res.json();
+    assert.equal(body.brief_id, "in-flight-id");
+    assert.match(body.error, /in progress/);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
+  }
+});

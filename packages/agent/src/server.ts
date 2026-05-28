@@ -8,6 +8,11 @@
 // Auth is a bearer token (the pairing token) on the Authorization header.
 // The web app reads the same token from local storage after the user pastes
 // it into the Connect page.
+//
+// State contract: the companion retains exactly one brief at a time
+// (`state.last_brief`, "last writer wins"). To keep that slot deterministic,
+// POST /v0/interests returns 409 while `last_brief.status === "pending"` —
+// callers must wait for the in-flight synth to land before kicking a new one.
 
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -128,6 +133,20 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             : [];
           if (interests.length === 0)
             return json(res, 400, { error: "interests required" }, cors);
+
+          // One brief slot, last-writer-wins. Reject a second kick while the
+          // previous run is still pending so we don't silently overwrite it.
+          if (state.last_brief?.status === "pending") {
+            return json(
+              res,
+              409,
+              {
+                error: "brief in progress",
+                brief_id: state.last_brief.id,
+              },
+              cors,
+            );
+          }
 
           const briefId = newBriefId();
           const pending: Brief = {
