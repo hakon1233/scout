@@ -4,7 +4,8 @@ import * as React from "react";
 
 type Theme = "light" | "dark" | "system";
 
-const STORAGE_KEY = "notiva.theme";
+const STORAGE_KEY = "scout.theme";
+const LEGACY_STORAGE_KEY = "notiva.theme";
 
 function applyTheme(theme: Theme) {
   if (typeof document === "undefined") return;
@@ -18,7 +19,15 @@ function applyTheme(theme: Theme) {
 
 function readStored(): Theme {
   if (typeof window === "undefined") return "system";
-  const raw = window.localStorage.getItem(STORAGE_KEY);
+  let raw = window.localStorage.getItem(STORAGE_KEY);
+  if (raw === null) {
+    const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy !== null) {
+      window.localStorage.setItem(STORAGE_KEY, legacy);
+      window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+      raw = legacy;
+    }
+  }
   return raw === "light" || raw === "dark" || raw === "system" ? raw : "system";
 }
 
@@ -145,7 +154,7 @@ export function ThemeBootstrap() {
   return (
     <script
       dangerouslySetInnerHTML={{
-        __html: `(function(){try{var t=localStorage.getItem('${STORAGE_KEY}');if(t!=='light'&&t!=='dark'&&t!=='system'){t='system';}var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`,
+        __html: `(function(){try{var k='${STORAGE_KEY}',lk='${LEGACY_STORAGE_KEY}',t=localStorage.getItem(k);if(t===null){var l=localStorage.getItem(lk);if(l!==null){try{localStorage.setItem(k,l);localStorage.removeItem(lk);}catch(_){}t=l;}}if(t!=='light'&&t!=='dark'&&t!=='system'){t='system';}var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`,
       }}
     />
   );

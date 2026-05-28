@@ -8,7 +8,8 @@ import type { Brief as AppBrief } from "./types";
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
 export const COMPANION_PORT_SWEEP = [47821, 47822, 47823, 47830, 47840];
-const TOKEN_KEY = "notiva.companion.token";
+const TOKEN_KEY = "scout.companion.token";
+const LEGACY_TOKEN_KEY = "notiva.companion.token";
 
 let cachedBase: string | null = null;
 
@@ -18,7 +19,15 @@ function baseFor(port: number): string {
 
 export function loadCompanionToken(): string {
   if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(TOKEN_KEY) ?? "";
+  const current = window.localStorage.getItem(TOKEN_KEY);
+  if (current !== null) return current;
+  const legacy = window.localStorage.getItem(LEGACY_TOKEN_KEY);
+  if (legacy !== null) {
+    window.localStorage.setItem(TOKEN_KEY, legacy);
+    window.localStorage.removeItem(LEGACY_TOKEN_KEY);
+    return legacy;
+  }
+  return "";
 }
 
 export function saveCompanionToken(token: string): void {

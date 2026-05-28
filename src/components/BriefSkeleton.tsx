@@ -21,7 +21,7 @@ export function BriefSkeleton() {
 function SkeletonLine({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`notiva-skeleton block rounded-sm bg-surface-muted ${className}`}
+      className={`scout-skeleton block rounded-sm bg-surface-muted ${className}`}
     />
   );
 }
