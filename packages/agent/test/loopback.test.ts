@@ -139,3 +139,33 @@ test("POST /v0/interests returns 409 while a brief is pending (PER-92)", async (
     await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
   }
 });
+
+test("POST /v0/interests rejects >6 interests with 400 (PER-91)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  const claudeBin = await makeStubClaude();
+  const { server, port } = await startServer(0, { stateFile, claudeBin });
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        interests: ["a", "b", "c", "d", "e", "f", "g"],
+      }),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /too many interests/);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
+  }
+});
