@@ -64,8 +64,9 @@ export default function Home() {
             </a>
           </div>
           <p className="text-caption text-muted">
-            MVP runs entirely in your browser with your own Anthropic and Exa
-            API keys. Hosted Supabase backend is the next milestone.
+            MVP runs as a loopback companion to your local Claude Code CLI —
+            agents search and fetch the web through Claude Code&apos;s built-in
+            tools. No extra API keys required.
           </p>
         </div>
 
