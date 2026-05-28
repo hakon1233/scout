@@ -6,18 +6,33 @@ Set your interests, agents fetch and synthesize a brief with only the news you
 care about.
 
 Stack (see PER-2 architecture doc, v2): Next.js 15 (App Router, static export)
-hosted on GitHub Pages, Supabase for Postgres + Auth + Edge Functions, Anthropic
-Claude (Haiku 4.5 for rank, Opus 4.7 for synthesis), Exa for web search.
+hosted on GitHub Pages, Supabase for Postgres + Auth, and a local loopback
+companion (`@notiva/agent`) that shells out to the user's own Claude Code CLI
+for ranking (Haiku 4.5), synthesis (Opus 4.7), and web research (the CLI's
+built-in `WebSearch` + `WebFetch` tools). No server-side Anthropic key, no
+third-party search provider — the user's `claude` CLI handles auth from its
+own keychain.
 
 ## Local development
 
 ```bash
 pnpm install
-cp .env.example .env.local   # fill in keys
+cp .env.example .env.local   # fill in Supabase keys
 pnpm dev
 ```
 
-Open <http://localhost:3000>.
+In a second terminal, build and run the loopback companion:
+
+```bash
+pnpm -F @notiva/agent build
+node packages/agent/dist/cli.js pair   # prints a pairing token
+node packages/agent/dist/cli.js run    # serves on 127.0.0.1:47821
+```
+
+Open <http://localhost:3000>, go to **Connect**, paste the pairing token,
+and pick interests. The web app talks only to the loopback server; the
+companion shells out to your local `claude` CLI, which authenticates from
+its own keychain. No `ANTHROPIC_API_KEY` or web-search API key needed.
 
 ## Scripts
 
@@ -31,9 +46,10 @@ Open <http://localhost:3000>.
 ## Environment variables
 
 See `.env.example`. The client only needs `NEXT_PUBLIC_SUPABASE_URL` and
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`. `ANTHROPIC_API_KEY`, `EXA_API_KEY`, and
-`SUPABASE_SERVICE_ROLE_KEY` are kept in Supabase Edge Function secrets and
-never ship in the client bundle.
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase Postgres + Auth, protected by RLS).
+Anthropic and web-search credentials are **not** required anywhere in this
+repo — the loopback companion (`packages/agent`) delegates to the user's
+local Claude Code CLI, which holds its own OAuth token.
 
 ## Deployment
 
