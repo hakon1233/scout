@@ -124,10 +124,11 @@ export function createServer(deps: ServerDeps = {}): http.Server {
                 .filter((s): s is string => typeof s === "string")
                 .map((s) => s.trim())
                 .filter(Boolean)
-                .slice(0, 6)
             : [];
           if (interests.length === 0)
             return json(res, 400, { error: "interests required" }, cors);
+          if (interests.length > 6)
+            return json(res, 400, { error: "too many interests, max 6" }, cors);
 
           const briefId = newBriefId();
           const pending: Brief = {
