@@ -88,7 +88,7 @@ function StatePill({
       break;
     case "searching":
       className +=
-        " bg-accent text-accent-fg notiva-shimmer motion-safe:animate-pulse";
+        " bg-accent text-accent-fg scout-shimmer motion-safe:animate-pulse";
       label = "Searching";
       break;
     case "done":

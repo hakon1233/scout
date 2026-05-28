@@ -31,7 +31,7 @@ export function AppSkeleton() {
 function SkeletonLine({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`notiva-skeleton block rounded-sm bg-surface-muted ${className}`}
+      className={`scout-skeleton block rounded-sm bg-surface-muted ${className}`}
     />
   );
 }
@@ -39,7 +39,7 @@ function SkeletonLine({ className = "" }: { className?: string }) {
 function SkeletonChip({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`notiva-skeleton inline-block h-6 rounded-pill bg-surface-muted ${className}`}
+      className={`scout-skeleton inline-block h-6 rounded-pill bg-surface-muted ${className}`}
     />
   );
 }
