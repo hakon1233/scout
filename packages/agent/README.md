@@ -21,17 +21,31 @@ tools — no third-party search API key required.
   and the account must have WebSearch enabled (the anthropic.com Pro / Max
   subscription does).
 
+## Install
+
+The companion is **not on the public npm registry yet** (publishing under
+`@scout/` is tracked in PER-80). Until then, install the prebuilt,
+zero-dependency tarball that the Scout site serves from GitHub Pages — no
+registry account needed:
+
+```bash
+npm i -g https://hakon1233.github.io/scout/agent/notiva-agent-0.3.0.tgz
+```
+
+The Connect page (`/app/connect`) always shows the current install command for
+the host you opened it from.
+
 ## Use
 
 ```bash
 # one-time: generate a pairing token, paste it into the Scout Connect page
-npx @notiva/agent pair
+notiva-agent pair
 
 # start the loopback server (default port: 47821; override with --port or NOTIVA_AGENT_PORT)
-npx @notiva/agent run
+notiva-agent run
 
 # check state
-npx @notiva/agent status
+notiva-agent status
 ```
 
 ## Endpoints
