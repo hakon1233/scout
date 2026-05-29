@@ -147,6 +147,21 @@ export async function pollBriefs(sinceTs: string, token: string): Promise<AppBri
   return briefs.filter((b) => b.status === "ready" && b.summary_md).map(adaptBrief);
 }
 
+// Fetch the most recent ready brief the companion holds (any age), or null if
+// none exist / the companion is unreachable. Used on `/app/` load so a brief
+// generated in a previous session shows immediately instead of the example.
+export async function fetchLatestBrief(token: string): Promise<AppBrief | null> {
+  try {
+    const briefs = await pollBriefs(new Date(0).toISOString(), token);
+    if (briefs.length === 0) return null;
+    return briefs.reduce((newest, b) =>
+      b.generatedAt > newest.generatedAt ? b : newest,
+    );
+  } catch {
+    return null;
+  }
+}
+
 export async function pollBriefsRaw(sinceTs: string, token: string): Promise<AgentBrief[]> {
   const base = await requireBase();
   const url = `${base}/v0/briefs?since=${encodeURIComponent(sinceTs)}`;
