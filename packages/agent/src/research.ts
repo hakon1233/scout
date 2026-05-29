@@ -9,8 +9,20 @@
 // `claude` binary handles its own auth from `~/.claude/credentials.json`.
 
 import { spawn } from "node:child_process";
+import os from "node:os";
 
 const ALLOWED_TOOLS = "WebSearch,WebFetch,Read,Write";
+
+// Run the synthesis child at a lower scheduling priority than the loopback
+// server. The `claude` agent is CPU-heavy (web search + fetch + a full model
+// loop) and, on a constrained machine, can starve our single-threaded event
+// loop so that GET /v0/briefs and /healthz stop responding mid-synthesis —
+// the UI then sees its polling stall (PER-101). Niceness is advisory: it only
+// costs `claude` cycles when something else (us, answering a poll) actually
+// wants the CPU, so it doesn't slow synthesis on an idle box. Increasing
+// niceness is always permitted for unprivileged processes; we swallow the
+// rare EPERM/ENOSYS rather than fail the run.
+const SYNTH_CHILD_NICENESS = 10;
 
 export type ResearchOptions = {
   claudeBin?: string;
@@ -40,6 +52,15 @@ export async function researchAndSynthesize(
       ],
       { stdio: ["pipe", "pipe", "pipe"] },
     );
+
+    // De-prioritize the heavy child so it can't starve the loopback server.
+    if (child.pid !== undefined) {
+      try {
+        os.setPriority(child.pid, SYNTH_CHILD_NICENESS);
+      } catch {
+        // Not fatal — synthesis still runs, just without the niceness hedge.
+      }
+    }
 
     let stdout = "";
     let stderr = "";
