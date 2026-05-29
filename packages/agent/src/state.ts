@@ -2,14 +2,14 @@
 //
 // We deliberately keep this in a single JSON file so users can inspect or
 // delete it. There is no Supabase, no remote sync — everything lives at
-// `~/.config/notiva/state.json` with chmod 0600.
+// `~/.config/scout/state.json` with chmod 0600.
 
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 
-export const CONFIG_DIR = path.join(os.homedir(), ".config", "notiva");
+export const CONFIG_DIR = path.join(os.homedir(), ".config", "scout");
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
 
 export type Brief = {

@@ -1,4 +1,4 @@
-import { fromHttp, fromTransport, NotivaError } from "./errors";
+import { fromHttp, fromTransport, ScoutError } from "./errors";
 import type { Article } from "./types";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -91,7 +91,7 @@ export async function synthesizeBrief(opts: SynthesizeOptions): Promise<string> 
       .trim();
 
     if (!text) {
-      throw new NotivaError({
+      throw new ScoutError({
         kind: "unknown",
         provider: "anthropic",
         message: "Anthropic returned an empty brief.",

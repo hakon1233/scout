@@ -1,10 +1,10 @@
 // Unit tests for pairing-token resolution (PER-102).
 //
-// `notiva-agent pair` must reuse an existing token by default but mint a fresh
+// `scout-agent pair` must reuse an existing token by default but mint a fresh
 // one under --force/--reset. resolvePairingToken() is the pure decision the CLI
 // wraps, so we test it directly — no filesystem, no process spawn.
 //
-// Run with: pnpm --filter @notiva/agent test
+// Run with: pnpm --filter @scout/agent test
 
 import test from "node:test";
 import assert from "node:assert/strict";

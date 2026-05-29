@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Banner, Button } from "@/components/ui";
-import type { ClassifiedError, NotivaErrorProvider } from "@/lib/errors";
+import type { ClassifiedError, ScoutErrorProvider } from "@/lib/errors";
 
 type Props = {
   error: ClassifiedError;
@@ -10,7 +10,7 @@ type Props = {
   onEditKeys: () => void;
 };
 
-const providerLabel: Record<NotivaErrorProvider, string> = {
+const providerLabel: Record<ScoutErrorProvider, string> = {
   anthropic: "Anthropic",
   exa: "Exa",
   app: "Scout",

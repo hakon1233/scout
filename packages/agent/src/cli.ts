@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// @notiva/agent — local loopback companion CLI.
+// @scout/agent — local loopback companion CLI.
 //
 // Subcommands:
 //   pair          Generate a local pairing token and print it. Paste it into the
-//                 Notiva web Connect page to authorize the browser → loopback link.
+//                 Scout web Connect page to authorize the browser → loopback link.
 //                 Reuses an existing token if one is stored; pass --force (alias
 //                 --reset) to mint a fresh token and invalidate the old one.
 //   run (default) Start the loopback HTTP server on 127.0.0.1.
@@ -23,19 +23,19 @@ async function cmdPair(force: boolean): Promise<void> {
   await saveState({ ...state, pairing_token: token });
 
   if (had && !rotated) {
-    console.log("Reusing existing pairing token (run `notiva-agent pair --force` to rotate).\n");
+    console.log("Reusing existing pairing token (run `scout-agent pair --force` to rotate).\n");
   } else if (had && rotated) {
     console.log("Rotated pairing token — the previous token is now invalid.\n");
   }
-  console.log("Pairing token (paste into the Notiva Connect page):\n");
+  console.log("Pairing token (paste into the Scout Connect page):\n");
   console.log(`  ${token}\n`);
-  console.log(`Stored at ${STATE_FILE}. Run \`notiva-agent run\` to start the loopback server.`);
+  console.log(`Stored at ${STATE_FILE}. Run \`scout-agent run\` to start the loopback server.`);
 }
 
 async function cmdStatus(): Promise<void> {
   const state = await loadState();
   if (!state.pairing_token) {
-    console.log("not paired. run `notiva-agent pair` first.");
+    console.log("not paired. run `scout-agent pair` first.");
     return;
   }
   console.log(`paired (token: ${state.pairing_token.slice(0, 8)}…)`);
@@ -47,12 +47,12 @@ async function cmdStatus(): Promise<void> {
 async function cmdRun(portArg?: string): Promise<void> {
   const state = await loadState();
   if (!state.pairing_token) {
-    console.error("not paired. run `notiva-agent pair` first.");
+    console.error("not paired. run `scout-agent pair` first.");
     process.exit(1);
   }
   const port = portArg ? Number(portArg) : DEFAULT_PORT;
   const { port: bound } = await startServer(Number.isFinite(port) ? port : DEFAULT_PORT);
-  console.log(`@notiva/agent v${PKG_VERSION} listening on http://127.0.0.1:${bound}`);
+  console.log(`@scout/agent v${PKG_VERSION} listening on http://127.0.0.1:${bound}`);
   console.log("Endpoints: GET /healthz, POST /v0/interests, GET /v0/briefs?since=<iso>");
 }
 
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
         break;
       }
       default:
-        console.error(`unknown command: ${cmd}. usage: notiva-agent [pair|run|status]`);
+        console.error(`unknown command: ${cmd}. usage: scout-agent [pair|run|status]`);
         process.exit(2);
     }
   } catch (err) {

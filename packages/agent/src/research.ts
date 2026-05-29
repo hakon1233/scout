@@ -35,7 +35,7 @@ export async function researchAndSynthesize(
   interests: string[],
   opts: ResearchOptions = {},
 ): Promise<string> {
-  const claudeBin = opts.claudeBin ?? process.env.NOTIVA_CLAUDE_BIN ?? "claude";
+  const claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ?? "claude";
   const spawnImpl = opts.spawnFn ?? spawn;
   const prompt = buildResearchPrompt(interests);
 

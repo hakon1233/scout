@@ -4,7 +4,7 @@
 // The stub `claude` ignores its args and prints a fixed brief, so we don't
 // hit the real network or require the user's Claude Code OAuth.
 //
-// Run with: pnpm --filter @notiva/agent test
+// Run with: pnpm --filter @scout/agent test
 //
 // Uses node:assert + node:test so we don't add a test-runner dependency.
 
@@ -17,7 +17,7 @@ import { saveState, newPairingToken, type Brief } from "../src/state.js";
 import { startServer } from "../src/server.js";
 
 async function makeStubClaude(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-stub-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-stub-"));
   const bin = path.join(dir, "claude");
   // Drains stdin (the prompt) and prints a canned brief. The shape mirrors
   // what `claude --print` would emit so the companion's parse path is real.
@@ -27,7 +27,7 @@ async function makeStubClaude(): Promise<string> {
 }
 
 test("loopback round-trip: pair → POST interests → poll briefs", async () => {
-  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-state-"));
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
   await saveState({ pairing_token: token }, stateFile);
@@ -101,7 +101,7 @@ test("loopback round-trip: pair → POST interests → poll briefs", async () =>
 });
 
 test("POST /v0/interests returns 409 while a brief is pending (PER-92)", async () => {
-  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-state-"));
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
   // Seed state with a pending brief — simulates an in-flight synth.
@@ -141,7 +141,7 @@ test("POST /v0/interests returns 409 while a brief is pending (PER-92)", async (
 });
 
 test("GET /v0/briefs + /healthz stay responsive during synthesis (PER-101)", async () => {
-  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-state-"));
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
   await saveState({ pairing_token: token }, stateFile);
@@ -205,7 +205,7 @@ test("GET /v0/briefs + /healthz stay responsive during synthesis (PER-101)", asy
 });
 
 test("POST /v0/interests rejects >6 interests with 400 (PER-91)", async () => {
-  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-state-"));
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
   await saveState({ pairing_token: token }, stateFile);

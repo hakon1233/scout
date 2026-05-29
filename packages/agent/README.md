@@ -1,6 +1,6 @@
-# @notiva/agent
+# @scout/agent
 
-Local loopback companion for [Scout](https://github.com/notiva). Runs an HTTP
+Local loopback companion for [Scout](https://github.com/hakon1233/scout). Runs an HTTP
 server on `127.0.0.1` only. The web app talks to it directly from your browser —
 there is no Supabase, no backend, no data leaving your machine except the
 outbound calls your local `claude` CLI makes on your behalf.
@@ -27,7 +27,7 @@ Install the prebuilt, zero-dependency tarball that the Scout site serves from
 GitHub Pages — no registry account needed:
 
 ```bash
-npm i -g https://hakon1233.github.io/scout/agent/notiva-agent-0.3.0.tgz
+npm i -g https://hakon1233.github.io/scout/agent/scout-agent-0.3.0.tgz
 ```
 
 The Connect page (`/app/connect`) always shows the current install command for
@@ -38,16 +38,16 @@ the host you opened it from.
 ```bash
 # one-time: generate a pairing token, paste it into the Scout Connect page.
 # Re-running reuses the stored token; nothing rotates.
-notiva-agent pair
+scout-agent pair
 
 # rotate to a brand-new token (invalidates the old one — re-pair the browser after)
-notiva-agent pair --force   # alias: --reset
+scout-agent pair --force   # alias: --reset
 
-# start the loopback server (default port: 47821; override with --port or NOTIVA_AGENT_PORT)
-notiva-agent run
+# start the loopback server (default port: 47821; override with --port or SCOUT_AGENT_PORT)
+scout-agent run
 
 # check state
-notiva-agent status
+scout-agent status
 ```
 
 ## Endpoints
@@ -64,7 +64,7 @@ Auth is `Authorization: Bearer <pairing-token>`.
 
 ## State
 
-Everything lives at `~/.config/notiva/state.json` (chmod 0600):
+Everything lives at `~/.config/scout/state.json` (chmod 0600):
 
 ```json
 {
@@ -78,12 +78,12 @@ Everything lives at `~/.config/notiva/state.json` (chmod 0600):
 }
 ```
 
-Delete the file to un-pair, or run `notiva-agent pair --force` to rotate the token in place.
+Delete the file to un-pair, or run `scout-agent pair --force` to rotate the token in place.
 
 ## Environment overrides
 
-- `NOTIVA_AGENT_PORT` — bind port (default 47821).
-- `NOTIVA_CLAUDE_BIN` — path to the `claude` binary (default `claude` from `PATH`).
+- `SCOUT_AGENT_PORT` — bind port (default 47821).
+- `SCOUT_CLAUDE_BIN` — path to the `claude` binary (default `claude` from `PATH`).
 
 ## How research works
 
