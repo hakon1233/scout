@@ -14,10 +14,9 @@ import { loadSettings, saveLastBrief } from "@/lib/storage";
 type Status = "idle" | "checking" | "connected" | "disconnected";
 type GenerateState = "idle" | "posting" | "polling" | "done" | "error";
 
-// The companion is not on the public npm registry yet (npm publish under
-// @scout/ is tracked in PER-80 / PER-98). Until then we serve the prebuilt,
-// zero-dependency tarball from this site (GitHub Pages) and install from the
-// URL directly — works on a clean machine with no registry account.
+// We serve the prebuilt, zero-dependency companion tarball from this site
+// (GitHub Pages) and install from the URL directly — works on a clean machine
+// with no registry account.
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const TARBALL_PATH = `${BASE_PATH}/agent/notiva-agent-0.3.0.tgz`;
 // Sensible absolute default for SSR/export; overwritten with the real origin
@@ -202,11 +201,8 @@ export default function ConnectPage() {
         </p>
         <CmdBlock cmd={installCmd} copyKey="pair" copied={copied} onCopy={copy} />
         <p className="text-xs text-gray-400 dark:text-gray-500">
-          Note: the companion is not on the public npm registry yet, so this
-          installs the prebuilt package directly from this site. Requires Node
-          20+. Publishing under{" "}
-          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">@scout/</code>{" "}
-          is tracked separately (PER-80).
+          This installs the prebuilt companion package directly from this site.
+          Requires Node 20+.
         </p>
         <p className="text-sm text-gray-600 dark:text-gray-300">
           The command prints a token. Paste it below:

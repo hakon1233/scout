@@ -69,7 +69,7 @@ export async function pingCompanion(): Promise<boolean> {
 
 async function requireBase(): Promise<string> {
   const base = await discoverCompanion();
-  if (!base) throw new Error("Companion not reachable. Start `npx @notiva/agent run` and try again.");
+  if (!base) throw new Error("Companion not reachable. Start `notiva-agent run` and try again.");
   return base;
 }
 

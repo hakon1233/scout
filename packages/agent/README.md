@@ -23,10 +23,8 @@ tools — no third-party search API key required.
 
 ## Install
 
-The companion is **not on the public npm registry yet** (publishing under
-`@scout/` is tracked in PER-80). Until then, install the prebuilt,
-zero-dependency tarball that the Scout site serves from GitHub Pages — no
-registry account needed:
+Install the prebuilt, zero-dependency tarball that the Scout site serves from
+GitHub Pages — no registry account needed:
 
 ```bash
 npm i -g https://hakon1233.github.io/scout/agent/notiva-agent-0.3.0.tgz
