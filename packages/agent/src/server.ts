@@ -28,7 +28,7 @@ import {
 import { researchAndSynthesize } from "./research.js";
 
 export const PKG_VERSION = "0.3.0";
-export const DEFAULT_PORT = Number(process.env.NOTIVA_AGENT_PORT ?? 47821);
+export const DEFAULT_PORT = Number(process.env.SCOUT_AGENT_PORT ?? 47821);
 
 export type ServerDeps = {
   stateFile?: string;
@@ -43,7 +43,7 @@ const CORS_ALLOWED_ORIGINS = [
   /^https?:\/\/localhost(:\d+)?$/,
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
   /^https:\/\/[a-z0-9-]+\.vercel\.app$/,
-  /^https:\/\/notiva\.[a-z.]+$/,
+  /^https:\/\/scout\.[a-z.]+$/,
   /^https:\/\/[a-z0-9-]+\.github\.io$/,
 ];
 

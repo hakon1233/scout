@@ -18,7 +18,7 @@ type GenerateState = "idle" | "posting" | "polling" | "done" | "error";
 // (GitHub Pages) and install from the URL directly — works on a clean machine
 // with no registry account.
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
-const TARBALL_PATH = `${BASE_PATH}/agent/notiva-agent-0.3.0.tgz`;
+const TARBALL_PATH = `${BASE_PATH}/agent/scout-agent-0.3.0.tgz`;
 // Sensible absolute default for SSR/export; overwritten with the real origin
 // after mount so the copied command is correct on whatever host serves it.
 const DEFAULT_TARBALL_URL = `https://hakon1233.github.io${TARBALL_PATH}`;
@@ -153,9 +153,9 @@ export default function ConnectPage() {
           : "—";
 
   // Install the prebuilt companion globally from the tarball URL, then use the
-  // short `notiva-agent` commands. No npm-registry account needed.
-  const installCmd = `npm i -g ${tarballUrl}\nnotiva-agent pair`;
-  const runCmd = "notiva-agent run";
+  // short `scout-agent` commands. No npm-registry account needed.
+  const installCmd = `npm i -g ${tarballUrl}\nscout-agent pair`;
+  const runCmd = "scout-agent run";
 
   return (
     <main className="mx-auto max-w-xl px-5 py-10 space-y-8">

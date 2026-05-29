@@ -1,4 +1,4 @@
-// Loopback client for the @notiva/agent companion.
+// Loopback client for the @scout/agent companion.
 // The companion binds to 127.0.0.1:47821 by default; we try that first
 // then fall back to a small known-port sweep so a user who started the
 // agent on a different port can still pair.
@@ -9,7 +9,6 @@ export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
 export const COMPANION_PORT_SWEEP = [47821, 47822, 47823, 47830, 47840];
 const TOKEN_KEY = "scout.companion.token";
-const LEGACY_TOKEN_KEY = "notiva.companion.token";
 
 let cachedBase: string | null = null;
 
@@ -20,14 +19,7 @@ function baseFor(port: number): string {
 export function loadCompanionToken(): string {
   if (typeof window === "undefined") return "";
   const current = window.localStorage.getItem(TOKEN_KEY);
-  if (current !== null) return current;
-  const legacy = window.localStorage.getItem(LEGACY_TOKEN_KEY);
-  if (legacy !== null) {
-    window.localStorage.setItem(TOKEN_KEY, legacy);
-    window.localStorage.removeItem(LEGACY_TOKEN_KEY);
-    return legacy;
-  }
-  return "";
+  return current ?? "";
 }
 
 export function saveCompanionToken(token: string): void {
@@ -69,7 +61,7 @@ export async function pingCompanion(): Promise<boolean> {
 
 async function requireBase(): Promise<string> {
   const base = await discoverCompanion();
-  if (!base) throw new Error("Companion not reachable. Start `notiva-agent run` and try again.");
+  if (!base) throw new Error("Companion not reachable. Start `scout-agent run` and try again.");
   return base;
 }
 

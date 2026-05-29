@@ -1,6 +1,6 @@
 # supabase/
 
-Notiva v4 (Path 1) database + edge functions. See [`docs`](../docs) and the
+Scout v4 (Path 1) database + edge functions. See [`docs`](../docs) and the
 architecture doc on PER-2 for the full design.
 
 ## Layout

@@ -1,5 +1,5 @@
 import { synthesizeBrief } from "./anthropic";
-import { NotivaError } from "./errors";
+import { ScoutError } from "./errors";
 import { dedupeArticles, searchInterest } from "./exa";
 import type { Article, Brief, Settings } from "./types";
 
@@ -28,7 +28,7 @@ export type RunAgentOptions = {
   onlyTopics?: string[];
 };
 
-export class NoArticlesError extends NotivaError {
+export class NoArticlesError extends ScoutError {
   failedTopics: string[];
   constructor(failedTopics: string[]) {
     super({
@@ -63,7 +63,7 @@ export async function runAgent(
     .filter((t) => (restrictSet ? restrictSet.has(t) : true));
 
   if (interests.length === 0) {
-    throw new NotivaError({
+    throw new ScoutError({
       kind: "unknown",
       provider: "app",
       message: "Add at least one interest before generating a brief.",
@@ -136,7 +136,7 @@ export async function runAgent(
     const firstFailure = searches.find(
       (s): s is PromiseRejectedResult => s.status === "rejected",
     );
-    if (firstFailure && firstFailure.reason instanceof NotivaError) {
+    if (firstFailure && firstFailure.reason instanceof ScoutError) {
       throw firstFailure.reason;
     }
     throw new NoArticlesError(failedTopics);

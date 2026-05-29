@@ -7,7 +7,7 @@ care about.
 
 Stack (see PER-2 architecture doc, v2): Next.js 15 (App Router, static export)
 hosted on GitHub Pages, Supabase for Postgres + Auth, and a local loopback
-companion (`@notiva/agent`) that shells out to the user's own Claude Code CLI
+companion (`@scout/agent`) that shells out to the user's own Claude Code CLI
 for ranking (Haiku 4.5), synthesis (Opus 4.7), and web research (the CLI's
 built-in `WebSearch` + `WebFetch` tools). No server-side Anthropic key, no
 third-party search provider — the user's `claude` CLI handles auth from its
@@ -24,7 +24,7 @@ pnpm dev
 In a second terminal, build and run the loopback companion:
 
 ```bash
-pnpm -F @notiva/agent build
+pnpm -F @scout/agent build
 node packages/agent/dist/cli.js pair   # prints a pairing token
 node packages/agent/dist/cli.js run    # serves on 127.0.0.1:47821
 ```

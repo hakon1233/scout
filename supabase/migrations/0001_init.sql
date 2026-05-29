@@ -1,4 +1,4 @@
--- Notiva v4 schema (Path 1 — local companion).
+-- Scout v4 schema (Path 1 — local companion).
 -- Tables: interests, briefs, articles, companion_pairings, companion_devices, usage_exa_daily.
 -- All user-owned tables have RLS enabled with "user_id = auth.uid()" policies so a user
 -- only sees their own rows. The companion authenticates as the user via a JWT minted by

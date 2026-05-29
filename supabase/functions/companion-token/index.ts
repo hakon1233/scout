@@ -4,7 +4,7 @@
 // Flow:
 //   1. Signed-in user clicks "Connect agent" in the web UI. The UI inserts a row into
 //      `companion_pairings` (code = random base32, expires_at = now + 10m).
-//   2. The user runs `npx @notiva/agent pair` on their laptop and pastes the code.
+//   2. The user runs `npx @scout/agent pair` on their laptop and pastes the code.
 //   3. The CLI POSTs the code here. We look up the row using service-role, refuse if
 //      already used or expired, mark used_at, then mint a Supabase user JWT for that
 //      user via the GoTrue admin API (`generateLink` -> followed by token exchange) OR

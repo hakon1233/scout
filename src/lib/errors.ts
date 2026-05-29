@@ -1,21 +1,21 @@
-export type NotivaErrorKind = "auth" | "rate_limit" | "network" | "unknown";
-export type NotivaErrorProvider = "anthropic" | "exa" | "app";
+export type ScoutErrorKind = "auth" | "rate_limit" | "network" | "unknown";
+export type ScoutErrorProvider = "anthropic" | "exa" | "app";
 
-export class NotivaError extends Error {
-  kind: NotivaErrorKind;
-  provider: NotivaErrorProvider;
+export class ScoutError extends Error {
+  kind: ScoutErrorKind;
+  provider: ScoutErrorProvider;
   retryAfterSec?: number;
   cause?: unknown;
 
   constructor(opts: {
-    kind: NotivaErrorKind;
-    provider: NotivaErrorProvider;
+    kind: ScoutErrorKind;
+    provider: ScoutErrorProvider;
     message: string;
     retryAfterSec?: number;
     cause?: unknown;
   }) {
     super(opts.message);
-    this.name = "NotivaError";
+    this.name = "ScoutError";
     this.kind = opts.kind;
     this.provider = opts.provider;
     this.retryAfterSec = opts.retryAfterSec;
@@ -24,36 +24,36 @@ export class NotivaError extends Error {
 }
 
 export type ClassifiedError = {
-  kind: NotivaErrorKind;
-  provider: NotivaErrorProvider;
+  kind: ScoutErrorKind;
+  provider: ScoutErrorProvider;
   message: string;
   retryAfterSec?: number;
   raw: string;
 };
 
 export function fromHttp(
-  provider: NotivaErrorProvider,
+  provider: ScoutErrorProvider,
   status: number,
   body: string,
   retryAfter?: string | null,
-): NotivaError {
+): ScoutError {
   const trimmedBody = body.slice(0, 300);
   if (status === 401 || status === 403) {
-    return new NotivaError({
+    return new ScoutError({
       kind: "auth",
       provider,
       message: `${providerLabel(provider)} ${status}: ${trimmedBody}`,
     });
   }
   if (status === 429 || status === 529) {
-    return new NotivaError({
+    return new ScoutError({
       kind: "rate_limit",
       provider,
       retryAfterSec: parseRetryAfter(retryAfter),
       message: `${providerLabel(provider)} ${status}: ${trimmedBody}`,
     });
   }
-  return new NotivaError({
+  return new ScoutError({
     kind: "unknown",
     provider,
     message: `${providerLabel(provider)} ${status}: ${trimmedBody}`,
@@ -61,19 +61,19 @@ export function fromHttp(
 }
 
 export function fromTransport(
-  provider: NotivaErrorProvider,
+  provider: ScoutErrorProvider,
   err: unknown,
-): NotivaError {
+): ScoutError {
   const e = err as Error & { name?: string; code?: string };
   if (e?.name === "AbortError") {
-    return new NotivaError({
+    return new ScoutError({
       kind: "network",
       provider,
       message: `${providerLabel(provider)} request timed out or was cancelled.`,
       cause: err,
     });
   }
-  return new NotivaError({
+  return new ScoutError({
     kind: "network",
     provider,
     message: `${providerLabel(provider)} unreachable: ${
@@ -84,7 +84,7 @@ export function fromTransport(
 }
 
 export function classifyError(err: unknown): ClassifiedError {
-  if (err instanceof NotivaError) {
+  if (err instanceof ScoutError) {
     return {
       kind: err.kind,
       provider: err.provider,
@@ -119,7 +119,7 @@ export function classifyError(err: unknown): ClassifiedError {
   };
 }
 
-function providerLabel(p: NotivaErrorProvider): string {
+function providerLabel(p: ScoutErrorProvider): string {
   switch (p) {
     case "anthropic":
       return "Anthropic";

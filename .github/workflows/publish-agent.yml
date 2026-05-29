@@ -1,4 +1,4 @@
-name: Publish @notiva/agent to npm
+name: Publish @scout/agent to npm
 
 on:
   workflow_dispatch:
@@ -22,8 +22,8 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @notiva/agent test
-      - run: pnpm --filter @notiva/agent build
-      - run: pnpm --filter @notiva/agent publish --access public --tag ${{ inputs.tag }}
+      - run: pnpm --filter @scout/agent test
+      - run: pnpm --filter @scout/agent build
+      - run: pnpm --filter @scout/agent publish --access public --tag ${{ inputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
