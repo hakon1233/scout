@@ -100,7 +100,31 @@ export function createServer(deps: ServerDeps = {}): http.Server {
     const cors = corsHeaders(origin);
 
     if (req.method === "OPTIONS") {
-      res.writeHead(204, cors);
+      // Private Network Access (PNA) preflight. Classic-PNA browsers
+      // (Chrome ~104–~129 and Chromium forks that haven't shipped Local
+      // Network Access yet) send an extra preflight carrying
+      // `Access-Control-Request-Private-Network: true` when a public origin
+      // (e.g. github.io) fetches this loopback server; they require us to
+      // echo `Access-Control-Allow-Private-Network: true` or they deny it.
+      // We honor that here for origins we already allow via CORS.
+      //
+      // IMPORTANT (verified on Chrome 148, 2026-05-30, PER-107): newer
+      // Chrome replaced classic PNA with the *Local Network Access* (LNA)
+      // model, which gates public→loopback behind a real USER PERMISSION
+      // ("Allow local network"). In that model the request is blocked
+      // before any preflight is sent, so this header is a NO-OP and cannot
+      // remove the prompt. Removing the prompt requires not making a
+      // public→loopback request at all (e.g. serve the UI from the
+      // companion on a localhost origin). This header stays as correct,
+      // harmless support for classic-PNA browsers — don't assume it solves
+      // the LNA prompt.
+      const wantsPrivateNetwork =
+        req.headers["access-control-request-private-network"] === "true";
+      const pna =
+        wantsPrivateNetwork && Object.keys(cors).length > 0
+          ? { "access-control-allow-private-network": "true" }
+          : {};
+      res.writeHead(204, { ...cors, ...pna });
       res.end();
       return;
     }

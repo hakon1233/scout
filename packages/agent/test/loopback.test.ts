@@ -100,6 +100,68 @@ test("loopback round-trip: pair → POST interests → poll briefs", async () =>
   }
 });
 
+test("OPTIONS preflight grants Private Network Access for allowed origins (PER-107)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  await saveState({ pairing_token: newPairingToken() }, stateFile);
+
+  const { server, port } = await startServer(0, { stateFile });
+
+  try {
+    // A real Chrome PNA preflight from the public github.io origin: it carries
+    // both Origin and Access-Control-Request-Private-Network: true.
+    const githubOrigin = "https://hakon1233.github.io";
+    const preflight = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "OPTIONS",
+      headers: {
+        origin: githubOrigin,
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "authorization, content-type",
+        "access-control-request-private-network": "true",
+      },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(
+      preflight.headers.get("access-control-allow-private-network"),
+      "true",
+    );
+    assert.equal(
+      preflight.headers.get("access-control-allow-origin"),
+      githubOrigin,
+    );
+
+    // A preflight WITHOUT the PNA request header must not get the grant.
+    const noPna = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "OPTIONS",
+      headers: { origin: githubOrigin, "access-control-request-method": "POST" },
+    });
+    assert.equal(noPna.status, 204);
+    assert.equal(
+      noPna.headers.get("access-control-allow-private-network"),
+      null,
+    );
+
+    // A PNA preflight from a disallowed origin gets neither CORS nor the grant.
+    const badOrigin = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://evil.example.com",
+        "access-control-request-method": "POST",
+        "access-control-request-private-network": "true",
+      },
+    });
+    assert.equal(badOrigin.status, 204);
+    assert.equal(
+      badOrigin.headers.get("access-control-allow-private-network"),
+      null,
+    );
+    assert.equal(badOrigin.headers.get("access-control-allow-origin"), null);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/interests returns 409 while a brief is pending (PER-92)", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
