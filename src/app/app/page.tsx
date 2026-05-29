@@ -12,6 +12,7 @@ import { SetupForm } from "@/components/SetupForm";
 import { Banner, Button, EmptyState } from "@/components/ui";
 import { runAgent, type AgentProgress } from "@/lib/agent";
 import {
+  fetchLatestBrief,
   loadCompanionToken,
   pingCompanion,
   refreshBriefViaCompanion,
@@ -82,6 +83,33 @@ export default function AppPage() {
       cancelled = true;
       clearInterval(id);
     };
+  }, [hydrated]);
+
+  useEffect(() => {
+    // On load, pull the latest ready brief from the paired companion so a brief
+    // generated in a previous session shows immediately — not the hardcoded
+    // example. Only adopt it when it's newer than whatever we cached locally,
+    // and never while a generation is already in flight.
+    if (!hydrated) return;
+    const token = loadCompanionToken();
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      const latest = await fetchLatestBrief(token);
+      if (cancelled || !latest || running) return;
+      const topics = loadSettings()?.interests.map((i) => i.topic) ?? [];
+      latest.failedTopics = topics.filter((t) => !latest.interests.includes(t));
+      setBrief((prev) => {
+        if (prev && prev.generatedAt >= latest.generatedAt) return prev;
+        saveLastBrief(latest);
+        return latest;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Runs once after hydration; `running` is intentionally read at fire time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
   const refreshViaCompanion = useCallback(async () => {
