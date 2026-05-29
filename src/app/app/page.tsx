@@ -9,8 +9,8 @@ import { BriefSkeleton } from "@/components/BriefSkeleton";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { InterestChips } from "@/components/InterestChips";
 import { SetupForm } from "@/components/SetupForm";
-import { Banner, Button, EmptyState } from "@/components/ui";
-import { runAgent, type AgentProgress } from "@/lib/agent";
+import { Banner, Button } from "@/components/ui";
+import type { AgentProgress } from "@/lib/agent";
 import {
   bootstrapCompanionToken,
   fetchLatestBrief,
@@ -41,7 +41,6 @@ export default function AppPage() {
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<ClassifiedError | null>(null);
-  const [zeroResults, setZeroResults] = useState(false);
   const [cancelled, setCancelled] = useState(false);
   const [interestsChanged, setInterestsChanged] = useState(false);
   const [companionReady, setCompanionReady] = useState(false);
@@ -116,29 +115,43 @@ export default function AppPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
-  const refreshViaCompanion = useCallback(async () => {
+  // Single brief path: the local Scout companion. The browser→Exa path was
+  // removed (PER-109) — it fetched api.exa.ai directly and was CORS-broken.
+  // The companion runs the local `claude` CLI over the loopback server, so
+  // there are no API keys and no cross-origin calls.
+  const generate = useCallback(async () => {
     if (!settings) return;
     const token = loadCompanionToken();
     if (!token) {
-      setError(classifyError(new Error("No pairing token. Visit /app/connect to pair.")));
+      setError(
+        classifyError(
+          new Error(
+            "Scout companion isn't paired yet. Start `scout-agent run` and open the app it prints, or visit /app/connect to pair.",
+          ),
+        ),
+      );
       return;
     }
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     setError(null);
-    setZeroResults(false);
     setCancelled(false);
     setInterestsChanged(false);
     setProgress({
       stage: "synthesizing",
       message: "Companion is fetching & synthesizing your brief…",
-      perInterest: settings.interests.map((i) => ({ topic: i.topic, state: "pending" })),
+      perInterest: settings.interests.map((i) => ({
+        topic: i.topic,
+        state: "pending",
+      })),
     });
     try {
       const since = brief?.generatedAt ?? new Date(0).toISOString();
       const next = await refreshBriefViaCompanion(
         settings.interests.map((i) => i.topic),
         token,
-        { sinceTs: since },
+        { sinceTs: since, signal: controller.signal },
       );
       next.failedTopics = settings.interests
         .map((i) => i.topic)
@@ -147,71 +160,21 @@ export default function AppPage() {
       setBrief(next);
       setProgress(null);
     } catch (e) {
-      setError(classifyError(e));
+      if (controller.signal.aborted || (e as Error)?.message === "aborted") {
+        setCancelled(true);
+      } else {
+        setError(classifyError(e));
+      }
       setProgress(null);
     } finally {
       setRunning(false);
+      if (abortRef.current === controller) abortRef.current = null;
     }
   }, [settings, brief]);
 
-  const runGeneration = useCallback(
-    async (onlyTopics?: string[]) => {
-      if (!settings) return;
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setRunning(true);
-      setError(null);
-      setZeroResults(false);
-      setCancelled(false);
-      setInterestsChanged(false);
-      const activeTopics = onlyTopics
-        ? settings.interests.filter((i) => onlyTopics.includes(i.topic))
-        : settings.interests;
-      setProgress({
-        stage: "searching",
-        message: "Starting agent…",
-        perInterest: activeTopics.map((i) => ({
-          topic: i.topic,
-          state: "pending",
-        })),
-      });
-      try {
-        const next = await runAgent(settings, setProgress, {
-          signal: controller.signal,
-          onlyTopics,
-        });
-        saveLastBrief(next);
-        setBrief(next);
-        setProgress(null);
-      } catch (e) {
-        if (controller.signal.aborted) {
-          setCancelled(true);
-          setProgress(null);
-        } else {
-          const classified = classifyError(e);
-          if (
-            classified.kind === "unknown" &&
-            (e as Error)?.name === "NoArticlesError"
-          ) {
-            setZeroResults(true);
-          } else {
-            setError(classified);
-          }
-          setProgress(null);
-        }
-      } finally {
-        setRunning(false);
-        if (abortRef.current === controller) abortRef.current = null;
-      }
-    },
-    [settings],
-  );
-
-  const generate = useCallback(() => runGeneration(), [runGeneration]);
-  const retryFailedTopics = useCallback(
-    (topics: string[]) => runGeneration(topics),
-    [runGeneration],
-  );
+  // The companion regenerates the whole brief each pass, so a failed-topic
+  // retry is just another full refresh.
+  const retryFailedTopics = useCallback(() => generate(), [generate]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -282,19 +245,19 @@ export default function AppPage() {
         </div>
         <div className="flex flex-col gap-2 min-[480px]:flex-row">
           <Button variant="secondary" onClick={() => setEditing("interests")}>
-            Manage interests &amp; keys
+            Manage interests
           </Button>
-          {companionReady && (
-            <Button
-              variant="secondary"
-              loading={running}
-              onClick={refreshViaCompanion}
-              title="Use the local Scout companion"
-            >
-              {running ? "Working…" : "Refresh brief (companion)"}
-            </Button>
-          )}
-          <Button variant="primary" loading={running} onClick={generate}>
+          <Button
+            variant="primary"
+            loading={running}
+            disabled={!companionReady}
+            onClick={generate}
+            title={
+              companionReady
+                ? "Generate your brief with the local Scout companion"
+                : "Start the Scout companion to generate a brief"
+            }
+          >
             {running
               ? "Working…"
               : brief
@@ -303,6 +266,24 @@ export default function AppPage() {
           </Button>
         </div>
       </header>
+
+      {!companionReady && (
+        <Banner tone="info">
+          <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Scout builds your brief with its local companion. Start{" "}
+              <code className="font-mono text-mono-xs">scout-agent run</code>{" "}
+              and open the app link it prints.
+            </span>
+            <Link
+              href="/app/connect"
+              className="shrink-0 text-caption uppercase text-muted underline transition hover:text-primary"
+            >
+              Pair companion →
+            </Link>
+          </span>
+        </Banner>
+      )}
 
       {interestsChanged && !running && (
         <Banner tone="info">
@@ -336,18 +317,6 @@ export default function AppPage() {
         />
       )}
 
-      {zeroResults && !running && (
-        <EmptyState
-          title="No articles found"
-          body="Try broader interests or fewer constraints."
-          primary={{
-            label: "Edit interests",
-            onClick: () => setEditing("interests"),
-          }}
-          secondary={{ label: "Try again", onClick: generate }}
-        />
-      )}
-
       {brief?.failedTopics && brief.failedTopics.length > 0 && !running && (
         <Banner tone="warning">
           <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -361,7 +330,7 @@ export default function AppPage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => retryFailedTopics(brief.failedTopics ?? [])}
+              onClick={retryFailedTopics}
             >
               Retry failed
             </Button>
@@ -380,7 +349,6 @@ export default function AppPage() {
       ) : (
         !running &&
         !brief &&
-        !zeroResults &&
         !error && (
           <div className="flex flex-col gap-3">
             <Banner tone="info">
