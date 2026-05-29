@@ -53,6 +53,17 @@ function validateInterests(v: string): string | null {
   return null;
 }
 
+// Keys are OPTIONAL: the default companion path (local `claude` CLI over the
+// loopback server) needs no keys. They're only used by the browser-direct
+// fetch path. So an empty key is valid; a non-empty key still must look right.
+function optionalAnthropicKey(v: string): string | null {
+  return v.trim() === "" ? null : validateAnthropicKey(v);
+}
+
+function optionalExaKey(v: string): string | null {
+  return v.trim() === "" ? null : validateExaKey(v);
+}
+
 export function SetupForm({
   initial,
   initialStep = 1,
@@ -100,16 +111,15 @@ export function SetupForm({
   const step1Invalid = nameErr !== null || interestsErr !== null;
   const step1ErrorMessage = nameErr ?? interestsErr ?? undefined;
 
-  // Step 2 invalid if effective keys fail validation. When user has a saved
-  // key and leaves the field blank, anthropicErr/exaErr reflect the blank
-  // input — fall back to the saved-key validation result.
+  // Step 2 is satisfied when keys are empty (companion path) OR, if provided,
+  // they look well-formed. Keys are never required to continue.
   const keysReady =
-    validateAnthropicKey(effectiveAnthropic) === null &&
-    validateExaKey(effectiveExa) === null;
+    optionalAnthropicKey(effectiveAnthropic) === null &&
+    optionalExaKey(effectiveExa) === null;
   const step2Invalid = !keysReady;
   const step2ErrorMessage =
-    validateAnthropicKey(effectiveAnthropic) ??
-    validateExaKey(effectiveExa) ??
+    optionalAnthropicKey(effectiveAnthropic) ??
+    optionalExaKey(effectiveExa) ??
     undefined;
 
   const interestCount = useMemo(
@@ -150,7 +160,7 @@ export function SetupForm({
           <div>
             <h1 className="text-title-1 text-primary">Set up your brief</h1>
             <p className="mt-2 text-body-sm text-secondary">
-              Next: paste two API keys (kept on your device).
+              Scout runs on your local Claude Code CLI — no API keys needed.
             </p>
           </div>
 
@@ -219,11 +229,13 @@ export function SetupForm({
         <form onSubmit={submitStep2} className="flex flex-col gap-6" noValidate>
           <div>
             <h1 className="text-title-1 text-primary">
-              Connect your providers
+              API keys (optional)
             </h1>
             <p className="mt-2 text-body-sm text-secondary">
-              Your API keys stay in this device&apos;s local storage and are
-              sent only to Anthropic and Exa.
+              Leave these blank to use the Scout companion (your local Claude
+              Code CLI) — that&apos;s the default and needs no keys. Only add
+              keys if you want the browser to call Anthropic and Exa directly.
+              Anything you enter stays in this device&apos;s local storage.
             </p>
           </div>
 
@@ -294,7 +306,7 @@ export function SetupForm({
           )}
 
           <KeyInput
-            label="Anthropic API key"
+            label="Anthropic API key (optional)"
             helper={
               <>
                 Get one at{" "}
@@ -314,20 +326,16 @@ export function SetupForm({
             value={anthropicKey}
             onChange={setAnthropicKey}
             placeholder="sk-ant-…"
-            // When a saved key exists and field is blank, suppress shape errors
-            // — the saved value is kept.
-            validate={
-              hasSavedAnthropic && anthropicKey === ""
-                ? undefined
-                : validateAnthropicKey
-            }
+            // Optional: blank is always fine (companion path). A non-empty key
+            // is shape-checked. Saved-key-blank also stays valid.
+            validate={optionalAnthropicKey}
             validateOn="blur"
             onValidityChange={setAnthropicErr}
             showSubmitErrors={submittedStep2}
           />
 
           <KeyInput
-            label="Exa API key"
+            label="Exa API key (optional)"
             helper={
               <>
                 Get one at{" "}
@@ -347,9 +355,7 @@ export function SetupForm({
             value={exaKey}
             onChange={setExaKey}
             placeholder="…"
-            validate={
-              hasSavedExa && exaKey === "" ? undefined : validateExaKey
-            }
+            validate={optionalExaKey}
             validateOn="blur"
             onValidityChange={setExaErr}
             showSubmitErrors={submittedStep2}
