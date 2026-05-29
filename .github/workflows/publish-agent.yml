@@ -23,7 +23,10 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @scout/agent test
-      - run: pnpm --filter @scout/agent build
+      # build:agent bundles the static web UI into packages/agent/webroot (empty
+      # basePath) THEN compiles the agent, so the published package serves the UI
+      # from its own loopback origin (PER-110 — no public→loopback, no LNA prompt).
+      - run: pnpm run build:agent
       - run: pnpm --filter @scout/agent publish --access public --tag ${{ inputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
