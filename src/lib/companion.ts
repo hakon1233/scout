@@ -26,6 +26,38 @@ export function saveCompanionToken(token: string): void {
   window.localStorage.setItem(TOKEN_KEY, token.trim());
 }
 
+// True when this page is itself served from the loopback companion origin
+// (http://127.0.0.1:47821/). The API is then same-origin, so there is no
+// public→loopback transition and the browser's Local Network Access prompt
+// never fires.
+export function isServedFromCompanion(): boolean {
+  if (typeof window === "undefined") return false;
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.origin);
+}
+
+// When served same-origin from the companion, fetch the pairing token from
+// `/v0/config` and persist it — so the user never copy/pastes it. Returns the
+// existing stored token when not served from the companion or if /v0/config is
+// unreachable. Returns the active token, or "" if none.
+export async function bootstrapCompanionToken(): Promise<string> {
+  const existing = loadCompanionToken();
+  if (!isServedFromCompanion()) return existing;
+  try {
+    const res = await fetch(`${window.location.origin}/v0/config`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!res.ok) return existing;
+    const cfg = (await res.json()) as { token?: string | null };
+    if (cfg.token && cfg.token !== existing) {
+      saveCompanionToken(cfg.token);
+      return cfg.token;
+    }
+  } catch {
+    // not reachable / not same-origin — fall back to the stored token
+  }
+  return existing;
+}
+
 async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
   try {
     const res = await fetch(`${baseFor(port)}/healthz`, {
@@ -40,6 +72,21 @@ async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
 // Returns the base URL of the live companion, or null. Caches the result
 // so subsequent calls in the same session skip the sweep.
 export async function discoverCompanion(): Promise<string | null> {
+  // Served same-origin from the companion? Use this exact origin — every API
+  // call is then same-origin (no CORS, no LNA prompt) and we skip the sweep.
+  if (isServedFromCompanion()) {
+    const origin = window.location.origin;
+    if (cachedBase === origin) return origin;
+    try {
+      const res = await fetch(`${origin}/healthz`, { signal: AbortSignal.timeout(1500) });
+      if (res.ok) {
+        cachedBase = origin;
+        return origin;
+      }
+    } catch {
+      // fall through to the port sweep
+    }
+  }
   if (cachedBase) {
     if (await pingPort(new URL(cachedBase).port ? Number(new URL(cachedBase).port) : COMPANION_PORT)) {
       return cachedBase;
