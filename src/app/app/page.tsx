@@ -12,6 +12,7 @@ import { SetupForm } from "@/components/SetupForm";
 import { Banner, Button, EmptyState } from "@/components/ui";
 import { runAgent, type AgentProgress } from "@/lib/agent";
 import {
+  bootstrapCompanionToken,
   fetchLatestBrief,
   loadCompanionToken,
   pingCompanion,
@@ -74,7 +75,10 @@ export default function AppPage() {
     if (!hydrated) return;
     let cancelled = false;
     const check = async () => {
-      const ok = loadCompanionToken() ? await pingCompanion() : false;
+      // When served from the companion, this also auto-adopts the pairing
+      // token from /v0/config so no manual paste is needed.
+      const token = await bootstrapCompanionToken();
+      const ok = token ? await pingCompanion() : false;
       if (!cancelled) setCompanionReady(ok);
     };
     check();
@@ -91,10 +95,10 @@ export default function AppPage() {
     // example. Only adopt it when it's newer than whatever we cached locally,
     // and never while a generation is already in flight.
     if (!hydrated) return;
-    const token = loadCompanionToken();
-    if (!token) return;
     let cancelled = false;
     (async () => {
+      const token = await bootstrapCompanionToken();
+      if (!token || cancelled) return;
       const latest = await fetchLatestBrief(token);
       if (cancelled || !latest || running) return;
       const topics = loadSettings()?.interests.map((i) => i.topic) ?? [];

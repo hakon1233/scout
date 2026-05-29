@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  bootstrapCompanionToken,
   COMPANION_PORT,
+  isServedFromCompanion,
   loadCompanionToken,
   pingCompanion,
   pollBriefs,
@@ -37,6 +39,7 @@ export default function ConnectPage() {
       : DEFAULT_TARBALL_URL,
   );
   const [status, setStatus] = useState<Status>("idle");
+  const [servedLocal, setServedLocal] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [genState, setGenState] = useState<GenerateState>("idle");
   const [genMsg, setGenMsg] = useState("");
@@ -47,7 +50,13 @@ export default function ConnectPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setToken(loadCompanionToken());
+    setServedLocal(isServedFromCompanion());
+    // When served from the companion (same-origin), auto-adopt the pairing
+    // token from /v0/config so the user skips the copy/paste step entirely.
+    (async () => {
+      const tok = await bootstrapCompanionToken();
+      setToken(tok);
+    })();
   }, []);
 
   const check = useCallback(async () => {
