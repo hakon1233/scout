@@ -14,14 +14,29 @@ import { loadSettings, saveLastBrief } from "@/lib/storage";
 type Status = "idle" | "checking" | "connected" | "disconnected";
 type GenerateState = "idle" | "posting" | "polling" | "done" | "error";
 
-const INSTALL_CMD = "npx @notiva/agent@latest";
-const PAIR_CMD = "npx @notiva/agent@latest pair";
-const RUN_CMD = "npx @notiva/agent@latest run";
+// The companion is not on the public npm registry yet (npm publish under
+// @scout/ is tracked in PER-80 / PER-98). Until then we serve the prebuilt,
+// zero-dependency tarball from this site (GitHub Pages) and install from the
+// URL directly — works on a clean machine with no registry account.
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const TARBALL_PATH = `${BASE_PATH}/agent/notiva-agent-0.3.0.tgz`;
+// Sensible absolute default for SSR/export; overwritten with the real origin
+// after mount so the copied command is correct on whatever host serves it.
+const DEFAULT_TARBALL_URL = `https://hakon1233.github.io${TARBALL_PATH}`;
 const POLL_INTERVAL_MS = 4000;
 const POLL_MAX_ATTEMPTS = 20; // ~80s
 
 export default function ConnectPage() {
   const [token, setToken] = useState("");
+  // Resolve the tarball URL against the actual origin this page is served from,
+  // so the copied command is correct regardless of the deploy host. Computed at
+  // mount via a lazy initializer (falls back to the canonical URL during the
+  // static export build, where `window` is undefined).
+  const [tarballUrl] = useState(() =>
+    typeof window !== "undefined"
+      ? `${window.location.origin}${TARBALL_PATH}`
+      : DEFAULT_TARBALL_URL,
+  );
   const [status, setStatus] = useState<Status>("idle");
   const [copied, setCopied] = useState<string | null>(null);
   const [genState, setGenState] = useState<GenerateState>("idle");
@@ -138,6 +153,11 @@ export default function ConnectPage() {
           ? "Not running"
           : "—";
 
+  // Install the prebuilt companion globally from the tarball URL, then use the
+  // short `notiva-agent` commands. No npm-registry account needed.
+  const installCmd = `npm i -g ${tarballUrl}\nnotiva-agent pair`;
+  const runCmd = "notiva-agent run";
+
   return (
     <main className="mx-auto max-w-xl px-5 py-10 space-y-8">
       <div>
@@ -180,13 +200,13 @@ export default function ConnectPage() {
         <p className="text-sm text-gray-600 dark:text-gray-300">
           Run this once in your terminal to install and generate a pairing token:
         </p>
-        <CmdBlock cmd={`${INSTALL_CMD}\n${PAIR_CMD}`} copyKey="pair" copied={copied} onCopy={copy} />
+        <CmdBlock cmd={installCmd} copyKey="pair" copied={copied} onCopy={copy} />
         <p className="text-xs text-gray-400 dark:text-gray-500">
-          Note: the npm package is still published under the legacy{" "}
-          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">@notiva/</code>{" "}
-          scope. A republish under{" "}
+          Note: the companion is not on the public npm registry yet, so this
+          installs the prebuilt package directly from this site. Requires Node
+          20+. Publishing under{" "}
           <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">@scout/</code>{" "}
-          is tracked separately.
+          is tracked separately (PER-80).
         </p>
         <p className="text-sm text-gray-600 dark:text-gray-300">
           The command prints a token. Paste it below:
@@ -216,7 +236,7 @@ export default function ConnectPage() {
         <p className="text-sm text-gray-600 dark:text-gray-300">
           Keep this running in a terminal tab. It listens on port {COMPANION_PORT}.
         </p>
-        <CmdBlock cmd={RUN_CMD} copyKey="run" copied={copied} onCopy={copy} />
+        <CmdBlock cmd={runCmd} copyKey="run" copied={copied} onCopy={copy} />
         <p className="text-xs text-gray-400 dark:text-gray-500">
           Needs{" "}
           <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">claude</code>{" "}
