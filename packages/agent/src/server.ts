@@ -26,6 +26,7 @@ import {
   type State,
 } from "./state.js";
 import { researchAndSynthesize } from "./research.js";
+import { resolveStatic } from "./static.js";
 
 export const PKG_VERSION = "0.3.0";
 export const DEFAULT_PORT = Number(process.env.SCOUT_AGENT_PORT ?? 47821);
@@ -37,6 +38,8 @@ export type ServerDeps = {
   spawnFn?: typeof spawn;
   // The synth pass is async; tests can wait on this to know when it finishes.
   onSynthesisDone?: (brief: Brief) => void;
+  // Static UI root; defaults to the bundled webroot. Injected for tests.
+  webroot?: string;
 };
 
 const CORS_ALLOWED_ORIGINS = [
@@ -46,6 +49,16 @@ const CORS_ALLOWED_ORIGINS = [
   /^https:\/\/scout\.[a-z.]+$/,
   /^https:\/\/[a-z0-9-]+\.github\.io$/,
 ];
+
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+// True when the request is same-origin with this loopback server: either no
+// Origin header (browsers omit it for same-origin GETs) or an explicit
+// loopback origin. Used to gate `/v0/config`, which hands the page its pairing
+// token — only the UI we serve (same-origin) should get it.
+function isSameOriginCaller(origin: string | undefined): boolean {
+  return !origin || LOOPBACK_ORIGIN.test(origin);
+}
 
 function corsHeaders(origin: string | undefined): Record<string, string> {
   if (!origin) return {};
@@ -86,6 +99,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
   const stateFile = deps.stateFile ?? STATE_FILE;
   const claudeBin = deps.claudeBin;
   const spawnFn = deps.spawnFn;
+  const webroot = deps.webroot;
 
   async function authed(req: http.IncomingMessage): Promise<State | null> {
     const token = bearer(req);
@@ -135,6 +149,28 @@ export function createServer(deps: ServerDeps = {}): http.Server {
       try {
         if (req.method === "GET" && url.pathname === "/healthz") {
           json(res, 200, { ok: true, version: PKG_VERSION }, cors);
+          return;
+        }
+
+        // Same-origin bootstrap: hand the served UI its pairing token so the
+        // user never has to copy/paste it. When the page is served from this
+        // companion (http://127.0.0.1:47821/), the fetch is same-origin and
+        // this returns the token. A cross-origin (public) caller is refused —
+        // and is in any case blocked by the browser's LNA gate before it ever
+        // reaches us. The token only guards the browser-origin boundary; any
+        // local process can already read ~/.config/scout/state.json, so this
+        // adds no on-machine exposure.
+        if (req.method === "GET" && url.pathname === "/v0/config") {
+          if (!isSameOriginCaller(origin)) {
+            return json(res, 403, { error: "forbidden" }, cors);
+          }
+          const state = await loadState(stateFile);
+          json(
+            res,
+            200,
+            { token: state.pairing_token ?? null, version: PKG_VERSION },
+            cors,
+          );
           return;
         }
 
@@ -208,6 +244,25 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const matches = last && (!since || last.generated_at > since) ? [last] : [];
           json(res, 200, { briefs: matches }, cors);
           return;
+        }
+
+        // Static UI fallback. Serve the bundled Next export for any GET/HEAD
+        // that didn't match an API route. Same-origin with the API above, so
+        // the browser never makes a public→loopback request → no LNA prompt.
+        if (req.method === "GET" || req.method === "HEAD") {
+          const hit = await resolveStatic(url.pathname, webroot);
+          if (hit) {
+            res.writeHead(200, {
+              "content-type": hit.contentType,
+              "content-length": String(hit.body.length),
+              // Hashed _next assets are immutable; HTML must revalidate.
+              "cache-control": url.pathname.startsWith("/_next/")
+                ? "public, max-age=31536000, immutable"
+                : "no-cache",
+            });
+            res.end(req.method === "HEAD" ? undefined : hit.body);
+            return;
+          }
         }
 
         json(res, 404, { error: "not found" }, cors);

@@ -52,8 +52,14 @@ async function cmdRun(portArg?: string): Promise<void> {
   }
   const port = portArg ? Number(portArg) : DEFAULT_PORT;
   const { port: bound } = await startServer(Number.isFinite(port) ? port : DEFAULT_PORT);
-  console.log(`@scout/agent v${PKG_VERSION} listening on http://127.0.0.1:${bound}`);
-  console.log("Endpoints: GET /healthz, POST /v0/interests, GET /v0/briefs?since=<iso>");
+  const url = `http://127.0.0.1:${bound}`;
+  console.log(`@scout/agent v${PKG_VERSION} listening on ${url}`);
+  console.log(`\n  Open Scout in your browser:  ${url}/app/\n`);
+  console.log(
+    "Serving the Scout UI from this loopback origin means the page is same-origin\n" +
+      'with the API — no "Allow local network" prompt, no pairing token to paste.',
+  );
+  console.log("\nEndpoints: GET /healthz, POST /v0/interests, GET /v0/briefs?since=<iso>");
 }
 
 async function main(): Promise<void> {

@@ -295,3 +295,87 @@ test("POST /v0/interests rejects >6 interests with 400 (PER-91)", async () => {
     await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
   }
 });
+
+// PER-110: the companion serves the web UI from its own loopback origin so the
+// page is same-origin with the API → no Local Network Access prompt. Two parts
+// are tested here: the /v0/config token bootstrap and the static file fallback.
+
+test("GET /v0/config hands the token to a same-origin caller, refuses cross-origin", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  const { server, port } = await startServer(0, { stateFile });
+  try {
+    // Same-origin: browsers omit Origin for same-origin GETs.
+    const noOrigin = await fetch(`http://127.0.0.1:${port}/v0/config`);
+    assert.equal(noOrigin.status, 200);
+    assert.equal((await noOrigin.json()).token, token);
+
+    // Explicit loopback origin (the served UI) also gets the token.
+    const loopback = await fetch(`http://127.0.0.1:${port}/v0/config`, {
+      headers: { origin: `http://127.0.0.1:${port}` },
+    });
+    assert.equal(loopback.status, 200);
+    assert.equal((await loopback.json()).token, token);
+
+    // A public cross-origin caller is refused — the token must never leak to
+    // github.io even if the browser's LNA gate somehow let the request through.
+    const cross = await fetch(`http://127.0.0.1:${port}/v0/config`, {
+      headers: { origin: "https://hakon1233.github.io" },
+    });
+    assert.equal(cross.status, 403);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+  }
+});
+
+test("serves the bundled static UI for non-API GETs (PER-110)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  await saveState({ pairing_token: newPairingToken() }, stateFile);
+
+  // A throwaway webroot mirroring the Next export layout (index.html, /app/,
+  // hashed _next asset) — no dependency on a prior `next build`.
+  const webroot = await fs.mkdtemp(path.join(os.tmpdir(), "scout-webroot-"));
+  await fs.writeFile(path.join(webroot, "index.html"), "<!doctype html><title>root</title>");
+  await fs.mkdir(path.join(webroot, "app"), { recursive: true });
+  await fs.writeFile(path.join(webroot, "app", "index.html"), "<!doctype html><title>app</title>");
+  await fs.mkdir(path.join(webroot, "_next", "static"), { recursive: true });
+  await fs.writeFile(path.join(webroot, "_next", "static", "x.js"), "console.log(1)");
+
+  const { server, port } = await startServer(0, { stateFile, webroot });
+  try {
+    // Root → index.html.
+    const root = await fetch(`http://127.0.0.1:${port}/`);
+    assert.equal(root.status, 200);
+    assert.match(root.headers.get("content-type") ?? "", /text\/html/);
+    assert.match(await root.text(), /<title>root<\/title>/);
+
+    // Directory route /app/ → app/index.html.
+    const app = await fetch(`http://127.0.0.1:${port}/app/`);
+    assert.equal(app.status, 200);
+    assert.match(await app.text(), /<title>app<\/title>/);
+
+    // Hashed asset → immutable cache + JS content-type.
+    const asset = await fetch(`http://127.0.0.1:${port}/_next/static/x.js`);
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers.get("content-type") ?? "", /javascript/);
+    assert.match(asset.headers.get("cache-control") ?? "", /immutable/);
+
+    // API routes still win over the static fallback.
+    const health = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(health.status, 200);
+    assert.equal((await health.json()).ok, true);
+
+    // Path traversal is refused (resolves outside webroot → 404, not the state file).
+    const evil = await fetch(`http://127.0.0.1:${port}/../../../etc/passwd`);
+    assert.equal(evil.status, 404);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(webroot, { recursive: true, force: true });
+  }
+});
