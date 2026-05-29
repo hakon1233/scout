@@ -140,6 +140,70 @@ test("POST /v0/interests returns 409 while a brief is pending (PER-92)", async (
   }
 });
 
+test("GET /v0/briefs + /healthz stay responsive during synthesis (PER-101)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  // A stub `claude` that holds the subprocess open for ~2.5s and burns CPU the
+  // whole time — stands in for the heavy real agent. If the request handler
+  // ever blocks the event loop on the in-flight child (e.g. a switch to a
+  // synchronous spawn / blocking read), the polls below would hang and the
+  // latency assertion would fail. This is the guard for the PER-101 contract:
+  // synthesis is fire-and-forget and the server keeps answering.
+  const dir = path.dirname(stateFile);
+  const claudeBin = path.join(dir, "claude-busy");
+  const busy = `#!/usr/bin/env node\ncat=process.stdin.resume();\nconst end=Date.now()+2500;\nwhile(Date.now()<end){Math.sqrt(Math.random());}\nprocess.stdout.write('# Your brief\\n\\n## x\\n- ok\\n  [example.com — D](https://example.com)\\n');\n`;
+  await fs.writeFile(claudeBin, busy, { mode: 0o755 });
+
+  let synthesisDone: (b: Brief) => void;
+  const doneP = new Promise<Brief>((r) => (synthesisDone = r));
+  const { server, port } = await startServer(0, {
+    stateFile,
+    claudeBin,
+    onSynthesisDone: (b) => synthesisDone(b),
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["ai policy", "nba"] }),
+    });
+    assert.equal(kick.status, 202);
+
+    // Poll while the child is in flight. Each poll must come back quickly and
+    // report `pending`, exactly what the web app needs to render live progress.
+    let sawPending = false;
+    for (let i = 0; i < 4; i++) {
+      const t0 = Date.now();
+      const [briefs, health] = await Promise.all([
+        fetch(`http://127.0.0.1:${port}/v0/briefs`, { headers: auth }),
+        fetch(`http://127.0.0.1:${port}/healthz`),
+      ]);
+      const elapsed = Date.now() - t0;
+      assert.equal(briefs.status, 200);
+      assert.equal(health.status, 200);
+      assert.ok(
+        elapsed < 1000,
+        `poll #${i} took ${elapsed}ms during synthesis (expected < 1000ms)`,
+      );
+      const body = await briefs.json();
+      if (body.briefs[0]?.status === "pending") sawPending = true;
+      await new Promise((res) => setTimeout(res, 400));
+    }
+    assert.ok(sawPending, "expected to observe a pending brief during synthesis");
+
+    const brief = await doneP;
+    assert.equal(brief.status, "ready");
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/interests rejects >6 interests with 400 (PER-91)", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "notiva-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
