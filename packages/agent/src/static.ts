@@ -60,7 +60,7 @@ export async function hasWebroot(root: string = WEBROOT): Promise<boolean> {
 // extensionless path also tries `<path>.html`.
 function candidatesFor(pathname: string): string[] {
   // Strip leading slash; default root to index.html.
-  let p = decodeURIComponent(pathname).replace(/^\/+/, "");
+  const p = decodeURIComponent(pathname).replace(/^\/+/, "");
   if (p === "") return ["index.html"];
   if (p.endsWith("/")) return [p + "index.html"];
   if (path.extname(p)) return [p];
