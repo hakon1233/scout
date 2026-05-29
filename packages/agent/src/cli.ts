@@ -4,6 +4,8 @@
 // Subcommands:
 //   pair          Generate a local pairing token and print it. Paste it into the
 //                 Notiva web Connect page to authorize the browser → loopback link.
+//                 Reuses an existing token if one is stored; pass --force (alias
+//                 --reset) to mint a fresh token and invalidate the old one.
 //   run (default) Start the loopback HTTP server on 127.0.0.1.
 //   status        Print pairing + last-brief state.
 //
@@ -11,13 +13,20 @@
 // (`sk-ant-oat01-…`) off-machine. Synthesis runs by spawning the user's local
 // `claude` CLI; we never read or forward that token.
 
-import { loadState, newPairingToken, saveState, STATE_FILE } from "./state.js";
+import { loadState, resolvePairingToken, saveState, STATE_FILE } from "./state.js";
 import { DEFAULT_PORT, PKG_VERSION, startServer } from "./server.js";
 
-async function cmdPair(): Promise<void> {
+async function cmdPair(force: boolean): Promise<void> {
   const state = await loadState();
-  const token = state.pairing_token ?? newPairingToken();
+  const had = Boolean(state.pairing_token);
+  const { token, rotated } = resolvePairingToken(state, force);
   await saveState({ ...state, pairing_token: token });
+
+  if (had && !rotated) {
+    console.log("Reusing existing pairing token (run `notiva-agent pair --force` to rotate).\n");
+  } else if (had && rotated) {
+    console.log("Rotated pairing token — the previous token is now invalid.\n");
+  }
   console.log("Pairing token (paste into the Notiva Connect page):\n");
   console.log(`  ${token}\n`);
   console.log(`Stored at ${STATE_FILE}. Run \`notiva-agent run\` to start the loopback server.`);
@@ -51,9 +60,11 @@ async function main(): Promise<void> {
   const [, , cmd, ...rest] = process.argv;
   try {
     switch (cmd) {
-      case "pair":
-        await cmdPair();
+      case "pair": {
+        const force = rest.includes("--force") || rest.includes("--reset");
+        await cmdPair(force);
         break;
+      }
       case "status":
         await cmdStatus();
         break;

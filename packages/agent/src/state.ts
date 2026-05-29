@@ -47,3 +47,20 @@ export function newPairingToken(): string {
 export function newBriefId(): string {
   return crypto.randomUUID();
 }
+
+export type PairResolution = {
+  token: string;
+  // true when a brand-new token was minted (first pairing, or a forced rotation).
+  // false when an existing token was reused unchanged.
+  rotated: boolean;
+};
+
+// Decide which token a `pair` invocation should persist. Pure + side-effect free
+// so it can be unit-tested without touching the filesystem. With `force`, always
+// mint a fresh token (rotation); otherwise reuse an existing token if present.
+export function resolvePairingToken(state: State, force = false): PairResolution {
+  if (state.pairing_token && !force) {
+    return { token: state.pairing_token, rotated: false };
+  }
+  return { token: newPairingToken(), rotated: true };
+}
