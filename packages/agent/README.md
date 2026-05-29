@@ -36,8 +36,12 @@ the host you opened it from.
 ## Use
 
 ```bash
-# one-time: generate a pairing token, paste it into the Scout Connect page
+# one-time: generate a pairing token, paste it into the Scout Connect page.
+# Re-running reuses the stored token; nothing rotates.
 notiva-agent pair
+
+# rotate to a brand-new token (invalidates the old one — re-pair the browser after)
+notiva-agent pair --force   # alias: --reset
 
 # start the loopback server (default port: 47821; override with --port or NOTIVA_AGENT_PORT)
 notiva-agent run
@@ -74,7 +78,7 @@ Everything lives at `~/.config/notiva/state.json` (chmod 0600):
 }
 ```
 
-Delete the file to un-pair.
+Delete the file to un-pair, or run `notiva-agent pair --force` to rotate the token in place.
 
 ## Environment overrides
 
