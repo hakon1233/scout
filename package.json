@@ -9,7 +9,10 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:agent-webroot": "node scripts/build-agent-webroot.mjs",
+    "build:agent": "pnpm run build:agent-webroot && pnpm --filter @scout/agent build",
+    "pack:agent": "pnpm run build:agent && cd packages/agent && npm pack --pack-destination ../../public/agent"
   },
   "dependencies": {
     "next": "16.2.6",
