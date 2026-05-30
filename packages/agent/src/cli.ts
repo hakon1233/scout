@@ -2,10 +2,12 @@
 // @scout/agent — local loopback companion CLI.
 //
 // Subcommands:
-//   pair          Generate a local pairing token and print it. Paste it into the
-//                 Scout web Connect page to authorize the browser → loopback link.
-//                 Reuses an existing token if one is stored; pass --force (alias
-//                 --reset) to mint a fresh token and invalidate the old one.
+//   pair          Generate and store a local pairing token. No paste needed:
+//                 `scout-agent run` serves the Scout UI from this loopback
+//                 origin, so the browser auto-adopts the token same-origin
+//                 (PER-110). Reuses an existing token if one is stored; pass
+//                 --force (alias --reset) to mint a fresh token and invalidate
+//                 the old one.
 //   run (default) Start the loopback HTTP server on 127.0.0.1.
 //   status        Print pairing + last-brief state.
 //
@@ -27,9 +29,14 @@ async function cmdPair(force: boolean): Promise<void> {
   } else if (had && rotated) {
     console.log("Rotated pairing token — the previous token is now invalid.\n");
   }
-  console.log("Pairing token (paste into the Scout Connect page):\n");
+  console.log("Pairing token (stored locally — no need to paste it anywhere):\n");
   console.log(`  ${token}\n`);
-  console.log(`Stored at ${STATE_FILE}. Run \`scout-agent run\` to start the loopback server.`);
+  console.log(`Stored at ${STATE_FILE}.`);
+  console.log(
+    "Next: run `scout-agent run`, then open the printed http://127.0.0.1 URL.\n" +
+      "The Scout UI is served from this companion, so the browser adopts the token\n" +
+      "automatically — no copy/paste step.",
+  );
 }
 
 async function cmdStatus(): Promise<void> {
