@@ -28,6 +28,14 @@ jobs:
           cache: pnpm
       - uses: actions/configure-pages@v5
       - run: pnpm install --frozen-lockfile
+      # Rebuild + repack the companion tarball from src/ on every deploy so the
+      # blob served at /agent/scout-agent-<v>.tgz can never lag the source
+      # (PER-113 #3 — a hand-committed tarball nearly shipped stale onboarding
+      # in PER-111). pack:agent runs build:agent (webroot + agent compile) then
+      # npm pack into public/agent/, which `pnpm build` copies into out/.
+      - run: pnpm run pack:agent
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
       - run: pnpm build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
