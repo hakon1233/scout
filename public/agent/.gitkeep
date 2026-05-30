@@ -1,0 +1,3 @@
+# Keeps public/agent/ present in the checkout. The companion tarball
+# (scout-agent-*.tgz) is gitignored and repacked from src/ on deploy
+# (pnpm run pack:agent). See PER-113.
