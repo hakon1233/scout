@@ -76,7 +76,7 @@ export async function researchAndSynthesize(
     child.on("close", (code) => {
       if (code !== 0)
         return reject(new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`));
-      const text = stdout.trim();
+      const text = stripBriefPreamble(stdout);
       if (!text) return reject(new Error("claude returned empty output"));
       resolve(text);
     });
@@ -84,6 +84,34 @@ export async function researchAndSynthesize(
     child.stdin!.write(prompt);
     child.stdin!.end();
   });
+}
+
+// Strip the `claude` CLI's conversational lead-in before the actual brief.
+//
+// Even with "No preamble" in the prompt, the headless `claude` run sometimes
+// emits a meta sentence first — e.g. "I have enough to write the brief." —
+// which then leaks into the rendered brief (PER-113 #1). The brief itself is
+// required to start with the `# Your brief` H1, so the robust fix is: if any
+// markdown heading exists, drop everything before the first one. Fallback for
+// the (rare) headingless case: drop a single leading non-bullet paragraph.
+export function stripBriefPreamble(raw: string): string {
+  const text = raw.trim();
+  if (!text) return text;
+
+  // Primary path: slice from the first markdown heading line (`# `, `## `, …).
+  const headingMatch = text.match(/^#{1,6}\s/m);
+  if (headingMatch && headingMatch.index !== undefined && headingMatch.index > 0) {
+    return text.slice(headingMatch.index).trim();
+  }
+  if (headingMatch) return text; // already starts at the heading — nothing to strip.
+
+  // Fallback: no heading at all. If the first paragraph is plain prose (not a
+  // list item or citation) and more content follows, treat it as preamble.
+  const paras = text.split(/\n\s*\n/);
+  if (paras.length > 1 && !/^\s*[-*]\s|\]\(/.test(paras[0])) {
+    return paras.slice(1).join("\n\n").trim();
+  }
+  return text;
 }
 
 export function buildResearchPrompt(interests: string[]): string {
