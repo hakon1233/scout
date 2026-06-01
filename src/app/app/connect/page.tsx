@@ -145,12 +145,12 @@ export default function ConnectPage() {
 
   const statusColor =
     status === "connected"
-      ? "text-green-600 dark:text-green-400"
+      ? "text-success"
       : status === "checking"
-        ? "text-yellow-600 dark:text-yellow-400"
+        ? "text-warning"
         : status === "disconnected"
-          ? "text-red-500 dark:text-red-400"
-          : "text-gray-400";
+          ? "text-danger"
+          : "text-muted";
 
   const statusLabel =
     status === "connected"
@@ -167,129 +167,157 @@ export default function ConnectPage() {
   const runCmd = "scout-agent run";
 
   return (
-    <main className="mx-auto max-w-xl px-5 py-10 space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight mb-1">Connect your agent</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-          The Scout companion runs on your laptop and uses your own{" "}
-          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">claude</code> CLI —
-          web search goes through your Claude subscription, so no third-party search key is
-          needed. Your Anthropic credentials never leave your machine.
-        </p>
-      </div>
-
-      {/* Status pill */}
-      <div className="flex items-center gap-2">
-        <span
-          className={`inline-block w-2 h-2 rounded-full ${
-            status === "connected"
-              ? "bg-green-500"
-              : status === "checking"
-                ? "bg-yellow-500 animate-pulse"
-                : status === "disconnected"
-                  ? "bg-red-500"
-                  : "bg-gray-300 dark:bg-gray-600"
-          }`}
-        />
-        <span className={`text-sm font-medium ${statusColor}`}>{statusLabel}</span>
-        <button
-          onClick={check}
-          className="ml-auto text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline underline-offset-2"
-        >
-          refresh
-        </button>
-      </div>
-
-      {/* Step 1 */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-          Step 1 — Install &amp; pair
-        </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          Run this once in your terminal to install and generate a pairing token:
-        </p>
-        <CmdBlock cmd={installCmd} copyKey="pair" copied={copied} onCopy={copy} />
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          This installs the prebuilt companion package directly from this site.
-          Requires Node 20+.
-        </p>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          The command prints a token. Paste it below:
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="Paste pairing token here"
-            className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            onClick={handleSaveToken}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+    <main className="min-h-screen bg-page text-primary">
+      <div className="mx-auto max-w-xl space-y-8 px-5 py-10">
+        <div className="flex items-center justify-between font-mono text-[12px] uppercase tracking-[0.06em] text-muted">
+          <a
+            href="/app"
+            className="transition-colors hover:text-primary"
           >
-            Save
+            ← Scout
+          </a>
+          <span>Pair the companion</span>
+        </div>
+
+        <div>
+          <p className="mb-3 flex items-center gap-2.5 font-mono text-[12px] uppercase tracking-[0.14em] text-signal">
+            <span className="h-[1.5px] w-[26px] bg-signal" />
+            Set up your wire
+          </p>
+          <h1 className="mb-2 font-serif text-[34px] font-semibold tracking-[-0.02em]">
+            Connect your agent
+          </h1>
+          <p className="font-reading text-[17px] leading-relaxed text-secondary">
+            The Scout companion runs on your laptop and uses your own{" "}
+            <code className="rounded bg-surface-muted px-1 font-mono text-[13px]">
+              claude
+            </code>{" "}
+            CLI — web search goes through your Claude subscription, so no
+            third-party search key is needed. Your Anthropic credentials never
+            leave your machine.
+          </p>
+        </div>
+
+        {/* Status pill */}
+        <div className="flex items-center gap-2 border-y border-border-default py-3">
+          <span
+            className={`inline-block h-2 w-2 rounded-full ${
+              status === "connected"
+                ? "bg-success"
+                : status === "checking"
+                  ? "animate-pulse bg-warning"
+                  : status === "disconnected"
+                    ? "bg-signal"
+                    : "bg-border-strong"
+            }`}
+          />
+          <span className={`text-sm font-medium ${statusColor}`}>
+            {statusLabel}
+          </span>
+          <button
+            onClick={check}
+            className="ml-auto font-mono text-[11px] uppercase tracking-[0.08em] text-muted underline underline-offset-2 transition-colors hover:text-primary"
+          >
+            refresh
           </button>
         </div>
-      </section>
 
-      {/* Step 2 */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-          Step 2 — Start the companion
-        </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          Keep this running in a terminal tab. It listens on port {COMPANION_PORT}.
-        </p>
-        <CmdBlock cmd={runCmd} copyKey="run" copied={copied} onCopy={copy} />
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          Needs{" "}
-          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">claude</code>{" "}
-          on your PATH, signed in to an account with WebSearch (anthropic.com Pro / Max).
-          No third-party search key required.
-        </p>
-      </section>
-
-      {/* Step 3 — Generate */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-          Step 3 — Generate a brief
-        </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          With the companion running, click below to kick off a brief using your saved interests.
-        </p>
-        <button
-          disabled={status !== "connected" || genState === "posting" || genState === "polling"}
-          onClick={handleGenerate}
-          className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-        >
-          {genState === "posting"
-            ? "Sending interests…"
-            : genState === "polling"
-              ? "Generating brief…"
-              : genState === "done"
-                ? "Brief ready ✓"
-                : "Generate brief with companion"}
-        </button>
-        {genMsg && (
-          <p
-            className={`text-sm ${genState === "error" ? "text-red-500" : genState === "done" ? "text-green-600 dark:text-green-400" : "text-gray-500"}`}
-          >
-            {genMsg}
-            {genState === "done" && (
-              <>
-                {" "}
-                <a
-                  href="/app"
-                  className="underline underline-offset-2 text-blue-600 dark:text-blue-400"
-                >
-                  Go to brief →
-                </a>
-              </>
-            )}
+        {/* Step 1 */}
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
+            <span className="text-signal">01</span> Install &amp; pair
+          </h2>
+          <p className="text-sm text-secondary">
+            Run this once in your terminal to install and generate a pairing
+            token:
           </p>
-        )}
-      </section>
+          <CmdBlock cmd={installCmd} copyKey="pair" copied={copied} onCopy={copy} />
+          <p className="text-xs text-muted">
+            This installs the prebuilt companion package directly from this
+            site. Requires Node 20+.
+          </p>
+          <p className="text-sm text-secondary">
+            The command prints a token. Paste it below:
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="Paste pairing token here"
+              className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
+            />
+            <button
+              onClick={handleSaveToken}
+              className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+            >
+              Save
+            </button>
+          </div>
+        </section>
+
+        {/* Step 2 */}
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
+            <span className="text-signal">02</span> Start the companion
+          </h2>
+          <p className="text-sm text-secondary">
+            Keep this running in a terminal tab. It listens on port{" "}
+            {COMPANION_PORT}.
+          </p>
+          <CmdBlock cmd={runCmd} copyKey="run" copied={copied} onCopy={copy} />
+          <p className="text-xs text-muted">
+            Needs{" "}
+            <code className="rounded bg-surface-muted px-1 font-mono text-[13px]">
+              claude
+            </code>{" "}
+            on your PATH, signed in to an account with WebSearch (anthropic.com
+            Pro / Max). No third-party search key required.
+          </p>
+        </section>
+
+        {/* Step 3 — Generate */}
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
+            <span className="text-signal">03</span> Generate a brief
+          </h2>
+          <p className="text-sm text-secondary">
+            With the companion running, click below to kick off a brief using
+            your saved interests.
+          </p>
+          <button
+            disabled={status !== "connected" || genState === "posting" || genState === "polling"}
+            onClick={handleGenerate}
+            className="w-full rounded-[6px] bg-accent py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {genState === "posting"
+              ? "Sending interests…"
+              : genState === "polling"
+                ? "Generating brief…"
+                : genState === "done"
+                  ? "Brief ready ✓"
+                  : "Generate brief with companion"}
+          </button>
+          {genMsg && (
+            <p
+              className={`text-sm ${genState === "error" ? "text-danger" : genState === "done" ? "text-success" : "text-muted"}`}
+            >
+              {genMsg}
+              {genState === "done" && (
+                <>
+                  {" "}
+                  <a
+                    href="/app"
+                    className="text-signal underline underline-offset-2"
+                  >
+                    Go to brief →
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
@@ -306,13 +334,13 @@ function CmdBlock({
   onCopy: (text: string, key: string) => void;
 }) {
   return (
-    <div className="relative rounded-lg bg-gray-900 dark:bg-gray-950 border border-gray-800">
-      <pre className="px-4 py-3 text-sm text-gray-100 font-mono overflow-x-auto whitespace-pre">
+    <div className="relative rounded-[6px] border border-[#322d25] bg-[#1c1a17]">
+      <pre className="overflow-x-auto whitespace-pre px-4 py-3 font-mono text-sm text-[#f1ece1]">
         {cmd}
       </pre>
       <button
         onClick={() => onCopy(cmd, copyKey)}
-        className="absolute top-2 right-2 px-2 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+        className="absolute right-2 top-2 rounded px-2 py-1 font-mono text-[11px] uppercase tracking-[0.06em] text-[#9a917f] transition-colors hover:bg-[#322d25] hover:text-[#f1ece1]"
       >
         {copied === copyKey ? "copied!" : "copy"}
       </button>

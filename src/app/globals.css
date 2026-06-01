@@ -51,31 +51,49 @@
   --blue-800: #1e40af;
   --blue-950: #172554;
 
-  /* Semantic — light */
-  --bg-page: var(--zinc-50);
-  --bg-surface: #ffffff;
-  --bg-surface-muted: var(--zinc-100);
-  --border-default: var(--zinc-200);
-  --border-strong: var(--zinc-300);
-  --text-primary: var(--zinc-900);
-  --text-secondary: var(--zinc-700);
-  --text-muted: var(--zinc-600);
-  --accent-bg: var(--zinc-900);
-  --accent-fg: var(--zinc-50);
-  --accent-bg-hover: var(--zinc-800);
-  --danger-bg: var(--red-50);
-  --danger-fg: var(--red-800);
-  --danger-border: var(--red-300);
-  --info-bg: var(--blue-50);
-  --info-fg: var(--blue-800);
-  --info-border: var(--blue-300);
-  --success-bg: var(--green-50);
-  --success-fg: var(--green-800);
-  --success-border: var(--green-300);
-  --warning-bg: var(--amber-50);
-  --warning-fg: var(--amber-800);
-  --warning-border: var(--amber-300);
-  --focus-ring: var(--zinc-900);
+  /*
+    Direction A — Editorial / "Private Wire Service" (PER-114).
+    Warm-paper canvas, ink type, signal-red dateline accent, editorial serif.
+    Founder pick, May 2026.
+  */
+  --paper: #f6f2ea;
+  --paper-2: #efe9dd;
+  --ink: #1c1a17;
+  --ink-2: #46413a;
+  --ink-3: #6f685d;
+  --line: #d8d0c1;
+  --line-2: #cabfac;
+  --card: #fffdf8;
+
+  /* Editorial accents (exposed as Tailwind text-signal / bg-signal utilities). */
+  --accent-signal: #9a3b2e;
+  --accent-deep: #1f3a4d;
+
+  /* Semantic — light (Direction A) */
+  --bg-page: var(--paper);
+  --bg-surface: var(--card);
+  --bg-surface-muted: var(--paper-2);
+  --border-default: var(--line);
+  --border-strong: var(--line-2);
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-2);
+  --text-muted: var(--ink-3);
+  --accent-bg: var(--ink);
+  --accent-fg: var(--paper);
+  --accent-bg-hover: #000000;
+  --danger-bg: #f7e9e6;
+  --danger-fg: #8a2f23;
+  --danger-border: #e0b3aa;
+  --info-bg: #e9eff2;
+  --info-fg: var(--accent-deep);
+  --info-border: #bcd0da;
+  --success-bg: #e9efe4;
+  --success-fg: #3f5a32;
+  --success-border: #c2d2b4;
+  --warning-bg: #f6ecd6;
+  --warning-fg: #7a5a1e;
+  --warning-border: #ddc89a;
+  --focus-ring: var(--accent-signal);
 
   /* Space — 4px base */
   --space-1: 0.25rem;
@@ -99,30 +117,33 @@
 }
 
 :root.dark {
-    --bg-page: #000000;
-    --bg-surface: var(--zinc-950);
-    --bg-surface-muted: var(--zinc-900);
-    --border-default: var(--zinc-800);
-    --border-strong: var(--zinc-700);
-    --text-primary: var(--zinc-50);
-    --text-secondary: var(--zinc-300);
-    --text-muted: var(--zinc-400);
-    --accent-bg: var(--zinc-100);
-    --accent-fg: var(--zinc-900);
-    --accent-bg-hover: var(--zinc-200);
-    --danger-bg: var(--red-950);
-    --danger-fg: #fecaca;
-    --danger-border: var(--red-900);
-    --info-bg: var(--blue-950);
-    --info-fg: var(--blue-300);
-    --info-border: var(--blue-800);
-    --success-bg: var(--green-950);
-    --success-fg: var(--green-300);
-    --success-border: var(--green-800);
-    --warning-bg: var(--amber-950);
-    --warning-fg: var(--amber-300);
-    --warning-border: var(--amber-800);
-    --focus-ring: var(--zinc-100);
+    /* Direction A dark — warm "ink room": darkened paper, not neutral black. */
+    --bg-page: #16140f;
+    --bg-surface: #1d1a14;
+    --bg-surface-muted: #24201a;
+    --border-default: #37322a;
+    --border-strong: #4b443a;
+    --text-primary: #f1ece1;
+    --text-secondary: #cabfac;
+    --text-muted: #9a917f;
+    --accent-bg: #f1ece1;
+    --accent-fg: #1c1a17;
+    --accent-bg-hover: #ffffff;
+    --accent-signal: #c4553f;
+    --accent-deep: #7da7bd;
+    --danger-bg: #2c1a16;
+    --danger-fg: #e6a99c;
+    --danger-border: #5a342b;
+    --info-bg: #16242b;
+    --info-fg: #9fc4d4;
+    --info-border: #2f4b57;
+    --success-bg: #1a241544;
+    --success-fg: #a6c596;
+    --success-border: #3a4d2f;
+    --warning-bg: #2a2310;
+    --warning-fg: #d8bd86;
+    --warning-border: #4d4324;
+    --focus-ring: var(--accent-signal);
 }
 
 @theme {
@@ -150,6 +171,9 @@
   --color-warning-bg: var(--warning-bg);
   --color-warning-border: var(--warning-border);
   --color-focus-ring: var(--focus-ring);
+  --color-signal: var(--accent-signal);
+  --color-signal-deep: var(--accent-deep);
+  --color-paper-card: var(--card);
 
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
@@ -188,14 +212,34 @@
   --text-mono-xs: 0.75rem;
   --text-mono-xs--line-height: 1.4;
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jbmono), ui-monospace, SFMono-Regular, monospace;
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, "Times New Roman", serif;
+  --font-reading: var(--font-newsreader), ui-serif, Georgia, serif;
 }
 
 body {
   background: var(--bg-page);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    color-mix(in srgb, var(--text-primary) 4%, transparent) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
   color: var(--text-primary);
   font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+/*
+  Direction A editorial type: serif display for titles, reading serif for
+  long-form brief prose. Applied to the shared type-scale utilities so every
+  in-app heading inherits the wire-service voice without per-component churn.
+*/
+.text-display,
+.text-title-1,
+.text-title-2 {
+  font-family: var(--font-serif);
 }
 
 /*
@@ -220,19 +264,27 @@ body {
   }
 }
 
+.scout-md {
+  font-family: var(--font-reading);
+  font-size: 1.0625rem;
+}
 .scout-md h1 {
+  font-family: var(--font-serif);
   font-size: var(--text-title-1);
   font-weight: 600;
   letter-spacing: -0.02em;
   margin-bottom: var(--space-3);
 }
 .scout-md h2 {
+  font-family: var(--font-serif);
   font-size: var(--text-title-2);
   font-weight: 600;
+  letter-spacing: -0.015em;
   margin-top: var(--space-7);
   margin-bottom: var(--space-2);
 }
 .scout-md h3 {
+  font-family: var(--font-serif);
   font-size: var(--text-title-3);
   font-weight: 600;
   margin-top: var(--space-5);
