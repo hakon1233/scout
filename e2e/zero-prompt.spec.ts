@@ -54,8 +54,8 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   await page.getByRole("button", { name: "Continue" }).click();
 
   // THE zero-prompt assertion: with no paste step, the token is auto-adopted
-  // same-origin and the companion ping succeeds, so Generate enables itself.
-  const generate = page.getByRole("button", { name: "Generate brief" });
+  // same-origin and the companion ping succeeds, so "Run now" enables itself.
+  const generate = page.getByRole("button", { name: "Run now" });
   await expect(generate).toBeEnabled({ timeout: 15_000});
 
   // The "Pair companion" prompt (shown only when !companionReady) must be gone —

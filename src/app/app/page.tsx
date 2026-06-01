@@ -53,6 +53,11 @@ export default function AppPage() {
   const [viewingPrev, setViewingPrev] = useState(false);
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [running, setRunning] = useState(false);
+  // PER-150: explicit success state for an on-demand "Run now". Holds the
+  // generated_at of the most recent run that completed in THIS session, so we
+  // can show a "fresh brief delivered" confirmation instead of silently
+  // swapping the brief. Cleared whenever a new run starts or context changes.
+  const [ranAt, setRanAt] = useState<string | null>(null);
   const [error, setError] = useState<ClassifiedError | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [interestsChanged, setInterestsChanged] = useState(false);
@@ -68,6 +73,9 @@ export default function AppPage() {
         return updated;
       });
       setInterestsChanged(true);
+      // A "fresh brief delivered" confirmation is stale the moment interests
+      // change — the out-of-date banner takes over instead.
+      setRanAt(null);
     },
     [],
   );
@@ -157,6 +165,7 @@ export default function AppPage() {
     setRunning(true);
     setError(null);
     setCancelled(false);
+    setRanAt(null);
     setInterestsChanged(false);
     setProgress({
       stage: "synthesizing",
@@ -188,6 +197,7 @@ export default function AppPage() {
       setBrief(next);
       setViewingPrev(false);
       setProgress(null);
+      setRanAt(next.generatedAt);
     } catch (e) {
       if (controller.signal.aborted || (e as Error)?.message === "aborted") {
         setCancelled(true);
@@ -326,17 +336,13 @@ export default function AppPage() {
             onClick={generate}
             title={
               settings.interests.length === 0
-                ? "Add at least one interest to generate a brief"
+                ? "Add at least one interest to run a brief"
                 : companionReady
-                  ? "Generate your brief with the local Scout companion"
-                  : "Start the Scout companion to generate a brief"
+                  ? "Run a fresh research pass now with the local Scout companion"
+                  : "Start the Scout companion to run a brief"
             }
           >
-            {running
-              ? "Working…"
-              : brief
-                ? "Regenerate brief"
-                : "Generate brief"}
+            {running ? "Working…" : "Run now"}
           </Button>
         </div>
       </header>
@@ -369,9 +375,22 @@ export default function AppPage() {
               onClick={generate}
               loading={running}
             >
-              Regenerate brief now
+              Run now
             </Button>
           </span>
+        </Banner>
+      )}
+
+      {/* PER-150: explicit success state for an on-demand run — a fresh brief
+          actually landed, not a silent swap. Suppressed once interests change
+          (the out-of-date banner takes over) or another run starts. */}
+      {ranAt && !running && !interestsChanged && !error && (
+        <Banner tone="success" aria-live="polite">
+          Fresh brief delivered ·{" "}
+          {new Date(ranAt).toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+          })}
         </Banner>
       )}
 
@@ -427,7 +446,7 @@ export default function AppPage() {
           <div className="flex flex-col gap-3">
             <Banner tone="info">
               Example brief — click{" "}
-              <span className="font-medium">Generate</span> to make your own.
+              <span className="font-medium">Run now</span> to make your own.
             </Banner>
             <BriefLayout
               brief={SAMPLE_BRIEF}
@@ -502,7 +521,7 @@ function StickyUtilityBar({
             loading={running}
             onClick={onRegenerate}
           >
-            {running ? "Working…" : "Regenerate brief"}
+            {running ? "Working…" : "Run now"}
           </Button>
         </div>
       </div>
