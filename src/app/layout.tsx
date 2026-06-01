@@ -91,8 +91,15 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${jetbrainsMono.variable} ${fraunces.variable} ${newsreader.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <head>
+        {/*
+          Resolve the theme on <html> before <body> paints — eliminates the
+          light → dark theme flash (FOUC, PER-131). Must stay in <head>, ahead
+          of body content; do not move it back into <body>.
+        */}
         <ThemeBootstrap />
+      </head>
+      <body className="min-h-full flex flex-col">
         {children}
       </body>
     </html>
