@@ -649,11 +649,13 @@ test("SPA fallback + trailing-slash parity for the bundled UI (PER-127)", async 
   }
 });
 
-// PER-144: a genuinely-unknown path hit by a *browser navigation* (Accept:
-// text/html) must render the export's styled 404.html — not the raw JSON
-// `{"error":"not found"}` a user would otherwise see. Asset/API/programmatic
-// requests (no text/html in Accept) still get the machine-readable JSON 404.
-test("unknown HTML navigation → styled 404.html, not raw JSON (PER-144)", async () => {
+// PER-144/PER-148: a genuinely-unknown route must render the export's styled
+// 404.html — not the raw JSON `{"error":"not found"}` a user would otherwise
+// see. PER-144 covered browser navigations (Accept: text/html); PER-148
+// broadens it to bare/`*/*` clients (curl, a directly-typed stray URL) on
+// extensionless routes too. Explicit JSON API clients and asset misses (paths
+// with a file extension) still get the machine-readable JSON 404.
+test("unknown route → styled 404.html, not raw JSON (PER-144/PER-148)", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   await saveState({ pairing_token: newPairingToken() }, stateFile);
@@ -684,12 +686,31 @@ test("unknown HTML navigation → styled 404.html, not raw JSON (PER-144)", asyn
     assert.equal(appUnknown.status, 200);
     assert.match(await appUnknown.text(), /<title>app<\/title>/);
 
-    // Programmatic / asset clients (no text/html in Accept) still get JSON 404.
+    // Explicit JSON API clients (application/json, no text/html) still get the
+    // machine-readable JSON 404 — the /v0 contract is preserved.
     const json404 = await fetch(`http://127.0.0.1:${port}/totally-unknown`, {
       headers: { accept: "application/json" },
     });
     assert.equal(json404.status, 404);
     assert.equal((await json404.json()).error, "not found");
+
+    // PER-148: a bare/`*/*` client (curl, a directly-typed stray URL with no
+    // text/html and no application/json) on an extensionless route is treated
+    // as a human landing on a stray URL → styled 404 page, never raw JSON.
+    const bare = await fetch(`http://127.0.0.1:${port}/totally-bogus-zzz`, {
+      headers: { accept: "*/*" },
+    });
+    assert.equal(bare.status, 404);
+    assert.match(bare.headers.get("content-type") ?? "", /text\/html/);
+    assert.match(await bare.text(), /Page not found/);
+
+    // PER-148: asset misses (path with a file extension) still get JSON 404 —
+    // serving an HTML body for a missing script/style would be wrong.
+    const asset404 = await fetch(`http://127.0.0.1:${port}/app/missing.js`, {
+      headers: { accept: "*/*" },
+    });
+    assert.equal(asset404.status, 404);
+    assert.equal((await asset404.json()).error, "not found");
   } finally {
     server.close();
     await fs.rm(tmpStateDir, { recursive: true, force: true });

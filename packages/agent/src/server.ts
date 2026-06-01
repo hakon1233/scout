@@ -397,15 +397,21 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           );
         }
 
-        // A browser navigation to a genuinely-unknown path (not caught by the
-        // SPA fallback above) should land on the export's styled 404 page with
-        // a "← back to your brief" link, not the raw JSON dump a user would
-        // otherwise see. Scoped to HTML navigations (Accept: text/html) so
-        // asset misses (e.g. /app/missing.js) and API/programmatic requests
-        // still get the machine-readable JSON 404. (PER-144)
+        // A GET/HEAD for a genuinely-unknown *route* (not caught by the SPA
+        // fallback above) should land on the export's styled 404 page with a
+        // "← back to your brief" link, not the raw JSON dump a user would
+        // otherwise see. Covers browser navigations (Accept: text/html) and
+        // bare/`*/*` clients (curl, a directly-typed stray URL) alike — anyone
+        // who could be a human. Asset misses (e.g. /app/missing.js — a path
+        // with a file extension) and explicit JSON API clients
+        // (Accept: application/json without text/html) still get the
+        // machine-readable JSON 404. (PER-144, broadened by PER-148)
         if (req.method === "GET" || req.method === "HEAD") {
           const accept = (req.headers.accept as string | undefined) ?? "";
-          if (accept.includes("text/html")) {
+          const wantsJsonOnly =
+            accept.includes("application/json") && !accept.includes("text/html");
+          const looksLikeAsset = /\.[a-z0-9]+$/i.test(url.pathname);
+          if (!wantsJsonOnly && !looksLikeAsset) {
             const page = await resolveStatic("/404.html", webroot);
             if (page) {
               res.writeHead(404, {
