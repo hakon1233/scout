@@ -432,6 +432,71 @@ test("GET /v0/config hands the token to a same-origin caller, refuses cross-orig
   }
 });
 
+// PER-135: the cross-origin origin-deny guard must be uniform across the whole
+// /v0/* surface. Previously only /v0/config 403'd a hostile Origin; /v0/briefs
+// and /v0/interests served it (no ACAO, so unreadable in a browser, but the
+// posture was inconsistent — a defense-in-depth gap). Now every /v0/* route
+// rejects a non-allowlisted Origin with 403, while allowlisted app origins and
+// no-Origin (non-browser) callers still pass.
+test("a hostile Origin is 403'd uniformly across all /v0/* routes (PER-135)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  const { server, port } = await startServer(0, { stateFile });
+  const evil = "http://evil.com";
+  const allowlisted = "https://hakon1233.github.io";
+  try {
+    // /v0/config (no token), /v0/briefs and /v0/interests (valid token) all
+    // reject the hostile Origin with 403 before any handler runs. A valid
+    // bearer token does NOT buy a hostile origin a 200.
+    const configEvil = await fetch(`http://127.0.0.1:${port}/v0/config`, {
+      headers: { origin: evil },
+    });
+    assert.equal(configEvil.status, 403);
+
+    const briefsEvil = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      headers: { origin: evil, authorization: `Bearer ${token}` },
+    });
+    assert.equal(briefsEvil.status, 403);
+    assert.equal(briefsEvil.headers.get("access-control-allow-origin"), null);
+
+    const interestsEvil = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: {
+        origin: evil,
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ interests: ["ai"] }),
+    });
+    assert.equal(interestsEvil.status, 403);
+
+    // An allowlisted app origin still reaches /v0/briefs (briefs are meant to be
+    // read cross-origin by the hosted UI) — it gets a 200 with a proper ACAO,
+    // not a 403. (/v0/config stays stricter: same-origin only, covered above.)
+    const briefsApp = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      headers: { origin: allowlisted, authorization: `Bearer ${token}` },
+    });
+    assert.equal(briefsApp.status, 200);
+    assert.equal(
+      briefsApp.headers.get("access-control-allow-origin"),
+      allowlisted,
+    );
+
+    // No-Origin (non-browser) caller is unaffected by the origin gate; it still
+    // gets through to bearer auth and serves.
+    const briefsNoOrigin = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(briefsNoOrigin.status, 200);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+  }
+});
+
 test("serves the bundled static UI for non-API GETs (PER-110)", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");

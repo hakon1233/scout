@@ -60,6 +60,23 @@ function isSameOriginCaller(origin: string | undefined): boolean {
   return !origin || LOOPBACK_ORIGIN.test(origin);
 }
 
+// True when a browser Origin is present but is NOT in our CORS allowlist. Such
+// a caller has no legitimate business touching any /v0/* route, so we 403 it
+// uniformly across the whole surface (defense in depth) instead of serving a
+// no-ACAO 200 the browser would block from reading anyway. This keeps the
+// origin-deny posture consistent: previously only /v0/config rejected a hostile
+// Origin while /v0/briefs and /v0/interests served it. (PER-135)
+//
+// No-Origin callers (non-browser clients, or same-origin GETs where the browser
+// omits Origin) pass this gate and remain subject to bearer auth. Allowlisted
+// app origins (the hosted UI on github.io / vercel.app) also pass, since briefs
+// and interests are designed to be called cross-origin by that UI. /v0/config
+// stays stricter still — same-origin only — via isSameOriginCaller.
+function isOriginDenied(origin: string | undefined): boolean {
+  if (!origin) return false;
+  return !CORS_ALLOWED_ORIGINS.some((rx) => rx.test(origin));
+}
+
 function corsHeaders(origin: string | undefined): Record<string, string> {
   if (!origin) return {};
   if (!CORS_ALLOWED_ORIGINS.some((rx) => rx.test(origin))) return {};
@@ -183,6 +200,14 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "GET" && url.pathname === "/healthz") {
           json(res, 200, { ok: true, version: PKG_VERSION }, cors);
           return;
+        }
+
+        // Uniform cross-origin deny gate for the whole /v0/* surface. A browser
+        // Origin that isn't in the CORS allowlist is rejected with 403 before
+        // any route handler runs, so /v0/config, /v0/briefs and /v0/interests
+        // all share one origin-deny posture. (PER-135)
+        if (url.pathname.startsWith("/v0/") && isOriginDenied(origin)) {
+          return json(res, 403, { error: "forbidden" }, cors);
         }
 
         // Same-origin bootstrap: hand the served UI its pairing token so the
