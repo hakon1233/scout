@@ -4,6 +4,10 @@ import type { Brief, Settings } from "./types";
 
 const SETTINGS_KEY = "scout.settings.v1";
 const BRIEF_KEY = "scout.lastBrief.v1";
+// One-deep recoverable archive of the brief that a user-initiated regenerate
+// replaces (PER-146). Holds exactly the *previous* edition; latest lives in
+// BRIEF_KEY. A third regenerate drops the oldest — honest one-deep history.
+const PREV_BRIEF_KEY = "scout.prevBrief.v1";
 
 function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null;
@@ -44,8 +48,23 @@ export function clearLastBrief(): void {
   window.localStorage.removeItem(BRIEF_KEY);
 }
 
+export function loadPrevBrief(): Brief | null {
+  if (typeof window === "undefined") return null;
+  return safeParse<Brief>(window.localStorage.getItem(PREV_BRIEF_KEY));
+}
+
+export function savePrevBrief(b: Brief): void {
+  window.localStorage.setItem(PREV_BRIEF_KEY, JSON.stringify(b));
+}
+
+export function clearPrevBrief(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(PREV_BRIEF_KEY);
+}
+
 export function clearSettings(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(SETTINGS_KEY);
   window.localStorage.removeItem(BRIEF_KEY);
+  window.localStorage.removeItem(PREV_BRIEF_KEY);
 }
