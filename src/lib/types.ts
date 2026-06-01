@@ -24,6 +24,4 @@ export type Brief = {
 export type Settings = {
   name: string;
   interests: Interest[];
-  anthropicKey: string;
-  exaKey: string;
 };

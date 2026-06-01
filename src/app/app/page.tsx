@@ -31,12 +31,10 @@ import type { Brief, Interest, Settings } from "@/lib/types";
 
 const STICKY_THRESHOLD_PX = 480;
 
-type EditTarget = "interests" | "keys";
-
 export default function AppPage() {
   const [hydrated, setHydrated] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [editing, setEditing] = useState<EditTarget | null>(null);
+  const [editing, setEditing] = useState(false);
   const [brief, setBrief] = useState<Brief | null>(null);
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [running, setRunning] = useState(false);
@@ -193,17 +191,16 @@ export default function AppPage() {
       <Shell>
         <SetupForm
           initial={settings}
-          initialStep={editing === "keys" ? 2 : 1}
           onSave={(s) => {
             saveSettings(s);
             setSettings(s);
-            setEditing(null);
+            setEditing(false);
           }}
-          onClearStoredKeys={() => {
+          onClearStored={() => {
             clearSettings();
             setSettings(null);
             setBrief(null);
-            setEditing(null);
+            setEditing(false);
           }}
         />
         {settings && (
@@ -211,7 +208,7 @@ export default function AppPage() {
             variant="link"
             size="sm"
             className="mt-3 self-start"
-            onClick={() => setEditing(null)}
+            onClick={() => setEditing(false)}
           >
             Cancel
           </Button>
@@ -228,7 +225,7 @@ export default function AppPage() {
         <StickyUtilityBar
           running={running}
           onRegenerate={generate}
-          onEditInterests={() => setEditing("interests")}
+          onEditInterests={() => setEditing(true)}
         />
       )}
 
@@ -244,7 +241,7 @@ export default function AppPage() {
           />
         </div>
         <div className="flex flex-col gap-2 min-[480px]:flex-row">
-          <Button variant="secondary" onClick={() => setEditing("interests")}>
+          <Button variant="secondary" onClick={() => setEditing(true)}>
             Manage interests
           </Button>
           <Button
@@ -310,11 +307,7 @@ export default function AppPage() {
       {cancelled && !running && <Banner tone="info">Cancelled.</Banner>}
 
       {error && (
-        <ErrorBanner
-          error={error}
-          onRetry={generate}
-          onEditKeys={() => setEditing("keys")}
-        />
+        <ErrorBanner error={error} onRetry={generate} />
       )}
 
       {brief?.failedTopics && brief.failedTopics.length > 0 && !running && (
@@ -344,7 +337,7 @@ export default function AppPage() {
           name={settings.name}
           running={running}
           onRegenerate={generate}
-          onEditInterests={() => setEditing("interests")}
+          onEditInterests={() => setEditing(true)}
         />
       ) : (
         !running &&
