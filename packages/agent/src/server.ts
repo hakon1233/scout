@@ -397,6 +397,28 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           );
         }
 
+        // A browser navigation to a genuinely-unknown path (not caught by the
+        // SPA fallback above) should land on the export's styled 404 page with
+        // a "← back to your brief" link, not the raw JSON dump a user would
+        // otherwise see. Scoped to HTML navigations (Accept: text/html) so
+        // asset misses (e.g. /app/missing.js) and API/programmatic requests
+        // still get the machine-readable JSON 404. (PER-144)
+        if (req.method === "GET" || req.method === "HEAD") {
+          const accept = (req.headers.accept as string | undefined) ?? "";
+          if (accept.includes("text/html")) {
+            const page = await resolveStatic("/404.html", webroot);
+            if (page) {
+              res.writeHead(404, {
+                "content-type": page.contentType,
+                "content-length": String(page.body.length),
+                "cache-control": "no-cache",
+              });
+              res.end(req.method === "HEAD" ? undefined : page.body);
+              return;
+            }
+          }
+        }
+
         json(res, 404, { error: "not found" }, cors);
       } catch (err) {
         json(res, 500, { error: String(err) }, cors);
