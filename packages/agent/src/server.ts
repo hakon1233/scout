@@ -184,12 +184,23 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           } catch {
             return json(res, 400, { error: "invalid json" }, cors);
           }
-          const interests = Array.isArray(parsed.interests)
+          const cleaned = Array.isArray(parsed.interests)
             ? (parsed.interests as unknown[])
                 .filter((s): s is string => typeof s === "string")
                 .map((s) => s.trim())
                 .filter(Boolean)
             : [];
+          // De-duplicate before counting against the max-6 budget. Match on a
+          // case-insensitive key so "AI safety"/"ai safety" collapse the way the
+          // rendered brief already does (one `## AI safety` section), but keep
+          // the first occurrence's original casing for display. (PER-126)
+          const seen = new Set<string>();
+          const interests = cleaned.filter((s) => {
+            const key = s.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
           if (interests.length === 0)
             return json(res, 400, { error: "interests required" }, cors);
           if (interests.length > 6)
