@@ -10,6 +10,11 @@
 //                 the old one.
 //   run (default) Start the loopback HTTP server on 127.0.0.1.
 //   status        Print pairing + last-brief state.
+//   install-service    Install a macOS launchd LaunchAgent so the companion
+//                      starts at login/boot and respawns if it exits (PER-153).
+//                      Makes the schedule reboot-durable.
+//   uninstall-service  Remove the LaunchAgent (companion no longer reboot-durable).
+//   service-status     Print whether the LaunchAgent is installed + loaded.
 //
 // Constraint: we MUST NOT transmit the user's Anthropic OAuth token
 // (`sk-ant-oat01-…`) off-machine. Synthesis runs by spawning the user's local
@@ -24,6 +29,12 @@ import {
 } from "./state.js";
 import { DEFAULT_PORT, PKG_VERSION, startServer } from "./server.js";
 import { Scheduler } from "./scheduler.js";
+import {
+  installService,
+  isServiceInstalled,
+  serviceStatus,
+  uninstallService,
+} from "./service.js";
 
 async function cmdPair(force: boolean): Promise<void> {
   const state = await loadState();
@@ -90,10 +101,16 @@ async function cmdRun(portArg?: string): Promise<void> {
   );
   const sched = (await loadState()).schedule;
   if (sched?.enabled) {
+    const durable = isServiceInstalled();
+    const durabilityNote = durable
+      ? "  Reboot-durable: a launchd LaunchAgent is installed, so this resumes\n" +
+        "  automatically after login/boot."
+      : "  Note: this only runs while THIS process is alive. After a reboot,\n" +
+        "  re-run `scout-agent run` — or `scout-agent install-service` once to\n" +
+        "  make it reboot-durable.";
     console.log(
       `\nScheduler: daily at ${sched.time_of_day} (local). Next: ${sched.next_run_at ?? "—"}.\n` +
-        "  Note: this only runs while THIS process is alive. After a reboot,\n" +
-        "  re-run `scout-agent run` to resume the schedule.",
+        durabilityNote,
     );
   }
   console.log(
@@ -113,6 +130,36 @@ async function main(): Promise<void> {
       case "status":
         await cmdStatus();
         break;
+      case "install-service": {
+        const portFlagIdx = rest.indexOf("--port");
+        const port = portFlagIdx >= 0 ? Number(rest[portFlagIdx + 1]) : undefined;
+        const r = await installService({
+          port: port && Number.isFinite(port) ? port : undefined,
+        });
+        console.log(`Wrote ${r.plist}`);
+        console.log(r.note);
+        if (r.bootstrapped) {
+          console.log(
+            "The companion is now reboot-durable — `/v0/schedule` reports reboot_durable:true\n" +
+              "and the Settings UI drops the reboot caveat.",
+          );
+        } else {
+          process.exitCode = 1;
+        }
+        break;
+      }
+      case "uninstall-service": {
+        const r = await uninstallService();
+        console.log(r.note);
+        if (!r.removed) process.exitCode = 1;
+        break;
+      }
+      case "service-status": {
+        const s = await serviceStatus();
+        console.log(`installed: ${s.installed} (${s.plist})`);
+        console.log(`loaded:    ${s.loaded === null ? "unknown" : s.loaded}`);
+        break;
+      }
       case "run":
       case undefined: {
         const portFlagIdx = rest.indexOf("--port");
@@ -121,7 +168,9 @@ async function main(): Promise<void> {
         break;
       }
       default:
-        console.error(`unknown command: ${cmd}. usage: scout-agent [pair|run|status]`);
+        console.error(
+          `unknown command: ${cmd}. usage: scout-agent [pair|run|status|install-service|uninstall-service|service-status]`,
+        );
         process.exit(2);
     }
   } catch (err) {
