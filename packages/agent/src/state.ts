@@ -20,10 +20,62 @@ export type Brief = {
   error_msg?: string;
 };
 
+// Persisted recurring-schedule config for the in-process scheduler (PER-151).
+// `enabled` + `time_of_day` are user-writable (Settings UI / PUT /v0/schedule);
+// the `last_run_*` / `next_run_at` fields are telemetry the scheduler maintains
+// so the UI can show "last produced a brief at …" / "next fire …".
+export type ScheduleConfig = {
+  enabled: boolean;
+  // Local wall-clock "HH:MM" (24h). Scheduler fires daily at this time.
+  time_of_day: string;
+  // ISO timestamp of the last SCHEDULED fire's outcome (not on-demand runs).
+  last_run_at?: string;
+  // success → a brief was produced; failed → synthesis errored; skipped → the
+  // fire couldn't run (a run was already in flight, or no interests stored yet).
+  last_run_status?: "success" | "failed" | "skipped";
+  // Human-readable reason when last_run_status is "failed" or "skipped".
+  last_run_note?: string;
+  // ISO timestamp the scheduler computed for the next fire (null/absent when
+  // disabled). The single writer is the scheduler's reschedule().
+  next_run_at?: string;
+};
+
 export type State = {
   pairing_token?: string;
   last_brief?: Brief;
+  // Last interests the user submitted, persisted so the scheduler can run an
+  // autonomous brief without the browser in the loop. Updated on every
+  // POST /v0/interests.
+  interests?: string[];
+  schedule?: ScheduleConfig;
 };
+
+// Default time-of-day for the daily schedule when none is stored yet.
+export const DEFAULT_TIME_OF_DAY = "07:00";
+
+// The schedule we materialize on first load when none is persisted. We default
+// `enabled: true` because the whole feature IS the founder's opt-in ("schedule
+// a run for the research") and the goal is briefs "without the founder doing
+// anything". The run is still gated on interests existing — a fire with no
+// stored interests records a "skipped" telemetry entry and spawns nothing — so
+// nothing is spent until the app has been used at least once. The UI (PER-152)
+// exposes the toggle to turn it off.
+export function defaultSchedule(): ScheduleConfig {
+  return { enabled: true, time_of_day: DEFAULT_TIME_OF_DAY };
+}
+
+// Validate + normalize a "HH:MM" 24h string. Returns the normalized value
+// (zero-padded) or null if malformed / out of range.
+export function normalizeTimeOfDay(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(raw.trim());
+  if (!m) return null;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isInteger(hh) || !Number.isInteger(mm)) return null;
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
 
 export async function loadState(file = STATE_FILE): Promise<State> {
   try {
