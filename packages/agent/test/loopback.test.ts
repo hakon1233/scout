@@ -296,6 +296,37 @@ test("POST /v0/interests rejects >6 interests with 400 (PER-91)", async () => {
   }
 });
 
+test("POST /v0/interests de-duplicates before the max-6 budget check (PER-126)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  const claudeBin = await makeStubClaude();
+  const { server, port } = await startServer(0, { stateFile, claudeBin });
+
+  try {
+    // 7 raw items but only 6 unique after case-insensitive de-dup ("AI safety"
+    // appears twice). The dupe must be collapsed BEFORE the max-6 check, so this
+    // is accepted (202) rather than rejected as ">6". Pre-PER-126 this 400'd.
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        interests: ["AI safety", "ai safety", "nba", "f1", "climate", "rust", "go"],
+      }),
+    });
+    assert.equal(res.status, 202);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
+  }
+});
+
 // PER-110: the companion serves the web UI from its own loopback origin so the
 // page is same-origin with the API → no Local Network Access prompt. Two parts
 // are tested here: the /v0/config token bootstrap and the static file fallback.
