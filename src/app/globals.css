@@ -84,9 +84,16 @@
   --danger-bg: #f7e9e6;
   --danger-fg: #8a2f23;
   --danger-border: #e0b3aa;
-  --info-bg: #e9eff2;
-  --info-fg: var(--accent-deep);
-  --info-border: #bcd0da;
+  /*
+    Info banners are neutral status notices (companion hint, example-brief,
+    "searched N topics"), not alarms — so they use a warm recessed parchment,
+    NOT the cold --accent-deep blue (PER-130). Signal-red stays reserved for
+    datelines/accents and danger, so info reads calm and doesn't manufacture
+    urgency. Warm-ink fg on parchment clears WCAG AA for body-sm text.
+  */
+  --info-bg: #efe7d4;
+  --info-fg: var(--ink-2);
+  --info-border: #d8cbac;
   --success-bg: #e9efe4;
   --success-fg: #3f5a32;
   --success-border: #c2d2b4;
@@ -134,9 +141,11 @@
     --danger-bg: #2c1a16;
     --danger-fg: #e6a99c;
     --danger-border: #5a342b;
-    --info-bg: #16242b;
-    --info-fg: #9fc4d4;
-    --info-border: #2f4b57;
+    /* Warm "ink room" info — recessed parchment-dark + warm-tan text, matching
+       the PAIR COMPANION link. Replaces the cold teal #16242b/#9fc4d4 (PER-130). */
+    --info-bg: #221d14;
+    --info-fg: var(--text-secondary);
+    --info-border: #463c2c;
     --success-bg: #1a241544;
     --success-fg: #a6c596;
     --success-border: #3a4d2f;
