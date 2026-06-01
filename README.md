@@ -1,5 +1,7 @@
 # Scout
 
+[![Test & Deploy](https://github.com/hakon1233/scout/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/hakon1233/scout/actions/workflows/deploy.yml)
+
 > Scout is a personalised AI news platform.
 
 Set your interests, agents fetch and synthesize a brief with only the news you

@@ -1,4 +1,9 @@
-name: Deploy to GitHub Pages
+name: Test & Deploy to GitHub Pages
+
+# Every push to main runs the full guard suite FIRST; the Pages deploy only
+# happens if it's green (PER-120). A red unit/contract (PER-118), E2E (PER-119),
+# or tarball-vs-dist drift (PER-111/PER-120) check blocks the deploy outright —
+# this is what ends the manual-dogfood era: tests now gate what ships.
 
 on:
   push:
@@ -15,7 +20,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate: typecheck + lint + companion unit/contract suite + headless E2E.
+  # Fully offline — no real Anthropic/Exa key; the `claude` shell-out is stubbed.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      # Companion unit + /v0 API contract suite (PER-118), hermetic/offline.
+      - run: pnpm test
+      # Headless Playwright E2E of the zero-prompt first-run loop (PER-119). It
+      # packs + boots the artifact with a stubbed `claude` binary, so it needs
+      # Chromium but no API keys and no network.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
   build:
+    # Hard gate: a red `test` job means no build and therefore no deploy.
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +67,11 @@ jobs:
       - run: pnpm run pack:agent
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+      # Stale-artifact guard (PER-120, PER-111 lesson): the `dist` that SHIPS
+      # inside the just-packed tarball must be byte-identical to the freshly
+      # built packages/agent/dist. If they drift, fail the build — "done in
+      # code ≠ shipped in the tarball."
+      - run: pnpm run check:tarball-dist
       - run: pnpm build
         env:
           NEXT_TELEMETRY_DISABLED: "1"

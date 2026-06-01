@@ -1,9 +1,10 @@
 name: CI
 
+# Pull-request validation. Pushes to main are gated by the `test` job in
+# deploy.yml (which additionally blocks the Pages deploy on red), so this
+# workflow only needs to guard PRs — no duplicate run on push.
 on:
   pull_request:
-  push:
-    branches: [main]
 
 jobs:
   ci:
@@ -22,6 +23,10 @@ jobs:
       - run: pnpm lint
       # Hermetic @scout/agent unit + /v0 contract suite (PER-118). Mocks the
       # `claude` shell-out, so it runs offline with zero quota and guards the
-      # known regressions (PER-91/92/106/108/110/113) on every push/PR.
+      # known regressions (PER-91/92/106/108/110/113).
       - run: pnpm test
+      # Headless Playwright E2E of the zero-prompt first-run loop (PER-119) —
+      # packs + boots the artifact with a stubbed `claude`, no API keys.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
       - run: pnpm build
