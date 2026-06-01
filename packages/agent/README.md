@@ -85,6 +85,27 @@ Delete the file to un-pair, or run `scout-agent pair --force` to rotate the toke
 - `SCOUT_AGENT_PORT` — bind port (default 47821).
 - `SCOUT_CLAUDE_BIN` — path to the `claude` binary (default `claude` from `PATH`).
 
+## Tests
+
+The companion ships a hermetic test suite (PER-118): it runs fully offline,
+mocks the `claude` shell-out, and costs zero Claude quota (no real
+WebSearch/WebFetch). It locks the `/v0/*` contract and pins fixes for past
+regressions (PER-91 interest cap, PER-92 in-flight brief slot, PER-106 brief
+render shape, PER-108 token never forwarded/logged, PER-110 token bootstrap,
+PER-113 preamble stripping).
+
+```bash
+# from the repo root — runs the @scout/agent suite
+pnpm test
+
+# or directly
+pnpm --filter @scout/agent test
+```
+
+CI runs `pnpm test` on every push/PR (`.github/workflows/ci.yml`). Test files
+live in `packages/agent/test/*.test.ts` and use `node:test` + `tsx` (no extra
+runner dependency).
+
 ## How research works
 
 On each `POST /v0/interests`, the companion spawns one headless `claude`
