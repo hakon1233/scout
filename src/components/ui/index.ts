@@ -5,3 +5,4 @@ export { Card } from "./Card";
 export { Section } from "./Section";
 export { Chip } from "./Chip";
 export { EmptyState } from "./EmptyState";
+export { Toggle } from "./Toggle";
