@@ -114,7 +114,7 @@ export function BriefLayout({
               loading={running}
               onClick={onRegenerate}
             >
-              {running ? "Working…" : "Regenerate"}
+              {running ? "Working…" : "Run now"}
             </Button>
           </div>
         </Card>
