@@ -15,8 +15,15 @@
 // (`sk-ant-oat01-…`) off-machine. Synthesis runs by spawning the user's local
 // `claude` CLI; we never read or forward that token.
 
-import { loadState, resolvePairingToken, saveState, STATE_FILE } from "./state.js";
+import {
+  defaultSchedule,
+  loadState,
+  resolvePairingToken,
+  saveState,
+  STATE_FILE,
+} from "./state.js";
 import { DEFAULT_PORT, PKG_VERSION, startServer } from "./server.js";
+import { Scheduler } from "./scheduler.js";
 
 async function cmdPair(force: boolean): Promise<void> {
   const state = await loadState();
@@ -57,8 +64,23 @@ async function cmdRun(portArg?: string): Promise<void> {
     console.error("not paired. run `scout-agent pair` first.");
     process.exit(1);
   }
+  // Materialize the default schedule on first run so the in-process scheduler
+  // has concrete config to resume after a restart (PER-151). Existing config is
+  // left untouched so a founder's enable/disable + time choice survives restart.
+  if (!state.schedule) {
+    await saveState({ ...state, schedule: defaultSchedule() });
+  }
+
   const port = portArg ? Number(portArg) : DEFAULT_PORT;
-  const { port: bound } = await startServer(Number.isFinite(port) ? port : DEFAULT_PORT);
+
+  // The scheduler fires the same run path the HTTP endpoint does; they share an
+  // in-memory single-flight guard (runner.ts) so runs never overlap.
+  const scheduler = new Scheduler({ stateFile: STATE_FILE });
+  const { port: bound } = await startServer(Number.isFinite(port) ? port : DEFAULT_PORT, {
+    onScheduleChanged: () => scheduler.reschedule(),
+  });
+  await scheduler.start();
+
   const url = `http://127.0.0.1:${bound}`;
   console.log(`@scout/agent v${PKG_VERSION} listening on ${url}`);
   console.log(`\n  Open Scout in your browser:  ${url}/app/\n`);
@@ -66,7 +88,17 @@ async function cmdRun(portArg?: string): Promise<void> {
     "Serving the Scout UI from this loopback origin means the page is same-origin\n" +
       'with the API — no "Allow local network" prompt, no pairing token to paste.',
   );
-  console.log("\nEndpoints: GET /healthz, POST /v0/interests, GET /v0/briefs?since=<iso>");
+  const sched = (await loadState()).schedule;
+  if (sched?.enabled) {
+    console.log(
+      `\nScheduler: daily at ${sched.time_of_day} (local). Next: ${sched.next_run_at ?? "—"}.\n` +
+        "  Note: this only runs while THIS process is alive. After a reboot,\n" +
+        "  re-run `scout-agent run` to resume the schedule.",
+    );
+  }
+  console.log(
+    "\nEndpoints: GET /healthz, POST /v0/interests, GET /v0/briefs?since=<iso>, GET|PUT /v0/schedule",
+  );
 }
 
 async function main(): Promise<void> {
