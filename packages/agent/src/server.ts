@@ -298,7 +298,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             }
             throw err;
           }
-          let parsed: { interests?: unknown };
+          let parsed: { interests?: unknown; retry_topics?: unknown };
           try {
             parsed = JSON.parse(body || "{}");
           } catch {
@@ -341,6 +341,24 @@ export function createServer(deps: ServerDeps = {}): http.Server {
               cors,
             );
 
+          // Optional focused-retry payload (PER-154): re-research ONLY these
+          // topics and merge the fresh sections into the prior brief, instead of
+          // regenerating the whole brief. Must be a subset of `interests`; we
+          // intersect (case-insensitively, mapping back to the canonical interest
+          // casing) and silently drop anything not in the current list rather
+          // than erroring on a stale topic.
+          const interestByKey = new Map(interests.map((s) => [s.toLowerCase(), s]));
+          const retryTopics = Array.isArray(parsed.retry_topics)
+            ? Array.from(
+                new Set(
+                  (parsed.retry_topics as unknown[])
+                    .filter((s): s is string => typeof s === "string")
+                    .map((s) => interestByKey.get(s.trim().toLowerCase()))
+                    .filter((s): s is string => Boolean(s)),
+                ),
+              )
+            : [];
+
           // One brief slot, last-writer-wins. The shared runner enforces single-
           // flight (in-memory guard + persisted pending check) so an on-demand
           // kick and a scheduled fire can never overlap (PER-151). It also
@@ -349,9 +367,21 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             interests,
             { stateFile, claudeBin, spawnFn, onSynthesisDone: deps.onSynthesisDone },
             "on_demand",
+            { retryTopics },
           );
           if (!outcome.started) {
-            // interests were validated non-empty above, so the only reason here
+            // A retry asked for but there's no prior brief to merge into → tell
+            // the client to fall back to a full run rather than silently doing
+            // nothing (no dead controls, PER-139/PER-154).
+            if (outcome.reason === "no_base_brief") {
+              return json(
+                res,
+                409,
+                { error: "no base brief to retry; run a full brief first" },
+                cors,
+              );
+            }
+            // interests were validated non-empty above, so the only other reason
             // is a run already in flight → 409, echoing the in-flight id.
             const briefId = outcome.reason === "in_flight" ? outcome.briefId : undefined;
             return json(

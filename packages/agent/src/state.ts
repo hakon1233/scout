@@ -8,6 +8,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import type { TopicCoverage } from "./coverage.js";
 
 export const CONFIG_DIR = path.join(os.homedir(), ".config", "scout");
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
@@ -18,7 +19,14 @@ export type Brief = {
   status: "pending" | "ready" | "failed";
   summary_md?: string;
   error_msg?: string;
+  // Per-topic coverage, computed by the companion over the FULL interest list
+  // when a brief lands (PER-154). Lets the UI honestly distinguish "no news
+  // today" (empty) from "the model dropped this topic" (missing) instead of
+  // reverse-parsing headings client-side with a brittle case-sensitive match.
+  topics?: TopicCoverage[];
 };
+
+export type { TopicCoverage } from "./coverage.js";
 
 // Persisted recurring-schedule config for the in-process scheduler (PER-151).
 // `enabled` + `time_of_day` are user-writable (Settings UI / PUT /v0/schedule);
