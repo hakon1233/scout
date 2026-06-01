@@ -29,14 +29,12 @@ const POLL_MAX_ATTEMPTS = 20; // ~80s
 export default function ConnectPage() {
   const [token, setToken] = useState("");
   // Resolve the tarball URL against the actual origin this page is served from,
-  // so the copied command is correct regardless of the deploy host. Computed at
-  // mount via a lazy initializer (falls back to the canonical URL during the
-  // static export build, where `window` is undefined).
-  const [tarballUrl] = useState(() =>
-    typeof window !== "undefined"
-      ? `${window.location.origin}${TARBALL_PATH}`
-      : DEFAULT_TARBALL_URL,
-  );
+  // so the copied command is correct regardless of the deploy host. Must START
+  // at DEFAULT_TARBALL_URL so the first client render matches the SSR/static
+  // export render (which has no `window`) — otherwise the differing command
+  // text triggers a hydration mismatch (React #418). We swap in the real origin
+  // in a post-mount effect, after hydration has reconciled.
+  const [tarballUrl, setTarballUrl] = useState(DEFAULT_TARBALL_URL);
   const [status, setStatus] = useState<Status>("idle");
   const [copied, setCopied] = useState<string | null>(null);
   const [genState, setGenState] = useState<GenerateState>("idle");
@@ -45,6 +43,16 @@ export default function ConnectPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
   const startedAtRef = useRef("");
+
+  useEffect(() => {
+    // After hydration, resolve the tarball URL against the actual serving
+    // origin so the copied install command points at this host. Doing this in
+    // an effect (not a lazy initializer) keeps the first client render equal to
+    // the SSR render — see the comment on `tarballUrl` above. Intentional
+    // post-mount sync of a client-only value (the serving origin).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTarballUrl(`${window.location.origin}${TARBALL_PATH}`);
+  }, []);
 
   useEffect(() => {
     // When served from the companion (same-origin — loopback or a ts.net proxy),
