@@ -6,6 +6,8 @@ type ChipProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & {
   index?: number;
   onRemove?: () => void;
   removeLabel?: string;
+  removeDisabled?: boolean;
+  removeTitle?: string;
 };
 
 export function Chip({
@@ -14,6 +16,8 @@ export function Chip({
   index,
   onRemove,
   removeLabel,
+  removeDisabled = false,
+  removeTitle,
   className = "",
   children,
   ...rest
@@ -48,8 +52,10 @@ export function Chip({
         <button
           type="button"
           onClick={onRemove}
+          disabled={removeDisabled}
           aria-label={label}
-          className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+          title={removeTitle}
+          className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
         >
           <svg
             viewBox="0 0 12 12"

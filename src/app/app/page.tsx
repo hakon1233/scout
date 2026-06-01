@@ -247,12 +247,14 @@ export default function AppPage() {
           <Button
             variant="primary"
             loading={running}
-            disabled={!companionReady}
+            disabled={!companionReady || settings.interests.length === 0}
             onClick={generate}
             title={
-              companionReady
-                ? "Generate your brief with the local Scout companion"
-                : "Start the Scout companion to generate a brief"
+              settings.interests.length === 0
+                ? "Add at least one interest to generate a brief"
+                : companionReady
+                  ? "Generate your brief with the local Scout companion"
+                  : "Start the Scout companion to generate a brief"
             }
           >
             {running
