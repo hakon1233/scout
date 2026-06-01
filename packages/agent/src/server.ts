@@ -19,13 +19,15 @@ import { spawn } from "node:child_process";
 import { URL } from "node:url";
 import {
   loadState,
-  newBriefId,
+  normalizeTimeOfDay,
   saveState,
+  defaultSchedule,
   STATE_FILE,
   type Brief,
+  type ScheduleConfig,
   type State,
 } from "./state.js";
-import { researchAndSynthesize } from "./research.js";
+import { startRun } from "./runner.js";
 import { resolveStatic, resolveAppShellFallback, trailingSlashRedirect } from "./static.js";
 
 export const PKG_VERSION = "0.3.0";
@@ -40,7 +42,36 @@ export type ServerDeps = {
   onSynthesisDone?: (brief: Brief) => void;
   // Static UI root; defaults to the bundled webroot. Injected for tests.
   webroot?: string;
+  // Invoked after PUT /v0/schedule persists a config change, so the running
+  // scheduler can re-arm its timer immediately (PER-151). No-op when absent.
+  onScheduleChanged?: () => void | Promise<void>;
 };
+
+// Shape GET /v0/schedule returns and PUT echoes back — the contract the
+// Settings UI (PER-152) consumes. `reboot_durable` is always false for the
+// nohup `run` companion (the scheduler dies with the process); surfacing it
+// lets the UI warn the founder to re-run after a reboot.
+export type ScheduleView = {
+  enabled: boolean;
+  time_of_day: string;
+  last_run_at: string | null;
+  last_run_status: ScheduleConfig["last_run_status"] | null;
+  last_run_note: string | null;
+  next_run_at: string | null;
+  reboot_durable: false;
+};
+
+function scheduleView(cfg: ScheduleConfig): ScheduleView {
+  return {
+    enabled: cfg.enabled,
+    time_of_day: cfg.time_of_day,
+    last_run_at: cfg.last_run_at ?? null,
+    last_run_status: cfg.last_run_status ?? null,
+    last_run_note: cfg.last_run_note ?? null,
+    next_run_at: cfg.next_run_at ?? null,
+    reboot_durable: false,
+  };
+}
 
 const CORS_ALLOWED_ORIGINS = [
   /^https?:\/\/localhost(:\d+)?$/,
@@ -87,6 +118,7 @@ const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
   "/v0/config": ["GET", "OPTIONS"],
   "/v0/interests": ["POST", "OPTIONS"],
   "/v0/briefs": ["GET", "OPTIONS"],
+  "/v0/schedule": ["GET", "PUT", "OPTIONS"],
 };
 
 function corsHeaders(origin: string | undefined): Record<string, string> {
@@ -95,7 +127,7 @@ function corsHeaders(origin: string | undefined): Record<string, string> {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-headers": "authorization, content-type",
-    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-methods": "GET, POST, PUT, OPTIONS",
     "access-control-max-age": "600",
     vary: "origin",
   };
@@ -304,39 +336,28 @@ export function createServer(deps: ServerDeps = {}): http.Server {
               cors,
             );
 
-          // One brief slot, last-writer-wins. Reject a second kick while the
-          // previous run is still pending so we don't silently overwrite it.
-          if (state.last_brief?.status === "pending") {
+          // One brief slot, last-writer-wins. The shared runner enforces single-
+          // flight (in-memory guard + persisted pending check) so an on-demand
+          // kick and a scheduled fire can never overlap (PER-151). It also
+          // persists the interests so the scheduler can reuse them.
+          const outcome = await startRun(
+            interests,
+            { stateFile, claudeBin, spawnFn, onSynthesisDone: deps.onSynthesisDone },
+            "on_demand",
+          );
+          if (!outcome.started) {
+            // interests were validated non-empty above, so the only reason here
+            // is a run already in flight → 409, echoing the in-flight id.
+            const briefId = outcome.reason === "in_flight" ? outcome.briefId : undefined;
             return json(
               res,
               409,
-              {
-                error: "brief in progress",
-                brief_id: state.last_brief.id,
-              },
+              { error: "brief in progress", brief_id: briefId },
               cors,
             );
           }
 
-          const briefId = newBriefId();
-          const pending: Brief = {
-            id: briefId,
-            generated_at: new Date().toISOString(),
-            status: "pending",
-          };
-          await saveState({ ...state, last_brief: pending }, stateFile);
-
-          // Fire and forget — the web app polls /v0/briefs to see when it lands.
-          void runSynthesis({
-            interests,
-            briefId,
-            stateFile,
-            claudeBin,
-            spawnFn,
-            onSynthesisDone: deps.onSynthesisDone,
-          });
-
-          json(res, 202, { brief_id: briefId, status: "pending" }, cors);
+          json(res, 202, { brief_id: outcome.briefId, status: "pending" }, cors);
           return;
         }
 
@@ -347,6 +368,75 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const last = state.last_brief;
           const matches = last && (!since || last.generated_at > since) ? [last] : [];
           json(res, 200, { briefs: matches }, cors);
+          return;
+        }
+
+        // Read the persisted recurring-schedule config + last/next-run telemetry
+        // for the Settings UI (PER-152). Materializes the default schedule on
+        // first read so the UI always has something concrete to render.
+        if (req.method === "GET" && url.pathname === "/v0/schedule") {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          const cfg = state.schedule ?? defaultSchedule();
+          json(res, 200, scheduleView(cfg), cors);
+          return;
+        }
+
+        // Write the schedule config (enable/disable + time-of-day). Telemetry
+        // fields are read-only here. After persisting we ask the running
+        // scheduler to re-arm so the change takes effect without a restart.
+        if (req.method === "PUT" && url.pathname === "/v0/schedule") {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          let body: string;
+          try {
+            body = await readBody(req);
+          } catch (err) {
+            if (err instanceof BodyTooLargeError) {
+              return json(res, 413, { error: "request body too large" }, cors);
+            }
+            throw err;
+          }
+          let parsed: { enabled?: unknown; time_of_day?: unknown };
+          try {
+            parsed = JSON.parse(body || "{}");
+          } catch {
+            return json(res, 400, { error: "invalid json" }, cors);
+          }
+
+          const current = state.schedule ?? defaultSchedule();
+          let enabled = current.enabled;
+          if (parsed.enabled !== undefined) {
+            if (typeof parsed.enabled !== "boolean") {
+              return json(res, 400, { error: "enabled must be a boolean" }, cors);
+            }
+            enabled = parsed.enabled;
+          }
+          let timeOfDay = current.time_of_day;
+          if (parsed.time_of_day !== undefined) {
+            const normalized = normalizeTimeOfDay(parsed.time_of_day);
+            if (!normalized) {
+              return json(
+                res,
+                400,
+                { error: "time_of_day must be 'HH:MM' (24h)" },
+                cors,
+              );
+            }
+            timeOfDay = normalized;
+          }
+
+          const next: ScheduleConfig = {
+            ...current,
+            enabled,
+            time_of_day: timeOfDay,
+          };
+          await saveState({ ...state, schedule: next }, stateFile);
+          // Re-arm the live scheduler; it also persists the recomputed
+          // next_run_at, so re-read before returning the view.
+          await deps.onScheduleChanged?.();
+          const fresh = await loadState(stateFile);
+          json(res, 200, scheduleView(fresh.schedule ?? next), cors);
           return;
         }
 
@@ -431,39 +521,6 @@ export function createServer(deps: ServerDeps = {}): http.Server {
       }
     })();
   });
-}
-
-async function runSynthesis(args: {
-  interests: string[];
-  briefId: string;
-  stateFile: string;
-  claudeBin?: string;
-  spawnFn?: typeof spawn;
-  onSynthesisDone?: (brief: Brief) => void;
-}): Promise<void> {
-  const { interests, briefId, stateFile, claudeBin, spawnFn } = args;
-  let brief: Brief;
-
-  try {
-    const summary = await researchAndSynthesize(interests, { claudeBin, spawnFn });
-    brief = {
-      id: briefId,
-      generated_at: new Date().toISOString(),
-      status: "ready",
-      summary_md: summary,
-    };
-  } catch (err) {
-    brief = {
-      id: briefId,
-      generated_at: new Date().toISOString(),
-      status: "failed",
-      error_msg: String(err),
-    };
-  }
-
-  const fresh = await loadState(stateFile);
-  await saveState({ ...fresh, last_brief: brief }, stateFile);
-  args.onSynthesisDone?.(brief);
 }
 
 export async function startServer(
