@@ -221,6 +221,10 @@ test("GET /v0/schedule returns the Settings-UI contract incl. reboot_durable:fal
     pairing_token: newPairingToken(),
     schedule: defaultSchedule(),
   });
+  // Pin durability detection to a non-existent plist so this is deterministic
+  // regardless of whether the host machine has the LaunchAgent installed.
+  const prevPlist = process.env.SCOUT_LAUNCH_AGENT_PLIST;
+  process.env.SCOUT_LAUNCH_AGENT_PLIST = path.join(tmp, "no-such.plist");
   const token = (await loadState(stateFile)).pairing_token!;
   const { server, port } = await startServer(0, { stateFile });
   const auth = { authorization: `Bearer ${token}` };
@@ -237,7 +241,16 @@ test("GET /v0/schedule returns the Settings-UI contract incl. reboot_durable:fal
     // unauth → 401
     const un = await fetch(`http://127.0.0.1:${port}/v0/schedule`);
     assert.equal(un.status, 401);
+
+    // Once a LaunchAgent plist is present, reboot_durable flips to true with no
+    // restart or config write (PER-153) — the view reads the live filesystem.
+    await fs.writeFile(process.env.SCOUT_LAUNCH_AGENT_PLIST!, "<plist/>");
+    const durable = await fetch(`http://127.0.0.1:${port}/v0/schedule`, { headers: auth });
+    const durableBody = (await durable.json()) as Record<string, unknown>;
+    assert.equal(durableBody.reboot_durable, true);
   } finally {
+    if (prevPlist === undefined) delete process.env.SCOUT_LAUNCH_AGENT_PLIST;
+    else process.env.SCOUT_LAUNCH_AGENT_PLIST = prevPlist;
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }

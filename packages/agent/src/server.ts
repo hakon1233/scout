@@ -28,6 +28,7 @@ import {
   type State,
 } from "./state.js";
 import { startRun } from "./runner.js";
+import { isServiceInstalled } from "./service.js";
 import { resolveStatic, resolveAppShellFallback, trailingSlashRedirect } from "./static.js";
 
 export const PKG_VERSION = "0.3.0";
@@ -48,9 +49,10 @@ export type ServerDeps = {
 };
 
 // Shape GET /v0/schedule returns and PUT echoes back — the contract the
-// Settings UI (PER-152) consumes. `reboot_durable` is always false for the
-// nohup `run` companion (the scheduler dies with the process); surfacing it
-// lets the UI warn the founder to re-run after a reboot.
+// Settings UI (PER-152) consumes. `reboot_durable` is true once a launchd
+// LaunchAgent (PER-153) is installed: launchd then restarts the companion at
+// login/boot, so the scheduler survives a reboot. When false the UI warns the
+// founder to re-run `scout-agent run` after a reboot.
 export type ScheduleView = {
   enabled: boolean;
   time_of_day: string;
@@ -58,7 +60,7 @@ export type ScheduleView = {
   last_run_status: ScheduleConfig["last_run_status"] | null;
   last_run_note: string | null;
   next_run_at: string | null;
-  reboot_durable: false;
+  reboot_durable: boolean;
 };
 
 function scheduleView(cfg: ScheduleConfig): ScheduleView {
@@ -69,7 +71,10 @@ function scheduleView(cfg: ScheduleConfig): ScheduleView {
     last_run_status: cfg.last_run_status ?? null,
     last_run_note: cfg.last_run_note ?? null,
     next_run_at: cfg.next_run_at ?? null,
-    reboot_durable: false,
+    // Honest, live signal: reflects whether the durable LaunchAgent is installed
+    // right now (plist present), so installing/uninstalling flips this with no
+    // restart or config write.
+    reboot_durable: isServiceInstalled(),
   };
 }
 
