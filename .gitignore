@@ -53,3 +53,10 @@ next-env.d.ts
 # supabase local dev artifacts
 /supabase/.branches
 /supabase/.temp
+
+# e2e (PER-119): packed-artifact extract, hermetic HOME, screenshots/traces
+/e2e/.artifact
+/playwright-report
+/test-results
+/blob-report
+/.playwright
