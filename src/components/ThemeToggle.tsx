@@ -141,11 +141,19 @@ function SystemIcon() {
   );
 }
 
+/**
+ * Blocking theme-resolution script. MUST be rendered inside <head>, before the
+ * render-blocking stylesheet and before <body> is parsed, so the correct theme
+ * class is on <html> at first paint — no flash of the light/warm-paper default
+ * before the dark editorial theme settles (FOUC, PER-131). Also sets
+ * color-scheme so UA surfaces (scrollbars, form controls) paint in the right
+ * mode immediately.
+ */
 export function ThemeBootstrap() {
   return (
     <script
       dangerouslySetInnerHTML={{
-        __html: `(function(){try{var k='${STORAGE_KEY}',t=localStorage.getItem(k);if(t!=='light'&&t!=='dark'&&t!=='system'){t='system';}var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`,
+        __html: `(function(){try{var k='${STORAGE_KEY}',t=localStorage.getItem(k);if(t!=='light'&&t!=='dark'&&t!=='system'){t='system';}var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;e.classList.toggle('dark',d);e.style.colorScheme=d?'dark':'light';}catch(e){}})();`,
       }}
     />
   );
