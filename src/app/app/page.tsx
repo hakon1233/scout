@@ -34,6 +34,22 @@ import type { Brief, Interest, Settings } from "@/lib/types";
 
 const STICKY_THRESHOLD_PX = 480;
 
+// Bucket a brief's topics into the two states the UI treats differently
+// (PER-154). `missing` = the model dropped the section → actionable, Retry can
+// recover it. `empty` = a section exists but had no fresh news today → honest,
+// NOT an error, NOT retryable. Prefers the companion's authoritative `topics`;
+// falls back to the legacy client-side `failedTopics` for briefs cached before
+// PER-154 (treated as missing, since the old field meant "didn't come back").
+function coverageBuckets(b: Brief): { missing: string[]; empty: string[] } {
+  if (b.topics && b.topics.length > 0) {
+    return {
+      missing: b.topics.filter((t) => t.status === "missing").map((t) => t.topic),
+      empty: b.topics.filter((t) => t.status === "empty").map((t) => t.topic),
+    };
+  }
+  return { missing: b.failedTopics ?? [], empty: [] };
+}
+
 // Mirrors BriefLayout's header date format so the "filed {date}" recovery
 // affordance and the PREVIOUS banner read identically to the brief header.
 function formatBriefDate(b: Brief): string {
@@ -124,8 +140,11 @@ export default function AppPage() {
       if (!token || cancelled) return;
       const latest = await fetchLatestBrief(token);
       if (cancelled || !latest || running) return;
-      const topics = loadSettings()?.interests.map((i) => i.topic) ?? [];
-      latest.failedTopics = topics.filter((t) => !latest.interests.includes(t));
+      // Per-topic coverage now rides along on the brief (`latest.topics`),
+      // computed authoritatively by the companion. We no longer reverse-engineer
+      // "failed" topics here via a case-sensitive heading diff — that brittle
+      // match (e.g. "openai" vs the model's "## OpenAI") was the source of the
+      // false "topic didn't come back" reports and the dead Retry (PER-154).
       setBrief((prev) => {
         if (prev && prev.generatedAt >= latest.generatedAt) return prev;
         // PER-146: do NOT rotate scout.prevBrief.v1 here. This adoption is a
@@ -148,8 +167,14 @@ export default function AppPage() {
   // removed (PER-109) — it fetched api.exa.ai directly and was CORS-broken.
   // The companion runs the local `claude` CLI over the loopback server, so
   // there are no API keys and no cross-origin calls.
-  const generate = useCallback(async () => {
+  const generate = useCallback(async (opts?: { retryTopics?: string[] }) => {
     if (!settings) return;
+    // Only honor a retry subset that's still in the current interest list; the
+    // companion re-checks too, but this keeps the progress panel honest.
+    const retryTopics = (opts?.retryTopics ?? []).filter((t) =>
+      settings.interests.some((i) => i.topic === t),
+    );
+    const isRetry = retryTopics.length > 0;
     const token = loadCompanionToken();
     if (!token) {
       setError(
@@ -170,10 +195,14 @@ export default function AppPage() {
     setInterestsChanged(false);
     setProgress({
       stage: "synthesizing",
-      message: "Companion is fetching & synthesizing your brief…",
+      message: isRetry
+        ? `Companion is re-researching ${retryTopics.length} topic${retryTopics.length === 1 ? "" : "s"}…`
+        : "Companion is fetching & synthesizing your brief…",
+      // On a focused retry, only the retried topics are "working"; the rest are
+      // carried over from the prior brief, so show them as already done.
       perInterest: settings.interests.map((i) => ({
         topic: i.topic,
-        state: "pending",
+        state: isRetry && !retryTopics.includes(i.topic) ? "done" : "pending",
       })),
     });
     try {
@@ -181,11 +210,14 @@ export default function AppPage() {
       const next = await refreshBriefViaCompanion(
         settings.interests.map((i) => i.topic),
         token,
-        { sinceTs: since, signal: controller.signal },
+        {
+          sinceTs: since,
+          signal: controller.signal,
+          retryTopics: isRetry ? retryTopics : undefined,
+        },
       );
-      next.failedTopics = settings.interests
-        .map((i) => i.topic)
-        .filter((t) => !next.interests.includes(t));
+      // Per-topic status rides along on `next.topics` from the companion — no
+      // client-side heading diff (PER-154).
       // PER-146: archive the outgoing brief BEFORE overwriting the slot so a
       // regenerate is recoverable, never a silent total loss. Only in this
       // user-initiated path (see the load-time adoption effect for why not
@@ -212,9 +244,22 @@ export default function AppPage() {
     }
   }, [settings, brief]);
 
-  // The companion regenerates the whole brief each pass, so a failed-topic
-  // retry is just another full refresh.
-  const retryFailedTopics = useCallback(() => generate(), [generate]);
+  // Retry ONLY the topics the model dropped (status "missing"), merging the
+  // fresh sections into the prior brief instead of regenerating everything
+  // (PER-154). Falls back to a full run if there's nothing structured to retry.
+  const retryMissingTopics = useCallback(() => {
+    const missing = brief ? coverageBuckets(brief).missing : [];
+    if (missing.length === 0) return generate();
+    return generate({ retryTopics: missing });
+  }, [brief, generate]);
+
+  // Zero-arg wrapper for UI handler props (onClick / onRetry / onRegenerate).
+  // `generate` takes an optional `{ retryTopics }`, so binding it directly to a
+  // DOM event handler would forward the MouseEvent as that argument (and fail
+  // strict type-checking). A full run takes no options — wrap it.
+  const runNow = useCallback(() => {
+    void generate();
+  }, [generate]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -318,7 +363,7 @@ export default function AppPage() {
       {brief && (
         <StickyUtilityBar
           running={running}
-          onRegenerate={generate}
+          onRegenerate={runNow}
           onEditInterests={() => setEditing(true)}
         />
       )}
@@ -342,7 +387,7 @@ export default function AppPage() {
             variant="primary"
             loading={running}
             disabled={!companionReady || settings.interests.length === 0}
-            onClick={generate}
+            onClick={runNow}
             title={
               settings.interests.length === 0
                 ? "Add at least one interest to run a brief"
@@ -381,7 +426,7 @@ export default function AppPage() {
             <Button
               variant="primary"
               size="sm"
-              onClick={generate}
+              onClick={runNow}
               loading={running}
             >
               Run now
@@ -412,36 +457,52 @@ export default function AppPage() {
       {cancelled && !running && <Banner tone="info">Cancelled.</Banner>}
 
       {error && (
-        <ErrorBanner error={error} onRetry={generate} />
+        <ErrorBanner error={error} onRetry={runNow} />
       )}
 
-      {brief?.failedTopics && brief.failedTopics.length > 0 && !running && (
-        <Banner tone="warning">
-          <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              Some topics didn&apos;t come back:{" "}
-              <span className="font-medium">
-                {brief.failedTopics.join(", ")}
-              </span>
-              .
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={retryFailedTopics}
-            >
-              Retry failed
-            </Button>
-          </span>
-        </Banner>
-      )}
+      {/* PER-154: distinguish two honest states. "Missing" = the model dropped
+          the section → warning + a Retry that re-researches ONLY those topics.
+          "Empty" = a section came back with no fresh news today → info, not an
+          error, no Retry (re-running won't conjure news that doesn't exist). */}
+      {brief && !running && (() => {
+        const { missing, empty } = coverageBuckets(brief);
+        return (
+          <>
+            {missing.length > 0 && (
+              <Banner tone="warning">
+                <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    Some topics didn&apos;t come back:{" "}
+                    <span className="font-medium">{missing.join(", ")}</span>.
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={retryMissingTopics}
+                  >
+                    Retry{" "}
+                    {missing.length === 1 ? "topic" : `${missing.length} topics`}
+                  </Button>
+                </span>
+              </Banner>
+            )}
+            {empty.length > 0 && (
+              <Banner tone="info" aria-live="polite">
+                No fresh news today for{" "}
+                <span className="font-medium">{empty.join(", ")}</span>. We
+                checked — there just wasn&apos;t anything new worth flagging.
+              </Banner>
+            )}
+          </>
+        );
+      })()}
 
       {brief && !showSkeleton ? (
         <BriefLayout
           brief={brief}
           name={settings.name}
           running={running}
-          onRegenerate={generate}
+          onRegenerate={runNow}
           onEditInterests={() => setEditing(true)}
           onViewPrevious={
             prevBrief ? () => setViewingPrev(true) : undefined
