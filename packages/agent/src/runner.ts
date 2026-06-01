@@ -24,6 +24,7 @@ import {
   type ScheduleConfig,
 } from "./state.js";
 import { researchAndSynthesize } from "./research.js";
+import { computeCoverage, mergeBriefSections } from "./coverage.js";
 
 export type RunDeps = {
   stateFile: string;
@@ -36,10 +37,20 @@ export type RunDeps = {
 
 export type RunSource = "on_demand" | "scheduled";
 
+export type RunOptions = {
+  // Focused-retry path (PER-154): research ONLY this subset of `interests`
+  // instead of the whole list, then merge the fresh sections into the prior
+  // brief's markdown (preserving the topics that already worked) before
+  // recomputing coverage over the full interest list. Must be a subset of
+  // `interests`. When absent/empty, a normal full-brief run happens.
+  retryTopics?: string[];
+};
+
 export type RunOutcome =
   | { started: true; briefId: string }
   | { started: false; reason: "in_flight"; briefId?: string }
-  | { started: false; reason: "no_interests" };
+  | { started: false; reason: "no_interests" }
+  | { started: false; reason: "no_base_brief" };
 
 // Single-process, single-flight guard (see header).
 let runInFlight = false;
@@ -57,6 +68,7 @@ export async function startRun(
   interests: string[],
   deps: RunDeps,
   source: RunSource = "on_demand",
+  opts: RunOptions = {},
 ): Promise<RunOutcome> {
   const state = await loadState(deps.stateFile);
 
@@ -65,6 +77,17 @@ export async function startRun(
   }
   if (interests.length === 0) {
     return { started: false, reason: "no_interests" };
+  }
+
+  // A focused retry only makes sense when there's a prior ready brief to merge
+  // the fresh sections into; without one there's nothing to preserve, so the
+  // caller should run a full brief instead. We narrow to the retry topics that
+  // are actually part of the current interest list (ignore stale/foreign ones).
+  const baseMarkdown = state.last_brief?.summary_md;
+  const retryTopics = (opts.retryTopics ?? []).filter((t) => interests.includes(t));
+  const isRetry = retryTopics.length > 0;
+  if (isRetry && !baseMarkdown) {
+    return { started: false, reason: "no_base_brief" };
   }
 
   runInFlight = true;
@@ -78,27 +101,50 @@ export async function startRun(
   // something to research even with no browser attached.
   await saveState({ ...state, interests, last_brief: pending }, deps.stateFile);
 
-  void runSynthesis(interests, briefId, deps, source);
+  void runSynthesis(interests, briefId, deps, source, {
+    researchTopics: isRetry ? retryTopics : interests,
+    baseMarkdown: isRetry ? baseMarkdown : undefined,
+    retryTopics: isRetry ? retryTopics : undefined,
+  });
   return { started: true, briefId };
 }
+
+type SynthesisPlan = {
+  // The topics to actually hand to claude this run (subset on retry, all else).
+  researchTopics: string[];
+  // On retry: the prior brief markdown to merge fresh sections into.
+  baseMarkdown?: string;
+  // On retry: which topics the fresh markdown should overwrite in the base.
+  retryTopics?: string[];
+};
 
 async function runSynthesis(
   interests: string[],
   briefId: string,
   deps: RunDeps,
   source: RunSource,
+  plan: SynthesisPlan,
 ): Promise<void> {
   let brief: Brief;
   try {
-    const summary = await researchAndSynthesize(interests, {
+    const fresh = await researchAndSynthesize(plan.researchTopics, {
       claudeBin: deps.claudeBin,
       spawnFn: deps.spawnFn,
     });
+    // On a focused retry, splice the fresh sections into the prior brief so the
+    // topics that already worked are preserved verbatim; otherwise the fresh
+    // markdown IS the whole brief. Coverage is always computed over the FULL
+    // interest list so the UI sees an honest per-topic status for every topic.
+    const summary =
+      plan.baseMarkdown && plan.retryTopics
+        ? mergeBriefSections(plan.baseMarkdown, fresh, plan.retryTopics)
+        : fresh;
     brief = {
       id: briefId,
       generated_at: new Date().toISOString(),
       status: "ready",
       summary_md: summary,
+      topics: computeCoverage(interests, summary),
     };
   } catch (err) {
     brief = {
