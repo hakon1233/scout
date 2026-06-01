@@ -12,6 +12,11 @@ type Props = {
   preview?: boolean;
   onRegenerate?: () => void;
   onEditInterests?: () => void;
+  // PER-146: when a previous edition exists in State LATEST, show a low-emphasis
+  // recovery link (header + footer). `prevDate` is the formatted filed date of
+  // that previous edition. Omitted ⇒ no previous ⇒ no affordance shown.
+  onViewPrevious?: () => void;
+  prevDate?: string;
 };
 
 export function BriefLayout({
@@ -21,6 +26,8 @@ export function BriefLayout({
   preview = false,
   onRegenerate,
   onEditInterests,
+  onViewPrevious,
+  prevDate,
 }: Props) {
   const generated = new Date(brief.generatedAt);
   const dateLabel = generated.toLocaleDateString(undefined, {
@@ -36,6 +43,8 @@ export function BriefLayout({
   const topicCount = brief.interests.length;
   const articleCount = brief.articles.length;
 
+  const hasPrevious = Boolean(onViewPrevious && prevDate);
+
   return (
     <article
       aria-label={`${name}'s brief — ${dateLabel}`}
@@ -45,9 +54,24 @@ export function BriefLayout({
         <p className="text-caption uppercase tracking-wide text-muted">
           Generated {dateLabel} · {timeLabel}
         </p>
+        {hasPrevious && (
+          <Button
+            variant="link"
+            size="sm"
+            className="self-start"
+            onClick={onViewPrevious}
+          >
+            ← View previous edition · filed {prevDate}
+          </Button>
+        )}
         <h1 className="text-title-1 text-primary">
           {name}&apos;s brief — {dateLabel}
         </h1>
+        {hasPrevious && (
+          <p className="text-caption text-muted">
+            Scout keeps your current and previous edition.
+          </p>
+        )}
       </header>
 
       <div className="measure-prose w-full">
@@ -77,6 +101,11 @@ export function BriefLayout({
             </p>
           </div>
           <div className="flex flex-col gap-2 min-[480px]:flex-row">
+            {hasPrevious && (
+              <Button variant="link" size="sm" onClick={onViewPrevious}>
+                ← View previous edition · filed {prevDate}
+              </Button>
+            )}
             <Button variant="link" onClick={onEditInterests}>
               Edit interests
             </Button>

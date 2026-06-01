@@ -23,19 +23,34 @@ import { SAMPLE_BRIEF } from "@/lib/sample-brief";
 import {
   clearSettings,
   loadLastBrief,
+  loadPrevBrief,
   loadSettings,
   saveLastBrief,
+  savePrevBrief,
   saveSettings,
 } from "@/lib/storage";
 import type { Brief, Interest, Settings } from "@/lib/types";
 
 const STICKY_THRESHOLD_PX = 480;
 
+// Mirrors BriefLayout's header date format so the "filed {date}" recovery
+// affordance and the PREVIOUS banner read identically to the brief header.
+function formatBriefDate(b: Brief): string {
+  return new Date(b.generatedAt).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export default function AppPage() {
   const [hydrated, setHydrated] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [editing, setEditing] = useState(false);
   const [brief, setBrief] = useState<Brief | null>(null);
+  // PER-146: one-deep recoverable archive of the brief a regenerate replaced.
+  const [prevBrief, setPrevBrief] = useState<Brief | null>(null);
+  const [viewingPrev, setViewingPrev] = useState(false);
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<ClassifiedError | null>(null);
@@ -64,6 +79,8 @@ export default function AppPage() {
     setSettings(loadSettings());
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBrief(loadLastBrief());
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPrevBrief(loadPrevBrief());
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
@@ -102,6 +119,11 @@ export default function AppPage() {
       latest.failedTopics = topics.filter((t) => !latest.interests.includes(t));
       setBrief((prev) => {
         if (prev && prev.generatedAt >= latest.generatedAt) return prev;
+        // PER-146: do NOT rotate scout.prevBrief.v1 here. This adoption is a
+        // non-destructive "show the newest brief on load," not the audited
+        // user-initiated overwrite — only generate() archives the outgoing
+        // brief. Rotating here would clobber a real previous edition with a
+        // brief the user never replaced by hand.
         saveLastBrief(latest);
         return latest;
       });
@@ -154,8 +176,17 @@ export default function AppPage() {
       next.failedTopics = settings.interests
         .map((i) => i.topic)
         .filter((t) => !next.interests.includes(t));
+      // PER-146: archive the outgoing brief BEFORE overwriting the slot so a
+      // regenerate is recoverable, never a silent total loss. Only in this
+      // user-initiated path (see the load-time adoption effect for why not
+      // there). First-ever generate has no `brief`, so no previous is created.
+      if (brief) {
+        savePrevBrief(brief);
+        setPrevBrief(brief);
+      }
       saveLastBrief(next);
       setBrief(next);
+      setViewingPrev(false);
       setProgress(null);
     } catch (e) {
       if (controller.signal.aborted || (e as Error)?.message === "aborted") {
@@ -195,11 +226,15 @@ export default function AppPage() {
             saveSettings(s);
             setSettings(s);
             setEditing(false);
+            // PER-146: editing returns context to the latest edition on save.
+            setViewingPrev(false);
           }}
           onClearStored={() => {
             clearSettings();
             setSettings(null);
             setBrief(null);
+            setPrevBrief(null);
+            setViewingPrev(false);
             setEditing(false);
           }}
         />
@@ -213,6 +248,46 @@ export default function AppPage() {
             Cancel
           </Button>
         )}
+      </Shell>
+    );
+  }
+
+  // State PREVIOUS (PER-146): read-only view of the previous edition. Regenerate
+  // is suppressed entirely here — you go back to latest first. Manage interests
+  // stays reachable and returns context to latest on save.
+  if (viewingPrev && prevBrief) {
+    return (
+      <Shell>
+        <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-2">
+            <p className="text-caption uppercase text-muted">Scout · MVP</p>
+            <h1 className="text-title-1 text-primary">
+              {settings.name}&apos;s brief
+            </h1>
+          </div>
+          <Button variant="secondary" onClick={() => setEditing(true)}>
+            Manage interests
+          </Button>
+        </header>
+
+        <Banner
+          tone="info"
+          aria-live="polite"
+          className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>
+            Viewing your previous edition · filed {formatBriefDate(prevBrief)}
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setViewingPrev(false)}
+          >
+            Back to latest
+          </Button>
+        </Banner>
+
+        <BriefLayout brief={prevBrief} name={settings.name} preview />
       </Shell>
     );
   }
@@ -340,6 +415,10 @@ export default function AppPage() {
           running={running}
           onRegenerate={generate}
           onEditInterests={() => setEditing(true)}
+          onViewPrevious={
+            prevBrief ? () => setViewingPrev(true) : undefined
+          }
+          prevDate={prevBrief ? formatBriefDate(prevBrief) : undefined}
         />
       ) : (
         !running &&
