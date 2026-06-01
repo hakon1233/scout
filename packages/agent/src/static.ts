@@ -89,3 +89,45 @@ export async function resolveStatic(
   }
   return null;
 }
+
+// Canonical trailing-slash redirect target for an extensionless directory
+// route, or null. The Next export uses `trailingSlash: true`, so GitHub Pages
+// 301s `/app/connect` → `/app/connect/`. The companion's file server would
+// otherwise serve the page directly at the non-canonical URL (200), a cosmetic
+// origin mismatch (PER-127). Only redirects when the directory's index.html
+// actually exists, so genuinely-missing routes still fall through to the SPA
+// fallback / 404 instead of bouncing to a slashed dead-end.
+export async function trailingSlashRedirect(
+  pathname: string,
+  root: string = WEBROOT,
+): Promise<string | null> {
+  if (!(await hasWebroot(root))) return null;
+  const p = decodeURIComponent(pathname);
+  if (p === "/" || p.endsWith("/") || path.extname(p)) return null;
+  const rel = p.replace(/^\/+/, "") + "/index.html";
+  const filePath = path.resolve(root, rel);
+  if (filePath !== root && !filePath.startsWith(root + path.sep)) return null;
+  try {
+    await fs.access(filePath);
+    return pathname + "/";
+  } catch {
+    return null;
+  }
+}
+
+// SPA fallback: serve the `/app/` shell for an unmatched, extensionless
+// navigation under `/app` so a deep-link or refresh of an in-app view
+// (e.g. /app/settings) lands on the app instead of a hard 404 (PER-127).
+// In-app views like settings are panels rendered at `/app/`, not real export
+// routes, so there is no `/app/settings/index.html` to serve. Extensionless +
+// `/app`-scoped is deliberate: asset misses (have extensions) and unknown
+// top-level routes still 404.
+export async function resolveAppShellFallback(
+  pathname: string,
+  root: string = WEBROOT,
+): Promise<StaticHit | null> {
+  const p = decodeURIComponent(pathname).replace(/^\/+/, "");
+  if (path.extname(p)) return null;
+  if (p !== "app" && !p.startsWith("app/")) return null;
+  return resolveStatic("/app/", root);
+}
