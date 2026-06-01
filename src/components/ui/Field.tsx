@@ -65,6 +65,10 @@ export function Field(props: FieldProps) {
   const isTextarea = (props as TextareaProps).as === "textarea";
 
   const [touched, setTouched] = React.useState(false);
+  // Whether the user has started typing in this field. Gates `validateOn="change"`
+  // so a required field never surfaces its error on a pristine, untouched load
+  // (premature-validation antipattern) — only once the user actually interacts.
+  const [dirty, setDirty] = React.useState(false);
   const value = (rest as { value?: string }).value ?? "";
   const valueStr = String(value);
 
@@ -81,7 +85,8 @@ export function Field(props: FieldProps) {
     }
   }, [computedError, onValidityChange]);
 
-  const surface = validateOn === "change" || showSubmitErrors || touched;
+  const surface =
+    showSubmitErrors || touched || (validateOn === "change" && dirty);
   const derivedError = surface ? computedError : null;
   const error = errorProp ?? derivedError;
   const invalid = Boolean(error);
@@ -103,11 +108,15 @@ export function Field(props: FieldProps) {
     as: _as,
     className = "",
     onBlur: onBlurProp,
+    onChange: onChangeProp,
     ...controlRest
   } = rest as {
     as?: string;
     className?: string;
     onBlur?: React.FocusEventHandler<HTMLInputElement | HTMLTextAreaElement>;
+    onChange?: React.ChangeEventHandler<
+      HTMLInputElement | HTMLTextAreaElement
+    >;
   } & Record<string, unknown>;
   void _as;
 
@@ -118,6 +127,17 @@ export function Field(props: FieldProps) {
     (
       onBlurProp as
         | React.FocusEventHandler<HTMLInputElement | HTMLTextAreaElement>
+        | undefined
+    )?.(e);
+  }
+
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) {
+    if (!dirty) setDirty(true);
+    (
+      onChangeProp as
+        | React.ChangeEventHandler<HTMLInputElement | HTMLTextAreaElement>
         | undefined
     )?.(e);
   }
@@ -133,6 +153,7 @@ export function Field(props: FieldProps) {
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           onBlur={handleBlur}
+          onChange={handleChange}
           className={`${controlBase} ${borderClass} min-h-32 ${className}`}
           {...(controlRest as React.TextareaHTMLAttributes<HTMLTextAreaElement>)}
         />
@@ -142,6 +163,7 @@ export function Field(props: FieldProps) {
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           onBlur={handleBlur}
+          onChange={handleChange}
           className={`${controlBase} ${borderClass} ${className}`}
           {...(controlRest as React.InputHTMLAttributes<HTMLInputElement>)}
         />
