@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { saveState, newPairingToken, type Brief } from "../src/state.js";
+import { saveState, loadState, newPairingToken, type Brief } from "../src/state.js";
 import { startServer } from "../src/server.js";
 
 async function makeStubClaude(): Promise<string> {
@@ -289,6 +289,75 @@ test("POST /v0/interests rejects >6 interests with 400 (PER-91)", async () => {
     assert.equal(res.status, 400);
     const body = await res.json();
     assert.match(body.error, /too many interests/);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/interests rejects an oversized body with 413 (PER-137)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  const claudeBin = await makeStubClaude();
+  const { server, port } = await startServer(0, { stateFile, claudeBin });
+
+  try {
+    // ~2 MB single interest — the original repro. Must 413 (not 202), and no
+    // synthesis is started.
+    const huge = "A".repeat(2_000_000);
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ interests: [huge] }),
+    });
+    assert.equal(res.status, 413);
+    const body = await res.json();
+    assert.match(body.error, /too large/);
+
+    // No brief slot was consumed.
+    const state = await loadState(stateFile);
+    assert.equal(state.last_brief, undefined);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/interests rejects an over-long single interest with 400 (PER-137)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  const claudeBin = await makeStubClaude();
+  const { server, port } = await startServer(0, { stateFile, claudeBin });
+
+  try {
+    // Under the body cap but a single interest longer than MAX_INTEREST_LEN
+    // (201 chars) — must 400, not 202.
+    const tooLong = "a".repeat(201);
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ interests: [tooLong] }),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /interest too long/);
+
+    const state = await loadState(stateFile);
+    assert.equal(state.last_brief, undefined);
   } finally {
     server.close();
     await fs.rm(tmpStateDir, { recursive: true, force: true });
