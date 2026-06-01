@@ -26,7 +26,7 @@ import {
   type State,
 } from "./state.js";
 import { researchAndSynthesize } from "./research.js";
-import { resolveStatic } from "./static.js";
+import { resolveStatic, resolveAppShellFallback, trailingSlashRedirect } from "./static.js";
 
 export const PKG_VERSION = "0.3.0";
 export const DEFAULT_PORT = Number(process.env.SCOUT_AGENT_PORT ?? 47821);
@@ -317,7 +317,23 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         // that didn't match an API route. Same-origin with the API above, so
         // the browser never makes a public→loopback request → no LNA prompt.
         if (req.method === "GET" || req.method === "HEAD") {
-          const hit = await resolveStatic(url.pathname, webroot);
+          // Match Next `trailingSlash: true` / GitHub Pages: 301 a directory
+          // route hit without its trailing slash (e.g. /app/connect →
+          // /app/connect/) so the companion and github.io behave identically.
+          const redirectTo = await trailingSlashRedirect(url.pathname, webroot);
+          if (redirectTo) {
+            res.writeHead(301, {
+              location: redirectTo + url.search,
+              "cache-control": "no-cache",
+            });
+            res.end();
+            return;
+          }
+          // Static export, then SPA fallback to the /app/ shell for unmatched
+          // in-app deep-links/refreshes so they don't hard-404 (PER-127).
+          const hit =
+            (await resolveStatic(url.pathname, webroot)) ??
+            (await resolveAppShellFallback(url.pathname, webroot));
           if (hit) {
             res.writeHead(200, {
               "content-type": hit.contentType,

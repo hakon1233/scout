@@ -479,3 +479,56 @@ test("serves the bundled static UI for non-API GETs (PER-110)", async () => {
     await fs.rm(webroot, { recursive: true, force: true });
   }
 });
+
+// PER-127: deep-linking / refreshing an in-app view (a panel at /app/, not a
+// real export route) must land on the app shell instead of a hard 404; and a
+// directory route hit without its trailing slash should 301 like GitHub Pages.
+test("SPA fallback + trailing-slash parity for the bundled UI (PER-127)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  await saveState({ pairing_token: newPairingToken() }, stateFile);
+
+  // Webroot mirroring the Next `trailingSlash: true` export: /app/ and
+  // /app/connect/ are directory routes; there is NO /app/settings route.
+  const webroot = await fs.mkdtemp(path.join(os.tmpdir(), "scout-webroot-"));
+  await fs.writeFile(path.join(webroot, "index.html"), "<!doctype html><title>root</title>");
+  await fs.mkdir(path.join(webroot, "app"), { recursive: true });
+  await fs.writeFile(path.join(webroot, "app", "index.html"), "<!doctype html><title>app</title>");
+  await fs.mkdir(path.join(webroot, "app", "connect"), { recursive: true });
+  await fs.writeFile(
+    path.join(webroot, "app", "connect", "index.html"),
+    "<!doctype html><title>connect</title>",
+  );
+
+  const { server, port } = await startServer(0, { stateFile, webroot });
+  try {
+    // /app/settings has no route → fall back to the app shell (200), not 404.
+    const settings = await fetch(`http://127.0.0.1:${port}/app/settings`);
+    assert.equal(settings.status, 200);
+    assert.match(await settings.text(), /<title>app<\/title>/);
+
+    // Same for a nested in-app deep-link.
+    const nested = await fetch(`http://127.0.0.1:${port}/app/settings/keys`);
+    assert.equal(nested.status, 200);
+    assert.match(await nested.text(), /<title>app<\/title>/);
+
+    // /app/connect (no trailing slash) → 301 to /app/connect/, matching the
+    // GitHub Pages / Next trailingSlash behavior.
+    const connect = await fetch(`http://127.0.0.1:${port}/app/connect`, {
+      redirect: "manual",
+    });
+    assert.equal(connect.status, 301);
+    assert.equal(connect.headers.get("location"), "/app/connect/");
+
+    // The fallback is scoped to /app and to extensionless navigations: an
+    // unknown top-level route and a missing asset both still 404.
+    const top = await fetch(`http://127.0.0.1:${port}/totally-unknown`);
+    assert.equal(top.status, 404);
+    const missingAsset = await fetch(`http://127.0.0.1:${port}/app/missing.js`);
+    assert.equal(missingAsset.status, 404);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(webroot, { recursive: true, force: true });
+  }
+});
