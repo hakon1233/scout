@@ -3,7 +3,7 @@
 // then fall back to a small known-port sweep so a user who started the
 // agent on a different port can still pair.
 
-import type { Brief as AppBrief } from "./types";
+import type { Brief as AppBrief, TopicCoverage } from "./types";
 
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
@@ -132,12 +132,17 @@ async function requireBase(): Promise<string> {
 export async function postInterests(
   interests: string[],
   token: string,
+  // Focused-retry (PER-154): when set, the companion re-researches ONLY these
+  // topics and merges them into the prior brief instead of regenerating it all.
+  retryTopics?: string[],
 ): Promise<{ brief_id: string; status: string }> {
   const base = await requireBase();
+  const body: { interests: string[]; retry_topics?: string[] } = { interests };
+  if (retryTopics && retryTopics.length > 0) body.retry_topics = retryTopics;
   const res = await fetch(`${base}/v0/interests`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify({ interests }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
@@ -156,6 +161,10 @@ type AgentBrief = {
   status: string;
   summary_md?: string;
   error_msg?: string;
+  // Authoritative per-topic coverage (PER-154); present on briefs from a
+  // companion >= 0.3.x. Absent on older cached briefs — the UI then falls back
+  // to deriving status from the parsed headings.
+  topics?: TopicCoverage[];
 };
 
 // The companion no longer returns a structured `articles` list — the model
@@ -201,6 +210,7 @@ function adaptBrief(b: AgentBrief): AppBrief {
     interests,
     articles,
     markdown,
+    topics: b.topics,
   };
 }
 
@@ -299,11 +309,18 @@ export async function pollBriefsRaw(sinceTs: string, token: string): Promise<Age
 export async function refreshBriefViaCompanion(
   interests: string[],
   token: string,
-  opts: { sinceTs?: string; timeoutMs?: number; signal?: AbortSignal } = {},
+  opts: {
+    sinceTs?: string;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    // Focused-retry (PER-154): re-research only these topics, merge into the
+    // prior brief. Must be a subset of `interests`.
+    retryTopics?: string[];
+  } = {},
 ): Promise<AppBrief> {
   const since = opts.sinceTs ?? new Date(0).toISOString();
   const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
-  await postInterests(interests, token);
+  await postInterests(interests, token, opts.retryTopics);
   while (Date.now() < deadline) {
     if (opts.signal?.aborted) throw new Error("aborted");
     await new Promise((r) => setTimeout(r, 2000));
