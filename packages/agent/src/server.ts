@@ -82,9 +82,42 @@ function json(
   res.end(JSON.stringify(body));
 }
 
-async function readBody(req: http.IncomingMessage): Promise<string> {
+// Request-body and per-interest bounds. The count is already capped at 6; these
+// cap the remaining unbounded dimensions so an oversized body can't blow the
+// companion's memory or get forwarded into the (expensive, ~5-min) Claude
+// synthesis prompt. (PER-137)
+//
+// 16 KiB comfortably holds 6 interests of 200 chars each plus JSON framing and
+// any whitespace/unicode escaping, with generous headroom.
+export const MAX_BODY_BYTES = 16 * 1024;
+export const MAX_INTEREST_LEN = 200;
+
+// Thrown by readBody when the request body exceeds MAX_BODY_BYTES, so the
+// handler can answer 413 instead of buffering an unbounded body into memory.
+export class BodyTooLargeError extends Error {
+  constructor() {
+    super("request body too large");
+    this.name = "BodyTooLargeError";
+  }
+}
+
+async function readBody(
+  req: http.IncomingMessage,
+  maxBytes = MAX_BODY_BYTES,
+): Promise<string> {
   const chunks: Buffer[] = [];
-  for await (const c of req) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
+  let total = 0;
+  for await (const c of req) {
+    const buf = Buffer.isBuffer(c) ? c : Buffer.from(c);
+    total += buf.length;
+    if (total > maxBytes) {
+      // Stop buffering and tear down the connection so we never hold the whole
+      // oversized payload in memory.
+      req.destroy();
+      throw new BodyTooLargeError();
+    }
+    chunks.push(buf);
+  }
   return Buffer.concat(chunks).toString("utf8");
 }
 
@@ -177,7 +210,20 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "POST" && url.pathname === "/v0/interests") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const body = await readBody(req);
+          // Fast reject on a declared oversized body before reading it at all.
+          const declaredLen = Number(req.headers["content-length"]);
+          if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
+            return json(res, 413, { error: "request body too large" }, cors);
+          }
+          let body: string;
+          try {
+            body = await readBody(req);
+          } catch (err) {
+            if (err instanceof BodyTooLargeError) {
+              return json(res, 413, { error: "request body too large" }, cors);
+            }
+            throw err;
+          }
           let parsed: { interests?: unknown };
           try {
             parsed = JSON.parse(body || "{}");
@@ -208,6 +254,16 @@ export function createServer(deps: ServerDeps = {}): http.Server {
               res,
               400,
               { error: "too many interests, max 6" },
+              cors,
+            );
+          // Cap each interest's length. The count and total body are already
+          // bounded; this stops a single in-budget interest from being a
+          // multi-KB blob forwarded into the synthesis prompt. (PER-137)
+          if (interests.some((s) => s.length > MAX_INTEREST_LEN))
+            return json(
+              res,
+              400,
+              { error: `interest too long, max ${MAX_INTEREST_LEN} chars` },
               cors,
             );
 
