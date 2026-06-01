@@ -21,6 +21,9 @@ export function InterestChips({ interests, onChange }: Props) {
   }, [adding]);
 
   function remove(id: string) {
+    // Never let the list reach zero — the disabled remove button is the primary
+    // guard; this is the defensive backstop.
+    if (interests.length <= 1) return;
     onChange(interests.filter((i) => i.id !== id));
   }
 
@@ -54,12 +57,20 @@ export function InterestChips({ interests, onChange }: Props) {
   }
 
   const atMax = interests.length >= MAX_INTERESTS;
+  // Keep at least one interest — an empty list dead-ends `generate()` (the
+  // companion 400s on "interests required"). Mirrors SetupForm's min-1 rule.
+  const atMin = interests.length <= 1;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5" role="list" aria-label="Interests">
       {interests.map((i) => (
         <span key={i.id} role="listitem">
-          <Chip onRemove={() => remove(i.id)} removeLabel={`Remove ${i.topic}`}>
+          <Chip
+            onRemove={() => remove(i.id)}
+            removeLabel={`Remove ${i.topic}`}
+            removeDisabled={atMin}
+            removeTitle={atMin ? "Keep at least one interest" : undefined}
+          >
             {i.topic}
           </Chip>
         </span>
@@ -86,17 +97,22 @@ export function InterestChips({ interests, onChange }: Props) {
             maxLength={64}
           />
         </span>
+      ) : atMax ? (
+        <span
+          className="inline-flex items-center rounded-pill px-2 py-0.5 text-caption text-muted"
+          role="note"
+        >
+          Max {MAX_INTERESTS} interests — remove one to add another
+        </span>
       ) : (
-        !atMax && (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="inline-flex items-center gap-1 rounded-pill border border-dashed border-border-strong bg-surface px-2 py-0.5 text-caption text-secondary hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
-            aria-label="Add interest"
-          >
-            <span aria-hidden="true">+</span> Add
-          </button>
-        )
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="inline-flex items-center gap-1 rounded-pill border border-dashed border-border-strong bg-surface px-2 py-0.5 text-caption text-secondary hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+          aria-label="Add interest"
+        >
+          <span aria-hidden="true">+</span> Add
+        </button>
       )}
     </div>
   );
