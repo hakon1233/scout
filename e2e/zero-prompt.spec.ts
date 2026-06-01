@@ -46,13 +46,12 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   // localStorage), loaded straight from the companion's own origin.
   await page.goto(`${ORIGIN}/app/`);
 
-  // First run shows the setup wizard (no stored settings). Complete it.
+  // First run shows the setup form (no stored settings). It's a single step
+  // (name + interests) — the BYO-key step was removed (PER-133) since briefs
+  // are generated only via the local companion.
   await page.getByLabel("Your name").fill("E2E Tester");
   await page.getByLabel(/Interests/).fill("AI safety\nMarkets");
   await page.getByRole("button", { name: "Continue" }).click();
-
-  // Step 2: keys are optional — leave blank (companion path) and continue.
-  await page.getByRole("button", { name: "Save and continue" }).click();
 
   // THE zero-prompt assertion: with no paste step, the token is auto-adopted
   // same-origin and the companion ping succeeds, so Generate enables itself.

@@ -7,7 +7,6 @@ import type { ClassifiedError, ScoutErrorProvider } from "@/lib/errors";
 type Props = {
   error: ClassifiedError;
   onRetry: () => void;
-  onEditKeys: () => void;
 };
 
 const providerLabel: Record<ScoutErrorProvider, string> = {
@@ -16,17 +15,22 @@ const providerLabel: Record<ScoutErrorProvider, string> = {
   app: "Scout",
 };
 
-export function ErrorBanner({ error, onRetry, onEditKeys }: Props) {
+export function ErrorBanner({ error, onRetry }: Props) {
+  // Brief generation runs only through the local companion now (PER-109), so
+  // there are no BYO keys to edit. An auth failure here means the companion
+  // token was rejected — re-pairing is the fix.
   if (error.kind === "auth") {
     return (
       <Banner tone="danger">
         <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span>
-            Your {providerLabel[error.provider]} key was rejected. Update it in
-            setup.
+            Scout couldn&apos;t authenticate with its companion. Restart{" "}
+            <code className="font-mono text-mono-xs">scout-agent run</code> and
+            reconnect from{" "}
+            <code className="font-mono text-mono-xs">/app/connect</code>.
           </span>
-          <Button variant="secondary" size="sm" onClick={onEditKeys}>
-            Edit keys
+          <Button variant="secondary" size="sm" onClick={onRetry}>
+            Try again
           </Button>
         </span>
       </Banner>
