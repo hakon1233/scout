@@ -77,6 +77,18 @@ function isOriginDenied(origin: string | undefined): boolean {
   return !CORS_ALLOWED_ORIGINS.some((rx) => rx.test(origin));
 }
 
+// Known /v0/* routes and the methods each accepts. OPTIONS is handled globally
+// (CORS/PNA preflight) for every route, so it's always listed. Used to answer a
+// wrong-method request on a KNOWN path with 405 Method Not Allowed + an `Allow`
+// header, instead of the indistinguishable 404 a genuinely unknown path gets —
+// so a client can tell "this route exists, wrong method" from "no such route".
+// (PER-136)
+const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
+  "/v0/config": ["GET", "OPTIONS"],
+  "/v0/interests": ["POST", "OPTIONS"],
+  "/v0/briefs": ["GET", "OPTIONS"],
+};
+
 function corsHeaders(origin: string | undefined): Record<string, string> {
   if (!origin) return {};
   if (!CORS_ALLOWED_ORIGINS.some((rx) => rx.test(origin))) return {};
@@ -371,6 +383,18 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             res.end(req.method === "HEAD" ? undefined : hit.body);
             return;
           }
+        }
+
+        // Known route, unsupported method → 405 + Allow (REST-correct), so it's
+        // distinguishable from a genuinely unknown path's 404. (PER-136)
+        const allowed = V0_ROUTE_METHODS[url.pathname];
+        if (allowed) {
+          return json(
+            res,
+            405,
+            { error: "method not allowed" },
+            { ...cors, allow: allowed.join(", ") },
+          );
         }
 
         json(res, 404, { error: "not found" }, cors);

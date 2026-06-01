@@ -497,6 +497,57 @@ test("a hostile Origin is 403'd uniformly across all /v0/* routes (PER-135)", as
   }
 });
 
+// PER-136: a wrong method on a KNOWN /v0/* route must return 405 Method Not
+// Allowed with an `Allow` header listing the valid methods — distinguishable
+// from the 404 a genuinely unknown path gets. An unknown path still 404s.
+test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404 (PER-136)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  const { server, port } = await startServer(0, { stateFile });
+  const auth = { authorization: `Bearer ${token}` };
+  try {
+    // DELETE/POST on the GET-only /v0/config → 405, Allow: GET, OPTIONS.
+    const cfgDelete = await fetch(`http://127.0.0.1:${port}/v0/config`, {
+      method: "DELETE",
+      headers: auth,
+    });
+    assert.equal(cfgDelete.status, 405);
+    assert.equal(cfgDelete.headers.get("allow"), "GET, OPTIONS");
+    assert.equal((await cfgDelete.json()).error, "method not allowed");
+
+    // GET on the POST-only /v0/interests → 405, Allow: POST, OPTIONS.
+    const interestsGet = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      headers: auth,
+    });
+    assert.equal(interestsGet.status, 405);
+    assert.equal(interestsGet.headers.get("allow"), "POST, OPTIONS");
+
+    // PUT on the GET-only /v0/briefs → 405, Allow: GET, OPTIONS.
+    const briefsPut = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      method: "PUT",
+      headers: auth,
+    });
+    assert.equal(briefsPut.status, 405);
+    assert.equal(briefsPut.headers.get("allow"), "GET, OPTIONS");
+
+    // A genuinely unknown /v0/* path still 404s (no Allow header) — the 405
+    // path must not swallow real not-found cases.
+    const unknown = await fetch(`http://127.0.0.1:${port}/v0/nonsense`, {
+      method: "DELETE",
+      headers: auth,
+    });
+    assert.equal(unknown.status, 404);
+    assert.equal(unknown.headers.get("allow"), null);
+    assert.equal((await unknown.json()).error, "not found");
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+  }
+});
+
 test("serves the bundled static UI for non-API GETs (PER-110)", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
