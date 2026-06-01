@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Banner, Button } from "@/components/ui";
 import {
   bootstrapCompanionToken,
   COMPANION_PORT,
@@ -28,6 +29,13 @@ const POLL_MAX_ATTEMPTS = 20; // ~80s
 
 export default function ConnectPage() {
   const [token, setToken] = useState("");
+  // True once a pairing token is saved to storage — either auto-adopted from
+  // the same-origin companion (`/v0/config`) or pasted manually. Tracked
+  // separately from the editable `token` field so typing into the manual-paste
+  // escape hatch doesn't flip `setupComplete`. Starts false so the first client
+  // render matches the SSR/static export (no localStorage).
+  const [hasSavedToken, setHasSavedToken] = useState(false);
+  const [hasInterests, setHasInterests] = useState(false);
   // Resolve the tarball URL against the actual origin this page is served from,
   // so the copied command is correct regardless of the deploy host. Must START
   // at DEFAULT_TARBALL_URL so the first client render matches the SSR/static
@@ -52,6 +60,9 @@ export default function ConnectPage() {
     // post-mount sync of a client-only value (the serving origin).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTarballUrl(`${window.location.origin}${TARBALL_PATH}`);
+    // Mirror saved interests so State A can surface a "set interests first"
+    // link before the user clicks Generate. Read once on mount (post-hydration).
+    setHasInterests((loadSettings()?.interests.length ?? 0) > 0);
   }, []);
 
   useEffect(() => {
@@ -60,6 +71,7 @@ export default function ConnectPage() {
     (async () => {
       const tok = await bootstrapCompanionToken();
       setToken(tok);
+      setHasSavedToken(Boolean(tok));
     })();
   }, []);
 
@@ -80,6 +92,7 @@ export default function ConnectPage() {
 
   const handleSaveToken = useCallback(() => {
     saveCompanionToken(token);
+    setHasSavedToken(Boolean(token.trim()));
   }, [token]);
 
   const copy = useCallback((text: string, key: string) => {
@@ -92,13 +105,13 @@ export default function ConnectPage() {
   const handleGenerate = useCallback(async () => {
     const settings = loadSettings();
     if (!settings || settings.interests.length === 0) {
-      setGenMsg("No interests set — go to the app page and add some interests first.");
+      setGenMsg("No interests set yet.");
       setGenState("error");
       return;
     }
     const tok = loadCompanionToken();
     if (!tok) {
-      setGenMsg("No pairing token saved. Complete Step 1 first.");
+      setGenMsg("No pairing token saved. Pair the companion first.");
       setGenState("error");
       return;
     }
@@ -147,6 +160,16 @@ export default function ConnectPage() {
     };
   }, []);
 
+  // The page is only reachable at 127.0.0.1:47821 because the companion is
+  // already installed, running, and paired — so when both are true, render the
+  // "you're all set" success state instead of the install walkthrough. Same
+  // semantics as `companionReady` in src/app/app/page.tsx.
+  const setupComplete = status === "connected" && hasSavedToken;
+  // While the first ping is in flight we don't yet know which state to show.
+  // Render a neutral placeholder rather than flashing the walkthrough and then
+  // collapsing it (Doherty / perceived-performance — PER-140 spec §5).
+  const resolving = status === "idle" || status === "checking";
+
   const statusColor =
     status === "connected"
       ? "text-success"
@@ -158,7 +181,7 @@ export default function ConnectPage() {
 
   const statusLabel =
     status === "connected"
-      ? `Connected · port ${COMPANION_PORT}`
+      ? `✓ Connected · port ${COMPANION_PORT}`
       : status === "checking"
         ? "Checking…"
         : status === "disconnected"
@@ -170,14 +193,22 @@ export default function ConnectPage() {
   const installCmd = `npm i -g ${tarballUrl}\nscout-agent pair`;
   const runCmd = "scout-agent run";
 
+  const generateLabel =
+    genState === "posting"
+      ? "Sending interests…"
+      : genState === "polling"
+        ? "Generating brief…"
+        : genState === "done"
+          ? "Brief ready ✓"
+          : "Generate brief with companion";
+
+  const generating = genState === "posting" || genState === "polling";
+
   return (
     <main className="min-h-screen bg-page text-primary">
       <div className="mx-auto max-w-xl space-y-8 px-5 py-10">
         <div className="flex items-center justify-between font-mono text-[12px] uppercase tracking-[0.06em] text-muted">
-          <a
-            href="/app"
-            className="transition-colors hover:text-primary"
-          >
+          <a href="/app" className="transition-colors hover:text-primary">
             ← Scout
           </a>
           <span>Pair the companion</span>
@@ -226,103 +257,248 @@ export default function ConnectPage() {
           </button>
         </div>
 
-        {/* Step 1 */}
-        <section className="space-y-3">
-          <h2 className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
-            <span className="text-signal">01</span> Install &amp; pair
-          </h2>
-          <p className="text-sm text-secondary">
-            Run this once in your terminal to install and generate a pairing
-            token:
-          </p>
-          <CmdBlock cmd={installCmd} copyKey="pair" copied={copied} onCopy={copy} />
-          <p className="text-xs text-muted">
-            This installs the prebuilt companion package directly from this
-            site. Requires Node 20+.
-          </p>
-          <p className="text-sm text-secondary">
-            The command prints a token. Paste it below:
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="Paste pairing token here"
-              className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
-            />
-            <button
-              onClick={handleSaveToken}
-              className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
-            >
-              Save
-            </button>
-          </div>
-        </section>
+        {resolving ? (
+          <CheckingPlaceholder />
+        ) : setupComplete ? (
+          /* ── State A — Connected: confirmation + Generate lead ── */
+          <>
+            <Banner tone="success">
+              <div className="space-y-2">
+                <p className="font-medium">You&apos;re all set</p>
+                <CheckRow>Installed &amp; paired</CheckRow>
+                <CheckRow>Companion running</CheckRow>
+              </div>
+            </Banner>
 
-        {/* Step 2 */}
-        <section className="space-y-3">
-          <h2 className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
-            <span className="text-signal">02</span> Start the companion
-          </h2>
-          <p className="text-sm text-secondary">
-            Keep this running in a terminal tab. It listens on port{" "}
-            {COMPANION_PORT}.
-          </p>
-          <CmdBlock cmd={runCmd} copyKey="run" copied={copied} onCopy={copy} />
-          <p className="text-xs text-muted">
-            Needs{" "}
-            <code className="rounded bg-surface-muted px-1 font-mono text-[13px]">
-              claude
-            </code>{" "}
-            on your PATH, signed in to an account with WebSearch (anthropic.com
-            Pro / Max). No third-party search key required.
-          </p>
-        </section>
+            <section className="space-y-3">
+              <Button
+                variant="primary"
+                className="w-full"
+                disabled={generating}
+                loading={generating}
+                onClick={handleGenerate}
+              >
+                {generateLabel}
+              </Button>
 
-        {/* Step 3 — Generate */}
-        <section className="space-y-3">
-          <h2 className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
-            <span className="text-signal">03</span> Generate a brief
-          </h2>
-          <p className="text-sm text-secondary">
-            With the companion running, click below to kick off a brief using
-            your saved interests.
-          </p>
-          <button
-            disabled={status !== "connected" || genState === "posting" || genState === "polling"}
-            onClick={handleGenerate}
-            className="w-full rounded-[6px] bg-accent py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {genState === "posting"
-              ? "Sending interests…"
-              : genState === "polling"
-                ? "Generating brief…"
-                : genState === "done"
-                  ? "Brief ready ✓"
-                  : "Generate brief with companion"}
-          </button>
-          {genMsg && (
-            <p
-              className={`text-sm ${genState === "error" ? "text-danger" : genState === "done" ? "text-success" : "text-muted"}`}
-            >
-              {genMsg}
-              {genState === "done" && (
-                <>
-                  {" "}
+              {!hasInterests && genState === "idle" && (
+                <p className="text-sm text-secondary">
+                  No interests set yet.{" "}
                   <a
                     href="/app"
                     className="text-signal underline underline-offset-2"
                   >
-                    Go to brief →
+                    Set your interests first →
                   </a>
-                </>
+                </p>
               )}
-            </p>
-          )}
-        </section>
+
+              {genMsg && (
+                <p
+                  className={`text-sm ${
+                    genState === "error"
+                      ? "text-danger"
+                      : genState === "done"
+                        ? "text-success"
+                        : "text-muted"
+                  }`}
+                >
+                  {genMsg}
+                  {genState === "error" && !hasInterests && (
+                    <>
+                      {" "}
+                      <a
+                        href="/app"
+                        className="text-signal underline underline-offset-2"
+                      >
+                        Set your interests first →
+                      </a>
+                    </>
+                  )}
+                  {genState === "done" && (
+                    <>
+                      {" "}
+                      <a
+                        href="/app"
+                        className="text-signal underline underline-offset-2"
+                      >
+                        Go to brief →
+                      </a>
+                    </>
+                  )}
+                </p>
+              )}
+            </section>
+
+            {/* Progressive disclosure — install reference for another machine */}
+            <details className="group rounded-[6px] border border-border-default">
+              <summary className="cursor-pointer rounded-[6px] px-4 py-3 font-mono text-[12px] uppercase tracking-[0.08em] text-muted outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-focus-ring">
+                Set Scout up on another machine
+              </summary>
+              <div className="space-y-5 border-t border-border-default px-4 py-4">
+                <div className="space-y-2">
+                  <p className="text-sm text-secondary">
+                    Install &amp; pair on the other machine:
+                  </p>
+                  <CmdBlock
+                    cmd={installCmd}
+                    copyKey="pair"
+                    copied={copied}
+                    onCopy={copy}
+                  />
+                  <p className="text-xs text-muted">
+                    Installs the prebuilt companion directly from this site.
+                    Requires Node 20+.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-secondary">
+                    Then start it (listens on port {COMPANION_PORT}):
+                  </p>
+                  <CmdBlock
+                    cmd={runCmd}
+                    copyKey="run"
+                    copied={copied}
+                    onCopy={copy}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-secondary">
+                    Auto-pairing didn&apos;t work? Paste a token manually:
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder="Paste pairing token here"
+                      className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
+                    />
+                    <button
+                      onClick={handleSaveToken}
+                      className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </>
+        ) : (
+          /* ── State B — Walkthrough (github.io first-run, unchanged) ── */
+          <>
+            {/* Step 1 */}
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
+                <span className="text-signal">01</span> Install &amp; pair
+              </h2>
+              <p className="text-sm text-secondary">
+                Run this once in your terminal to install and generate a pairing
+                token:
+              </p>
+              <CmdBlock cmd={installCmd} copyKey="pair" copied={copied} onCopy={copy} />
+              <p className="text-xs text-muted">
+                This installs the prebuilt companion package directly from this
+                site. Requires Node 20+.
+              </p>
+              <p className="text-sm text-secondary">
+                The command prints a token. Paste it below:
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="Paste pairing token here"
+                  className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
+                />
+                <button
+                  onClick={handleSaveToken}
+                  className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+                >
+                  Save
+                </button>
+              </div>
+            </section>
+
+            {/* Step 2 */}
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
+                <span className="text-signal">02</span> Start the companion
+              </h2>
+              <p className="text-sm text-secondary">
+                Keep this running in a terminal tab. It listens on port{" "}
+                {COMPANION_PORT}.
+              </p>
+              <CmdBlock cmd={runCmd} copyKey="run" copied={copied} onCopy={copy} />
+              <p className="text-xs text-muted">
+                Needs{" "}
+                <code className="rounded bg-surface-muted px-1 font-mono text-[13px]">
+                  claude
+                </code>{" "}
+                on your PATH, signed in to an account with WebSearch
+                (anthropic.com Pro / Max). No third-party search key required.
+              </p>
+            </section>
+
+            {/* Step 3 — Generate */}
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
+                <span className="text-signal">03</span> Generate a brief
+              </h2>
+              <p className="text-sm text-secondary">
+                With the companion running, click below to kick off a brief using
+                your saved interests.
+              </p>
+              <button
+                disabled={status !== "connected" || generating}
+                onClick={handleGenerate}
+                className="w-full rounded-[6px] bg-accent py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {generateLabel}
+              </button>
+              {genMsg && (
+                <p
+                  className={`text-sm ${genState === "error" ? "text-danger" : genState === "done" ? "text-success" : "text-muted"}`}
+                >
+                  {genMsg}
+                  {genState === "done" && (
+                    <>
+                      {" "}
+                      <a
+                        href="/app"
+                        className="text-signal underline underline-offset-2"
+                      >
+                        Go to brief →
+                      </a>
+                    </>
+                  )}
+                </p>
+              )}
+            </section>
+          </>
+        )}
       </div>
     </main>
+  );
+}
+
+function CheckRow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex items-center gap-2 text-sm text-success">
+      <span aria-hidden="true">✓</span>
+      <span>{children}</span>
+    </p>
+  );
+}
+
+function CheckingPlaceholder() {
+  return (
+    <div className="flex items-center gap-2 py-2 text-sm text-muted">
+      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-border-strong" />
+      Checking companion…
+    </div>
   );
 }
 
