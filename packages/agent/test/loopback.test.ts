@@ -648,3 +648,51 @@ test("SPA fallback + trailing-slash parity for the bundled UI (PER-127)", async 
     await fs.rm(webroot, { recursive: true, force: true });
   }
 });
+
+// PER-144: a genuinely-unknown path hit by a *browser navigation* (Accept:
+// text/html) must render the export's styled 404.html — not the raw JSON
+// `{"error":"not found"}` a user would otherwise see. Asset/API/programmatic
+// requests (no text/html in Accept) still get the machine-readable JSON 404.
+test("unknown HTML navigation → styled 404.html, not raw JSON (PER-144)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  await saveState({ pairing_token: newPairingToken() }, stateFile);
+
+  const webroot = await fs.mkdtemp(path.join(os.tmpdir(), "scout-webroot-"));
+  await fs.writeFile(path.join(webroot, "index.html"), "<!doctype html><title>root</title>");
+  await fs.mkdir(path.join(webroot, "app"), { recursive: true });
+  await fs.writeFile(path.join(webroot, "app", "index.html"), "<!doctype html><title>app</title>");
+  await fs.writeFile(
+    path.join(webroot, "404.html"),
+    "<!doctype html><title>Page not found</title><a href=\"/\">home</a>",
+  );
+
+  const html = { accept: "text/html,application/xhtml+xml" };
+  const { server, port } = await startServer(0, { stateFile, webroot });
+  try {
+    // Genuinely-unknown top-level path, browser navigation → 404 + styled page.
+    const unknown = await fetch(`http://127.0.0.1:${port}/totally-unknown`, { headers: html });
+    assert.equal(unknown.status, 404);
+    assert.match(unknown.headers.get("content-type") ?? "", /text\/html/);
+    assert.match(await unknown.text(), /Page not found/);
+
+    // The PER-144 repro path itself stays caught by the SPA fallback (200 shell),
+    // never reaching the 404 page.
+    const appUnknown = await fetch(`http://127.0.0.1:${port}/app/nonexistent-xyz`, {
+      headers: html,
+    });
+    assert.equal(appUnknown.status, 200);
+    assert.match(await appUnknown.text(), /<title>app<\/title>/);
+
+    // Programmatic / asset clients (no text/html in Accept) still get JSON 404.
+    const json404 = await fetch(`http://127.0.0.1:${port}/totally-unknown`, {
+      headers: { accept: "application/json" },
+    });
+    assert.equal(json404.status, 404);
+    assert.equal((await json404.json()).error, "not found");
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(webroot, { recursive: true, force: true });
+  }
+});
