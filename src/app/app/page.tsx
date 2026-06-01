@@ -8,6 +8,7 @@ import { BriefLayout } from "@/components/BriefLayout";
 import { BriefSkeleton } from "@/components/BriefSkeleton";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { InterestChips } from "@/components/InterestChips";
+import { ScheduleSettings } from "@/components/ScheduleSettings";
 import { SetupForm } from "@/components/SetupForm";
 import { Banner, Button } from "@/components/ui";
 import type { AgentProgress } from "@/lib/agent";
@@ -248,6 +249,14 @@ export default function AppPage() {
             setEditing(false);
           }}
         />
+        {/* Schedule controls live in the settings screen, but only once the
+            founder has a stored config — first-run setup stays a single focused
+            step (companion isn't paired yet anyway). PER-152. */}
+        {settings && (
+          <div className="mt-2 border-t border-border-default pt-6">
+            <ScheduleSettings />
+          </div>
+        )}
         {settings && (
           <Button
             variant="link"
@@ -255,7 +264,7 @@ export default function AppPage() {
             className="mt-3 self-start"
             onClick={() => setEditing(false)}
           >
-            Cancel
+            Back to brief
           </Button>
         )}
       </Shell>

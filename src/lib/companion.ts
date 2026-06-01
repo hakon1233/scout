@@ -226,6 +226,62 @@ export async function fetchLatestBrief(token: string): Promise<AppBrief | null> 
   }
 }
 
+// Recurring-schedule config + last/next-run telemetry the companion exposes at
+// GET|PUT /v0/schedule (PER-151). The Settings UI (PER-152) reads this to render
+// the schedule controls and the legibility row. `reboot_durable` is false for
+// the nohup `run` companion — the timer dies with the process.
+export type CompanionSchedule = {
+  enabled: boolean;
+  /** "HH:MM" 24h local time-of-day the scheduled run fires. */
+  time_of_day: string;
+  last_run_at: string | null;
+  last_run_status: "success" | "failed" | "skipped" | null;
+  last_run_note: string | null;
+  next_run_at: string | null;
+  reboot_durable: boolean;
+};
+
+// Read the persisted schedule config + run telemetry. Throws on an unreachable
+// companion or non-2xx so the caller can render a real error / "not paired" state.
+export async function fetchSchedule(token: string): Promise<CompanionSchedule> {
+  const base = await requireBase();
+  const res = await fetch(`${base}/v0/schedule`, {
+    headers: { authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
+      error?: string;
+    };
+    throw new Error(err.error ?? `Couldn't read the schedule (${res.status}).`);
+  }
+  return res.json() as Promise<CompanionSchedule>;
+}
+
+// Write the schedule (enable/disable and/or time-of-day). The companion
+// validates, re-arms its live timer, and echoes back the updated view —
+// including the recomputed next_run_at — so the caller renders truth, not a
+// guess. Throws the companion's human-readable error on 400/401/etc.
+export async function updateSchedule(
+  patch: { enabled?: boolean; time_of_day?: string },
+  token: string,
+): Promise<CompanionSchedule> {
+  const base = await requireBase();
+  const res = await fetch(`${base}/v0/schedule`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify(patch),
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
+      error?: string;
+    };
+    throw new Error(err.error ?? `Couldn't save the schedule (${res.status}).`);
+  }
+  return res.json() as Promise<CompanionSchedule>;
+}
+
 export async function pollBriefsRaw(sinceTs: string, token: string): Promise<AgentBrief[]> {
   const base = await requireBase();
   const url = `${base}/v0/briefs?since=${encodeURIComponent(sinceTs)}`;
