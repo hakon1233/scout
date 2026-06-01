@@ -20,4 +20,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      # Hermetic @scout/agent unit + /v0 contract suite (PER-118). Mocks the
+      # `claude` shell-out, so it runs offline with zero quota and guards the
+      # known regressions (PER-91/92/106/108/110/113) on every push/PR.
+      - run: pnpm test
       - run: pnpm build
