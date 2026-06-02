@@ -26,11 +26,13 @@ import {
   interestTopics,
   STATE_FILE,
   type Brief,
+  type ChatTurn,
   type ScheduleConfig,
   type State,
 } from "./state.js";
 import { interestDocMeta, INTERESTS_DIR } from "./docs.js";
 import { startRun } from "./runner.js";
+import { startChatTurn } from "./chat.js";
 import { isServiceInstalled } from "./service.js";
 import { resolveStatic, resolveAppShellFallback, trailingSlashRedirect } from "./static.js";
 
@@ -53,6 +55,9 @@ export type ServerDeps = {
   // (~/.config/scout/interests). Injected for tests so GET /v0/interests can be
   // exercised against a hermetic doc store instead of the real home dir.
   interestsDir?: string;
+  // The chat turn is async (kick + poll like briefs); tests wait on this to know
+  // when a turn has finished applying its changes. (PER-172)
+  onChatDone?: (turn: ChatTurn) => void;
 };
 
 // Shape GET /v0/schedule returns and PUT echoes back — the contract the
@@ -160,6 +165,7 @@ const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
   "/v0/interests": ["GET", "POST", "PUT", "OPTIONS"],
   "/v0/briefs": ["GET", "OPTIONS"],
   "/v0/schedule": ["GET", "PUT", "OPTIONS"],
+  "/v0/chat": ["GET", "POST", "OPTIONS"],
 };
 
 function corsHeaders(origin: string | undefined): Record<string, string> {
@@ -193,6 +199,9 @@ function json(
 // any whitespace/unicode escaping, with generous headroom.
 export const MAX_BODY_BYTES = 16 * 1024;
 export const MAX_INTEREST_LEN = 200;
+// A single chat message. Generous enough for a paragraph of intent, bounded so an
+// oversized turn can't be forwarded into the (model-priced) chat prompt. (PER-172)
+export const MAX_CHAT_MESSAGE_LEN = 4000;
 
 type InterestParse =
   | { ok: true; interests: string[] }
@@ -526,6 +535,85 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const last = state.last_brief;
           const matches = last && (!since || last.generated_at > since) ? [last] : [];
           json(res, 200, { briefs: matches }, cors);
+          return;
+        }
+
+        // Kick one chat turn over the interest collection (PER-172 / C4). Async
+        // kick + poll, exactly like POST /v0/interests: we persist a `pending`
+        // turn and fire the (model-priced) round-trip fire-and-forget, returning
+        // 202 immediately. The caller polls GET /v0/chat?since= for the reply +
+        // the machine-readable change set the turn applied. Single chat slot,
+        // last-writer-wins → 409 while a turn is already pending (mirrors the
+        // brief single-flight), so two turns can't race on the interest set.
+        if (req.method === "POST" && url.pathname === "/v0/chat") {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          const declaredLen = Number(req.headers["content-length"]);
+          if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
+            return json(res, 413, { error: "request body too large" }, cors);
+          }
+          let body: string;
+          try {
+            body = await readBody(req);
+          } catch (err) {
+            if (err instanceof BodyTooLargeError) {
+              return json(res, 413, { error: "request body too large" }, cors);
+            }
+            throw err;
+          }
+          let parsed: { message?: unknown };
+          try {
+            parsed = JSON.parse(body || "{}");
+          } catch {
+            return json(res, 400, { error: "invalid json" }, cors);
+          }
+          const message =
+            typeof parsed.message === "string" ? parsed.message.trim() : "";
+          if (!message) return json(res, 400, { error: "message required" }, cors);
+          if (message.length > MAX_CHAT_MESSAGE_LEN) {
+            return json(
+              res,
+              400,
+              { error: `message too long, max ${MAX_CHAT_MESSAGE_LEN} chars` },
+              cors,
+            );
+          }
+          const outcome = await startChatTurn(message, {
+            stateFile,
+            interestsDir,
+            claudeBin,
+            spawnFn,
+            onChatDone: deps.onChatDone,
+          });
+          if (!outcome.started) {
+            // The only non-empty reason here is in_flight (message was validated
+            // non-empty above) → 409, echoing the in-flight turn id.
+            const turnId =
+              outcome.reason === "in_flight" ? outcome.turnId : undefined;
+            return json(
+              res,
+              409,
+              { error: "chat turn in progress", turn_id: turnId },
+              cors,
+            );
+          }
+          json(res, 202, { turn_id: outcome.turnId, status: "pending" }, cors);
+          return;
+        }
+
+        // Poll the latest chat turn (PER-172). Mirrors GET /v0/briefs: returns the
+        // single held turn when it's newer than `since` (its reply + applied
+        // changes once `ready`), else []. The FE polls this until `status` flips
+        // off `pending`, then renders the reply and re-`GET /v0/interests` (or
+        // applies `changes` in place) — the "Updated" beat fires on the confirmed
+        // change set, never a hopeful guess (PER-139).
+        if (req.method === "GET" && url.pathname === "/v0/chat") {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          const since = url.searchParams.get("since");
+          const last = state.last_chat;
+          const matches = last && (!since || last.created_at > since) ? [last] : [];
+          json(res, 200, { turns: matches }, cors);
           return;
         }
 

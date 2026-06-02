@@ -1,0 +1,424 @@
+// Conversational interest manager (PER-172 / C4).
+//
+// ONE chat manages the WHOLE set of interest docs. A single turn can:
+//   - create a new interest (+ its `<id>.md` intent doc),
+//   - refine/rename an existing interest's doc/topic,
+//   - delete an interest (+ its doc).
+//
+// We delegate the natural-language reasoning to a headless `claude` subprocess
+// the EXACT same delegated way research.ts does: we spawn the CLI and feed the
+// prompt over stdin. We NEVER read, env-pass, argv-pass, or forward the user's
+// `sk-ant-oat01-…` OAuth token — `claude` self-auths from
+// `~/.claude/credentials.json` (guarded by the PER-108 contract test).
+//
+// Unlike research, the subprocess touches NO filesystem and uses NO tools. It
+// only reasons over the interest snapshot we hand it and returns a structured
+// change set as JSON. THIS module is the trusted applier: it validates each
+// change against the current interest set, mints ids server-side (a model must
+// never invent an `int_…` id, nor write an arbitrary `<id>.md`), persists via the
+// docs.ts / state.ts helpers, and only then flips the turn to `ready`. That keeps
+// the change set machine-readable AND makes the doc edit observable in the same
+// turn (CEO contract e81f2c2a) — and a created/deleted interest also lands in
+// `state.interests`, which a model editing files alone could never accomplish.
+
+import { spawn } from "node:child_process";
+import os from "node:os";
+import {
+  loadState,
+  saveState,
+  newChatTurnId,
+  newInterestId,
+  type ChatChange,
+  type ChatTurn,
+  type Interest,
+  type State,
+} from "./state.js";
+import {
+  readInterestDoc,
+  writeInterestDoc,
+  deleteInterestDoc,
+} from "./docs.js";
+
+// No tools: the chat subprocess only reasons and returns JSON. We still pass
+// --dangerously-skip-permissions (as research does) so a stray tool attempt
+// can't hang waiting on an interactive permission prompt in --print mode; the
+// empty allow-list means there is nothing to invoke anyway.
+const ALLOWED_TOOLS = "";
+
+// Same niceness hedge as research.ts: keep the CPU-heavy child from starving the
+// single-threaded loopback event loop so polls/healthz stay responsive.
+const CHAT_CHILD_NICENESS = 10;
+
+// Hard ceiling on interests, matching parseInterestsPayload's max-6 in server.ts.
+// A chat "create" past the cap is dropped (and called out in the prompt context)
+// so the collection can't grow unbounded via conversation.
+export const MAX_INTERESTS = 6;
+
+export type ChatOptions = {
+  claudeBin?: string;
+  // Spawn override for tests — injects a stub `claude` without the real binary
+  // or network, exactly like ResearchOptions.spawnFn.
+  spawnFn?: typeof spawn;
+};
+
+// What the model is asked to return: a reply plus the changes it wants applied.
+// `interestId` is omitted on create (the system assigns it). We validate this
+// shape defensively before trusting any field.
+type ProposedChange = {
+  op?: unknown;
+  interestId?: unknown;
+  topic?: unknown;
+  doc?: unknown;
+};
+type ChatModelOutput = {
+  reply: string;
+  changes: ProposedChange[];
+};
+
+// Snapshot of an interest handed to the model: its id, topic, and current doc so
+// the model can "read" the doc before proposing an edit.
+type InterestSnapshot = { id: string; topic: string; doc: string };
+
+export async function buildInterestSnapshots(
+  interests: Interest[],
+  interestsDir: string,
+): Promise<InterestSnapshot[]> {
+  return await Promise.all(
+    interests.map(async (it) => ({
+      id: it.id,
+      topic: it.topic,
+      doc: (await readInterestDoc(it.id, interestsDir)) ?? "",
+    })),
+  );
+}
+
+export function buildChatPrompt(
+  message: string,
+  snapshots: InterestSnapshot[],
+): string {
+  const lines: string[] = [];
+  lines.push(
+    "You are Scout's interest assistant. Through conversation you help the user",
+  );
+  lines.push(
+    "manage their personalized-news interests. There is ONE chat for the WHOLE",
+  );
+  lines.push("set of interests — not one chat per interest.");
+  lines.push("");
+  lines.push("Each interest has:");
+  lines.push("- an `id`: an opaque, stable handle (do NOT invent new ids),");
+  lines.push("- a `topic`: the short headline the news engine searches on,");
+  lines.push(
+    "- a `doc`: free-form markdown capturing EXACTLY what the user wants from that",
+  );
+  lines.push(
+    "  topic. This doc is injected verbatim into the topic's research prompt, so",
+  );
+  lines.push("  refining it directly changes what the next brief researches.");
+  lines.push("");
+  lines.push(
+    `Current interests (${snapshots.length} of a maximum of ${MAX_INTERESTS}), as JSON:`,
+  );
+  lines.push("```json");
+  lines.push(JSON.stringify(snapshots, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("The user says:");
+  lines.push('"""');
+  lines.push(message);
+  lines.push('"""');
+  lines.push("");
+  lines.push(
+    "Decide what changes (if any) to make to the interests, then reply to the user.",
+  );
+  lines.push("");
+  lines.push(
+    "Respond with a SINGLE JSON object and NOTHING else (no prose, no code fence):",
+  );
+  lines.push("{");
+  lines.push('  "reply": "<your short conversational reply to the user>",');
+  lines.push('  "changes": [');
+  lines.push("    // Refine or replace an existing interest's intent doc:");
+  lines.push(
+    '    { "op": "update", "interestId": "<existing id>", "doc": "<full new markdown>" },',
+  );
+  lines.push("    // Add a topic rename by also including a topic field:");
+  lines.push(
+    '    { "op": "update", "interestId": "<existing id>", "topic": "<new topic>", "doc": "<full markdown>" },',
+  );
+  lines.push("    // Create a new interest (do NOT supply an id — the system mints it):");
+  lines.push(
+    '    { "op": "create", "topic": "<topic>", "doc": "<full markdown>" },',
+  );
+  lines.push("    // Delete an interest:");
+  lines.push('    { "op": "delete", "interestId": "<existing id>" }');
+  lines.push("  ]");
+  lines.push("}");
+  lines.push("");
+  lines.push("Rules:");
+  lines.push(
+    "- Include ONLY the changes you are actually making this turn; use [] when none.",
+  );
+  lines.push(
+    '- For "update"/"delete", `interestId` MUST be one of the ids listed above.',
+  );
+  lines.push('- For "create", OMIT `interestId`; never invent one.');
+  lines.push('- `doc` must be the COMPLETE new document, never a diff or fragment.');
+  lines.push(
+    `- There is a hard cap of ${MAX_INTERESTS} interests; don't create past it.`,
+  );
+  lines.push("- Do not use any tools. Output only the JSON object.");
+  return lines.join("\n");
+}
+
+// Run the `claude` subprocess for one chat turn and parse its JSON output.
+// Mirrors research.ts's delegated spawn (stdin prompt, niceness, error mapping)
+// but expects a JSON object back instead of brief markdown.
+export async function chatComplete(
+  message: string,
+  snapshots: InterestSnapshot[],
+  opts: ChatOptions = {},
+): Promise<ChatModelOutput> {
+  const claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ?? "claude";
+  const spawnImpl = opts.spawnFn ?? spawn;
+  const prompt = buildChatPrompt(message, snapshots);
+
+  const raw = await new Promise<string>((resolve, reject) => {
+    const child = spawnImpl(
+      claudeBin,
+      [
+        "--print",
+        "--output-format",
+        "text",
+        "--dangerously-skip-permissions",
+        "--allowed-tools",
+        ALLOWED_TOOLS,
+      ],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
+
+    if (child.pid !== undefined) {
+      try {
+        os.setPriority(child.pid, CHAT_CHILD_NICENESS);
+      } catch {
+        // Advisory only — proceed without the niceness hedge.
+      }
+    }
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout!.on("data", (b: Buffer) => (stdout += b.toString()));
+    child.stderr!.on("data", (b: Buffer) => (stderr += b.toString()));
+    child.on("error", (e) =>
+      reject(
+        new Error(
+          `failed to spawn '${claudeBin}' — is the Claude Code CLI installed and on PATH? (${e.message})`,
+        ),
+      ),
+    );
+    child.on("close", (code) => {
+      if (code !== 0)
+        return reject(new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`));
+      resolve(stdout);
+    });
+
+    child.stdin!.write(prompt);
+    child.stdin!.end();
+  });
+
+  return parseChatOutput(raw);
+}
+
+// Extract the JSON object from the model's text output and coerce it into the
+// ChatModelOutput shape. Robust to a stray code fence or leading/trailing prose:
+// we slice from the first `{` to the last `}`. Throws on anything unparseable so
+// the turn lands as `failed` rather than silently dropping the user's edit.
+export function parseChatOutput(raw: string): ChatModelOutput {
+  const text = raw.trim();
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("chat model did not return a JSON object");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.slice(start, end + 1));
+  } catch (err) {
+    throw new Error(`chat model returned invalid JSON: ${String(err)}`);
+  }
+  const obj = parsed as { reply?: unknown; changes?: unknown };
+  const reply = typeof obj.reply === "string" ? obj.reply : "";
+  const changes = Array.isArray(obj.changes)
+    ? (obj.changes as ProposedChange[])
+    : [];
+  return { reply, changes };
+}
+
+// Apply the model's proposed changes to the doc store + interest list, returning
+// the new interest list and the change set that ACTUALLY landed (with concrete,
+// server-assigned ids). Every change is validated against `current`: an update or
+// delete naming an id we don't hold is dropped (so the model can never write an
+// arbitrary `<id>.md`), and a create past MAX_INTERESTS is dropped. The applied
+// list — never the model's raw proposal — is what we return to the client, so the
+// FE only ever sees confirmed writes (PER-139).
+export async function applyChatChanges(
+  current: Interest[],
+  proposed: ProposedChange[],
+  interestsDir: string,
+): Promise<{ interests: Interest[]; applied: ChatChange[] }> {
+  const interests = [...current];
+  const applied: ChatChange[] = [];
+
+  for (const ch of proposed) {
+    const op = ch.op;
+    if (op === "create") {
+      const topic = typeof ch.topic === "string" ? ch.topic.trim() : "";
+      if (!topic) continue;
+      if (interests.length >= MAX_INTERESTS) continue;
+      const id = newInterestId();
+      const doc = typeof ch.doc === "string" ? ch.doc : "";
+      interests.push({ id, topic });
+      await writeInterestDoc(id, doc, interestsDir);
+      applied.push({ interestId: id, op: "create", topic, doc });
+    } else if (op === "update") {
+      const id = typeof ch.interestId === "string" ? ch.interestId : "";
+      const idx = interests.findIndex((i) => i.id === id);
+      if (idx === -1) continue; // never touch an id we don't own
+      const topic =
+        typeof ch.topic === "string" && ch.topic.trim()
+          ? ch.topic.trim()
+          : interests[idx].topic;
+      const doc =
+        typeof ch.doc === "string"
+          ? ch.doc
+          : (await readInterestDoc(id, interestsDir)) ?? "";
+      interests[idx] = { id, topic };
+      await writeInterestDoc(id, doc, interestsDir);
+      applied.push({ interestId: id, op: "update", topic, doc });
+    } else if (op === "delete") {
+      const id = typeof ch.interestId === "string" ? ch.interestId : "";
+      const idx = interests.findIndex((i) => i.id === id);
+      if (idx === -1) continue;
+      const [removed] = interests.splice(idx, 1);
+      await deleteInterestDoc(id, interestsDir);
+      applied.push({ interestId: id, op: "delete", topic: removed.topic });
+    }
+  }
+
+  return { interests, applied };
+}
+
+export type ChatDeps = {
+  stateFile: string;
+  interestsDir: string;
+  claudeBin?: string;
+  spawnFn?: typeof spawn;
+  // Fired when a turn finishes (ready or failed). Tests await this.
+  onChatDone?: (turn: ChatTurn) => void;
+};
+
+export type ChatOutcome =
+  | { started: true; turnId: string }
+  | { started: false; reason: "in_flight"; turnId?: string }
+  | { started: false; reason: "empty_message" };
+
+// Single-process, single-flight guard (mirrors runner.ts). One chat turn at a
+// time: a turn reads-then-writes the interest set, so overlapping turns could
+// clobber each other's edits.
+let chatInFlight = false;
+
+export function isChatInFlight(): boolean {
+  return chatInFlight;
+}
+
+// Kick a chat turn: persist a `pending` slot, fire the claude round-trip +
+// change-apply fire-and-forget, and return immediately. Callers poll
+// GET /v0/chat?since= to see it flip to `ready` (with reply + applied changes).
+export async function startChatTurn(
+  message: string,
+  deps: ChatDeps,
+): Promise<ChatOutcome> {
+  const trimmed = message.trim();
+  if (!trimmed) return { started: false, reason: "empty_message" };
+
+  const state = await loadState(deps.stateFile);
+  if (chatInFlight || state.last_chat?.status === "pending") {
+    return { started: false, reason: "in_flight", turnId: state.last_chat?.id };
+  }
+
+  chatInFlight = true;
+  const turnId = newChatTurnId();
+  const pending: ChatTurn = {
+    id: turnId,
+    created_at: new Date().toISOString(),
+    status: "pending",
+    message: trimmed,
+  };
+  await saveState({ ...state, last_chat: pending }, deps.stateFile);
+
+  void runChatTurn(trimmed, turnId, deps);
+  return { started: true, turnId };
+}
+
+async function runChatTurn(
+  message: string,
+  turnId: string,
+  deps: ChatDeps,
+): Promise<void> {
+  let turn: ChatTurn;
+  let nextInterests: Interest[] | null = null;
+  try {
+    const state = await loadState(deps.stateFile);
+    const snapshots = await buildInterestSnapshots(
+      state.interests ?? [],
+      deps.interestsDir,
+    );
+    const output = await chatComplete(message, snapshots, {
+      claudeBin: deps.claudeBin,
+      spawnFn: deps.spawnFn,
+    });
+    // Apply against the freshly-loaded interest list so the change set is durable
+    // on disk BEFORE the turn flips to `ready` (observable-in-same-response).
+    const { interests, applied } = await applyChatChanges(
+      state.interests ?? [],
+      output.changes,
+      deps.interestsDir,
+    );
+    nextInterests = interests;
+    turn = {
+      id: turnId,
+      created_at: new Date().toISOString(),
+      status: "ready",
+      message,
+      reply: output.reply,
+      changes: applied,
+    };
+  } catch (err) {
+    turn = {
+      id: turnId,
+      created_at: new Date().toISOString(),
+      status: "failed",
+      message,
+      error_msg: String(err),
+    };
+  }
+
+  try {
+    // Reload before persisting so we don't clobber a concurrent writer (e.g. the
+    // scheduler updating next_run_at). Only overwrite `interests` when the turn
+    // actually changed them.
+    const fresh = await loadState(deps.stateFile);
+    await saveState(
+      {
+        ...fresh,
+        interests: nextInterests ?? fresh.interests,
+        last_chat: turn,
+      },
+      deps.stateFile,
+    );
+  } finally {
+    chatInFlight = false;
+  }
+
+  deps.onChatDone?.(turn);
+}
