@@ -23,6 +23,11 @@
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0"
   },
+  "pnpm": {
+    "overrides": {
+      "postcss": ">=8.5.10"
+    }
+  },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
     "@tailwindcss/postcss": "^4",

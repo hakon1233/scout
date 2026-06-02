@@ -11,7 +11,9 @@
 import { spawn } from "node:child_process";
 import os from "node:os";
 
-const ALLOWED_TOOLS = "WebSearch,WebFetch,Read,Write";
+// Read and Write are intentionally excluded — a research subprocess has no
+// legitimate reason to access or modify the local filesystem.
+const ALLOWED_TOOLS = "WebSearch,WebFetch";
 
 // Run the synthesis child at a lower scheduling priority than the loopback
 // server. The `claude` agent is CPU-heavy (web search + fetch + a full model
