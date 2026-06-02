@@ -1,14 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { EmptyState } from "@/components/ui";
-import { fetchCompanionInterests } from "@/lib/companion";
 import {
-  fetchInterestDocMeta,
+  InterestDocCard,
+  type DocBeat,
+  type DocCardModel,
+} from "@/components/profile/InterestDocCard";
+import { ChatDock, type ChatMessage } from "@/components/profile/ChatDock";
+import {
+  bootstrapCompanionToken,
+  fetchCompanionInterests,
+} from "@/lib/companion";
+import { runChatTurn, type ChatChange } from "@/lib/chat";
+import {
+  fetchInterestsFull,
   type InterestDocMeta,
-  type InterestWithDoc,
-  interestEditorHref,
   interestKey,
   mockDocMeta,
   SAMPLE_INTERESTS,
@@ -18,39 +26,48 @@ import type { Interest } from "@/lib/types";
 
 // Merge the locally-stored interests (which carry stable ids) with whatever the
 // companion reports it's actually running (topic-only — see PER-157 adoption).
-// Companion order wins so the profile mirrors the wire the user will receive;
-// ids are reused from local settings when the topic matches, else synthesized
-// by interestKey. When not served from the companion we just show local.
+// Used only as a fallback when the authed full fetch is unavailable.
 function mergeInterests(
   local: Interest[],
   companionTopics: string[],
 ): Interest[] {
   if (companionTopics.length === 0) return local;
-  const byTopic = new Map(
-    local.map((i) => [i.topic.trim().toLowerCase(), i]),
-  );
+  const byTopic = new Map(local.map((i) => [i.topic.trim().toLowerCase(), i]));
   return companionTopics.map((topic) => {
     const match = byTopic.get(topic.trim().toLowerCase());
     return match ?? { id: "", topic };
   });
 }
 
-function formatDocDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+// Monotonic id for transcript lines (no Math.random — keeps a clean, testable
+// sequence within a session).
+let msgSeq = 0;
+function nextMsgId(): string {
+  msgSeq += 1;
+  return `m${msgSeq}`;
 }
 
 export default function ProfilePage() {
   const [hydrated, setHydrated] = useState(false);
   const [name, setName] = useState("");
+  const [token, setToken] = useState("");
   const [interests, setInterests] = useState<Interest[]>([]);
   const [docMeta, setDocMeta] = useState<Record<string, InterestDocMeta>>({});
-  // `?mock` / `?mock=full` seeds a synthetic doc shape so the indicator's two
-  // states are reviewable before C1 lands. null in production.
+  // Doc bodies known THIS session — only what a chat turn's `changes[]` actually
+  // returned. There is no GET-doc-body route by design; we render confirmed
+  // writes, never a guess.
+  const [docBodies, setDocBodies] = useState<Record<string, string>>({});
+  // Transient "just changed" beats, keyed by interestKey. The PER-139 proof.
+  const [beats, setBeats] = useState<Record<string, DocBeat>>({});
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // `?mock` / `?mock=full` seeds a synthetic doc shape so the card states are
+  // reviewable before the companion is reachable. null in production.
   const [mockSeed, setMockSeed] = useState<string | null>(null);
+
+  const beatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Hydrate from localStorage on mount — static export renders at build time
   // with no window, so this is the canonical sync point (mirrors app/page.tsx).
@@ -64,52 +81,203 @@ export default function ProfilePage() {
         : seed !== null
           ? SAMPLE_INTERESTS
           : [];
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    /* eslint-disable react-hooks/set-state-in-effect */
     setName(stored?.name?.trim() ?? "");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setInterests(localInterests);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMockSeed(seed);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMessages([
+      {
+        id: nextMsgId(),
+        role: "scout",
+        text: "Hi — I'm Scout. Tell me what to track and I'll draft an intent doc for it, refine one you already have, or drop an interest. Pick “Refine” on any card to aim a message at it.",
+      },
+    ]);
     setHydrated(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  // After hydration, reconcile with the companion's live interest set (when
-  // served from it) and load real doc metadata. Mock seed short-circuits both.
+  // After hydration, bootstrap the pairing token and reconcile with the live
+  // interest set (real ids + doc metadata in one authed round-trip). Mock seed
+  // short-circuits the network entirely.
   useEffect(() => {
     if (!hydrated) return;
     if (mockSeed !== null) return;
     let cancelled = false;
     (async () => {
-      const [companionTopics, meta] = await Promise.all([
-        fetchCompanionInterests(),
-        fetchInterestDocMeta(),
-      ]);
+      const tok = await bootstrapCompanionToken();
       if (cancelled) return;
-      if (companionTopics.length > 0) {
-        setInterests((prev) => mergeInterests(prev, companionTopics));
+      setToken(tok);
+      const full = await fetchInterestsFull(tok);
+      if (cancelled) return;
+      if (full && full.interests.length > 0) {
+        setInterests(full.interests);
+        setDocMeta(full.meta);
+        return;
       }
-      setDocMeta(meta);
+      // Fallback: companion reachable but no authed list — mirror topics.
+      const topics = await fetchCompanionInterests();
+      if (cancelled) return;
+      if (topics.length > 0) {
+        setInterests((prev) => mergeInterests(prev, topics));
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, [hydrated, mockSeed]);
 
-  const rows: InterestWithDoc[] = useMemo(() => {
-    const meta =
-      mockSeed !== null ? mockDocMeta(interests, mockSeed) : docMeta;
-    return interests.map((i) => ({
-      ...i,
-      doc: meta[interestKey(i)] ?? { hasDoc: false },
-    }));
-  }, [interests, docMeta, mockSeed]);
+  // Clear any pending beat timers on unmount.
+  useEffect(() => {
+    const timers = beatTimers.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
 
-  const docCount = rows.filter((r) => r.doc.hasDoc).length;
+  // Fire a "just changed" beat on a confirmed write, auto-reverting to the
+  // static dateline after a beat so the card settles.
+  const flashBeat = useCallback((key: string, kind: Exclude<DocBeat, null>) => {
+    setBeats((prev) => ({ ...prev, [key]: kind }));
+    if (beatTimers.current[key]) clearTimeout(beatTimers.current[key]);
+    beatTimers.current[key] = setTimeout(() => {
+      setBeats((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      delete beatTimers.current[key];
+    }, 6000);
+  }, []);
+
+  // Apply one turn's confirmed change set to the cards. `interestId` is the
+  // concrete server id, which is exactly a real interest's interestKey.
+  const applyChanges = useCallback(
+    (changes: ChatChange[], at: string) => {
+      for (const ch of changes) {
+        const key = ch.interestId;
+        if (!key) continue;
+        if (ch.op === "delete") {
+          setInterests((prev) =>
+            prev.filter((i) => interestKey(i) !== key && i.id !== key),
+          );
+          setDocBodies((prev) => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+          setDocMeta((prev) => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+          setFocusKey((cur) => (cur === key ? null : cur));
+          if (beatTimers.current[key]) {
+            clearTimeout(beatTimers.current[key]);
+            delete beatTimers.current[key];
+          }
+          continue;
+        }
+        // create | update
+        const topic = ch.topic?.trim() ?? "";
+        setInterests((prev) => {
+          const idx = prev.findIndex(
+            (i) => interestKey(i) === key || i.id === key,
+          );
+          if (idx === -1) {
+            return [...prev, { id: key, topic }];
+          }
+          if (topic && prev[idx].topic !== topic) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], id: prev[idx].id || key, topic };
+            return next;
+          }
+          return prev;
+        });
+        if (typeof ch.doc === "string") {
+          setDocBodies((prev) => ({ ...prev, [key]: ch.doc as string }));
+        }
+        setDocMeta((prev) => ({
+          ...prev,
+          [key]: { hasDoc: true, updatedAt: at },
+        }));
+        flashBeat(key, ch.op === "create" ? "created" : "updated");
+      }
+    },
+    [flashBeat],
+  );
+
+  const send = useCallback(
+    (raw: string) => {
+      const text = raw.trim();
+      if (!text || sending) return;
+
+      // The focused interest's topic scopes the message in natural language —
+      // the POST body is `{ message }` only, so targeting rides in the prose.
+      const focusTopic = focusKey
+        ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
+        : null;
+      const wire = focusTopic
+        ? `Regarding my interest "${focusTopic}": ${text}`
+        : text;
+
+      const at = new Date().toISOString();
+      setMessages((prev) => [
+        ...prev,
+        { id: nextMsgId(), role: "you", text, ts: at },
+      ]);
+      setSending(true);
+      setError(null);
+
+      (async () => {
+        try {
+          const turn = await runChatTurn(wire, token);
+          const replyAt = new Date().toISOString();
+          if (turn.reply) {
+            setMessages((prev) => [
+              ...prev,
+              { id: nextMsgId(), role: "scout", text: turn.reply!, ts: replyAt },
+            ]);
+          }
+          if (turn.changes && turn.changes.length > 0) {
+            applyChanges(turn.changes, replyAt);
+          }
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Something went wrong.");
+        } finally {
+          setSending(false);
+        }
+      })();
+    },
+    [sending, focusKey, interests, token, applyChanges],
+  );
+
+  // Build the card view-models from the live interest set + everything we know
+  // about each doc. Mock seed overlays synthetic metadata for review.
+  const cards: DocCardModel[] = useMemo(() => {
+    const meta = mockSeed !== null ? mockDocMeta(interests, mockSeed) : docMeta;
+    return interests.map((i) => {
+      const key = interestKey(i);
+      const m = meta[key] ?? { hasDoc: false };
+      const body = docBodies[key];
+      return {
+        key,
+        topic: i.topic,
+        hasDoc: m.hasDoc || Boolean(body),
+        updatedAt: m.updatedAt,
+        body,
+        beat: beats[key] ?? null,
+      };
+    });
+  }, [interests, docMeta, docBodies, beats, mockSeed]);
+
+  const docCount = cards.filter((c) => c.hasDoc).length;
+  const focusTopic = focusKey
+    ? (cards.find((c) => c.key === focusKey)?.topic ?? null)
+    : null;
 
   return (
     <main className="min-h-screen bg-page text-primary">
-      <div className="mx-auto max-w-2xl space-y-8 px-5 py-10">
+      <div className="mx-auto max-w-6xl space-y-8 px-5 py-10">
         {/* Top bar — mirrors /app/connect */}
         <div className="flex items-center justify-between font-mono text-[12px] uppercase tracking-[0.06em] text-muted">
           <a href="/app" className="transition-colors hover:text-primary">
@@ -122,7 +290,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Masthead */}
-        <header>
+        <header className="max-w-2xl">
           <p className="mb-3 flex items-center gap-2.5 font-mono text-[12px] uppercase tracking-[0.14em] text-signal">
             <span className="h-[1.5px] w-[26px] bg-signal" />
             Your wire
@@ -131,125 +299,80 @@ export default function ProfilePage() {
             {hydrated && name ? name : "Your profile"}
           </h1>
           <p className="font-reading text-[17px] leading-relaxed text-secondary">
-            The interests Scout files briefs against. Give any one an{" "}
-            <span className="text-primary">intent doc</span> to steer what its
-            research session looks for.
+            The interests Scout files briefs against. Talk to Scout to give any
+            one an <span className="text-primary">intent doc</span> — that doc
+            steers what its research session looks for.
           </p>
         </header>
 
-        {/* Interests section */}
-        <section className="space-y-4">
-          <div className="flex items-baseline justify-between border-b border-border-default pb-2">
-            <h2 className="font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
-              Interests
-            </h2>
-            {hydrated && rows.length > 0 && (
-              <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
-                {docCount} of {rows.length} with intent doc
-              </p>
-            )}
-          </div>
+        {/* Workbench: interests (left) + live chat (right) on desktop; stacked
+            on mobile with the composer pinned to the bottom of the dock. */}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:items-start">
+          {/* Interests column */}
+          <section className="space-y-4">
+            <div className="flex items-baseline justify-between border-b border-border-default pb-2">
+              <h2 className="font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
+                Interests
+              </h2>
+              {hydrated && cards.length > 0 && (
+                <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                  {docCount} of {cards.length} with intent doc
+                </p>
+              )}
+            </div>
 
-          {!hydrated ? (
-            <ProfileSkeleton />
-          ) : rows.length === 0 ? (
-            <EmptyState
-              title="No interests yet"
-              body="Set the topics you want briefed, then come back to give each one an intent doc."
-              primary={{
-                label: "Set your interests",
-                onClick: () => {
-                  window.location.href = "/app";
-                },
-              }}
-            />
-          ) : (
-            <ul className="flex flex-col gap-2.5">
-              {rows.map((row) => (
-                <li key={interestKey(row)}>
-                  <InterestRow row={row} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            {!hydrated ? (
+              <ProfileSkeleton />
+            ) : cards.length === 0 ? (
+              <EmptyState
+                title="No interests yet"
+                body="Ask Scout to start tracking a topic — it'll appear here with its intent doc."
+              />
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {cards.map((card) => (
+                  <li key={card.key}>
+                    <InterestDocCard
+                      model={card}
+                      focused={focusKey === card.key}
+                      onFocusToggle={() =>
+                        setFocusKey((cur) =>
+                          cur === card.key ? null : card.key,
+                        )
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Chat column */}
+          <ChatDock
+            messages={messages}
+            sending={sending}
+            error={error}
+            focusTopic={focusTopic}
+            onClearFocus={() => setFocusKey(null)}
+            onSend={send}
+          />
+        </div>
       </div>
     </main>
   );
 }
 
-function InterestRow({ row }: { row: InterestWithDoc }) {
-  const { hasDoc, updatedAt } = row.doc;
-  return (
-    <a
-      href={interestEditorHref(row)}
-      className="group flex items-center gap-4 rounded-md border border-border-default bg-surface px-4 py-3.5 no-underline transition-colors hover:border-border-strong hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
-    >
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-serif text-[18px] font-medium leading-snug text-primary">
-          {row.topic}
-        </p>
-        <div className="mt-1">
-          <DocIndicator hasDoc={hasDoc} updatedAt={updatedAt} />
-        </div>
-      </div>
-      <span
-        aria-hidden="true"
-        className="font-mono text-[13px] text-muted transition-colors group-hover:text-signal"
-      >
-        {hasDoc ? "Edit →" : "Add →"}
-      </span>
-    </a>
-  );
-}
-
-// The "has intent doc" indicator. Two honest states — a signal-dot + dateline
-// when a doc exists, a muted dashed-dot "add" prompt when it doesn't.
-function DocIndicator({
-  hasDoc,
-  updatedAt,
-}: {
-  hasDoc: boolean;
-  updatedAt?: string;
-}) {
-  if (hasDoc) {
-    return (
-      <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-signal">
-        <span
-          aria-hidden="true"
-          className="inline-block h-1.5 w-1.5 rounded-full bg-signal"
-        />
-        Intent doc
-        {updatedAt && (
-          <span className="text-muted normal-case tracking-normal">
-            · updated {formatDocDate(updatedAt)}
-          </span>
-        )}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
-      <span
-        aria-hidden="true"
-        className="inline-block h-1.5 w-1.5 rounded-full border border-dashed border-border-strong"
-      />
-      No intent doc yet
-    </span>
-  );
-}
-
 function ProfileSkeleton() {
   return (
-    <ul className="flex flex-col gap-2.5" aria-hidden="true">
+    <ul className="flex flex-col gap-3" aria-hidden="true">
       {[0, 1, 2].map((i) => (
         <li
           key={i}
-          className="flex items-center gap-4 rounded-md border border-border-default bg-surface px-4 py-3.5"
+          className="rounded-lg border border-border-default bg-surface p-4"
         >
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="h-4 w-1/2 animate-pulse rounded bg-surface-muted" />
-            <div className="h-2.5 w-24 animate-pulse rounded bg-surface-muted" />
+          <div className="space-y-2">
+            <div className="h-5 w-1/2 animate-pulse rounded bg-surface-muted" />
+            <div className="h-2.5 w-28 animate-pulse rounded bg-surface-muted" />
           </div>
         </li>
       ))}
