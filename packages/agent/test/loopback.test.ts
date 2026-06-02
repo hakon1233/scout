@@ -558,7 +558,20 @@ test("founder's Tailscale .ts.net origin reaches the run path, not a 403 (PER-15
   await saveState({ pairing_token: token }, stateFile);
 
   const claudeBin = await makeStubClaude();
-  const { server, port } = await startServer(0, { stateFile, claudeBin });
+
+  // The 202 path fires synthesis asynchronously and writes the brief back to
+  // state.json. Capture completion so we can drain the in-flight run before
+  // tearing down tmpStateDir — otherwise a late saveState() races the fs.rm
+  // and rejects with ENOENT (unhandledRejection → flaky CI fail). Same pattern
+  // as the round-trip test above.
+  let synthesisDone: (b: Brief) => void;
+  const doneP = new Promise<Brief>((r) => (synthesisDone = r));
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    claudeBin,
+    onSynthesisDone: (b) => synthesisDone(b),
+  });
   const tailnetOrigin = "https://your-host.example:48721";
   try {
     // The run trigger over the tailnet origin is accepted (202), not 403'd.
@@ -596,6 +609,10 @@ test("founder's Tailscale .ts.net origin reaches the run path, not a 403 (PER-15
       },
     });
     assert.equal(evil.status, 403);
+
+    // Drain the in-flight synthesis kicked off by the 202 above, so its
+    // saveState() to state.json completes before the finally removes the dir.
+    await doneP;
   } finally {
     server.close();
     await fs.rm(tmpStateDir, { recursive: true, force: true });
