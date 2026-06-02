@@ -297,9 +297,17 @@ test("PUT /v0/interests persists to state.json WITHOUT running a synthesis (PER-
     assert.equal(body.status, "saved");
     assert.deepEqual(body.interests, ["ai safety", "markets"]);
 
-    // It persisted to state.json (the headless scheduler's source of truth)…
+    // It persisted to state.json (the headless scheduler's source of truth) as
+    // the rich {id, topic} model (PER-169); the topics round-trip losslessly.
     const state = await loadState(stateFile);
-    assert.deepEqual(state.interests, ["ai safety", "markets"]);
+    assert.deepEqual(
+      (state.interests ?? []).map((i) => i.topic),
+      ["ai safety", "markets"],
+    );
+    assert.ok(
+      (state.interests ?? []).every((i) => typeof i.id === "string" && i.id),
+      "every persisted interest has a stable id",
+    );
     // …and left no brief slot behind — no run was kicked.
     assert.equal(state.last_brief, undefined);
     // The hard guarantee: claude was never spawned.

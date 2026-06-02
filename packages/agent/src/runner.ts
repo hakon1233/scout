@@ -20,7 +20,9 @@ import {
   loadState,
   newBriefId,
   saveState,
+  interestTopics,
   type Brief,
+  type Interest,
   type ScheduleConfig,
 } from "./state.js";
 import { researchAndSynthesize } from "./research.js";
@@ -65,7 +67,7 @@ export function isRunInFlight(): boolean {
 // the outcome. `source` only affects whether the eventual result is recorded
 // into the schedule's last-run telemetry.
 export async function startRun(
-  interests: string[],
+  interests: Interest[],
   deps: RunDeps,
   source: RunSource = "on_demand",
   opts: RunOptions = {},
@@ -79,12 +81,17 @@ export async function startRun(
     return { started: false, reason: "no_interests" };
   }
 
+  // The engine is topic-only (per-interest doc injection is C2/PER-171). Convert
+  // the rich interests to their topic strings at this single boundary; the rich
+  // {id, topic} objects are what we persist below.
+  const topics = interestTopics(interests);
+
   // A focused retry only makes sense when there's a prior ready brief to merge
   // the fresh sections into; without one there's nothing to preserve, so the
   // caller should run a full brief instead. We narrow to the retry topics that
   // are actually part of the current interest list (ignore stale/foreign ones).
   const baseMarkdown = state.last_brief?.summary_md;
-  const retryTopics = (opts.retryTopics ?? []).filter((t) => interests.includes(t));
+  const retryTopics = (opts.retryTopics ?? []).filter((t) => topics.includes(t));
   const isRetry = retryTopics.length > 0;
   if (isRetry && !baseMarkdown) {
     return { started: false, reason: "no_base_brief" };
@@ -101,8 +108,8 @@ export async function startRun(
   // something to research even with no browser attached.
   await saveState({ ...state, interests, last_brief: pending }, deps.stateFile);
 
-  void runSynthesis(interests, briefId, deps, source, {
-    researchTopics: isRetry ? retryTopics : interests,
+  void runSynthesis(topics, briefId, deps, source, {
+    researchTopics: isRetry ? retryTopics : topics,
     baseMarkdown: isRetry ? baseMarkdown : undefined,
     retryTopics: isRetry ? retryTopics : undefined,
   });

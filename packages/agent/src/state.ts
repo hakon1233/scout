@@ -48,15 +48,107 @@ export type ScheduleConfig = {
   next_run_at?: string;
 };
 
+// A single interest the user tracks. The `topic` is the short headline the
+// research engine bullets into its prompt; the `id` is a stable, opaque handle
+// that anchors the per-interest intent doc stored at
+// `~/.config/scout/interests/<id>.md` (see docs.ts). The id survives reorders,
+// adds, and removes so a doc never silently detaches from its topic. (PER-169)
+export type Interest = {
+  id: string;
+  topic: string;
+};
+
 export type State = {
   pairing_token?: string;
   last_brief?: Brief;
   // Last interests the user submitted, persisted so the scheduler can run an
   // autonomous brief without the browser in the loop. Updated on every
-  // POST /v0/interests.
-  interests?: string[];
+  // POST/PUT /v0/interests. Stored as rich {id, topic} objects (PER-169); a
+  // legacy `string[]` on disk is migrated to this shape on load — see
+  // `migrateInterests` / `loadState`.
+  interests?: Interest[];
   schedule?: ScheduleConfig;
 };
+
+// Mint a fresh, opaque, filename-safe interest id. Random (not derived from the
+// topic) so the id — and the doc attached to it — survives a topic rename.
+export function newInterestId(): string {
+  return `int_${crypto.randomBytes(12).toString("hex")}`;
+}
+
+// Deterministic id for a LEGACY (string[]) interest being migrated. Derived from
+// the topic so that re-loading an unpersisted legacy state.json yields the SAME
+// id every time (a random id would drift on each load until the first save,
+// which would make GET /v0/interests and any future doc path non-stable). Once a
+// save lands, the id is canonicalized into the persisted {id, topic}. (PER-169)
+export function legacyInterestId(topic: string): string {
+  const h = crypto
+    .createHash("sha256")
+    .update(topic.trim().toLowerCase())
+    .digest("hex");
+  return `int_${h.slice(0, 24)}`;
+}
+
+// Normalize whatever is stored under `interests` into the rich {id, topic} shape.
+// Accepts the legacy `string[]` (each string → {legacyId, topic}) and the new
+// object form (passed through, dropping malformed entries). Lossless for legacy
+// data: every non-empty topic string survives with a stable id. Pure so it can
+// be unit-tested without the filesystem.
+export function migrateInterests(raw: unknown): Interest[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Interest[] = [];
+  const seenIds = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry === "string") {
+      const topic = entry.trim();
+      if (!topic) continue;
+      let id = legacyInterestId(topic);
+      // Defend against the (degenerate) case of two legacy strings hashing to
+      // the same id — keep both by suffixing, so migration never drops a topic.
+      while (seenIds.has(id)) id = `${id}_`;
+      seenIds.add(id);
+      out.push({ id, topic });
+    } else if (entry && typeof entry === "object") {
+      const obj = entry as { id?: unknown; topic?: unknown };
+      const topic = typeof obj.topic === "string" ? obj.topic.trim() : "";
+      if (!topic) continue;
+      let id =
+        typeof obj.id === "string" && obj.id.trim()
+          ? obj.id.trim()
+          : legacyInterestId(topic);
+      while (seenIds.has(id)) id = `${id}_`;
+      seenIds.add(id);
+      out.push({ id, topic });
+    }
+  }
+  return out;
+}
+
+// The plain topic strings, in order — what the research engine bullets into its
+// prompt. Single boundary between the rich state model and the topic-only engine.
+export function interestTopics(interests: Interest[] | undefined): string[] {
+  return (interests ?? []).map((i) => i.topic);
+}
+
+// Reconcile a validated, ordered list of topic strings (what the FE sends over
+// the wire — it has no ids yet) against the existing rich interests, preserving
+// each existing topic's id so its intent doc stays attached across reorder / add
+// / remove. New topics get a fresh random id. Pure + filesystem-free. (PER-169)
+export function reconcileInterests(
+  existing: Interest[] | undefined,
+  topics: string[],
+): Interest[] {
+  const byTopic = new Map<string, string>();
+  for (const it of existing ?? []) byTopic.set(it.topic.toLowerCase(), it.id);
+  const usedIds = new Set<string>();
+  return topics.map((topic) => {
+    const key = topic.toLowerCase();
+    let id = byTopic.get(key);
+    if (!id || usedIds.has(id)) id = newInterestId();
+    usedIds.add(id);
+    return { id, topic };
+  });
+}
 
 // Default time-of-day for the daily schedule when none is stored yet.
 export const DEFAULT_TIME_OF_DAY = "07:00";
@@ -88,7 +180,16 @@ export function normalizeTimeOfDay(raw: unknown): string | null {
 export async function loadState(file = STATE_FILE): Promise<State> {
   try {
     const raw = await fs.readFile(file, "utf8");
-    return JSON.parse(raw) as State;
+    const parsed = JSON.parse(raw) as State;
+    // Normalize interests to the rich {id, topic} shape on every load so the
+    // rest of the system never sees the legacy `string[]`. Migration is pure and
+    // lossless (see migrateInterests); the canonicalized ids are persisted on the
+    // next save. Leave `interests` absent (not []) when it was absent, so the
+    // "no interests stored yet" path stays distinguishable.
+    if (parsed.interests !== undefined) {
+      parsed.interests = migrateInterests(parsed.interests);
+    }
+    return parsed;
   } catch {
     return {};
   }
