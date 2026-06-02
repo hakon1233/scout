@@ -82,12 +82,12 @@ export default function Home() {
       {/* Masthead */}
       <header className="border-b-[1.5px] border-primary">
         <div className="mx-auto w-full max-w-[1120px] px-7">
-          <div className="flex items-center justify-between py-3.5 font-mono text-[12px] uppercase tracking-[0.06em] text-muted">
+          <div className="flex items-center justify-between py-3 font-mono text-[12px] uppercase tracking-[0.06em] text-muted">
             <span className="flex items-center gap-2">
               <span className="inline-block size-1.5 rounded-full bg-signal" />
-              Local-first · Runs on your machine
+              Your private wire
             </span>
-            <span className="hidden sm:inline">Vol. 1 — Your private wire</span>
+            <span className="hidden sm:inline">Vol. 1</span>
           </div>
           <div className="flex items-end justify-between pb-4 pt-1.5">
             <div className="flex items-center gap-3 font-serif text-[40px] font-semibold leading-none tracking-[-0.02em]">
@@ -126,7 +126,7 @@ export default function Home() {
 
       <div className="mx-auto w-full max-w-[1120px] px-7">
         {/* Hero */}
-        <section className="grid items-center gap-9 py-9 lg:grid-cols-[1.05fr_0.95fr] lg:gap-[54px] lg:py-14">
+        <section className="grid items-start gap-9 py-9 lg:grid-cols-[1.05fr_0.95fr] lg:gap-[54px] lg:py-14">
           <div>
             <p className="mb-5 flex items-center gap-2.5 font-mono text-[12px] uppercase tracking-[0.14em] text-signal">
               <span className="h-[1.5px] w-[26px] bg-signal" />
@@ -144,15 +144,15 @@ export default function Home() {
             <div className="flex flex-wrap items-center gap-3.5">
               <Link
                 href="/app"
-                className="inline-flex items-center gap-2 rounded-[6px] bg-accent px-[22px] py-[13px] text-[15px] font-medium text-accent-fg no-underline transition-colors hover:bg-accent-hover"
+                className="inline-flex items-center gap-2 rounded-[6px] bg-accent px-[26px] py-[14px] text-[15px] font-medium text-accent-fg no-underline transition-colors hover:bg-accent-hover"
               >
                 Open the app →
               </Link>
               <a
-                href="#sample"
-                className="inline-flex items-center gap-2 rounded-[6px] border-[1.5px] border-border-strong bg-transparent px-[22px] py-[13px] text-[15px] font-medium text-primary no-underline transition-colors hover:border-primary"
+                href="#how-it-works"
+                className="text-[14px] text-secondary no-underline transition-colors hover:text-primary"
               >
-                See a sample brief
+                How it works
               </a>
             </div>
             <div
