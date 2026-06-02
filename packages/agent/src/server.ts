@@ -22,11 +22,14 @@ import {
   normalizeTimeOfDay,
   saveState,
   defaultSchedule,
+  reconcileInterests,
+  interestTopics,
   STATE_FILE,
   type Brief,
   type ScheduleConfig,
   type State,
 } from "./state.js";
+import { interestDocMeta, INTERESTS_DIR } from "./docs.js";
 import { startRun } from "./runner.js";
 import { isServiceInstalled } from "./service.js";
 import { resolveStatic, resolveAppShellFallback, trailingSlashRedirect } from "./static.js";
@@ -46,6 +49,10 @@ export type ServerDeps = {
   // Invoked after PUT /v0/schedule persists a config change, so the running
   // scheduler can re-arm its timer immediately (PER-151). No-op when absent.
   onScheduleChanged?: () => void | Promise<void>;
+  // Per-interest intent-doc directory; defaults to docs.ts INTERESTS_DIR
+  // (~/.config/scout/interests). Injected for tests so GET /v0/interests can be
+  // exercised against a hermetic doc store instead of the real home dir.
+  interestsDir?: string;
 };
 
 // Shape GET /v0/schedule returns and PUT echoes back — the contract the
@@ -150,7 +157,7 @@ function isOriginDenied(origin: string | undefined): boolean {
 // (PER-136)
 const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
   "/v0/config": ["GET", "OPTIONS"],
-  "/v0/interests": ["POST", "PUT", "OPTIONS"],
+  "/v0/interests": ["GET", "POST", "PUT", "OPTIONS"],
   "/v0/briefs": ["GET", "OPTIONS"],
   "/v0/schedule": ["GET", "PUT", "OPTIONS"],
 };
@@ -264,6 +271,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
   const claudeBin = deps.claudeBin;
   const spawnFn = deps.spawnFn;
   const webroot = deps.webroot;
+  const interestsDir = deps.interestsDir ?? INTERESTS_DIR;
 
   async function authed(req: http.IncomingMessage): Promise<State | null> {
     const token = bearer(req);
@@ -349,11 +357,41 @@ export function createServer(deps: ServerDeps = {}): http.Server {
               // localStorage was cleared / is a different profile / a different
               // origin than the one that did first-run setup can still render the
               // brief + a working "Run now" instead of dead-ending on the setup
-              // form (PER-157). Same-origin gated like the token above.
-              interests: state.interests ?? [],
+              // form (PER-157). Same-origin gated like the token above. Mapped to
+              // topic strings for back-compat — the rich {id, topic} model lives
+              // behind GET /v0/interests (PER-169); this endpoint's `interests`
+              // contract stays a plain string[].
+              interests: interestTopics(state.interests),
             },
             cors,
           );
+          return;
+        }
+
+        // Rich interest list with per-interest intent-doc metadata (PER-169).
+        // Unlike /v0/config (which flattens to topic strings for back-compat),
+        // this is the authoritative shape the profile view consumes: each entry
+        // is {id, topic, hasDoc, docUpdatedAt}. `hasDoc`/`docUpdatedAt` are read
+        // straight from the doc store (docs.ts) so they can never drift from the
+        // actual `<id>.md` files. Field names match what C3/PER-170's
+        // fetchInterestDocMeta() already consumes, so the profile doc-indicator
+        // lights up on real data with no FE change.
+        if (req.method === "GET" && url.pathname === "/v0/interests") {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          const interests = state.interests ?? [];
+          const withMeta = await Promise.all(
+            interests.map(async (it) => {
+              const meta = await interestDocMeta(it.id, interestsDir);
+              return {
+                id: it.id,
+                topic: it.topic,
+                hasDoc: meta.hasDoc,
+                docUpdatedAt: meta.updatedAt ?? null,
+              };
+            }),
+          );
+          json(res, 200, { interests: withMeta }, cors);
           return;
         }
 
@@ -386,10 +424,11 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const validated = parseInterestsPayload(parsed.interests);
           if (!validated.ok)
             return json(res, validated.status, { error: validated.error }, cors);
-          await saveState(
-            { ...state, interests: validated.interests },
-            stateFile,
-          );
+          // Persist the rich {id, topic} model, preserving each existing topic's
+          // id so its intent doc stays attached across an edit (PER-169). The
+          // wire response stays a topic string[] for back-compat.
+          const interests = reconcileInterests(state.interests, validated.interests);
+          await saveState({ ...state, interests }, stateFile);
           json(res, 200, { interests: validated.interests, status: "saved" }, cors);
           return;
         }
@@ -420,7 +459,10 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const validated = parseInterestsPayload(parsed.interests);
           if (!validated.ok)
             return json(res, validated.status, { error: validated.error }, cors);
-          const interests = validated.interests;
+          const topics = validated.interests;
+          // Reconcile into the rich {id, topic} model (preserving ids) before the
+          // run persists them, so the doc store stays anchored across runs.
+          const interests = reconcileInterests(state.interests, topics);
 
           // Optional focused-retry payload (PER-154): re-research ONLY these
           // topics and merge the fresh sections into the prior brief, instead of
@@ -428,7 +470,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           // intersect (case-insensitively, mapping back to the canonical interest
           // casing) and silently drop anything not in the current list rather
           // than erroring on a stale topic.
-          const interestByKey = new Map(interests.map((s) => [s.toLowerCase(), s]));
+          const interestByKey = new Map(topics.map((s) => [s.toLowerCase(), s]));
           const retryTopics = Array.isArray(parsed.retry_topics)
             ? Array.from(
                 new Set(

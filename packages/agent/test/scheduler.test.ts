@@ -117,7 +117,7 @@ test("normalizeTimeOfDay validates + zero-pads, rejects garbage", () => {
 test("a scheduled fire produces a brief and records success + next_run_at (PER-139 real-not-dead)", async () => {
   const { tmp, stateFile } = await tmpState({
     pairing_token: newPairingToken(),
-    interests: ["ai safety"],
+    interests: [{ id: "int_aisafety", topic: "ai safety" }],
     schedule: { enabled: true, time_of_day: "07:00" },
   });
   const { spawnFn } = makeSpawnRecorder({ autoClose: true });
@@ -154,7 +154,7 @@ test("a scheduled fire produces a brief and records success + next_run_at (PER-1
 test("a fire while a run is in flight is skipped, never overlapping (concurrency safety)", async () => {
   const { tmp, stateFile } = await tmpState({
     pairing_token: newPairingToken(),
-    interests: ["ai safety"],
+    interests: [{ id: "int_aisafety", topic: "ai safety" }],
     schedule: { enabled: true, time_of_day: "07:00" },
     // A run is already pending (e.g. an on-demand "Run now" still synthesizing).
     last_brief: { id: "in-flight-id", generated_at: new Date().toISOString(), status: "pending" },

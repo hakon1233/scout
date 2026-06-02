@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { saveState, loadState, newPairingToken, type Brief } from "../src/state.js";
+import { saveState, loadState, newPairingToken, type Brief, type State } from "../src/state.js";
 import { startServer } from "../src/server.js";
 
 async function makeStubClaude(): Promise<string> {
@@ -451,8 +451,14 @@ test("GET /v0/config returns the persisted interests to a same-origin caller", a
     assert.deepEqual((await empty.json()).interests, []);
 
     // With interests persisted, they're echoed verbatim and in order.
+    // NB: this seeds the LEGACY string[] on-disk shape on purpose — loadState
+    // migrates it to {id, topic} and /v0/config flattens back to topics, so this
+    // doubles as a back-compat check that old state.json files still serve.
     await saveState(
-      { pairing_token: token, interests: ["ai", "anthropic", "openai"] },
+      {
+        pairing_token: token,
+        interests: ["ai", "anthropic", "openai"],
+      } as unknown as State,
       stateFile,
     );
     const withInterests = await fetch(`http://127.0.0.1:${port}/v0/config`);
@@ -618,12 +624,14 @@ test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404 
     assert.equal(cfgDelete.headers.get("allow"), "GET, OPTIONS");
     assert.equal((await cfgDelete.json()).error, "method not allowed");
 
-    // GET on the write-only /v0/interests → 405, Allow: POST, PUT, OPTIONS.
-    const interestsGet = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+    // DELETE on /v0/interests (GET/POST/PUT only, PER-169 added GET) → 405,
+    // Allow: GET, POST, PUT, OPTIONS.
+    const interestsDelete = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "DELETE",
       headers: auth,
     });
-    assert.equal(interestsGet.status, 405);
-    assert.equal(interestsGet.headers.get("allow"), "POST, PUT, OPTIONS");
+    assert.equal(interestsDelete.status, 405);
+    assert.equal(interestsDelete.headers.get("allow"), "GET, POST, PUT, OPTIONS");
 
     // PUT on the GET-only /v0/briefs → 405, Allow: GET, OPTIONS.
     const briefsPut = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
