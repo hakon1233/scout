@@ -82,6 +82,31 @@ export async function bootstrapCompanionToken(): Promise<string> {
   return existing;
 }
 
+// Read the user's persisted interests from the companion when it's serving this
+// page same-origin. The companion is the source of truth — it stores interests
+// on every POST /v0/interests so its scheduler can run headless — so a browser
+// without locally-saved settings (cleared storage, a different profile, or a
+// different origin than the one that did first-run setup) can still recover the
+// user's interests and render a usable brief instead of the setup form (PER-157).
+// Returns [] when not served same-origin or /v0/config is unreachable/empty.
+export async function fetchCompanionInterests(): Promise<string[]> {
+  if (typeof window === "undefined") return [];
+  if (!(await isServedFromCompanion())) return [];
+  try {
+    const res = await fetch(`${window.location.origin}/v0/config`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!res.ok) return [];
+    const cfg = (await res.json()) as { interests?: unknown };
+    if (!Array.isArray(cfg.interests)) return [];
+    return cfg.interests.filter(
+      (t): t is string => typeof t === "string" && t.trim().length > 0,
+    );
+  } catch {
+    return [];
+  }
+}
+
 async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
   try {
     const res = await fetch(`${baseFor(port)}/healthz`, {
@@ -319,7 +344,13 @@ export async function refreshBriefViaCompanion(
   } = {},
 ): Promise<AppBrief> {
   const since = opts.sinceTs ?? new Date(0).toISOString();
-  const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
+  // A real run researches every interest with live WebSearch + WebFetch, so a
+  // full 6-topic pass routinely runs past two minutes — especially cold or when
+  // `claude` is rate-limited. A 120s client deadline gave up while the companion
+  // kept working: the UI showed "Timed out…", and because the server run was
+  // still in flight, the user's next click hit the single-flight 409 and errored
+  // again — the "it doesn't work" go-around (PER-157). Give the run real room.
+  const deadline = Date.now() + (opts.timeoutMs ?? 300_000);
   await postInterests(interests, token, opts.retryTopics);
   while (Date.now() < deadline) {
     if (opts.signal?.aborted) throw new Error("aborted");

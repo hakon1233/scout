@@ -14,6 +14,7 @@ import { Banner, Button } from "@/components/ui";
 import type { AgentProgress } from "@/lib/agent";
 import {
   bootstrapCompanionToken,
+  fetchCompanionInterests,
   fetchLatestBrief,
   loadCompanionToken,
   pingCompanion,
@@ -160,6 +161,39 @@ export default function AppPage() {
       cancelled = true;
     };
     // Runs once after hydration; `running` is intentionally read at fire time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
+  useEffect(() => {
+    // PER-157: when this browser has NO locally-saved settings but the companion
+    // (the source of truth) holds the user's interests, adopt them. Without this
+    // the app dead-ends on the setup form — and silently drops the ready brief it
+    // already fetched above — for any browser that didn't do first-run setup here
+    // (cleared storage, a different profile, or a different origin than the one
+    // the companion now serves). The result reads as "Run now doesn't work."
+    // Only fires when nothing is stored locally: a real saved config (with the
+    // user's name + curated interests) always wins and is never overwritten.
+    if (!hydrated) return;
+    if (loadSettings()) return;
+    let cancelled = false;
+    (async () => {
+      const topics = await fetchCompanionInterests();
+      if (cancelled || topics.length === 0) return;
+      // Re-check: the user may have completed setup while this was in flight.
+      if (loadSettings()) return;
+      const adopted: Settings = {
+        name: "",
+        interests: topics.map((topic, i) => ({
+          id: `int_${i}_${topic.slice(0, 12)}`,
+          topic,
+        })),
+      };
+      saveSettings(adopted);
+      setSettings(adopted);
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
@@ -326,7 +360,7 @@ export default function AppPage() {
           <div className="flex flex-col gap-2">
             <p className="text-caption uppercase text-muted">Scout · MVP</p>
             <h1 className="text-title-1 text-primary">
-              {settings.name}&apos;s brief
+              {settings.name ? `${settings.name}'s brief` : "Your brief"}
             </h1>
           </div>
           <Button variant="secondary" onClick={() => setEditing(true)}>
@@ -372,7 +406,7 @@ export default function AppPage() {
         <div className="flex flex-col gap-2">
           <p className="text-caption uppercase text-muted">Scout · MVP</p>
           <h1 className="text-title-1 text-primary">
-            {settings.name}&apos;s brief
+            {settings.name ? `${settings.name}'s brief` : "Your brief"}
           </h1>
           <InterestChips
             interests={settings.interests}

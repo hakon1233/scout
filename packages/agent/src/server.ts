@@ -275,7 +275,18 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           json(
             res,
             200,
-            { token: state.pairing_token ?? null, version: PKG_VERSION },
+            {
+              token: state.pairing_token ?? null,
+              version: PKG_VERSION,
+              // The companion is the source of truth for the user's interests
+              // (persisted on every POST /v0/interests so the scheduler can run
+              // headless). Hand them to the served UI too, so a browser whose
+              // localStorage was cleared / is a different profile / a different
+              // origin than the one that did first-run setup can still render the
+              // brief + a working "Run now" instead of dead-ending on the setup
+              // form (PER-157). Same-origin gated like the token above.
+              interests: state.interests ?? [],
+            },
             cors,
           );
           return;
