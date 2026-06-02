@@ -46,20 +46,23 @@ export function interestEditorHref(i: Interest): string {
   return `/app/interest?id=${encodeURIComponent(interestKey(i))}`;
 }
 
-// Fetch doc metadata keyed by interestKey. Returns {} (→ every interest reads
-// as "no doc yet") whenever the companion isn't serving us or the doc endpoint
-// doesn't exist yet. Shaped to match the rich-interest payload C1 will expose
-// at `/v0/interests`, so this becomes real with no caller change.
-export async function fetchInterestDocMeta(): Promise<
-  Record<string, InterestDocMeta>
-> {
-  if (typeof window === "undefined") return {};
-  if (!(await isServedFromCompanion())) return {};
+// Fetch the FULL interest set from the authed GET /v0/interests — real stable
+// ids (so a chat change's `interestId` matches the rendered card), topics, and
+// doc metadata in one round-trip. Returns null when the companion isn't serving
+// us same-origin (public host / offline) so the caller can fall back to local
+// settings. `/v0/interests` is authed, so the pairing token is required — an
+// unauthenticated read 401s and the doc indicators silently never light up.
+export async function fetchInterestsFull(
+  token: string,
+): Promise<{ interests: Interest[]; meta: Record<string, InterestDocMeta> } | null> {
+  if (typeof window === "undefined") return null;
+  if (!(await isServedFromCompanion())) return null;
   try {
     const res = await fetch(`${window.location.origin}/v0/interests`, {
-      signal: AbortSignal.timeout(2000),
+      headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      signal: AbortSignal.timeout(2500),
     });
-    if (!res.ok) return {};
+    if (!res.ok) return null;
     const body = (await res.json()) as {
       interests?: Array<{
         id?: string;
@@ -68,21 +71,36 @@ export async function fetchInterestDocMeta(): Promise<
         docUpdatedAt?: string;
       }>;
     };
-    if (!Array.isArray(body.interests)) return {};
-    const out: Record<string, InterestDocMeta> = {};
+    if (!Array.isArray(body.interests)) return null;
+    const interests: Interest[] = [];
+    const meta: Record<string, InterestDocMeta> = {};
     for (const it of body.interests) {
-      const key = (it.id ?? it.topic ?? "").trim();
-      if (!key) continue;
-      out[key] = {
+      const id = (it.id ?? "").trim();
+      const topic = (it.topic ?? "").trim();
+      if (!topic) continue;
+      const interest: Interest = { id, topic };
+      interests.push(interest);
+      meta[interestKey(interest)] = {
         hasDoc: Boolean(it.hasDoc),
         updatedAt:
           typeof it.docUpdatedAt === "string" ? it.docUpdatedAt : undefined,
       };
     }
-    return out;
+    return { interests, meta };
   } catch {
-    return {};
+    return null;
   }
+}
+
+// Fetch doc metadata keyed by interestKey. Returns {} (→ every interest reads
+// as "no doc yet") whenever the companion isn't serving us or the read fails.
+// Thin wrapper over `fetchInterestsFull` kept for callers that only need the
+// metadata map (e.g. the read-only profile row before the chat workbench).
+export async function fetchInterestDocMeta(
+  token: string,
+): Promise<Record<string, InterestDocMeta>> {
+  const full = await fetchInterestsFull(token);
+  return full?.meta ?? {};
 }
 
 // Synthetic doc metadata for design/QA review of the indicator's two states
