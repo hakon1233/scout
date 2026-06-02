@@ -432,6 +432,48 @@ test("GET /v0/config hands the token to a same-origin caller, refuses cross-orig
   }
 });
 
+// PER-157: the companion is the source of truth for the user's interests, so it
+// hands them to a same-origin caller alongside the token. This lets a browser
+// with no locally-saved settings (cleared storage / different profile / a
+// different origin than first-run setup) recover the interests and render a
+// working brief instead of dead-ending on the setup form. Empty when none yet.
+test("GET /v0/config returns the persisted interests to a same-origin caller", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+
+  const { server, port } = await startServer(0, { stateFile });
+  try {
+    // No interests stored yet → an empty array, never undefined.
+    await saveState({ pairing_token: token }, stateFile);
+    const empty = await fetch(`http://127.0.0.1:${port}/v0/config`);
+    assert.equal(empty.status, 200);
+    assert.deepEqual((await empty.json()).interests, []);
+
+    // With interests persisted, they're echoed verbatim and in order.
+    await saveState(
+      { pairing_token: token, interests: ["ai", "anthropic", "openai"] },
+      stateFile,
+    );
+    const withInterests = await fetch(`http://127.0.0.1:${port}/v0/config`);
+    assert.equal(withInterests.status, 200);
+    assert.deepEqual((await withInterests.json()).interests, [
+      "ai",
+      "anthropic",
+      "openai",
+    ]);
+
+    // Cross-origin is still refused — interests don't leak to a public origin.
+    const cross = await fetch(`http://127.0.0.1:${port}/v0/config`, {
+      headers: { origin: "https://hakon1233.github.io" },
+    });
+    assert.equal(cross.status, 403);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+  }
+});
+
 // PER-135: the cross-origin origin-deny guard must be uniform across the whole
 // /v0/* surface. Previously only /v0/config 403'd a hostile Origin; /v0/briefs
 // and /v0/interests served it (no ACAO, so unreadable in a browser, but the
