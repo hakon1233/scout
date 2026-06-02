@@ -121,7 +121,7 @@ function isOriginDenied(origin: string | undefined): boolean {
 // (PER-136)
 const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
   "/v0/config": ["GET", "OPTIONS"],
-  "/v0/interests": ["POST", "OPTIONS"],
+  "/v0/interests": ["POST", "PUT", "OPTIONS"],
   "/v0/briefs": ["GET", "OPTIONS"],
   "/v0/schedule": ["GET", "PUT", "OPTIONS"],
 };
@@ -157,6 +157,42 @@ function json(
 // any whitespace/unicode escaping, with generous headroom.
 export const MAX_BODY_BYTES = 16 * 1024;
 export const MAX_INTEREST_LEN = 200;
+
+type InterestParse =
+  | { ok: true; interests: string[] }
+  | { ok: false; status: number; error: string };
+
+// Clean → dedupe (case-insensitively, keeping first casing) → enforce the
+// 1..6 count and per-interest length budget. Shared by POST /v0/interests
+// (which also kicks a synthesis run) and PUT /v0/interests (persist-only,
+// PER-160) so both apply the exact same rules. (Dedupe rationale: PER-126;
+// length cap: PER-137.)
+function parseInterestsPayload(raw: unknown): InterestParse {
+  const cleaned = Array.isArray(raw)
+    ? (raw as unknown[])
+        .filter((s): s is string => typeof s === "string")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const seen = new Set<string>();
+  const interests = cleaned.filter((s) => {
+    const key = s.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (interests.length === 0)
+    return { ok: false, status: 400, error: "interests required" };
+  if (interests.length > 6)
+    return { ok: false, status: 400, error: "too many interests, max 6" };
+  if (interests.some((s) => s.length > MAX_INTEREST_LEN))
+    return {
+      ok: false,
+      status: 400,
+      error: `interest too long, max ${MAX_INTEREST_LEN} chars`,
+    };
+  return { ok: true, interests };
+}
 
 // Thrown by readBody when the request body exceeds MAX_BODY_BYTES, so the
 // handler can answer 413 instead of buffering an unbounded body into memory.
@@ -292,6 +328,43 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           return;
         }
 
+        // Persist-only interests save (PER-160). The profile/edit view PUTs the
+        // user's interests so the edit sticks in state.json on its own —
+        // distinct from POST below, which ALSO kicks a (~5-min) synthesis run.
+        // The scheduler reuses whatever is persisted here on its next fire.
+        if (req.method === "PUT" && url.pathname === "/v0/interests") {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          const declaredLen = Number(req.headers["content-length"]);
+          if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
+            return json(res, 413, { error: "request body too large" }, cors);
+          }
+          let body: string;
+          try {
+            body = await readBody(req);
+          } catch (err) {
+            if (err instanceof BodyTooLargeError) {
+              return json(res, 413, { error: "request body too large" }, cors);
+            }
+            throw err;
+          }
+          let parsed: { interests?: unknown };
+          try {
+            parsed = JSON.parse(body || "{}");
+          } catch {
+            return json(res, 400, { error: "invalid json" }, cors);
+          }
+          const validated = parseInterestsPayload(parsed.interests);
+          if (!validated.ok)
+            return json(res, validated.status, { error: validated.error }, cors);
+          await saveState(
+            { ...state, interests: validated.interests },
+            stateFile,
+          );
+          json(res, 200, { interests: validated.interests, status: "saved" }, cors);
+          return;
+        }
+
         if (req.method === "POST" && url.pathname === "/v0/interests") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
@@ -315,42 +388,10 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           } catch {
             return json(res, 400, { error: "invalid json" }, cors);
           }
-          const cleaned = Array.isArray(parsed.interests)
-            ? (parsed.interests as unknown[])
-                .filter((s): s is string => typeof s === "string")
-                .map((s) => s.trim())
-                .filter(Boolean)
-            : [];
-          // De-duplicate before counting against the max-6 budget. Match on a
-          // case-insensitive key so "AI safety"/"ai safety" collapse the way the
-          // rendered brief already does (one `## AI safety` section), but keep
-          // the first occurrence's original casing for display. (PER-126)
-          const seen = new Set<string>();
-          const interests = cleaned.filter((s) => {
-            const key = s.toLowerCase();
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          if (interests.length === 0)
-            return json(res, 400, { error: "interests required" }, cors);
-          if (interests.length > 6)
-            return json(
-              res,
-              400,
-              { error: "too many interests, max 6" },
-              cors,
-            );
-          // Cap each interest's length. The count and total body are already
-          // bounded; this stops a single in-budget interest from being a
-          // multi-KB blob forwarded into the synthesis prompt. (PER-137)
-          if (interests.some((s) => s.length > MAX_INTEREST_LEN))
-            return json(
-              res,
-              400,
-              { error: `interest too long, max ${MAX_INTEREST_LEN} chars` },
-              cors,
-            );
+          const validated = parseInterestsPayload(parsed.interests);
+          if (!validated.ok)
+            return json(res, validated.status, { error: validated.error }, cors);
+          const interests = validated.interests;
 
           // Optional focused-retry payload (PER-154): re-research ONLY these
           // topics and merge the fresh sections into the prior brief, instead of

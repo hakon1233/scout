@@ -560,12 +560,12 @@ test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404 
     assert.equal(cfgDelete.headers.get("allow"), "GET, OPTIONS");
     assert.equal((await cfgDelete.json()).error, "method not allowed");
 
-    // GET on the POST-only /v0/interests → 405, Allow: POST, OPTIONS.
+    // GET on the write-only /v0/interests → 405, Allow: POST, PUT, OPTIONS.
     const interestsGet = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       headers: auth,
     });
     assert.equal(interestsGet.status, 405);
-    assert.equal(interestsGet.headers.get("allow"), "POST, OPTIONS");
+    assert.equal(interestsGet.headers.get("allow"), "POST, PUT, OPTIONS");
 
     // PUT on the GET-only /v0/briefs → 405, Allow: GET, OPTIONS.
     const briefsPut = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
