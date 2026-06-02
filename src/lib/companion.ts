@@ -225,11 +225,17 @@ type AgentBrief = {
 // working without changing its data shape.
 const LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
 const TOPIC_HEADING_RE = /^##\s+(.+?)\s*$/;
+// Per-story publish date: each story bullet leads with its date as an ISO date
+// (or `undated`) in backticks — the contract set by the shared search-skills
+// fragment (packages/agent/src/search-skills.ts STORY_DATE_RE). We capture it
+// into Article.publishedAt so the UI can show it per item and sort newest-first.
+const STORY_DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`/;
 
 function parseArticlesFromMarkdown(markdown: string, briefId: string) {
   const articles: AppBrief["articles"] = [];
   const interests = new Set<string>();
   let currentTopic = "general";
+  let currentDate: string | undefined;
   let idx = 0;
 
   for (const line of markdown.split("\n")) {
@@ -237,8 +243,12 @@ function parseArticlesFromMarkdown(markdown: string, briefId: string) {
     if (heading) {
       currentTopic = heading[1].trim();
       interests.add(currentTopic);
+      currentDate = undefined;
       continue;
     }
+    // A new story bullet resets the active date; `undated` → no date.
+    const dateMatch = STORY_DATE_RE.exec(line);
+    if (dateMatch) currentDate = dateMatch[1] === "undated" ? undefined : dateMatch[1];
     let m: RegExpExecArray | null;
     while ((m = LINK_RE.exec(line)) !== null) {
       const [, label, url] = m;
@@ -247,6 +257,7 @@ function parseArticlesFromMarkdown(markdown: string, briefId: string) {
         title: label.trim(),
         url,
         interest: currentTopic,
+        publishedAt: currentDate,
       });
     }
   }
