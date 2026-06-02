@@ -82,6 +82,7 @@
   --accent-fg: var(--paper);
   --accent-bg-hover: #000000;
   --danger-bg: #f7e9e6;
+  --danger-bg-hover: #f1ddd8;
   --danger-fg: #8a2f23;
   --danger-border: #e0b3aa;
   /*
@@ -124,35 +125,36 @@
 }
 
 :root.dark {
-    /* Direction A dark — warm "ink room": darkened paper, not neutral black. */
-    --bg-page: #16140f;
-    --bg-surface: #1d1a14;
-    --bg-surface-muted: #24201a;
-    --border-default: #37322a;
-    --border-strong: #4b443a;
-    --text-primary: #f1ece1;
-    --text-secondary: #cabfac;
-    --text-muted: #9a917f;
-    --accent-bg: #f1ece1;
-    --accent-fg: #1c1a17;
-    --accent-bg-hover: #ffffff;
-    --accent-signal: #c4553f;
-    --accent-deep: #7da7bd;
-    --danger-bg: #2c1a16;
-    --danger-fg: #e6a99c;
-    --danger-border: #5a342b;
-    /* Warm "ink room" info — recessed parchment-dark + warm-tan text, matching
+  /* Direction A dark — warm "ink room": darkened paper, not neutral black. */
+  --bg-page: #16140f;
+  --bg-surface: #1d1a14;
+  --bg-surface-muted: #24201a;
+  --border-default: #37322a;
+  --border-strong: #4b443a;
+  --text-primary: #f1ece1;
+  --text-secondary: #cabfac;
+  --text-muted: #9a917f;
+  --accent-bg: #f1ece1;
+  --accent-fg: #1c1a17;
+  --accent-bg-hover: #ffffff;
+  --accent-signal: #c4553f;
+  --accent-deep: #7da7bd;
+  --danger-bg: #2c1a16;
+  --danger-bg-hover: #3a201a;
+  --danger-fg: #e6a99c;
+  --danger-border: #5a342b;
+  /* Warm "ink room" info — recessed parchment-dark + warm-tan text, matching
        the PAIR COMPANION link. Replaces the cold teal #16242b/#9fc4d4 (PER-130). */
-    --info-bg: #221d14;
-    --info-fg: var(--text-secondary);
-    --info-border: #463c2c;
-    --success-bg: #1a241544;
-    --success-fg: #a6c596;
-    --success-border: #3a4d2f;
-    --warning-bg: #2a2310;
-    --warning-fg: #d8bd86;
-    --warning-border: #4d4324;
-    --focus-ring: var(--accent-signal);
+  --info-bg: #221d14;
+  --info-fg: var(--text-secondary);
+  --info-border: #463c2c;
+  --success-bg: #1a241544;
+  --success-fg: #a6c596;
+  --success-border: #3a4d2f;
+  --warning-bg: #2a2310;
+  --warning-fg: #d8bd86;
+  --warning-border: #4d4324;
+  --focus-ring: var(--accent-signal);
 }
 
 @theme {
@@ -169,6 +171,7 @@
   --color-accent-hover: var(--accent-bg-hover);
   --color-danger: var(--danger-fg);
   --color-danger-bg: var(--danger-bg);
+  --color-danger-bg-hover: var(--danger-bg-hover);
   --color-danger-border: var(--danger-border);
   --color-info: var(--info-fg);
   --color-info-bg: var(--info-bg);
@@ -223,7 +226,8 @@
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jbmono), ui-monospace, SFMono-Regular, monospace;
-  --font-serif: var(--font-fraunces), ui-serif, Georgia, "Times New Roman", serif;
+  --font-serif:
+    var(--font-fraunces), ui-serif, Georgia, "Times New Roman", serif;
   --font-reading: var(--font-newsreader), ui-serif, Georgia, serif;
 }
 
@@ -257,7 +261,15 @@ body {
   keyboard-focused interactive meets WCAG 2.4.7 / 1.4.11. Components with
   bespoke focus styling override via their own focus-visible utilities.
 */
-:where(a, button, summary, [role="button"], input, select, textarea):focus-visible {
+:where(
+  a,
+  button,
+  summary,
+  [role="button"],
+  input,
+  select,
+  textarea
+):focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: 4px;

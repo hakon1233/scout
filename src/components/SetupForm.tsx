@@ -157,7 +157,9 @@ export function SetupForm({ initial, onSave, onClearStored }: Props) {
       {confirmClear && (
         <Banner tone="warning">
           <span className="flex flex-wrap items-center justify-between gap-3">
-            <span>Clear stored name, interests, and last brief from this browser?</span>
+            <span>
+              Clear stored name, interests, and last brief from this browser?
+            </span>
             <span className="flex gap-2">
               <Button
                 type="button"
@@ -169,7 +171,7 @@ export function SetupForm({ initial, onSave, onClearStored }: Props) {
               </Button>
               <Button
                 type="button"
-                variant="secondary"
+                variant="danger"
                 size="sm"
                 onClick={() => {
                   clearSettings();
@@ -189,10 +191,12 @@ export function SetupForm({ initial, onSave, onClearStored }: Props) {
 
       {hasStored && onClearStored && !confirmClear && (
         <div className="flex items-center justify-between border-t border-border-default pt-4">
-          <span className="text-caption text-muted">Stored on this device.</span>
+          <span className="text-caption text-muted">
+            Stored on this device.
+          </span>
           <Button
             type="button"
-            variant="ghost"
+            variant="danger"
             size="sm"
             onClick={() => setConfirmClear(true)}
             aria-expanded={confirmClear}
