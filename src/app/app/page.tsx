@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentProgressPanel } from "@/components/AgentProgressPanel";
+import { AppNav } from "@/components/AppNav";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { BriefLayout } from "@/components/BriefLayout";
 import { BriefSkeleton } from "@/components/BriefSkeleton";
@@ -19,6 +20,7 @@ import {
   loadCompanionToken,
   pingCompanion,
   refreshBriefViaCompanion,
+  saveInterests,
 } from "@/lib/companion";
 import { classifyError, type ClassifiedError } from "@/lib/errors";
 import { SAMPLE_BRIEF } from "@/lib/sample-brief";
@@ -110,6 +112,20 @@ export default function AppPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    // PER-160: the persistent profile icon on other /app/* routes (e.g.
+    // /app/connect) links here with `?profile=1` to open the profile/edit view.
+    // Honor it once after hydration, then strip the param so a refresh or a
+    // later in-page close doesn't re-trigger it.
+    if (!hydrated) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("profile") === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditing(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -301,7 +317,7 @@ export default function AppPage() {
 
   if (!hydrated) {
     return (
-      <Shell>
+      <Shell onOpenProfile={() => setEditing(true)}>
         <AppSkeleton />
       </Shell>
     );
@@ -309,7 +325,7 @@ export default function AppPage() {
 
   if (!settings || editing) {
     return (
-      <Shell>
+      <Shell onOpenProfile={() => setEditing(true)}>
         <SetupForm
           initial={settings}
           onSave={(s) => {
@@ -318,6 +334,20 @@ export default function AppPage() {
             setEditing(false);
             // PER-146: editing returns context to the latest edition on save.
             setViewingPrev(false);
+            // PER-160: persist the edited interests to the companion
+            // (state.json) so the edit is durable server-side on its own — not
+            // just in this browser's localStorage — and the headless scheduler
+            // reuses it. Best-effort and non-blocking: PUT /v0/interests only
+            // saves, it does NOT run a brief (that's the explicit "Run now").
+            // If the companion isn't paired/reachable, the local save above
+            // still stands and the next Run now will push interests anyway.
+            const token = loadCompanionToken();
+            if (token) {
+              void saveInterests(
+                s.interests.map((i) => i.topic),
+                token,
+              ).catch(() => {});
+            }
           }}
           onClearStored={() => {
             clearSettings();
@@ -355,7 +385,7 @@ export default function AppPage() {
   // stays reachable and returns context to latest on save.
   if (viewingPrev && prevBrief) {
     return (
-      <Shell>
+      <Shell onOpenProfile={() => setEditing(true)}>
         <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
           <div className="flex flex-col gap-2">
             <p className="text-caption uppercase text-muted">Scout · MVP</p>
@@ -393,7 +423,7 @@ export default function AppPage() {
   const showSkeleton = progress?.stage === "synthesizing";
 
   return (
-    <Shell>
+    <Shell onOpenProfile={() => setEditing(true)}>
       {brief && (
         <StickyUtilityBar
           running={running}
@@ -564,18 +594,19 @@ export default function AppPage() {
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  onOpenProfile,
+}: {
+  children: React.ReactNode;
+  // PER-160: opens the profile/edit view. Present on every Shell render so the
+  // profile icon is a persistent top-right affordance across all app states.
+  onOpenProfile?: () => void;
+}) {
   return (
     <main className="min-h-screen bg-page px-4 py-8 text-primary sm:px-6 sm:py-12">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-        <nav className="flex items-center justify-between">
-          <Link
-            href="/"
-            className="text-caption uppercase text-muted transition hover:text-primary"
-          >
-            ← Scout
-          </Link>
-        </nav>
+        <AppNav onOpenProfile={onOpenProfile} />
         {children}
       </div>
     </main>

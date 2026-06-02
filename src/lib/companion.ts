@@ -180,6 +180,33 @@ export async function postInterests(
   return res.json() as Promise<{ brief_id: string; status: string }>;
 }
 
+// Persist the user's interests to the companion (state.json) WITHOUT kicking a
+// synthesis run — the "save my profile" action (PER-160). Distinct from
+// `postInterests`, which also runs a ~5-min brief. Best-effort: callers use this
+// so a profile edit sticks server-side (and survives for the headless scheduler)
+// even if the user doesn't immediately Run now. Throws the companion's
+// human-readable error on non-2xx so the caller can surface it.
+export async function saveInterests(
+  interests: string[],
+  token: string,
+): Promise<{ interests: string[]; status: string }> {
+  const base = await requireBase();
+  const res = await fetch(`${base}/v0/interests`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify({ interests }),
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
+      error?: string;
+      hint?: string;
+    };
+    throw new Error(err.hint ?? err.error ?? `Couldn't save interests (${res.status}).`);
+  }
+  return res.json() as Promise<{ interests: string[]; status: string }>;
+}
+
 type AgentBrief = {
   id: string;
   generated_at: string;
