@@ -547,17 +547,31 @@ function CmdBlock({
   copied: string | null;
   onCopy: (text: string, key: string) => void;
 }) {
+  // Header row keeps COPY out of the command's text lane entirely (PER-166) —
+  // no absolute overlay overlapping the first line. The <pre> wraps long
+  // unbreakable tokens (the install URL) instead of overflowing: `pre-wrap`
+  // preserves the real newline between the two commands, `overflow-wrap:anywhere`
+  // breaks the URL token, and `overflow-x-auto` stays only as a safety net.
+  // The "Terminal" caption and COPY label live in separate DOM, so the copied
+  // value is still the byte-for-byte `cmd` string.
   return (
-    <div className="relative rounded-[6px] border border-[#322d25] bg-[#1c1a17]">
-      <pre className="overflow-x-auto whitespace-pre px-4 py-3 font-mono text-sm text-[#f1ece1]">
+    <div className="overflow-hidden rounded-[6px] border border-[#322d25] bg-[#1c1a17]">
+      <div className="flex items-center justify-between border-b border-[#322d25] pl-3 pr-1">
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#8b8474]">
+          Terminal
+        </span>
+        <button
+          type="button"
+          onClick={() => onCopy(cmd, copyKey)}
+          aria-label={copied === copyKey ? "Command copied" : "Copy command"}
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded px-3 font-mono text-[11px] uppercase tracking-[0.06em] text-[#cabfa8] transition-colors hover:bg-[#322d25] hover:text-[#f1ece1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+        >
+          {copied === copyKey ? "copied!" : "copy"}
+        </button>
+      </div>
+      <pre className="overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3 font-mono text-sm text-[#f1ece1]">
         {cmd}
       </pre>
-      <button
-        onClick={() => onCopy(cmd, copyKey)}
-        className="absolute right-2 top-2 rounded px-2 py-1 font-mono text-[11px] uppercase tracking-[0.06em] text-[#9a917f] transition-colors hover:bg-[#322d25] hover:text-[#f1ece1]"
-      >
-        {copied === copyKey ? "copied!" : "copy"}
-      </button>
     </div>
   );
 }
