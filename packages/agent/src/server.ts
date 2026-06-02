@@ -78,12 +78,14 @@ function scheduleView(cfg: ScheduleConfig): ScheduleView {
   };
 }
 
+// CORS: loopback dev origins + the specific Scout production hostname(s).
+// Do NOT add wildcard *.vercel.app or *.github.io — any user of those
+// platforms could make cross-origin requests to the companion.
 const CORS_ALLOWED_ORIGINS = [
   /^https?:\/\/localhost(:\d+)?$/,
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https:\/\/[a-z0-9-]+\.vercel\.app$/,
-  /^https:\/\/scout\.[a-z.]+$/,
-  /^https:\/\/[a-z0-9-]+\.github\.io$/,
+  /^https:\/\/scout\.notiva\.no$/,
+  /^https:\/\/hakon1233\.github\.io$/,
 ];
 
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;

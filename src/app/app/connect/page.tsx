@@ -393,7 +393,8 @@ export default function ConnectPage() {
                   </p>
                   <div className="flex gap-2">
                     <input
-                      type="text"
+                      type="password"
+                      autoComplete="off"
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
                       placeholder="Paste pairing token here"
@@ -432,7 +433,8 @@ export default function ConnectPage() {
               </p>
               <div className="flex gap-2">
                 <input
-                  type="text"
+                  type="password"
+                  autoComplete="off"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   placeholder="Paste pairing token here"
