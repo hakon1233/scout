@@ -46,7 +46,9 @@ const STICKY_THRESHOLD_PX = 480;
 function coverageBuckets(b: Brief): { missing: string[]; empty: string[] } {
   if (b.topics && b.topics.length > 0) {
     return {
-      missing: b.topics.filter((t) => t.status === "missing").map((t) => t.topic),
+      missing: b.topics
+        .filter((t) => t.status === "missing")
+        .map((t) => t.topic),
       empty: b.topics.filter((t) => t.status === "empty").map((t) => t.topic),
     };
   }
@@ -84,21 +86,18 @@ export default function AppPage() {
   const [companionReady, setCompanionReady] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const updateInterests = useCallback(
-    (next: Interest[]) => {
-      setSettings((prev) => {
-        if (!prev) return prev;
-        const updated = { ...prev, interests: next };
-        saveSettings(updated);
-        return updated;
-      });
-      setInterestsChanged(true);
-      // A "fresh brief delivered" confirmation is stale the moment interests
-      // change — the out-of-date banner takes over instead.
-      setRanAt(null);
-    },
-    [],
-  );
+  const updateInterests = useCallback((next: Interest[]) => {
+    setSettings((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, interests: next };
+      saveSettings(updated);
+      return updated;
+    });
+    setInterestsChanged(true);
+    // A "fresh brief delivered" confirmation is stale the moment interests
+    // change — the out-of-date banner takes over instead.
+    setRanAt(null);
+  }, []);
 
   useEffect(() => {
     // Hydrate from localStorage on mount. Static export means first render runs
@@ -217,82 +216,85 @@ export default function AppPage() {
   // removed (PER-109) — it fetched api.exa.ai directly and was CORS-broken.
   // The companion runs the local `claude` CLI over the loopback server, so
   // there are no API keys and no cross-origin calls.
-  const generate = useCallback(async (opts?: { retryTopics?: string[] }) => {
-    if (!settings) return;
-    // Only honor a retry subset that's still in the current interest list; the
-    // companion re-checks too, but this keeps the progress panel honest.
-    const retryTopics = (opts?.retryTopics ?? []).filter((t) =>
-      settings.interests.some((i) => i.topic === t),
-    );
-    const isRetry = retryTopics.length > 0;
-    const token = loadCompanionToken();
-    if (!token) {
-      setError(
-        classifyError(
-          new Error(
-            "Scout companion isn't paired yet. Start `scout-agent run` and open the app it prints, or visit /app/connect to pair.",
+  const generate = useCallback(
+    async (opts?: { retryTopics?: string[] }) => {
+      if (!settings) return;
+      // Only honor a retry subset that's still in the current interest list; the
+      // companion re-checks too, but this keeps the progress panel honest.
+      const retryTopics = (opts?.retryTopics ?? []).filter((t) =>
+        settings.interests.some((i) => i.topic === t),
+      );
+      const isRetry = retryTopics.length > 0;
+      const token = loadCompanionToken();
+      if (!token) {
+        setError(
+          classifyError(
+            new Error(
+              "Scout companion isn't paired yet. Start `scout-agent run` and open the app it prints, or visit /app/connect to pair.",
+            ),
           ),
-        ),
-      );
-      return;
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setRunning(true);
-    setError(null);
-    setCancelled(false);
-    setRanAt(null);
-    setInterestsChanged(false);
-    setProgress({
-      stage: "synthesizing",
-      message: isRetry
-        ? `Companion is re-researching ${retryTopics.length} topic${retryTopics.length === 1 ? "" : "s"}…`
-        : "Companion is fetching & synthesizing your brief…",
-      // On a focused retry, only the retried topics are "working"; the rest are
-      // carried over from the prior brief, so show them as already done.
-      perInterest: settings.interests.map((i) => ({
-        topic: i.topic,
-        state: isRetry && !retryTopics.includes(i.topic) ? "done" : "pending",
-      })),
-    });
-    try {
-      const since = brief?.generatedAt ?? new Date(0).toISOString();
-      const next = await refreshBriefViaCompanion(
-        settings.interests.map((i) => i.topic),
-        token,
-        {
-          sinceTs: since,
-          signal: controller.signal,
-          retryTopics: isRetry ? retryTopics : undefined,
-        },
-      );
-      // Per-topic status rides along on `next.topics` from the companion — no
-      // client-side heading diff (PER-154).
-      // PER-146: archive the outgoing brief BEFORE overwriting the slot so a
-      // regenerate is recoverable, never a silent total loss. Only in this
-      // user-initiated path (see the load-time adoption effect for why not
-      // there). First-ever generate has no `brief`, so no previous is created.
-      if (brief) {
-        savePrevBrief(brief);
-        setPrevBrief(brief);
+        );
+        return;
       }
-      saveLastBrief(next);
-      setBrief(next);
-      setViewingPrev(false);
-      setProgress(null);
-      setRanAt(next.generatedAt);
-    } catch (e) {
-      if (controller.signal.aborted || (e as Error)?.message === "aborted") {
-        setCancelled(true);
-      } else {
-        setError(classifyError(e));
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setRunning(true);
+      setError(null);
+      setCancelled(false);
+      setRanAt(null);
+      setInterestsChanged(false);
+      setProgress({
+        stage: "synthesizing",
+        message: isRetry
+          ? `Companion is re-researching ${retryTopics.length} topic${retryTopics.length === 1 ? "" : "s"}…`
+          : "Companion is fetching & synthesizing your brief…",
+        // On a focused retry, only the retried topics are "working"; the rest are
+        // carried over from the prior brief, so show them as already done.
+        perInterest: settings.interests.map((i) => ({
+          topic: i.topic,
+          state: isRetry && !retryTopics.includes(i.topic) ? "done" : "pending",
+        })),
+      });
+      try {
+        const since = brief?.generatedAt ?? new Date(0).toISOString();
+        const next = await refreshBriefViaCompanion(
+          settings.interests.map((i) => i.topic),
+          token,
+          {
+            sinceTs: since,
+            signal: controller.signal,
+            retryTopics: isRetry ? retryTopics : undefined,
+          },
+        );
+        // Per-topic status rides along on `next.topics` from the companion — no
+        // client-side heading diff (PER-154).
+        // PER-146: archive the outgoing brief BEFORE overwriting the slot so a
+        // regenerate is recoverable, never a silent total loss. Only in this
+        // user-initiated path (see the load-time adoption effect for why not
+        // there). First-ever generate has no `brief`, so no previous is created.
+        if (brief) {
+          savePrevBrief(brief);
+          setPrevBrief(brief);
+        }
+        saveLastBrief(next);
+        setBrief(next);
+        setViewingPrev(false);
+        setProgress(null);
+        setRanAt(next.generatedAt);
+      } catch (e) {
+        if (controller.signal.aborted || (e as Error)?.message === "aborted") {
+          setCancelled(true);
+        } else {
+          setError(classifyError(e));
+        }
+        setProgress(null);
+      } finally {
+        setRunning(false);
+        if (abortRef.current === controller) abortRef.current = null;
       }
-      setProgress(null);
-    } finally {
-      setRunning(false);
-      if (abortRef.current === controller) abortRef.current = null;
-    }
-  }, [settings, brief]);
+    },
+    [settings, brief],
+  );
 
   // Retry ONLY the topics the model dropped (status "missing"), merging the
   // fresh sections into the prior brief instead of regenerating everything
@@ -444,9 +446,6 @@ export default function AppPage() {
           />
         </div>
         <div className="flex flex-col gap-2 min-[480px]:flex-row">
-          <Button variant="secondary" onClick={() => setEditing(true)}>
-            Manage interests
-          </Button>
           <Button
             variant="primary"
             loading={running}
@@ -461,6 +460,9 @@ export default function AppPage() {
             }
           >
             {running ? "Working…" : "Run now"}
+          </Button>
+          <Button variant="secondary" onClick={() => setEditing(true)}>
+            Manage interests
           </Button>
         </div>
       </header>
@@ -512,54 +514,54 @@ export default function AppPage() {
         </Banner>
       )}
 
-      {progress && (
-        <AgentProgressPanel progress={progress} onCancel={cancel} />
-      )}
+      {progress && <AgentProgressPanel progress={progress} onCancel={cancel} />}
 
       {showSkeleton && <BriefSkeleton />}
 
       {cancelled && !running && <Banner tone="info">Cancelled.</Banner>}
 
-      {error && (
-        <ErrorBanner error={error} onRetry={runNow} />
-      )}
+      {error && <ErrorBanner error={error} onRetry={runNow} />}
 
       {/* PER-154: distinguish two honest states. "Missing" = the model dropped
           the section → warning + a Retry that re-researches ONLY those topics.
           "Empty" = a section came back with no fresh news today → info, not an
           error, no Retry (re-running won't conjure news that doesn't exist). */}
-      {brief && !running && (() => {
-        const { missing, empty } = coverageBuckets(brief);
-        return (
-          <>
-            {missing.length > 0 && (
-              <Banner tone="warning">
-                <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <span>
-                    Some topics didn&apos;t come back:{" "}
-                    <span className="font-medium">{missing.join(", ")}</span>.
+      {brief &&
+        !running &&
+        (() => {
+          const { missing, empty } = coverageBuckets(brief);
+          return (
+            <>
+              {missing.length > 0 && (
+                <Banner tone="warning">
+                  <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <span>
+                      Some topics didn&apos;t come back:{" "}
+                      <span className="font-medium">{missing.join(", ")}</span>.
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={retryMissingTopics}
+                    >
+                      Retry{" "}
+                      {missing.length === 1
+                        ? "topic"
+                        : `${missing.length} topics`}
+                    </Button>
                   </span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={retryMissingTopics}
-                  >
-                    Retry{" "}
-                    {missing.length === 1 ? "topic" : `${missing.length} topics`}
-                  </Button>
-                </span>
-              </Banner>
-            )}
-            {empty.length > 0 && (
-              <Banner tone="info" aria-live="polite">
-                No fresh news today for{" "}
-                <span className="font-medium">{empty.join(", ")}</span>. We
-                checked — there just wasn&apos;t anything new worth flagging.
-              </Banner>
-            )}
-          </>
-        );
-      })()}
+                </Banner>
+              )}
+              {empty.length > 0 && (
+                <Banner tone="info" aria-live="polite">
+                  No fresh news today for{" "}
+                  <span className="font-medium">{empty.join(", ")}</span>. We
+                  checked — there just wasn&apos;t anything new worth flagging.
+                </Banner>
+              )}
+            </>
+          );
+        })()}
 
       {brief && !showSkeleton ? (
         <BriefLayout
@@ -568,9 +570,7 @@ export default function AppPage() {
           running={running}
           onRegenerate={runNow}
           onEditInterests={() => setEditing(true)}
-          onViewPrevious={
-            prevBrief ? () => setViewingPrev(true) : undefined
-          }
+          onViewPrevious={prevBrief ? () => setViewingPrev(true) : undefined}
           prevDate={prevBrief ? formatBriefDate(prevBrief) : undefined}
         />
       ) : (
@@ -579,14 +579,10 @@ export default function AppPage() {
         !error && (
           <div className="flex flex-col gap-3">
             <Banner tone="info">
-              Example brief — click{" "}
-              <span className="font-medium">Run now</span> to make your own.
+              Example brief — click <span className="font-medium">Run now</span>{" "}
+              to make your own.
             </Banner>
-            <BriefLayout
-              brief={SAMPLE_BRIEF}
-              name={settings.name}
-              preview
-            />
+            <BriefLayout brief={SAMPLE_BRIEF} name={settings.name} preview />
           </div>
         )
       )}

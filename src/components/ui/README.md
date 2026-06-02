@@ -21,7 +21,7 @@ All tokens live in `src/app/globals.css`. Light values are defined under `:root`
 | `--accent-bg`     | `bg-accent`                | Primary action background          |
 | `--accent-fg`     | `text-accent-fg`           | Primary action foreground          |
 | `--accent-bg-hover` | `bg-accent-hover`        | Primary action hover               |
-| `--danger-*`      | `bg-danger-bg` / `text-danger` / `border-danger-border` | Error surfaces |
+| `--danger-*`      | `bg-danger-bg` / `bg-danger-bg-hover` / `text-danger` / `border-danger-border` | Error surfaces + destructive-action buttons |
 | `--info-*`        | `bg-info-bg` / `text-info` / `border-info-border` | Info banners |
 | `--success-*`     | `bg-success-bg` / `text-success` / `border-success-border` | Success banners |
 | `--warning-*`     | `bg-warning-bg` / `text-warning` / `border-warning-border` | Warning banners |
@@ -59,7 +59,8 @@ Live in `src/components/ui/`. Re-exported from `src/components/ui/index.ts`.
 <Button variant="primary" size="md" loading={isSaving}>Save</Button>
 ```
 
-- `variant`: `primary | secondary | ghost | link`
+- `variant`: `primary | secondary | ghost | link | danger`
+  - `danger`: tinted secondary-destructive treatment for destructive actions (e.g. "Clear stored data"). Pairs with a confirm step — do not use for one-click destructive actions.
 - `size`: `sm | md`
 - `loading`: inline spinner, disables the button, sets `aria-busy`
 - Renders a real `<button>`. For navigation, use `<Link>` with the same visual classes (see `src/app/page.tsx`).

@@ -137,7 +137,9 @@ export default function ConnectPage() {
       if (pollCountRef.current > POLL_MAX_ATTEMPTS) {
         clearInterval(pollRef.current!);
         setGenState("error");
-        setGenMsg("Timed out waiting for brief. Check the companion terminal for errors.");
+        setGenMsg(
+          "Timed out waiting for brief. Check the companion terminal for errors.",
+        );
         return;
       }
       try {
@@ -400,12 +402,9 @@ export default function ConnectPage() {
                       placeholder="Paste pairing token here"
                       className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
                     />
-                    <button
-                      onClick={handleSaveToken}
-                      className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
-                    >
+                    <Button variant="primary" onClick={handleSaveToken}>
                       Save
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -423,7 +422,12 @@ export default function ConnectPage() {
                 Run this once in your terminal to install and generate a pairing
                 token:
               </p>
-              <CmdBlock cmd={installCmd} copyKey="pair" copied={copied} onCopy={copy} />
+              <CmdBlock
+                cmd={installCmd}
+                copyKey="pair"
+                copied={copied}
+                onCopy={copy}
+              />
               <p className="text-xs text-muted">
                 This installs the prebuilt companion package directly from this
                 site. Requires Node 20+.
@@ -440,12 +444,9 @@ export default function ConnectPage() {
                   placeholder="Paste pairing token here"
                   className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
                 />
-                <button
-                  onClick={handleSaveToken}
-                  className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
-                >
+                <Button variant="primary" onClick={handleSaveToken}>
                   Save
-                </button>
+                </Button>
               </div>
             </section>
 
@@ -458,7 +459,12 @@ export default function ConnectPage() {
                 Keep this running in a terminal tab. It listens on port{" "}
                 {COMPANION_PORT}.
               </p>
-              <CmdBlock cmd={runCmd} copyKey="run" copied={copied} onCopy={copy} />
+              <CmdBlock
+                cmd={runCmd}
+                copyKey="run"
+                copied={copied}
+                onCopy={copy}
+              />
               <p className="text-xs text-muted">
                 Needs{" "}
                 <code className="rounded bg-surface-muted px-1 font-mono text-[13px]">
@@ -475,16 +481,17 @@ export default function ConnectPage() {
                 <span className="text-signal">03</span> Generate a brief
               </h2>
               <p className="text-sm text-secondary">
-                With the companion running, click below to kick off a brief using
-                your saved interests.
+                With the companion running, click below to kick off a brief
+                using your saved interests.
               </p>
-              <button
+              <Button
+                variant="primary"
+                className="w-full"
                 disabled={status !== "connected" || generating}
                 onClick={handleGenerate}
-                className="w-full rounded-[6px] bg-accent py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {generateLabel}
-              </button>
+              </Button>
               {genMsg && (
                 <p
                   className={`text-sm ${genState === "error" ? "text-danger" : genState === "done" ? "text-success" : "text-muted"}`}
