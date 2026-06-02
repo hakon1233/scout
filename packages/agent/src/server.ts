@@ -78,15 +78,42 @@ function scheduleView(cfg: ScheduleConfig): ScheduleView {
   };
 }
 
-// CORS: loopback dev origins + the specific Scout production hostname(s).
+// CORS: loopback dev origins + the specific Scout production hostname(s) +
+// the founder's private Tailscale tailnet origin.
 // Do NOT add wildcard *.vercel.app or *.github.io — any user of those
 // platforms could make cross-origin requests to the companion.
+//
+// Tailscale (PER-157): the founder reaches the companion over his tailnet at
+// `https://<machine>.<tailnet>.ts.net(:<port>)?`, NOT loopback. A browser there
+// sends that Origin on every write (`POST /v0/interests` = Run now,
+// `PUT /v0/interests`/`/v0/schedule`), so without it `isOriginDenied()` 403s the
+// entire run path — exactly the founder's "run doesn't work". MagicDNS `.ts.net`
+// names resolve only inside a user's own tailnet, so a public attacker site can
+// never present such an Origin; the only cross-origin caller able to is a page
+// served within the founder's own private tailnet — an acceptable trust boundary.
 const CORS_ALLOWED_ORIGINS = [
   /^https?:\/\/localhost(:\d+)?$/,
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
   /^https:\/\/scout\.notiva\.no$/,
   /^https:\/\/hakon1233\.github\.io$/,
+  /^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.ts\.net(:\d+)?$/i,
+  ...extraAllowedOrigins(),
 ];
+
+// Optional operator-configured serving origins, so a non-tailnet deployment can
+// be allowlisted without a code change (PER-157). Set SCOUT_ALLOWED_ORIGINS to a
+// comma-separated list of exact origins, e.g.
+//   SCOUT_ALLOWED_ORIGINS="https://news.example.com,https://news.example.com:8443"
+// Each entry is matched exactly (scheme+host+port), never as a wildcard.
+function extraAllowedOrigins(): RegExp[] {
+  const raw = process.env.SCOUT_ALLOWED_ORIGINS;
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((origin) => new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+}
 
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
