@@ -63,6 +63,22 @@ export function BriefView({ brief }: { brief: Brief }) {
                 </h2>
               );
             },
+            code: ({ children, className }) => {
+              // Each story bullet leads with its publish date as `YYYY-MM-DD`
+              // (or `undated`) — render that token as a prominent date badge so
+              // freshness is visible per item (PER-176). Other inline code is
+              // left as-is.
+              const text = nodeToString(children).trim();
+              const isDate = /^\d{4}-\d{2}-\d{2}$/.test(text) || text === "undated";
+              if (isDate && !className) {
+                return (
+                  <span className="mr-1 inline-flex items-center rounded-pill border border-border-default bg-surface-muted px-2 py-0.5 text-caption font-medium uppercase tracking-wide text-muted tabular-nums">
+                    {text === "undated" ? "undated" : formatDate(text)}
+                  </span>
+                );
+              }
+              return <code className={className}>{children}</code>;
+            },
             a: ({ href, children }) => {
               if (!href) return <>{children}</>;
               const entry = citationByUrl.get(canonicalUrl(href));

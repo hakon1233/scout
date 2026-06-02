@@ -10,6 +10,7 @@
 
 import { spawn } from "node:child_process";
 import os from "node:os";
+import { SEARCH_SKILLS } from "./search-skills.js";
 
 // Read and Write are intentionally excluded — a research subprocess has no
 // legitimate reason to access or modify the local filesystem.
@@ -116,13 +117,21 @@ export function stripBriefPreamble(raw: string): string {
   return text;
 }
 
-export function buildResearchPrompt(interests: string[]): string {
+export function buildResearchPrompt(interests: string[], now: Date = new Date()): string {
+  const today = now.toISOString().slice(0, 10); // YYYY-MM-DD, anchors "last 7 days".
   const lines: string[] = [];
   lines.push("You are Scout, an agent that researches and writes a personalized news brief.");
   lines.push("");
-  lines.push("Use the WebSearch tool to find recent (past 7 days when possible) news on each");
-  lines.push("topic below. Use WebFetch on the most promising 1-2 results per topic to get");
-  lines.push("enough context to write a real summary, not just a headline rehash.");
+  lines.push(`Today's date is ${today}. Use it to judge how recent each item is.`);
+  lines.push("");
+  lines.push("Use the WebSearch tool to find news on each topic below. Use WebFetch on the");
+  lines.push("most promising results per topic to confirm the facts AND the publish date,");
+  lines.push("so you write a real summary (not a headline rehash) with a verified date.");
+  lines.push("");
+  // The shared "skills folder" — one canonical, version-controlled fragment
+  // (search-skills.ts) injected into EVERY research session. Defines recency,
+  // mandatory per-story dates, source quality, and the date-first bullet format.
+  lines.push(SEARCH_SKILLS);
   lines.push("");
   lines.push("Topics the reader picked:");
   for (const t of interests) lines.push(`- ${t}`);
@@ -135,11 +144,12 @@ export function buildResearchPrompt(interests: string[]): string {
   lines.push("  related ones (e.g. keep `anthropic`, `claude code`, and `openai` as");
   lines.push("  separate sections). The heading text must be the topic VERBATIM as");
   lines.push("  written above (same words; capitalization may differ).");
-  lines.push("- Under each topic, 2-4 bullets. Each bullet: a one-sentence summary,");
-  lines.push("  then a newline with `  [domain — Title](url)` as the citation.");
-  lines.push("- Drop off-topic or duplicate results. If you genuinely can't find");
-  lines.push("  anything recent for a topic, STILL emit its `## <topic>` heading with");
-  lines.push("  a single line `_no fresh news_` underneath — never omit the section.");
+  lines.push("- Under each topic, 2-4 story bullets following the date-first format and");
+  lines.push("  recency rules in the search skills above (newest first, ISO date in");
+  lines.push("  backticks leading each bullet, citation on the next line).");
+  lines.push("- If you genuinely can't find anything within the last 30 days for a topic,");
+  lines.push("  STILL emit its `## <topic>` heading with a single line `_no fresh news_`");
+  lines.push("  underneath — never omit the section.");
   lines.push("- Keep the whole brief under ~500 words.");
   lines.push("");
   lines.push("Write the brief now.");
