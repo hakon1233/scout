@@ -25,7 +25,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
-import { saveState, newPairingToken, type Brief } from "../src/state.js";
+import { saveState, loadState, newPairingToken, type Brief } from "../src/state.js";
 import { startServer } from "../src/server.js";
 
 const CANNED_BRIEF =
@@ -268,6 +268,80 @@ test("the pairing token is never forwarded to claude or logged, and no API key i
   } finally {
     for (const k of Object.keys(orig) as Array<keyof typeof orig>) console[k] = orig[k];
     if (savedKey !== undefined) process.env.ANTHROPIC_API_KEY = savedKey;
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("PUT /v0/interests persists to state.json WITHOUT running a synthesis (PER-160)", async () => {
+  const { tmp, stateFile, token } = await seededServer();
+  // autoClose:true would let a synthesis complete — but PUT must never spawn
+  // claude at all. We assert `calls` stays empty to prove it's persist-only.
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn: recorder.spawnFn,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...auth },
+      // Includes a case-dupe ("AI safety"/"ai safety") to confirm PUT applies
+      // the same clean/dedupe rules POST does (keep first casing, collapse).
+      body: JSON.stringify({ interests: ["ai safety", "AI safety", "markets"] }),
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { interests: string[]; status: string };
+    assert.equal(body.status, "saved");
+    assert.deepEqual(body.interests, ["ai safety", "markets"]);
+
+    // It persisted to state.json (the headless scheduler's source of truth)…
+    const state = await loadState(stateFile);
+    assert.deepEqual(state.interests, ["ai safety", "markets"]);
+    // …and left no brief slot behind — no run was kicked.
+    assert.equal(state.last_brief, undefined);
+    // The hard guarantee: claude was never spawned.
+    assert.equal(recorder.calls.length, 0, "PUT must not spawn a synthesis");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("PUT /v0/interests rejects an empty/oversized interest list (PER-160)", async () => {
+  const { tmp, stateFile, token } = await seededServer();
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const empty = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: [] }),
+    });
+    assert.equal(empty.status, 400);
+
+    const tooMany = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["a", "b", "c", "d", "e", "f", "g"] }),
+    });
+    assert.equal(tooMany.status, 400);
+
+    // Unauthenticated PUT is refused before any state write.
+    const noAuth = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ interests: ["x"] }),
+    });
+    assert.equal(noAuth.status, 401);
+
+    const state = await loadState(stateFile);
+    assert.equal(state.interests, undefined, "no rejected write should land");
+  } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
