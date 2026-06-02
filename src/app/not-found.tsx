@@ -23,20 +23,31 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 // hydration we read the real pathname and swap to the app-aware variant for
 // `/app/*`. Both states are valid 404s (no brief flash), so the swap is
 // acceptable progressive enhancement.
+type Resolved = { isAppPath: boolean; attemptedPath: string };
+
 export default function NotFound() {
-  const [isAppPath, setIsAppPath] = useState(false);
-  const [attemptedPath, setAttemptedPath] = useState<string | null>(null);
+  // Server-prerendered markup (the build-time 404.html) is the generic public
+  // variant. After mount we read the real URL and, for `/app/*`, swap to the
+  // app-aware variant. Reading `window.location` is an external-system read that
+  // can only happen client-side, so the post-mount setState is intentional here
+  // (matches the existing pattern in app/page.tsx).
+  const [resolved, setResolved] = useState<Resolved | null>(null);
 
   useEffect(() => {
     const { pathname } = window.location;
-    const withoutBase = BASE_PATH && pathname.startsWith(BASE_PATH)
-      ? pathname.slice(BASE_PATH.length)
-      : pathname;
-    setAttemptedPath(withoutBase || "/");
-    setIsAppPath(withoutBase === "/app" || withoutBase.startsWith("/app/"));
+    const withoutBase =
+      BASE_PATH && pathname.startsWith(BASE_PATH)
+        ? pathname.slice(BASE_PATH.length)
+        : pathname;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setResolved({
+      isAppPath: withoutBase === "/app" || withoutBase.startsWith("/app/"),
+      attemptedPath: withoutBase || "/",
+    });
   }, []);
 
-  if (isAppPath) {
+  if (resolved?.isAppPath) {
+    const attemptedPath = resolved.attemptedPath;
     return (
       <main className="flex min-h-screen flex-col bg-page font-sans text-primary">
         <div className="mx-auto w-full max-w-2xl px-6 py-8">
