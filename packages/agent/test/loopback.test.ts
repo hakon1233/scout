@@ -539,6 +539,64 @@ test("a hostile Origin is 403'd uniformly across all /v0/* routes (PER-135)", as
   }
 });
 
+// PER-157: the founder reaches the companion over his Tailscale tailnet
+// (`https://<machine>.<tailnet>.ts.net`), NOT loopback. A browser there sends
+// that Origin on every write, so the run trigger `POST /v0/interests` (and the
+// profile/schedule PUTs) must NOT be 403'd by the origin gate — that was the
+// founder's "Run now doesn't work". A `.ts.net` origin is allowlisted; briefs
+// also get a proper ACAO so the cross-origin UI can read them.
+test("founder's Tailscale .ts.net origin reaches the run path, not a 403 (PER-157)", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  const claudeBin = await makeStubClaude();
+  const { server, port } = await startServer(0, { stateFile, claudeBin });
+  const tailnetOrigin = "https://your-host.example:48721";
+  try {
+    // The run trigger over the tailnet origin is accepted (202), not 403'd.
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: {
+        origin: tailnetOrigin,
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ interests: ["ai"] }),
+    });
+    assert.equal(kick.status, 202);
+    assert.equal(
+      kick.headers.get("access-control-allow-origin"),
+      tailnetOrigin,
+    );
+
+    // Briefs are readable cross-origin from the tailnet UI (200 + ACAO).
+    const briefs = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      headers: { origin: tailnetOrigin, authorization: `Bearer ${token}` },
+    });
+    assert.equal(briefs.status, 200);
+    assert.equal(
+      briefs.headers.get("access-control-allow-origin"),
+      tailnetOrigin,
+    );
+
+    // A look-alike that is NOT a .ts.net host is still rejected — the allowlist
+    // did not turn into a wildcard.
+    const evil = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      headers: {
+        origin: "https://your-host.example.evil.com",
+        authorization: `Bearer ${token}`,
+      },
+    });
+    assert.equal(evil.status, 403);
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
+  }
+});
+
 // PER-136: a wrong method on a KNOWN /v0/* route must return 405 Method Not
 // Allowed with an `Allow` header listing the valid methods — distinguishable
 // from the 404 a genuinely unknown path gets. An unknown path still 404s.
