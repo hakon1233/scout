@@ -28,6 +28,43 @@ export type Brief = {
 
 export type { TopicCoverage } from "./coverage.js";
 
+// One change a chat turn applied to the interest collection (PER-172 / C4). The
+// chat session manages the WHOLE set of interests, so a single turn can create a
+// new interest (+ its doc), refine an existing interest's doc/topic, or delete an
+// interest. `interestId` is always the concrete (server-assigned, for create) id
+// the change landed on, so the UI can re-`GET /v0/interests` or update in place
+// without guessing. This is the machine-readable change set the CEO contract
+// (comment e81f2c2a) requires alongside the assistant reply, and the seam where
+// C5's FE "Updated" beat fires only on a CONFIRMED write (PER-139 no-dead-control).
+export type ChatChange = {
+  interestId: string;
+  op: "create" | "update" | "delete";
+  // Present for create/update; the interest's (possibly renamed) topic.
+  topic?: string;
+  // The full markdown doc as persisted, for create/update. Absent on delete.
+  doc?: string;
+};
+
+// One chat turn, held in a single last-writer-wins slot (`State.last_chat`) that
+// mirrors `last_brief`. A turn is kicked async (POST /v0/chat) and polled
+// (GET /v0/chat?since=) the same way briefs are, so the UI never blocks on the
+// ~claude round-trip. The `changes` are applied to the doc store + state BEFORE
+// the turn flips to `ready`, so a `ready` turn's change set is always already
+// durable on disk (the "observable in the same response" contract).
+export type ChatTurn = {
+  id: string;
+  created_at: string;
+  status: "pending" | "ready" | "failed";
+  // The user's message (echoed so a reconnecting poller has the full exchange).
+  message: string;
+  // The assistant's conversational reply (present once ready).
+  reply?: string;
+  // The change set actually applied this turn (present once ready; [] when the
+  // turn only answered a question without touching any doc).
+  changes?: ChatChange[];
+  error_msg?: string;
+};
+
 // Persisted recurring-schedule config for the in-process scheduler (PER-151).
 // `enabled` + `time_of_day` are user-writable (Settings UI / PUT /v0/schedule);
 // the `last_run_*` / `next_run_at` fields are telemetry the scheduler maintains
@@ -68,6 +105,12 @@ export type State = {
   // `migrateInterests` / `loadState`.
   interests?: Interest[];
   schedule?: ScheduleConfig;
+  // Single chat-turn slot (last-writer-wins), mirroring `last_brief`. The chat
+  // that manages the interest collection (PER-172) kicks a turn here and polls
+  // it to `ready`. One slot is enough: the UI shows the latest turn's reply +
+  // applied changes; the durable record of WHAT changed lives in the docs/state
+  // the turn already wrote.
+  last_chat?: ChatTurn;
 };
 
 // Mint a fresh, opaque, filename-safe interest id. Random (not derived from the
@@ -206,6 +249,10 @@ export function newPairingToken(): string {
 }
 
 export function newBriefId(): string {
+  return crypto.randomUUID();
+}
+
+export function newChatTurnId(): string {
   return crypto.randomUUID();
 }
 
