@@ -206,6 +206,49 @@ export default function AppPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
+  useEffect(() => {
+    // PER-191: keep the run-selector's interest list aligned with the companion's
+    // ACTUAL interests. The adoption effect above only seeds an EMPTY browser; a
+    // browser that set up earlier keeps its saved list verbatim, so when the user
+    // later adds/removes/renames interests via the profile chat, `settings.interests`
+    // drifts. The brief (built by the companion) then shows more `## topic` sections
+    // than the run-selector offers chips for — the founder's "way more topics than
+    // what we can filter by." Reconcile topics here (preserving the user's name and
+    // any existing stable ids) so run-selector, brief sections, and the brief filter
+    // all derive from one source of truth. No-op when nothing changed.
+    if (!hydrated) return;
+    const stored = loadSettings();
+    if (!stored || stored.interests.length === 0) return; // empty → adoption handles it
+    let cancelled = false;
+    (async () => {
+      const topics = await fetchCompanionInterests();
+      if (cancelled || topics.length === 0) return;
+      const idByTopic = new Map(
+        stored.interests.map((i) => [i.topic.trim().toLowerCase(), i.id]),
+      );
+      const current = stored.interests.map((i) => i.topic);
+      const sameOrder =
+        current.length === topics.length &&
+        current.every((t, idx) => t === topics[idx]);
+      if (sameOrder) return; // already aligned — nothing to write
+      const reconciled: Settings = {
+        name: stored.name,
+        interests: topics.map((topic, i) => ({
+          id:
+            idByTopic.get(topic.trim().toLowerCase()) ??
+            `int_${i}_${topic.slice(0, 12)}`,
+          topic,
+        })),
+      };
+      saveSettings(reconciled);
+      if (!cancelled) setSettings(reconciled);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
   // Single brief path: the local Scout companion. The browser→Exa path was
   // removed (PER-109) — it fetched api.exa.ai directly and was CORS-broken.
   // The companion runs the local `claude` CLI over the loopback server, so

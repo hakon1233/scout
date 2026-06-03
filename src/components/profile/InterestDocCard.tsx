@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import type { RunStories } from "@/lib/run-history";
 
 // The "just changed" beat fired the instant a chat turn confirms a durable
 // write to this interest's doc. It is the PER-139 no-dead-control proof: the
@@ -20,6 +21,9 @@ export type DocCardModel = {
   updatedAt?: string;
   body?: string;
   beat: DocBeat;
+  // The stories this interest turned up in each cached run, newest first
+  // (PER-191 AC2). Empty when no run has surfaced anything for it yet.
+  runs: RunStories[];
 };
 
 function formatDocDate(iso?: string): string {
@@ -75,7 +79,7 @@ export function InterestDocCard({
   onFocusToggle: () => void;
 }) {
   const [showRaw, setShowRaw] = useState(false);
-  const { topic, hasDoc, updatedAt, body, beat } = model;
+  const { topic, hasDoc, updatedAt, body, beat, runs } = model;
 
   return (
     <article
@@ -138,8 +142,78 @@ export function InterestDocCard({
           draft one — that doc steers every research run.
         </p>
       )}
+
+      <RunHistory runs={runs} />
     </article>
   );
+}
+
+// "News found per run" (PER-191 AC2). Each cached run that surfaced stories for
+// this interest, newest first, with the same per-story date token the brief
+// uses. Renders nothing until at least one run has turned something up.
+function RunHistory({ runs }: { runs: RunStories[] }) {
+  if (runs.length === 0) return null;
+  return (
+    <section className="mt-3 border-t border-border-default pt-3">
+      <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.1em] text-muted">
+        News found per run
+      </h3>
+      <ol className="flex flex-col gap-3 list-none p-0">
+        {runs.map((run) => (
+          <li key={run.runId}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-secondary">
+                {formatRunDate(run.generatedAt)}
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
+                {run.articles.length} stor{run.articles.length === 1 ? "y" : "ies"}
+              </span>
+            </div>
+            <ul className="mt-1.5 flex flex-col gap-1.5 list-none p-0">
+              {run.articles.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex items-baseline gap-2 font-reading text-[13px] leading-snug"
+                >
+                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.04em] text-muted tabular-nums">
+                    {formatStoryDate(a.publishedAt)}
+                  </span>
+                  <a
+                    href={a.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-secondary underline underline-offset-2 hover:text-primary"
+                  >
+                    {a.title || a.url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+// Full run date (with year) — the run-level dateline.
+function formatRunDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+// Per-story publish date. Mirrors the brief's badge: a short date, or "undated"
+// when the article carried no parseable date (PER-176/177).
+function formatStoryDate(iso?: string): string {
+  if (!iso) return "undated";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "undated";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 // The dateline / state beat under the topic. When a turn just wrote this doc,
