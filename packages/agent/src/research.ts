@@ -27,11 +27,35 @@ const ALLOWED_TOOLS = "WebSearch,WebFetch";
 // rare EPERM/ENOSYS rather than fail the run.
 const SYNTH_CHILD_NICENESS = 10;
 
+// Hard ceiling on a SINGLE per-interest `claude` session (C2/PER-171 +
+// PER-181). Pre-C2 the run was ONE session; now it's one PER interest fired
+// sequentially, so a single hung session (model stall, network wedge, a
+// rate-limit retry that never returns) used to block the whole `for` loop in
+// runner.ts FOREVER — the brief stayed `pending` and, once the persisted
+// pending outlived the process, every later run returned `in_flight`. A bounded
+// timeout turns a hang into a normal per-topic failure: the child is killed, the
+// promise rejects, runner records that topic as a missing section, and the other
+// interests still get their brief. Default 4 min (a real research session is
+// ~1-3 min); override with SCOUT_SESSION_TIMEOUT_MS for slow boxes/tests.
+const DEFAULT_SESSION_TIMEOUT_MS = 4 * 60 * 1000;
+
+function sessionTimeoutMs(override?: number): number {
+  if (override !== undefined && Number.isFinite(override) && override > 0) {
+    return override;
+  }
+  const env = Number(process.env.SCOUT_SESSION_TIMEOUT_MS);
+  return Number.isFinite(env) && env > 0 ? env : DEFAULT_SESSION_TIMEOUT_MS;
+}
+
 export type ResearchOptions = {
   claudeBin?: string;
   // Spawn override for tests — lets us inject a stub `claude` without hitting
   // the real binary or network.
   spawnFn?: typeof spawn;
+  // Per-session hard timeout in ms (PER-181). Defaults to
+  // SCOUT_SESSION_TIMEOUT_MS env or 4 min. Set small in tests to assert the
+  // kill path without waiting.
+  timeoutMs?: number;
 };
 
 // One interest to research in its own session (C2/PER-171). `topic` is the
@@ -56,6 +80,7 @@ export async function researchAndSynthesize(
   const claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ?? "claude";
   const spawnImpl = opts.spawnFn ?? spawn;
   const prompt = buildResearchPrompt(interest);
+  const timeoutMs = sessionTimeoutMs(opts.timeoutMs);
 
   return await new Promise<string>((resolve, reject) => {
     const child = spawnImpl(
@@ -82,16 +107,51 @@ export async function researchAndSynthesize(
 
     let stdout = "";
     let stderr = "";
+    let settled = false;
+
+    // Bounded per-session lifetime (PER-181). On expiry, kill the child and
+    // reject so a hung session degrades to one missing topic instead of wedging
+    // the whole run. SIGTERM first, then SIGKILL shortly after in case `claude`
+    // ignores the term (its own subprocesses/tools can swallow it). The kill is
+    // best-effort: a stub child in tests may have no real signal semantics.
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try {
+        child.kill("SIGTERM");
+        setTimeout(() => {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            /* already gone */
+          }
+        }, 2000).unref?.();
+      } catch {
+        /* already gone */
+      }
+      reject(
+        new Error(
+          `claude session for "${interest.topic}" timed out after ${timeoutMs}ms`,
+        ),
+      );
+    }, timeoutMs);
+
     child.stdout!.on("data", (b: Buffer) => (stdout += b.toString()));
     child.stderr!.on("data", (b: Buffer) => (stderr += b.toString()));
-    child.on("error", (e) =>
+    child.on("error", (e) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       reject(
         new Error(
           `failed to spawn '${claudeBin}' — is the Claude Code CLI installed and on PATH? (${e.message})`,
         ),
-      ),
-    );
+      );
+    });
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       if (code !== 0)
         return reject(new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`));
       const text = stripBriefPreamble(stdout);

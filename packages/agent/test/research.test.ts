@@ -7,7 +7,10 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResearchPrompt } from "../src/research.js";
+import { EventEmitter } from "node:events";
+import { Writable } from "node:stream";
+import type { spawn } from "node:child_process";
+import { buildResearchPrompt, researchAndSynthesize } from "../src/research.js";
 import { SEARCH_SKILLS, STORY_DATE_RE } from "../src/search-skills.js";
 
 test("the built prompt contains the shared search-skills fragment VERBATIM", () => {
@@ -88,4 +91,81 @@ test("the prompt scopes the session to the single topic and its output section",
   assert.match(prompt, /## claude code/);
   // The empty-topic marker is still mandated so coverage stays honest.
   assert.match(prompt, /_no fresh news_/);
+});
+
+// A `claude` stub that NEVER closes — models a hung session (model stall /
+// network wedge / a rate-limit retry that never returns). Records whether the
+// timeout path killed it. This is the PER-181 regression: before the per-session
+// timeout, a single hung session blocked the whole sequential run loop forever
+// and the brief stayed `pending` indefinitely.
+function makeHangingSpawn() {
+  const state = { killed: false, killSignal: "" };
+  const spawnFn = ((_bin: string, _args: readonly string[], _opts: unknown) => {
+    const child = new EventEmitter() as EventEmitter & {
+      stdin: Writable;
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      pid?: number;
+      kill: (sig?: string) => boolean;
+    };
+    child.pid = undefined; // skip os.setPriority in the stub.
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = (sig?: string) => {
+      state.killed = true;
+      state.killSignal = sig ?? "";
+      return true;
+    };
+    child.stdin = new Writable({ write(_c, _e, cb) { cb(); } });
+    // Intentionally never emit "close" or "error": the session hangs.
+    return child;
+  }) as unknown as typeof spawn;
+  return { state, spawnFn };
+}
+
+test("PER-181: a hung claude session is killed and rejects after the timeout", async () => {
+  const { state, spawnFn } = makeHangingSpawn();
+  await assert.rejects(
+    researchAndSynthesize(
+      { topic: "ai", doc: "track ai" },
+      { spawnFn, timeoutMs: 50 },
+    ),
+    /timed out after 50ms/,
+    "a session that never closes must reject with a timeout, not hang forever",
+  );
+  assert.equal(state.killed, true, "the hung child must be killed on timeout");
+  assert.equal(state.killSignal, "SIGTERM", "kill should start with SIGTERM");
+});
+
+test("PER-181: a session that closes in time is NOT affected by the timeout", async () => {
+  // A fast, well-behaved stub still resolves normally — the timeout is a ceiling,
+  // not a delay.
+  const spawnFn = ((_bin: string, _args: readonly string[], _opts: unknown) => {
+    const child = new EventEmitter() as EventEmitter & {
+      stdin: Writable;
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      pid?: number;
+    };
+    child.pid = undefined;
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = new Writable({ write(_c, _e, cb) { cb(); } });
+    child.stdin.on("finish", () =>
+      setImmediate(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from("## ai\n- a thing.\n  [src](https://example.com/a)\n"),
+        );
+        child.emit("close", 0);
+      }),
+    );
+    return child;
+  }) as unknown as typeof spawn;
+
+  const md = await researchAndSynthesize(
+    { topic: "ai", doc: "track ai" },
+    { spawnFn, timeoutMs: 5000 },
+  );
+  assert.match(md, /## ai/);
 });

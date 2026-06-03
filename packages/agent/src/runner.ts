@@ -84,6 +84,32 @@ export function isRunInFlight(): boolean {
   return runInFlight;
 }
 
+// How long a persisted `pending` brief may survive WITHOUT this process actively
+// running it before we treat it as an abandoned/crashed run and reclaim the slot
+// (PER-181). Background: within a live process, `runInFlight === true` for the
+// entire lifetime of a real run, so a second request is correctly blocked. The
+// ONLY way to see a persisted `pending` while `runInFlight === false` is a
+// process that died between writing the pending slot and finishing synthesis
+// (launchd KeepAlive restart, sleep, OOM). Before this guard that bricked the
+// companion permanently: every later run saw the stale `pending` and returned
+// `in_flight` forever. We still require the pending to be older than this grace
+// window so we never stomp a slot a (hypothetical) sibling process just wrote.
+// The window must exceed a realistic full run: N interests × per-session timeout
+// (research.ts DEFAULT_SESSION_TIMEOUT_MS = 4 min). 30 min covers a slow ~7-topic
+// run while still reclaiming a genuinely dead run on the next attempt.
+const STALE_PENDING_MS = 30 * 60 * 1000;
+
+// A persisted pending brief is reclaimable iff we are NOT the process running it
+// (in-memory `runInFlight` is the authoritative "live run" signal) AND it has
+// outlived the grace window — i.e. it belongs to a process that died mid-run.
+function isStalePending(brief: Brief | undefined, now: number): boolean {
+  if (!brief || brief.status !== "pending") return false;
+  if (runInFlight) return false; // this process owns a live run — not stale.
+  const startedAt = Date.parse(brief.generated_at);
+  if (!Number.isFinite(startedAt)) return true; // unparseable → treat as dead.
+  return now - startedAt > STALE_PENDING_MS;
+}
+
 // Begin a synthesis run for `interests`. Persists the interests (so the
 // scheduler can reuse them) and a pending brief, then fires synthesis fire-and-
 // forget — callers poll GET /v0/briefs to see it land. Returns immediately with
@@ -97,7 +123,16 @@ export async function startRun(
 ): Promise<RunOutcome> {
   const state = await loadState(deps.stateFile);
 
-  if (runInFlight || state.last_brief?.status === "pending") {
+  // A live run in THIS process always blocks (in-memory guard, set synchronously
+  // before the pending slot is persisted — closes the loadState→saveState gap).
+  if (runInFlight) {
+    return { started: false, reason: "in_flight", briefId: state.last_brief?.id };
+  }
+  // A persisted `pending` blocks a new run too — UNLESS it's stale, meaning the
+  // process that wrote it died mid-run (PER-181). A stale pending is reclaimed:
+  // we fall through and overwrite it with a fresh run rather than wedging
+  // forever on a brief no live process will ever finish.
+  if (state.last_brief?.status === "pending" && !isStalePending(state.last_brief, Date.now())) {
     return { started: false, reason: "in_flight", briefId: state.last_brief?.id };
   }
   if (interests.length === 0) {
