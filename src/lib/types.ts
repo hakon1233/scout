@@ -22,6 +22,13 @@ export type Article = {
 export type TopicStatus = "covered" | "empty" | "missing";
 export type TopicCoverage = { topic: string; status: TopicStatus };
 
+// A snapshot of the intent doc that drove one topic's research, captured by the
+// companion at synthesis time (PER-187). Lets the brief show the reader exactly
+// what each section's research was based on — the doc text actually used for
+// that run. Mirrors the agent's TopicBasis. `topic` matches the `## <topic>`
+// heading in `markdown`.
+export type TopicBasis = { topic: string; doc: string };
+
 export type Brief = {
   id: string;
   generatedAt: string;
@@ -35,6 +42,10 @@ export type Brief = {
   // parsed headings against requested interests. Superseded by `topics`; kept
   // for briefs cached before PER-154. Derive from `topics` when available.
   failedTopics?: string[];
+  // Per-topic snapshot of the intent doc each section's research was based on
+  // (PER-187). Present on briefs produced since this change; absent on older
+  // cached briefs (the UI then simply shows no "based on" affordance).
+  bases?: TopicBasis[];
 };
 
 export type Settings = {

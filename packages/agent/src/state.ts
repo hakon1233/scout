@@ -13,6 +13,17 @@ import type { TopicCoverage } from "./coverage.js";
 export const CONFIG_DIR = path.join(os.homedir(), ".config", "scout");
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
 
+// A snapshot of the intent doc that drove ONE topic's research, captured at
+// synthesis time (PER-187). The whole point of the per-interest doc is that it
+// scopes WHAT the model looks for; this lets the brief show the reader the EXACT
+// doc text that produced a section — the actual bytes passed to
+// buildResearchPrompt for that run, not the doc as it stands now (which may have
+// since been edited). `topic` matches the `## <topic>` heading in summary_md.
+export type TopicBasis = {
+  topic: string;
+  doc: string;
+};
+
 export type Brief = {
   id: string;
   generated_at: string;
@@ -24,6 +35,11 @@ export type Brief = {
   // today" (empty) from "the model dropped this topic" (missing) instead of
   // reverse-parsing headings client-side with a brittle case-sensitive match.
   topics?: TopicCoverage[];
+  // Per-topic snapshot of the intent doc used for this run (PER-187). Captured
+  // from the SAME doc store the research engine reads (ensureInterestDoc), so
+  // "What this is based on" in the brief shows the real basis for each section.
+  // Absent on older cached briefs and on pending/failed briefs.
+  bases?: TopicBasis[];
 };
 
 export type { TopicCoverage } from "./coverage.js";

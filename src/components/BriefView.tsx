@@ -22,6 +22,19 @@ export function BriefView({ brief }: { brief: Brief }) {
     return m;
   }, [brief.articles]);
 
+  // Per-topic intent-doc snapshot (PER-187), keyed by the topic slug so it lines
+  // up with each `## <topic>` heading. This is the EXACT doc the companion fed
+  // the research session for that section, captured at run time — the founder's
+  // "what is this research based on?" answered inline, no trip to /app/profile.
+  const basisByTopicSlug = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const b of brief.bases ?? []) {
+      const doc = b.doc?.trim();
+      if (doc) m.set(slugify(b.topic), doc);
+    }
+    return m;
+  }, [brief.bases]);
+
   const citations = React.useMemo(() => buildCitations(brief), [brief]);
 
   const citationByUrl = React.useMemo(() => {
@@ -39,6 +52,18 @@ export function BriefView({ brief }: { brief: Brief }) {
     return 0;
   }
 
+  // Resolve the intent doc for a heading, mirroring sourceCountFor's exact-then-
+  // fuzzy match so a heading the model capitalized slightly differently still
+  // finds its basis. Returns null when no snapshot exists (older brief / no doc).
+  function basisFor(headingText: string): string | null {
+    const slug = slugify(headingText);
+    if (basisByTopicSlug.has(slug)) return basisByTopicSlug.get(slug)!;
+    for (const [k, v] of basisByTopicSlug) {
+      if (slug.includes(k) || k.includes(slug)) return v;
+    }
+    return null;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="scout-md">
@@ -49,18 +74,60 @@ export function BriefView({ brief }: { brief: Brief }) {
               const text = nodeToString(children);
               const id = slugify(text) || undefined;
               const count = sourceCountFor(text);
+              const basis = basisFor(text);
+              // A fragment, not a single <h2>: the "based on" disclosure is a
+              // sibling block under the heading (a <details> can't live inside an
+              // <h2>). react-markdown renders both as flow children of the
+              // container, so they stack correctly above the section's bullets.
               return (
-                <h2
-                  id={id}
-                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
-                >
-                  <span>{children}</span>
-                  {count > 0 && (
-                    <span className="inline-flex items-center rounded-pill border border-border-default bg-surface-muted px-2 py-0.5 text-caption uppercase tracking-wide text-muted">
-                      {count} source{count === 1 ? "" : "s"}
-                    </span>
+                <>
+                  <h2
+                    id={id}
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+                  >
+                    <span>{children}</span>
+                    {count > 0 && (
+                      <span className="inline-flex items-center rounded-pill border border-border-default bg-surface-muted px-2 py-0.5 text-caption uppercase tracking-wide text-muted">
+                        {count} source{count === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </h2>
+                  {basis && (
+                    <details className="mt-1 mb-2 rounded-md border border-border-default bg-surface-muted px-3 py-2">
+                      <summary className="cursor-pointer text-caption uppercase tracking-wide text-muted">
+                        What this is based on
+                      </summary>
+                      <p className="mt-2 text-caption text-muted">
+                        The interest note Scout used to research this topic. Edit
+                        it from “Edit interests”.
+                      </p>
+                      <div className="scout-md mt-2 text-body-sm">
+                        <ReactMarkdown
+                          components={{
+                            // Render the intent doc as plain, safe markdown —
+                            // links open in a new tab; no citation/Chip logic
+                            // (this is the reader's own note, not brief sources).
+                            a: ({ href, children: c }) =>
+                              href ? (
+                                <a
+                                  href={href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-primary underline"
+                                >
+                                  {c}
+                                </a>
+                              ) : (
+                                <>{c}</>
+                              ),
+                          }}
+                        >
+                          {basis}
+                        </ReactMarkdown>
+                      </div>
+                    </details>
                   )}
-                </h2>
+                </>
               );
             },
             code: ({ children, className }) => {
