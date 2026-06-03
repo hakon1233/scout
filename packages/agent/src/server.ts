@@ -15,6 +15,7 @@
 // callers must wait for the in-flight synth to land before kicking a new one.
 
 import http from "node:http";
+import path from "node:path";
 import { spawn } from "node:child_process";
 import { URL } from "node:url";
 import {
@@ -30,7 +31,7 @@ import {
   type ScheduleConfig,
   type State,
 } from "./state.js";
-import { interestDocMeta, INTERESTS_DIR } from "./docs.js";
+import { interestDocMeta } from "./docs.js";
 import { startRun } from "./runner.js";
 import { startChatTurn } from "./chat.js";
 import { isServiceInstalled } from "./service.js";
@@ -51,9 +52,10 @@ export type ServerDeps = {
   // Invoked after PUT /v0/schedule persists a config change, so the running
   // scheduler can re-arm its timer immediately (PER-151). No-op when absent.
   onScheduleChanged?: () => void | Promise<void>;
-  // Per-interest intent-doc directory; defaults to docs.ts INTERESTS_DIR
-  // (~/.config/scout/interests). Injected for tests so GET /v0/interests can be
-  // exercised against a hermetic doc store instead of the real home dir.
+  // Per-interest intent-doc directory; defaults to `interests/` beside the state
+  // file (in production CONFIG_DIR/interests === docs.ts INTERESTS_DIR). Injected
+  // for tests so GET /v0/interests and the synthesis doc-backfill run against a
+  // hermetic doc store instead of the real home dir.
   interestsDir?: string;
   // The chat turn is async (kick + poll like briefs); tests wait on this to know
   // when a turn has finished applying its changes. (PER-172)
@@ -280,7 +282,13 @@ export function createServer(deps: ServerDeps = {}): http.Server {
   const claudeBin = deps.claudeBin;
   const spawnFn = deps.spawnFn;
   const webroot = deps.webroot;
-  const interestsDir = deps.interestsDir ?? INTERESTS_DIR;
+  // Default the doc dir to `interests/` beside the state file so a tmp-stateFile
+  // test automatically gets a tmp doc dir (the lazy backfill in startRun's
+  // synthesis never touches the real ~/.config/scout). In production stateFile
+  // is CONFIG_DIR/state.json, so this resolves to CONFIG_DIR/interests ===
+  // docs.ts INTERESTS_DIR — exact parity. (C2/PER-171)
+  const interestsDir =
+    deps.interestsDir ?? path.join(path.dirname(stateFile), "interests");
 
   async function authed(req: http.IncomingMessage): Promise<State | null> {
     const token = bearer(req);
@@ -497,7 +505,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           // persists the interests so the scheduler can reuse them.
           const outcome = await startRun(
             interests,
-            { stateFile, claudeBin, spawnFn, onSynthesisDone: deps.onSynthesisDone },
+            { stateFile, claudeBin, spawnFn, interestsDir, onSynthesisDone: deps.onSynthesisDone },
             "on_demand",
             { retryTopics },
           );

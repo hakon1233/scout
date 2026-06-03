@@ -29,13 +29,16 @@ import {
 } from "../src/state.js";
 import { startServer } from "../src/server.js";
 
-// A claude stub whose output depends on which topics are in the prompt. On the
-// full run (all four topics) it emits sections for every topic EXCEPT "openai"
-// (the drop that reproduces the bug). On a focused retry whose prompt contains
-// only "openai", it emits the OpenAI section. Headings are deliberately
-// title-cased to also prove normalized matching.
+// A claude stub for the per-interest world (C2/PER-171): each session researches
+// ONE topic, so each prompt names a `single topic: "<topic>"`. The stub reads
+// that topic and emits exactly that topic's section — EXCEPT for "openai", which
+// it DROPS the first time it's asked (the bug: a topic comes back missing) and
+// supplies on the second ask (the focused retry recovering it). Headings are
+// deliberately title-cased to also prove normalized matching survives the
+// extract/assemble re-labelling.
 function makeTopicAwareSpawn() {
   const calls: Array<{ stdin: string }> = [];
+  let openaiSeen = 0;
 
   const sectionFor = (topic: string): string => {
     const titled = topic.replace(/\b\w/g, (c) => c.toUpperCase());
@@ -59,19 +62,15 @@ function makeTopicAwareSpawn() {
 
     const finish = () => {
       record.stdin = stdinData;
-      const wantsOpenAI = /(^|\n)-\s*openai\b/i.test(stdinData);
-      const wantsStartup = /(^|\n)-\s*startup news\b/i.test(stdinData);
-      let md = "# Your brief\n\n";
-      // The full run lists all four topics (incl. startup news); the focused
-      // retry lists only "openai". On the FULL run we intentionally DROP openai
-      // to reproduce the bug; the retry then supplies it.
-      if (wantsStartup) {
-        md += sectionFor("startup news");
-        md += "\n" + sectionFor("ai");
-        md += "\n" + sectionFor("anthropic");
-        // NOTE: "openai" is intentionally DROPPED on the full run.
-      } else if (wantsOpenAI) {
-        md += sectionFor("openai");
+      const topic = /single topic: "([^"]+)"/.exec(stdinData)?.[1] ?? "";
+      let md = "";
+      if (topic === "openai") {
+        openaiSeen += 1;
+        // First ask (full run) → drop it: emit nothing so the session yields no
+        // section and the topic lands as "missing". Second ask (retry) → supply it.
+        md = openaiSeen === 1 ? "" : `# Your brief\n\n${sectionFor("openai")}`;
+      } else if (topic) {
+        md = `# Your brief\n\n${sectionFor(topic)}`;
       }
       child.stdout.emit("data", Buffer.from(md));
       child.emit("close", 0);
@@ -167,12 +166,16 @@ test("retry_topics re-researches only the dropped topic and merges it in (PER-15
     assert.match(mergedMd, /^##\s+Startup News/im);
     assert.match(mergedMd, /^##\s+Anthropic/im);
 
-    // The retry prompt carried ONLY openai — proving we didn't re-spend the
-    // whole brief. (The first prompt listed all four topics.)
-    assert.equal(calls.length, 2);
-    assert.match(calls[0].stdin, /startup news/);
-    assert.match(calls[1].stdin, /openai/);
-    assert.doesNotMatch(calls[1].stdin, /- anthropic/i);
+    // Per-interest sessions: the full run spawned one per topic (4), the focused
+    // retry spawned exactly one more — for openai ONLY — proving we didn't
+    // re-spend the whole brief. The first four prompts cover the four topics in
+    // order; the fifth (retry) is openai and carries no other topic.
+    assert.equal(calls.length, 5);
+    assert.match(calls[0].stdin, /single topic: "startup news"/);
+    assert.match(calls[3].stdin, /single topic: "openai"/);
+    const retryPrompt = calls[4].stdin;
+    assert.match(retryPrompt, /single topic: "openai"/);
+    assert.doesNotMatch(retryPrompt, /single topic: "anthropic"/);
     assert.notEqual(baseMd, mergedMd);
   } finally {
     server.close();

@@ -244,23 +244,25 @@ test("the pairing token is never forwarded to claude or logged, and no API key i
     const brief = await doneP;
     assert.equal(brief.status, "ready", "synthesis succeeds with no API key configured");
 
-    // Exactly one claude child was spawned.
-    assert.equal(recorder.calls.length, 1);
-    const call = recorder.calls[0];
+    // Per-interest sessions (C2/PER-171): one claude child per topic.
+    assert.equal(recorder.calls.length, 2);
 
-    // The token must appear in NONE of: argv, spawn options (incl. any env),
-    // or the prompt piped to stdin.
-    const argvBlob = JSON.stringify(call.args);
-    const optsBlob = JSON.stringify(call.options ?? {});
-    assert.ok(!argvBlob.includes(token), "token leaked into claude argv");
-    assert.ok(!optsBlob.includes(token), "token leaked into claude spawn options/env");
-    assert.ok(!call.stdin.includes(token), "token leaked into the claude prompt (stdin)");
+    // The token must appear in NONE of: argv, spawn options (incl. any env), or
+    // the prompt piped to stdin — for EVERY spawned child, not just the first.
+    for (const call of recorder.calls) {
+      const argvBlob = JSON.stringify(call.args);
+      const optsBlob = JSON.stringify(call.options ?? {});
+      assert.ok(!argvBlob.includes(token), "token leaked into claude argv");
+      assert.ok(!optsBlob.includes(token), "token leaked into claude spawn options/env");
+      assert.ok(!call.stdin.includes(token), "token leaked into the claude prompt (stdin)");
+    }
 
-    // The prompt is built from interests only — it carries the topics, never
-    // the secret. Sanity-check the topics are there so we know we inspected a
-    // real prompt, not an empty one.
-    assert.match(call.stdin, /ai safety/);
-    assert.match(call.stdin, /markets/);
+    // Each prompt is built from ONE interest's topic + doc, never the secret.
+    // Sanity-check both topics show up (one per session) so we know we inspected
+    // real prompts, not empty ones.
+    const prompts = recorder.calls.map((c) => c.stdin);
+    assert.ok(prompts.some((p) => /ai safety/.test(p)), "a session must cover 'ai safety'");
+    assert.ok(prompts.some((p) => /markets/.test(p)), "a session must cover 'markets'");
 
     // Nothing logged during the whole exchange may contain the token.
     const allLogs = logged.join("\n");

@@ -83,6 +83,52 @@ export function computeCoverage(
   });
 }
 
+// Extract ONE topic's section from a single per-interest research session's
+// output and re-emit it under the CANONICAL `## <topic>` heading (C2/PER-171).
+//
+// Per-interest sessions each research one topic and are asked for exactly one
+// `## <topic>` section, but a headless `claude` run is free to title-case the
+// heading, wrap it in a `# Your brief`, or (a generic test stub) emit a heading
+// that doesn't match the requested topic at all. We don't trust the model's
+// heading: we take the FIRST section's body and re-label it with the topic we
+// actually asked for, so the assembled brief is coherent and coverage matching
+// is exact. Returns null when the session produced no usable section body — the
+// assembler then omits the topic entirely, which computeCoverage reports as
+// "missing" (and PER-154's focused retry can recover).
+export function extractTopicSection(
+  sessionMarkdown: string,
+  topic: string,
+): string | null {
+  const { pre, blocks } = sectionBlocks(sessionMarkdown);
+  // Prefer the first `## ` block's body; fall back to the preamble text when the
+  // session emitted bare prose with no heading at all.
+  let body: string;
+  if (blocks.length > 0) {
+    body = blocks[0].raw.replace(/^##\s+.+$/m, "").trim();
+  } else {
+    body = pre.trim();
+  }
+  if (!body) return null;
+  return `## ${topic}\n${body}\n`;
+}
+
+// Assemble per-interest sections into one brief (C2/PER-171). Each entry is a
+// requested interest's topic plus the section extractTopicSection produced for
+// it (or null when its session yielded nothing usable). Order follows the
+// requested-interest order. Topics with a null section are OMITTED — the brief
+// stays honest (computeCoverage reports them "missing") rather than fabricating
+// an empty section. The `# Your brief` H1 the renderer expects is prepended once.
+export function assembleBrief(
+  sections: Array<{ topic: string; section: string | null }>,
+): string {
+  const body = sections
+    .map((s) => s.section)
+    .filter((s): s is string => s !== null)
+    .map((s) => (s.endsWith("\n") ? s : s + "\n"))
+    .join("\n");
+  return `# Your brief\n\n${body}`;
+}
+
 // Merge freshly-researched sections for `retriedTopics` into a prior brief,
 // replacing those topics' sections in place (and appending any that were
 // missing before). Sections the retry didn't touch are preserved exactly. The
