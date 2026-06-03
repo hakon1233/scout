@@ -22,8 +22,9 @@ import {
   mockDocMeta,
   SAMPLE_INTERESTS,
 } from "@/lib/interest-docs";
-import { loadSettings } from "@/lib/storage";
-import type { Interest } from "@/lib/types";
+import { loadLastBrief, loadPrevBrief, loadSettings } from "@/lib/storage";
+import { orderedRuns, runHistoryForTopic } from "@/lib/run-history";
+import type { Brief, Interest } from "@/lib/types";
 
 // Merge the locally-stored interests (which carry stable ids) with whatever the
 // companion reports it's actually running (topic-only — see PER-157 adoption).
@@ -53,6 +54,9 @@ export default function ProfilePage() {
   const [name, setName] = useState("");
   const [token, setToken] = useState("");
   const [interests, setInterests] = useState<Interest[]>([]);
+  // The brief editions cached in the browser (latest + previous), newest run
+  // first — the source for each card's "news found per run" (PER-191 AC2).
+  const [runs, setRuns] = useState<Brief[]>([]);
   const [docMeta, setDocMeta] = useState<Record<string, InterestDocMeta>>({});
   // Doc bodies known THIS session — only what a chat turn's `changes[]` actually
   // returned. There is no GET-doc-body route by design; we render confirmed
@@ -85,6 +89,7 @@ export default function ProfilePage() {
     /* eslint-disable react-hooks/set-state-in-effect */
     setName(stored?.name?.trim() ?? "");
     setInterests(localInterests);
+    setRuns(orderedRuns([loadLastBrief(), loadPrevBrief()]));
     setMockSeed(seed);
     setMessages([
       {
@@ -267,9 +272,12 @@ export default function ProfilePage() {
         updatedAt: m.updatedAt,
         body,
         beat: beats[key] ?? null,
+        // Per-run stories for this interest (newest first). Suppressed under the
+        // mock seed, which has no real run data.
+        runs: mockSeed !== null ? [] : runHistoryForTopic(runs, i.topic),
       };
     });
-  }, [interests, docMeta, docBodies, beats, mockSeed]);
+  }, [interests, docMeta, docBodies, beats, mockSeed, runs]);
 
   const docCount = cards.filter((c) => c.hasDoc).length;
   const focusTopic = focusKey

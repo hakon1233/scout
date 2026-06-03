@@ -13,6 +13,30 @@ type CitationEntry = {
 };
 
 export function BriefView({ brief }: { brief: Brief }) {
+  // Derive the filter chips from the brief's OWN `## ` section headings. This is
+  // the single source of truth that guarantees every section the reader can see
+  // has a matching filter and vice-versa (PER-191) — no separate, drift-prone
+  // interest list. Selecting a chip narrows both the rendered markdown and the
+  // sources list to exactly that section.
+  const sections = React.useMemo(() => parseSections(brief.markdown), [brief.markdown]);
+  const [activeSlug, setActiveSlug] = React.useState<string | null>(null);
+
+  // Reset the filter whenever a new brief loads so a stale selection from the
+  // previous brief never hides everything.
+  React.useEffect(() => {
+    setActiveSlug(null);
+  }, [brief.id]);
+
+  // Keep the active selection valid if the section set changes.
+  const active =
+    activeSlug && sections.some((s) => s.slug === activeSlug) ? activeSlug : null;
+
+  const visibleMarkdown = React.useMemo(() => {
+    if (!active) return brief.markdown;
+    const sec = sections.find((s) => s.slug === active);
+    return sec ? sec.body : brief.markdown;
+  }, [active, sections, brief.markdown]);
+
   const countsByTopicSlug = React.useMemo(() => {
     const m = new Map<string, number>();
     for (const a of brief.articles) {
@@ -43,11 +67,20 @@ export function BriefView({ brief }: { brief: Brief }) {
     return m;
   }, [citations]);
 
+  // When a section is selected, the sources panel narrows to that section's
+  // articles (matched by interest slug, exact-then-fuzzy like sourceCountFor) so
+  // the filter is honest end-to-end. Citation indices stay as built from the
+  // full brief so a chip's [n] is stable whether or not a filter is applied.
+  const visibleCitations = React.useMemo(() => {
+    if (!active) return citations;
+    return citations.filter((c) => slugMatches(active, slugify(c.article.interest)));
+  }, [active, citations]);
+
   function sourceCountFor(headingText: string): number {
     const slug = slugify(headingText);
     if (countsByTopicSlug.has(slug)) return countsByTopicSlug.get(slug)!;
     for (const [k, v] of countsByTopicSlug) {
-      if (slug.includes(k) || k.includes(slug)) return v;
+      if (slugMatches(slug, k)) return v;
     }
     return 0;
   }
@@ -59,13 +92,40 @@ export function BriefView({ brief }: { brief: Brief }) {
     const slug = slugify(headingText);
     if (basisByTopicSlug.has(slug)) return basisByTopicSlug.get(slug)!;
     for (const [k, v] of basisByTopicSlug) {
-      if (slug.includes(k) || k.includes(slug)) return v;
+      if (slugMatches(slug, k)) return v;
     }
     return null;
   }
 
   return (
     <div className="flex flex-col gap-6">
+      {sections.length > 1 && (
+        <div
+          className="flex flex-wrap gap-2"
+          role="group"
+          aria-label="Filter brief by topic"
+        >
+          <button
+            type="button"
+            onClick={() => setActiveSlug(null)}
+            aria-pressed={!active}
+            className={filterPill(!active)}
+          >
+            All topics
+          </button>
+          {sections.map((s) => (
+            <button
+              key={s.slug}
+              type="button"
+              onClick={() => setActiveSlug(s.slug)}
+              aria-pressed={active === s.slug}
+              className={filterPill(active === s.slug)}
+            >
+              <span className="max-w-[16ch] truncate">{s.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="scout-md">
         <ReactMarkdown
           components={{
@@ -171,7 +231,7 @@ export function BriefView({ brief }: { brief: Brief }) {
             },
           }}
         >
-          {brief.markdown}
+          {visibleMarkdown}
         </ReactMarkdown>
       </div>
 
@@ -180,10 +240,10 @@ export function BriefView({ brief }: { brief: Brief }) {
         className="rounded-md border border-border-default bg-surface-muted p-3"
       >
         <summary className="cursor-pointer text-caption uppercase tracking-wide text-muted">
-          Sources ({brief.articles.length})
+          Sources ({visibleCitations.length})
         </summary>
         <ol className="mt-3 flex flex-col gap-2 list-none p-0">
-          {citations.map((c) => (
+          {visibleCitations.map((c) => (
             <li
               key={c.article.id}
               className="flex items-baseline gap-2 text-body-sm text-secondary"
@@ -287,6 +347,58 @@ function slugify(s: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+// Exact-then-fuzzy slug equality, shared by the section filter and the per-topic
+// count/basis lookups so a heading the model capitalized or pluralized slightly
+// differently still lines up with its articles.
+function slugMatches(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a.includes(b) || b.includes(a);
+}
+
+// Split a brief into its `## ` sections in document order. `body` is the full
+// markdown for that section (heading line included) so rendering a single
+// section reuses the exact same ReactMarkdown pipeline. Content before the first
+// `## ` (a brief preamble, if any) is intentionally not a filterable chip.
+function parseSections(markdown: string): { slug: string; label: string; body: string }[] {
+  const lines = markdown.split("\n");
+  const sections: { slug: string; label: string; body: string }[] = [];
+  let current: { slug: string; label: string; body: string[] } | null = null;
+  const headingRe = /^##\s+(?!#)(.+?)\s*$/;
+  for (const line of lines) {
+    const m = headingRe.exec(line);
+    if (m) {
+      if (current) sections.push({ ...current, body: current.body.join("\n") });
+      const label = m[1].trim();
+      current = { slug: slugify(label), label, body: [line] };
+    } else if (current) {
+      current.body.push(line);
+    }
+  }
+  if (current) sections.push({ ...current, body: current.body.join("\n") });
+
+  // De-dupe by slug (a brief shouldn't repeat a topic, but be defensive so chips
+  // never collide on React keys).
+  const seen = new Set<string>();
+  return sections.filter((s) => {
+    if (!s.slug || seen.has(s.slug)) return false;
+    seen.add(s.slug);
+    return true;
+  });
+}
+
+// Mirrors RunScopeSelector's pill styling so the brief filter reads as the same
+// control family (same token set, focus ring, min tap target).
+function filterPill(active: boolean): string {
+  return [
+    "inline-flex min-h-[44px] items-center rounded-pill border px-3 py-1.5 text-caption transition",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+    active
+      ? "border-border-strong bg-surface-strong font-medium text-primary"
+      : "border-border-default bg-surface text-muted hover:bg-surface-muted hover:text-secondary",
+  ].join(" ");
 }
 
 function nodeToString(node: React.ReactNode): string {
