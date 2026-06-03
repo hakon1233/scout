@@ -109,7 +109,57 @@ export function extractTopicSection(
     body = pre.trim();
   }
   if (!body) return null;
-  return `## ${topic}\n${body}\n`;
+  // C7 (PER-186): the model is *asked* to emit stories newest-first but only
+  // does so intermittently. Enforce the order deterministically at the single
+  // per-topic emit point so every assembled section is strictly newest-first.
+  return `## ${topic}\n${sortSectionStoriesNewestFirst(body)}\n`;
+}
+
+// A story bullet leads with its publish date as an ISO date (or `undated`) in
+// backticks — the date-first contract from search-skills.ts. The bullet may be
+// `-` or `*` and indented; continuation lines (citation, wrapped summary) follow
+// until the next bullet.
+const STORY_BULLET_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`/;
+
+// Sort one section body's story bullets strictly newest-first by their leading
+// ISO date (C7/PER-186). Each story — its bullet line plus any continuation
+// lines up to the next bullet — moves as one block, so the citation stays with
+// its story. Lines BEFORE the first story bullet (an intro line, the
+// `_Nothing notable…_` / `_no fresh news_` note) are preserved verbatim at the
+// top. `undated` stories sink to the bottom; stories with equal dates keep their
+// original relative order (stable). Returns the body byte-identical when there's
+// nothing to reorder, so an already-ordered section is untouched.
+export function sortSectionStoriesNewestFirst(body: string): string {
+  const lines = body.split("\n");
+  const head: string[] = [];
+  type Block = { date: string | null; lines: string[]; order: number };
+  const blocks: Block[] = [];
+  let cur: Block | null = null;
+  for (const line of lines) {
+    const m = STORY_BULLET_RE.exec(line);
+    if (m) {
+      cur = {
+        date: m[1] === "undated" ? null : m[1],
+        lines: [line],
+        order: blocks.length,
+      };
+      blocks.push(cur);
+    } else if (cur) {
+      cur.lines.push(line);
+    } else {
+      head.push(line);
+    }
+  }
+  if (blocks.length < 2) return body; // nothing to reorder
+  const sorted = [...blocks].sort((a, b) => {
+    if (a.date === b.date) return a.order - b.order; // stable tiebreak
+    if (a.date === null) return 1; // undated sinks
+    if (b.date === null) return -1;
+    return a.date < b.date ? 1 : -1; // ISO dates: lexical == chronological, desc
+  });
+  // Already in order ⇒ leave the body byte-identical.
+  if (sorted.every((b, i) => b.order === i)) return body;
+  return [...head, ...sorted.flatMap((b) => b.lines)].join("\n");
 }
 
 // Assemble per-interest sections into one brief (C2/PER-171). Each entry is a

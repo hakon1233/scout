@@ -45,9 +45,15 @@ export function BriefLayout({
 
   const hasPrevious = Boolean(onViewPrevious && prevDate);
 
+  // No founder name set ⇒ fall back to "Your brief" rather than rendering the
+  // empty-possessive "'s brief" (PER-186 defect 2). The possessive only reads
+  // right when there's actually a name to own it.
+  const trimmedName = name.trim();
+  const ownerLabel = trimmedName ? `${trimmedName}'s brief` : "Your brief";
+
   return (
     <article
-      aria-label={`${name}'s brief — ${dateLabel}`}
+      aria-label={`${ownerLabel} — ${dateLabel}`}
       className="flex flex-col gap-6"
     >
       <header className="measure-prose flex flex-col gap-1">
@@ -65,7 +71,7 @@ export function BriefLayout({
           </Button>
         )}
         <h1 className="text-title-1 text-primary">
-          {name}&apos;s brief — {dateLabel}
+          {ownerLabel} — {dateLabel}
         </h1>
         {hasPrevious && (
           <p className="text-caption text-muted">
