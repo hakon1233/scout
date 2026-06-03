@@ -14,6 +14,8 @@ import {
   normalizeTopic,
   computeCoverage,
   mergeBriefSections,
+  extractTopicSection,
+  sortSectionStoriesNewestFirst,
 } from "../src/coverage.js";
 
 test("normalizeTopic collapses casing, punctuation and whitespace", () => {
@@ -159,4 +161,67 @@ test("mergeBriefSections appends a topic that was entirely missing from the base
     { topic: "ai", status: "covered" },
     { topic: "codex", status: "covered" },
   ]);
+});
+
+// --- C7/PER-186: within-section strict newest-first ordering ---------------
+
+test("sortSectionStoriesNewestFirst reorders out-of-order story bullets, citation in tow", () => {
+  // The exact failure shape from the PER-186 evidence: newest on top, but the
+  // 2nd/3rd bullets out of order (05-27 before 05-29).
+  const body = [
+    "- `2026-06-02` — newest.",
+    "  [a.com — Newest](https://a.com/1)",
+    "- `2026-05-27` — older.",
+    "  [a.com — Older](https://a.com/2)",
+    "- `2026-05-29` — middle.",
+    "  [a.com — Middle](https://a.com/3)",
+  ].join("\n");
+  const sorted = sortSectionStoriesNewestFirst(body);
+  const dates = [...sorted.matchAll(/`(\d{4}-\d{2}-\d{2})`/g)].map((m) => m[1]);
+  assert.deepEqual(dates, ["2026-06-02", "2026-05-29", "2026-05-27"]);
+  // Each citation stays with its own bullet after the move.
+  assert.match(sorted, /`2026-05-29` — middle\.\n {2}\[a\.com — Middle\]/);
+});
+
+test("sortSectionStoriesNewestFirst leaves an already-ordered body byte-identical", () => {
+  const body = [
+    "- `2026-06-02` — a.",
+    "  [a.com — A](https://a.com/1)",
+    "- `2026-05-30` — b.",
+    "  [a.com — B](https://a.com/2)",
+  ].join("\n");
+  assert.equal(sortSectionStoriesNewestFirst(body), body);
+});
+
+test("sortSectionStoriesNewestFirst sinks undated stories and preserves the intro note", () => {
+  const body = [
+    "_Nothing notable in the last week — showing older items._",
+    "- `undated` — no date found.",
+    "  [a.com — U](https://a.com/u)",
+    "- `2026-05-10` — dated.",
+    "  [a.com — D](https://a.com/d)",
+  ].join("\n");
+  const sorted = sortSectionStoriesNewestFirst(body);
+  // Intro note stays on top, ahead of every bullet.
+  assert.match(sorted, /^_Nothing notable/);
+  const dates = [...sorted.matchAll(/`(\d{4}-\d{2}-\d{2}|undated)`/g)].map(
+    (m) => m[1],
+  );
+  assert.deepEqual(dates, ["2026-05-10", "undated"]);
+});
+
+test("extractTopicSection emits the section already sorted newest-first", () => {
+  const sessionMd = [
+    "## startup news",
+    "- `2026-06-02` — newest.",
+    "  [a.com — N](https://a.com/1)",
+    "- `2026-05-27` — older.",
+    "  [a.com — O](https://a.com/2)",
+    "- `2026-05-29` — middle.",
+    "  [a.com — M](https://a.com/3)",
+  ].join("\n");
+  const section = extractTopicSection(sessionMd, "startup news");
+  assert.ok(section);
+  const dates = [...section.matchAll(/`(\d{4}-\d{2}-\d{2})`/g)].map((m) => m[1]);
+  assert.deepEqual(dates, ["2026-06-02", "2026-05-29", "2026-05-27"]);
 });
