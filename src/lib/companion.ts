@@ -160,10 +160,20 @@ export async function postInterests(
   // Focused-retry (PER-154): when set, the companion re-researches ONLY these
   // topics and merges them into the prior brief instead of regenerating it all.
   retryTopics?: string[],
+  // Run-selector (C6/PER-173): when set, research ONLY this subset and produce a
+  // fresh brief over just those topics. `interests` still carries the FULL list
+  // so the companion's saved set (the scheduler's source of truth) is unchanged.
+  selectedTopics?: string[],
 ): Promise<{ brief_id: string; status: string }> {
   const base = await requireBase();
-  const body: { interests: string[]; retry_topics?: string[] } = { interests };
+  const body: {
+    interests: string[];
+    retry_topics?: string[];
+    selected_topics?: string[];
+  } = { interests };
   if (retryTopics && retryTopics.length > 0) body.retry_topics = retryTopics;
+  if (selectedTopics && selectedTopics.length > 0)
+    body.selected_topics = selectedTopics;
   const res = await fetch(`${base}/v0/interests`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
@@ -379,6 +389,9 @@ export async function refreshBriefViaCompanion(
     // Focused-retry (PER-154): re-research only these topics, merge into the
     // prior brief. Must be a subset of `interests`.
     retryTopics?: string[];
+    // Run-selector (C6/PER-173): research only this subset and produce a fresh
+    // brief over just those topics. Must be a subset of `interests`.
+    selectedTopics?: string[];
   } = {},
 ): Promise<AppBrief> {
   const since = opts.sinceTs ?? new Date(0).toISOString();
@@ -389,7 +402,7 @@ export async function refreshBriefViaCompanion(
   // still in flight, the user's next click hit the single-flight 409 and errored
   // again — the "it doesn't work" go-around (PER-157). Give the run real room.
   const deadline = Date.now() + (opts.timeoutMs ?? 300_000);
-  await postInterests(interests, token, opts.retryTopics);
+  await postInterests(interests, token, opts.retryTopics, opts.selectedTopics);
   while (Date.now() < deadline) {
     if (opts.signal?.aborted) throw new Error("aborted");
     await new Promise((r) => setTimeout(r, 2000));

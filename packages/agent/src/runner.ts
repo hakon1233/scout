@@ -59,6 +59,16 @@ export type RunOptions = {
   // recomputing coverage over the full interest list. Must be a subset of
   // `interests`. When absent/empty, a normal full-brief run happens.
   retryTopics?: string[];
+  // Run-selector path (C6/PER-173): research ONLY this subset of `interests`
+  // and produce a FRESH brief containing just those sections — distinct from
+  // `retryTopics`, which merges a subset into a prior brief. Coverage is then
+  // computed over the SELECTED set (not the full list), so a one-interest run
+  // yields a brief + coverage covering only that topic. The FULL interest list
+  // is still persisted to state (the scheduler's source of truth) — a partial
+  // run never shrinks the saved set. Must be a subset of `interests`; ignored
+  // when `retryTopics` is set (a retry already carries its own subset) or when
+  // it covers the whole list (that's just a normal full run).
+  selectedTopics?: string[];
 };
 
 export type RunOutcome =
@@ -111,9 +121,31 @@ export async function startRun(
     return { started: false, reason: "no_base_brief" };
   }
   const retrySet = new Set(retryTopics);
+
+  // Run-selector subset (C6/PER-173). Only honored when this isn't a retry and
+  // the selection is a STRICT subset of the interest list; a selection equal to
+  // (or a superset of) the full list collapses to a normal full run. We narrow
+  // to topics actually in the current list so a stale/foreign topic can't sneak
+  // an empty section into the brief.
+  const selectedTopics = (opts.selectedTopics ?? []).filter((t) =>
+    topics.includes(t),
+  );
+  const isSelected =
+    !isRetry &&
+    selectedTopics.length > 0 &&
+    selectedTopics.length < topics.length;
+  const selectedSet = new Set(selectedTopics);
+
   const researchInterests = isRetry
     ? interests.filter((i) => retrySet.has(i.topic))
-    : interests;
+    : isSelected
+      ? interests.filter((i) => selectedSet.has(i.topic))
+      : interests;
+
+  // Which interests the brief reports coverage over. A selected run shows only
+  // the chosen topics (so an unselected interest isn't dishonestly flagged
+  // "missing"); a retry and a full run both cover the whole list.
+  const coverageInterests = isSelected ? researchInterests : interests;
 
   runInFlight = true;
   const briefId = newBriefId();
@@ -126,8 +158,9 @@ export async function startRun(
   // something to research even with no browser attached.
   await saveState({ ...state, interests, last_brief: pending }, deps.stateFile);
 
-  void runSynthesis(interests, briefId, deps, source, {
+  void runSynthesis(briefId, deps, source, {
     researchInterests,
+    coverageInterests,
     baseMarkdown: isRetry ? baseMarkdown : undefined,
     retryTopics: isRetry ? retryTopics : undefined,
   });
@@ -136,8 +169,13 @@ export async function startRun(
 
 type SynthesisPlan = {
   // The interests to actually research this run, each in its own per-interest
-  // session carrying its intent doc (subset on retry, all else). (C2/PER-171)
+  // session carrying its intent doc (subset on retry/selected, all else).
+  // (C2/PER-171, C6/PER-173)
   researchInterests: Interest[];
+  // The interests the assembled brief reports coverage over. The full list for a
+  // full run or retry; the selected subset for a run-selector subset run
+  // (C6/PER-173) so coverage is honest about exactly what was asked to run.
+  coverageInterests: Interest[];
   // On retry: the prior brief markdown to merge fresh sections into.
   baseMarkdown?: string;
   // On retry: which topics the fresh markdown should overwrite in the base.
@@ -145,7 +183,6 @@ type SynthesisPlan = {
 };
 
 async function runSynthesis(
-  interests: Interest[],
   briefId: string,
   deps: RunDeps,
   source: RunSource,
@@ -202,7 +239,7 @@ async function runSynthesis(
       generated_at: new Date().toISOString(),
       status: "ready",
       summary_md: summary,
-      topics: computeCoverage(interestTopics(interests), summary),
+      topics: computeCoverage(interestTopics(plan.coverageInterests), summary),
     };
   } catch (err) {
     brief = {
