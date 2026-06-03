@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 
-// Shared top nav for every `/app/*` route (PER-160): the "← Scout" home link on
-// the left and a persistent profile icon on the right. Clicking the icon opens
-// the profile/edit view where the user manages their interests.
+// Shared top nav for every `/app/*` route: the "← Scout" home link on the left
+// and a persistent profile icon on the right. Clicking the icon takes the user
+// to `/app/profile` — the chat-managed interest-docs view where they talk to
+// Scout to manage what it tracks (PER-183).
 //
-// On the main app page we have the editor in local state, so the host passes
-// `onOpenProfile` and we render a <button>. On other `/app/*` routes (e.g.
-// /app/connect) there's no in-page editor, so we omit the handler and render a
-// <Link> to `/app/?profile=1` — the app page reads that query param on load and
-// opens the editor. Either way the icon looks and sits in the same place, so it
-// reads as one persistent affordance across routes.
+// This was the founder's very first ask ("profile icon top-right so we can edit
+// stuff"). It used to open a local in-page chip editor (PER-160), which left
+// the real `/app/profile` page — chat + interest files — invisible: nothing
+// linked to it. Now the icon is one persistent affordance that always lands on
+// that page, on every `/app/*` route.
 const ICON_CLASSES =
   "inline-flex size-9 items-center justify-center rounded-pill border border-border-default bg-surface text-muted transition hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page";
 
-export function AppNav({ onOpenProfile }: { onOpenProfile?: () => void }) {
+export function AppNav() {
   return (
     <nav className="flex items-center justify-between">
       <Link
@@ -24,26 +24,14 @@ export function AppNav({ onOpenProfile }: { onOpenProfile?: () => void }) {
       >
         ← Scout
       </Link>
-      {onOpenProfile ? (
-        <button
-          type="button"
-          onClick={onOpenProfile}
-          aria-label="Open your profile"
-          title="Profile & interests"
-          className={ICON_CLASSES}
-        >
-          <ProfileIcon />
-        </button>
-      ) : (
-        <Link
-          href="/app/?profile=1"
-          aria-label="Open your profile"
-          title="Profile & interests"
-          className={ICON_CLASSES}
-        >
-          <ProfileIcon />
-        </Link>
-      )}
+      <Link
+        href="/app/profile"
+        aria-label="Open your profile"
+        title="Profile & interests"
+        className={ICON_CLASSES}
+      >
+        <ProfileIcon />
+      </Link>
     </nav>
   );
 }

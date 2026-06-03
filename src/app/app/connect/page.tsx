@@ -215,11 +215,10 @@ export default function ConnectPage() {
           </a>
           <span className="flex items-center gap-3">
             <span>Pair the companion</span>
-            {/* PER-160: persistent profile affordance across /app/* routes. No
-                in-page editor here, so link to the app with ?profile=1, which
-                opens the profile/edit view on load. */}
+            {/* Persistent profile affordance across /app/* routes — links to
+                the chat-managed interests view at /app/profile (PER-183). */}
             <a
-              href="/app/?profile=1"
+              href="/app/profile"
               aria-label="Open your profile"
               title="Profile & interests"
               className="inline-flex size-7 items-center justify-center rounded-pill border border-border-default text-muted transition-colors hover:text-primary"
