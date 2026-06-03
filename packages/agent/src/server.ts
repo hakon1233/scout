@@ -467,7 +467,11 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             }
             throw err;
           }
-          let parsed: { interests?: unknown; retry_topics?: unknown };
+          let parsed: {
+            interests?: unknown;
+            retry_topics?: unknown;
+            selected_topics?: unknown;
+          };
           try {
             parsed = JSON.parse(body || "{}");
           } catch {
@@ -481,23 +485,33 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           // run persists them, so the doc store stays anchored across runs.
           const interests = reconcileInterests(state.interests, topics);
 
+          // Case-insensitively map a wire topic back to its canonical interest
+          // casing, dropping anything not in the current list (no stale/foreign
+          // topics). Shared by the retry and run-selector subsets below.
+          const interestByKey = new Map(topics.map((s) => [s.toLowerCase(), s]));
+          const intersectTopics = (raw: unknown): string[] =>
+            Array.isArray(raw)
+              ? Array.from(
+                  new Set(
+                    (raw as unknown[])
+                      .filter((s): s is string => typeof s === "string")
+                      .map((s) => interestByKey.get(s.trim().toLowerCase()))
+                      .filter((s): s is string => Boolean(s)),
+                  ),
+                )
+              : [];
+
           // Optional focused-retry payload (PER-154): re-research ONLY these
           // topics and merge the fresh sections into the prior brief, instead of
-          // regenerating the whole brief. Must be a subset of `interests`; we
-          // intersect (case-insensitively, mapping back to the canonical interest
-          // casing) and silently drop anything not in the current list rather
-          // than erroring on a stale topic.
-          const interestByKey = new Map(topics.map((s) => [s.toLowerCase(), s]));
-          const retryTopics = Array.isArray(parsed.retry_topics)
-            ? Array.from(
-                new Set(
-                  (parsed.retry_topics as unknown[])
-                    .filter((s): s is string => typeof s === "string")
-                    .map((s) => interestByKey.get(s.trim().toLowerCase()))
-                    .filter((s): s is string => Boolean(s)),
-                ),
-              )
-            : [];
+          // regenerating the whole brief.
+          const retryTopics = intersectTopics(parsed.retry_topics);
+
+          // Optional run-selector payload (C6/PER-173): research ONLY this subset
+          // and produce a FRESH brief over just those topics. The full interest
+          // list is STILL persisted by startRun (the scheduler's source of
+          // truth) — a partial run never shrinks the saved set. Ignored by the
+          // runner when a retry is set or when it covers the whole list.
+          const selectedTopics = intersectTopics(parsed.selected_topics);
 
           // One brief slot, last-writer-wins. The shared runner enforces single-
           // flight (in-memory guard + persisted pending check) so an on-demand
@@ -507,7 +521,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             interests,
             { stateFile, claudeBin, spawnFn, interestsDir, onSynthesisDone: deps.onSynthesisDone },
             "on_demand",
-            { retryTopics },
+            { retryTopics, selectedTopics },
           );
           if (!outcome.started) {
             // A retry asked for but there's no prior brief to merge into → tell
