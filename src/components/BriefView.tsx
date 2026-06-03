@@ -98,8 +98,8 @@ export function BriefView({ brief }: { brief: Brief }) {
                         What this is based on
                       </summary>
                       <p className="mt-2 text-caption text-muted">
-                        The interest note Scout used to research this topic. Edit
-                        it from “Edit interests”.
+                        The interest note Scout used to research this topic.
+                        Manage it from your profile.
                       </p>
                       <div className="scout-md mt-2 text-body-sm">
                         <ReactMarkdown
