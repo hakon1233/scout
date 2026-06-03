@@ -34,13 +34,28 @@ export type ResearchOptions = {
   spawnFn?: typeof spawn;
 };
 
+// One interest to research in its own session (C2/PER-171). `topic` is the
+// short headline (and the canonical `## <topic>` heading); `doc` is that
+// interest's intent doc, injected VERBATIM. The caller backfills a default doc
+// (ensureInterestDoc) so `doc` is always non-empty.
+export type ResearchInterest = {
+  topic: string;
+  doc: string;
+};
+
+// Research a SINGLE interest in its own headless `claude` session, carrying that
+// interest's intent doc (C2/PER-171). The brief used to be one multi-topic
+// session; now each interest gets its own, so the doc that scopes WHAT to look
+// for actually reaches the model. Returns the session's raw (preamble-stripped)
+// markdown — the caller (runner) extracts the topic's section and assembles the
+// full brief across interests.
 export async function researchAndSynthesize(
-  interests: string[],
+  interest: ResearchInterest,
   opts: ResearchOptions = {},
 ): Promise<string> {
   const claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ?? "claude";
   const spawnImpl = opts.spawnFn ?? spawn;
-  const prompt = buildResearchPrompt(interests);
+  const prompt = buildResearchPrompt(interest);
 
   return await new Promise<string>((resolve, reject) => {
     const child = spawnImpl(
@@ -117,41 +132,56 @@ export function stripBriefPreamble(raw: string): string {
   return text;
 }
 
-export function buildResearchPrompt(interests: string[], now: Date = new Date()): string {
+// Build the prompt for ONE interest's research session (C2/PER-171). Composition
+// order is fixed and load-bearing: shared search skills (HOW to research) →
+// the interest's intent doc VERBATIM (WHAT to research) → today's date (the
+// recency anchor). The two layers compose — the skills are the canonical,
+// version-controlled rules imported from search-skills.ts (never copied), the
+// doc is this interest's captured intent. The doc MUST appear verbatim: if
+// editing a doc doesn't change the next run's prompt, the control is dead
+// (PER-139). research.test.ts pins that invariant.
+export function buildResearchPrompt(
+  interest: ResearchInterest,
+  now: Date = new Date(),
+): string {
   const today = now.toISOString().slice(0, 10); // YYYY-MM-DD, anchors "last 7 days".
+  const { topic, doc } = interest;
   const lines: string[] = [];
-  lines.push("You are Scout, an agent that researches and writes a personalized news brief.");
+  lines.push(
+    `You are Scout, an agent that researches and writes one section of a personalized news brief, for a single topic: "${topic}".`,
+  );
   lines.push("");
-  lines.push(`Today's date is ${today}. Use it to judge how recent each item is.`);
-  lines.push("");
-  lines.push("Use the WebSearch tool to find news on each topic below. Use WebFetch on the");
-  lines.push("most promising results per topic to confirm the facts AND the publish date,");
-  lines.push("so you write a real summary (not a headline rehash) with a verified date.");
-  lines.push("");
-  // The shared "skills folder" — one canonical, version-controlled fragment
-  // (search-skills.ts) injected into EVERY research session. Defines recency,
-  // mandatory per-story dates, source quality, and the date-first bullet format.
+  // 1. The shared "skills folder" — one canonical, version-controlled fragment
+  //    (search-skills.ts) injected into EVERY research session. Defines recency,
+  //    mandatory per-story dates, source quality, and the date-first bullet format.
   lines.push(SEARCH_SKILLS);
   lines.push("");
-  lines.push("Topics the reader picked:");
-  for (const t of interests) lines.push(`- ${t}`);
+  // 2. The interest's intent doc, VERBATIM. It says WHAT the reader wants from
+  //    this topic; the skills above say HOW to find it. Fenced so the model sees
+  //    exactly where the reader's words begin and end.
+  lines.push(`What the reader wants from "${topic}" (their intent — follow it closely):`);
+  lines.push("<intent-doc>");
+  lines.push(doc);
+  lines.push("</intent-doc>");
+  lines.push("");
+  // 3. The recency anchor.
+  lines.push(`Today's date is ${today}. Use it to judge how recent each item is.`);
+  lines.push("");
+  lines.push("Use the WebSearch tool to find news on this topic. Use WebFetch on the");
+  lines.push("most promising results to confirm the facts AND the publish date, so you");
+  lines.push("write a real summary (not a headline rehash) with a verified date.");
   lines.push("");
   lines.push("Output requirements:");
   lines.push("- GitHub-flavored Markdown only. No preamble, no trailing commentary.");
-  lines.push("- Start with `# Your brief`.");
-  lines.push("- EXACTLY one `## <topic>` section for EVERY topic above, in the same");
-  lines.push("  order. Never merge, skip, rename, or combine topics — even closely");
-  lines.push("  related ones (e.g. keep `anthropic`, `claude code`, and `openai` as");
-  lines.push("  separate sections). The heading text must be the topic VERBATIM as");
-  lines.push("  written above (same words; capitalization may differ).");
-  lines.push("- Under each topic, 2-4 story bullets following the date-first format and");
+  lines.push(`- Output EXACTLY one \`## ${topic}\` section — the heading text must be the`);
+  lines.push("  topic VERBATIM as written above (same words; capitalization may differ).");
+  lines.push("- Under the heading, 2-4 story bullets following the date-first format and");
   lines.push("  recency rules in the search skills above (newest first, ISO date in");
   lines.push("  backticks leading each bullet, citation on the next line).");
-  lines.push("- If you genuinely can't find anything within the last 30 days for a topic,");
-  lines.push("  STILL emit its `## <topic>` heading with a single line `_no fresh news_`");
-  lines.push("  underneath — never omit the section.");
-  lines.push("- Keep the whole brief under ~500 words.");
+  lines.push("- If you genuinely can't find anything within the last 30 days, STILL emit");
+  lines.push(`  the \`## ${topic}\` heading with a single line \`_no fresh news_\` underneath.`);
+  lines.push("- Keep the section under ~200 words.");
   lines.push("");
-  lines.push("Write the brief now.");
+  lines.push("Write the section now.");
   return lines.join("\n");
 }

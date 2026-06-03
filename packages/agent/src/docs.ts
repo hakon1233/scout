@@ -75,6 +75,47 @@ export async function deleteInterestDoc(
   }
 }
 
+// A deterministic default intent doc synthesized from a topic string (C2/PER-171).
+//
+// The six live interests predate the doc store, so most ids have no `.md` yet.
+// Rather than research with an empty doc — which would make the per-interest
+// session indistinguishable from the old topic-only one — we backfill a seed
+// doc the first time a docless interest is researched. This is intentionally a
+// pure string template, NOT an LLM call: C2 must stay deterministic + unit-
+// testable, and real intent refinement is the chat flow's job (C4/C5). The seed
+// is plain prose the user can later edit; editing it changes the next run's
+// prompt (the PER-139 no-dead-control invariant the whole epic turns on).
+export function defaultInterestDoc(topic: string): string {
+  const t = topic.trim();
+  return [
+    `# ${t}`,
+    "",
+    `Track recent, notable developments about **${t}**. Surface concrete news —`,
+    `announcements, releases, research, and reporting — favoring the last 7 days`,
+    `and primary sources. Skip evergreen background and explainers unless they're`,
+    `tied to something that just happened.`,
+    "",
+  ].join("\n");
+}
+
+// Return an interest's intent doc, lazily backfilling + PERSISTING a deterministic
+// default (defaultInterestDoc) the first time a topic is researched without one
+// (C2/PER-171). After this resolves, a doc file always exists on disk for `id`,
+// so the hard invariant holds even for interests that predate the doc store:
+// the doc the research prompt injects is the same bytes a user would see and
+// edit. An empty/whitespace-only file is treated as "no doc" and reseeded.
+export async function ensureInterestDoc(
+  id: string,
+  topic: string,
+  dir = INTERESTS_DIR,
+): Promise<string> {
+  const existing = await readInterestDoc(id, dir);
+  if (existing && existing.trim()) return existing;
+  const seed = defaultInterestDoc(topic);
+  await writeInterestDoc(id, seed, dir);
+  return seed;
+}
+
 // Lightweight existence + last-modified metadata for an interest's doc, read
 // straight from the filesystem so it can never drift from the actual file. The
 // file is the single source of truth for `hasDoc` / `updatedAt` — we deliberately

@@ -16,6 +16,7 @@
 // whether to 409 (HTTP) or record a "skipped" schedule entry.
 
 import { spawn } from "node:child_process";
+import path from "node:path";
 import {
   loadState,
   newBriefId,
@@ -26,13 +27,25 @@ import {
   type ScheduleConfig,
 } from "./state.js";
 import { researchAndSynthesize } from "./research.js";
-import { computeCoverage, mergeBriefSections } from "./coverage.js";
+import {
+  computeCoverage,
+  mergeBriefSections,
+  extractTopicSection,
+  assembleBrief,
+} from "./coverage.js";
+import { ensureInterestDoc } from "./docs.js";
 
 export type RunDeps = {
   stateFile: string;
   claudeBin?: string;
   // Spawn override for tests; production uses node:child_process spawn.
   spawnFn?: typeof spawn;
+  // Where per-interest intent docs live (C2/PER-171). Defaults to the
+  // `interests/` dir beside the state file, which in production resolves to
+  // `~/.config/scout/interests` (=== docs.ts INTERESTS_DIR) and in tests
+  // automatically lands in the tmp dir alongside the tmp stateFile, so the lazy
+  // doc-backfill never touches the real config dir.
+  interestsDir?: string;
   // Fired when synthesis finishes (ready or failed). Tests await this.
   onSynthesisDone?: (brief: Brief) => void;
 };
@@ -81,21 +94,26 @@ export async function startRun(
     return { started: false, reason: "no_interests" };
   }
 
-  // The engine is topic-only (per-interest doc injection is C2/PER-171). Convert
-  // the rich interests to their topic strings at this single boundary; the rich
-  // {id, topic} objects are what we persist below.
+  // Coverage is computed over the FULL interest list so the UI sees an honest
+  // per-topic status for every topic, whatever subset this run researches.
   const topics = interestTopics(interests);
 
   // A focused retry only makes sense when there's a prior ready brief to merge
   // the fresh sections into; without one there's nothing to preserve, so the
   // caller should run a full brief instead. We narrow to the retry topics that
-  // are actually part of the current interest list (ignore stale/foreign ones).
+  // are actually part of the current interest list (ignore stale/foreign ones),
+  // then map them back to the rich interests so each retried session still
+  // carries its own intent doc.
   const baseMarkdown = state.last_brief?.summary_md;
   const retryTopics = (opts.retryTopics ?? []).filter((t) => topics.includes(t));
   const isRetry = retryTopics.length > 0;
   if (isRetry && !baseMarkdown) {
     return { started: false, reason: "no_base_brief" };
   }
+  const retrySet = new Set(retryTopics);
+  const researchInterests = isRetry
+    ? interests.filter((i) => retrySet.has(i.topic))
+    : interests;
 
   runInFlight = true;
   const briefId = newBriefId();
@@ -108,8 +126,8 @@ export async function startRun(
   // something to research even with no browser attached.
   await saveState({ ...state, interests, last_brief: pending }, deps.stateFile);
 
-  void runSynthesis(topics, briefId, deps, source, {
-    researchTopics: isRetry ? retryTopics : topics,
+  void runSynthesis(interests, briefId, deps, source, {
+    researchInterests,
     baseMarkdown: isRetry ? baseMarkdown : undefined,
     retryTopics: isRetry ? retryTopics : undefined,
   });
@@ -117,8 +135,9 @@ export async function startRun(
 }
 
 type SynthesisPlan = {
-  // The topics to actually hand to claude this run (subset on retry, all else).
-  researchTopics: string[];
+  // The interests to actually research this run, each in its own per-interest
+  // session carrying its intent doc (subset on retry, all else). (C2/PER-171)
+  researchInterests: Interest[];
   // On retry: the prior brief markdown to merge fresh sections into.
   baseMarkdown?: string;
   // On retry: which topics the fresh markdown should overwrite in the base.
@@ -126,32 +145,64 @@ type SynthesisPlan = {
 };
 
 async function runSynthesis(
-  interests: string[],
+  interests: Interest[],
   briefId: string,
   deps: RunDeps,
   source: RunSource,
   plan: SynthesisPlan,
 ): Promise<void> {
+  const interestsDir =
+    deps.interestsDir ?? path.join(path.dirname(deps.stateFile), "interests");
   let brief: Brief;
   try {
-    const fresh = await researchAndSynthesize(plan.researchTopics, {
-      claudeBin: deps.claudeBin,
-      spawnFn: deps.spawnFn,
-    });
+    // Run each interest in its OWN headless `claude` session, carrying that
+    // interest's intent doc (C2/PER-171) — the invariant the whole epic turns
+    // on. Sequential, not concurrent: the synth child runs at niceness 10
+    // specifically so it can't starve the loopback server (PER-101), and firing
+    // several at once would defeat that. A session that throws or yields nothing
+    // contributes no section → assembleBrief omits the topic → computeCoverage
+    // reports it "missing" (which PER-154's focused retry can recover).
+    const sections: Array<{ topic: string; section: string | null }> = [];
+    let anyOk = false;
+    for (const interest of plan.researchInterests) {
+      try {
+        const doc = await ensureInterestDoc(interest.id, interest.topic, interestsDir);
+        const sessionMd = await researchAndSynthesize(
+          { topic: interest.topic, doc },
+          { claudeBin: deps.claudeBin, spawnFn: deps.spawnFn },
+        );
+        const section = extractTopicSection(sessionMd, interest.topic);
+        if (section) anyOk = true;
+        sections.push({ topic: interest.topic, section });
+      } catch {
+        // One topic's session failing must not sink the whole brief — record it
+        // as a missing section and keep going.
+        sections.push({ topic: interest.topic, section: null });
+      }
+    }
+
+    // Every researched session failed AND there's no prior brief to fall back
+    // on → there's nothing honest to show, so fail the brief (surfaces an error
+    // state rather than an empty "# Your brief"). With a base brief, we still
+    // merge (preserving the topics that previously worked).
+    if (!anyOk && !plan.baseMarkdown) {
+      throw new Error("all research sessions failed or returned no content");
+    }
+
+    const patch = assembleBrief(sections);
     // On a focused retry, splice the fresh sections into the prior brief so the
-    // topics that already worked are preserved verbatim; otherwise the fresh
-    // markdown IS the whole brief. Coverage is always computed over the FULL
-    // interest list so the UI sees an honest per-topic status for every topic.
+    // topics that already worked are preserved verbatim; otherwise the freshly
+    // assembled markdown IS the whole brief.
     const summary =
       plan.baseMarkdown && plan.retryTopics
-        ? mergeBriefSections(plan.baseMarkdown, fresh, plan.retryTopics)
-        : fresh;
+        ? mergeBriefSections(plan.baseMarkdown, patch, plan.retryTopics)
+        : patch;
     brief = {
       id: briefId,
       generated_at: new Date().toISOString(),
       status: "ready",
       summary_md: summary,
-      topics: computeCoverage(interests, summary),
+      topics: computeCoverage(interestTopics(interests), summary),
     };
   } catch (err) {
     brief = {
