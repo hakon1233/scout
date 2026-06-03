@@ -235,10 +235,17 @@ async function runSynthesis(
     // contributes no section → assembleBrief omits the topic → computeCoverage
     // reports it "missing" (which PER-154's focused retry can recover).
     const sections: Array<{ topic: string; section: string | null }> = [];
+    // Snapshot the intent doc that scoped each researched topic, keyed by topic
+    // (PER-187). We capture the EXACT `doc` string handed to researchAndSynthesize
+    // so the brief can later show the reader what the section was based on, even
+    // if they edit the doc afterwards. Keyed by topic so a backfilled default and
+    // a real doc are treated identically.
+    const basisByTopic = new Map<string, string>();
     let anyOk = false;
     for (const interest of plan.researchInterests) {
       try {
         const doc = await ensureInterestDoc(interest.id, interest.topic, interestsDir);
+        basisByTopic.set(interest.topic, doc);
         const sessionMd = await researchAndSynthesize(
           { topic: interest.topic, doc },
           { claudeBin: deps.claudeBin, spawnFn: deps.spawnFn },
@@ -251,6 +258,27 @@ async function runSynthesis(
         // as a missing section and keep going.
         sections.push({ topic: interest.topic, section: null });
       }
+    }
+
+    // Build the per-topic basis snapshot over the FULL coverage set, not just the
+    // topics researched this run. On a focused retry the merged brief still shows
+    // the previously-researched sections; loading their docs here means every
+    // section in the brief has a visible basis, not only the retried ones. The
+    // doc store (ensureInterestDoc) is exactly what research reads, so a default
+    // backfill is reflected faithfully. A doc read that throws is simply omitted —
+    // a missing basis degrades to "no basis shown" for that one topic, never a
+    // failed brief.
+    const bases: Array<{ topic: string; doc: string }> = [];
+    for (const interest of plan.coverageInterests) {
+      let doc = basisByTopic.get(interest.topic);
+      if (doc === undefined) {
+        try {
+          doc = await ensureInterestDoc(interest.id, interest.topic, interestsDir);
+        } catch {
+          continue;
+        }
+      }
+      bases.push({ topic: interest.topic, doc });
     }
 
     // Every researched session failed AND there's no prior brief to fall back
@@ -275,6 +303,7 @@ async function runSynthesis(
       status: "ready",
       summary_md: summary,
       topics: computeCoverage(interestTopics(plan.coverageInterests), summary),
+      bases,
     };
   } catch (err) {
     brief = {

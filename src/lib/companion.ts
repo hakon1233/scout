@@ -3,7 +3,7 @@
 // then fall back to a small known-port sweep so a user who started the
 // agent on a different port can still pair.
 
-import type { Brief as AppBrief, TopicCoverage } from "./types";
+import type { Brief as AppBrief, TopicBasis, TopicCoverage } from "./types";
 
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
@@ -227,6 +227,10 @@ type AgentBrief = {
   // companion >= 0.3.x. Absent on older cached briefs — the UI then falls back
   // to deriving status from the parsed headings.
   topics?: TopicCoverage[];
+  // Per-topic snapshot of the intent doc that drove each section's research
+  // (PER-187). Present on briefs from a companion that supports it; absent on
+  // older cached briefs.
+  bases?: TopicBasis[];
 };
 
 // The companion no longer returns a structured `articles` list — the model
@@ -284,6 +288,7 @@ function adaptBrief(b: AgentBrief): AppBrief {
     articles,
     markdown,
     topics: b.topics,
+    bases: b.bases,
   };
 }
 
