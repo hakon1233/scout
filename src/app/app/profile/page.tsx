@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ScheduleSettings } from "@/components/ScheduleSettings";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { EmptyState } from "@/components/ui";
 import {
@@ -357,6 +358,16 @@ export default function ProfilePage() {
             onSend={send}
           />
         </div>
+
+        {/* Delivery schedule (PER-152). Relocated here from the removed in-page
+            settings screen (PER-188) so the profile is the single surface for
+            everything about what Scout researches and when it delivers. */}
+        <section className="max-w-2xl border-t border-border-default pt-8">
+          <h2 className="mb-4 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
+            Delivery schedule
+          </h2>
+          <ScheduleSettings />
+        </section>
       </div>
     </main>
   );

@@ -91,8 +91,9 @@ async function main() {
       localStorage.setItem("scout.settings.v1", JSON.stringify(s));
     }, settings);
     await page.reload({ waitUntil: "networkidle" });
-    // Enter the Settings screen (where the schedule section lives).
-    await page.getByRole("button", { name: "Manage interests" }).first().click();
+    // The schedule section moved to the profile surface (PER-188); navigate
+    // straight there rather than via the (now routing) "Manage interests" button.
+    await page.goto(`${ORIGIN}/app/profile/`, { waitUntil: "networkidle" });
     // Wait for the schedule section to resolve (toggle is the tell).
     await page.getByRole("switch").waitFor({ timeout: 8000 });
     await sleep(400);
