@@ -44,7 +44,10 @@ export function InterestsList({
                 model={card}
                 focused={focusKey === card.key}
                 onFocusToggle={() => {
-                  if (refineInChat) {
+                  const desktopChatPanel =
+                    typeof window !== "undefined" &&
+                    window.matchMedia("(min-width: 1024px)").matches;
+                  if (refineInChat && !desktopChatPanel) {
                     window.location.assign(
                       `/app/chat?focus=${encodeURIComponent(card.key)}`,
                     );
