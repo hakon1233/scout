@@ -372,6 +372,49 @@ test("POST /v0/chat returns 409 while a turn is in flight; the prior turn isn't 
   }
 });
 
+test("POST /v0/chat accepts a new turn after a restart leaves only a persisted pending turn", async () => {
+  const staleTurn: ChatTurn = {
+    id: "chat_stale",
+    created_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+    status: "pending",
+    message: "stale before restart",
+  };
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+    last_chat: staleTurn,
+  });
+  const model = JSON.stringify({ reply: "ok", changes: [] });
+  const { spawnFn } = makeChatSpawn({ output: model, autoClose: true });
+  const { onChatDone, done } = awaitTurn();
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "new after restart" }),
+    });
+
+    assert.equal(kick.status, 202);
+    const body = (await kick.json()) as { turn_id: string };
+    assert.notEqual(body.turn_id, staleTurn.id);
+
+    const landed = await done;
+    assert.equal(landed.id, body.turn_id);
+    assert.equal(landed.status, "ready");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/chat rejects an empty message with 400 and never spawns claude", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded();
   const recorder = makeChatSpawn({ output: "{}", autoClose: true });
