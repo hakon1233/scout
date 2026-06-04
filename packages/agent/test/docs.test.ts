@@ -48,7 +48,10 @@ test("migrateInterests lifts legacy string[] to {id, topic} losslessly + stably"
   const legacy = ["ai safety", "  markets  ", "f1"];
   const out = migrateInterests(legacy);
   // No topic dropped; whitespace trimmed; order preserved.
-  assert.deepEqual(out.map((i) => i.topic), ["ai safety", "markets", "f1"]);
+  assert.deepEqual(
+    out.map((i) => i.topic),
+    ["ai safety", "markets", "f1"],
+  );
   // Every entry has a filename-safe id…
   for (const it of out) {
     assert.match(it.id, /^int_[A-Za-z0-9_-]+$/);
@@ -56,13 +59,19 @@ test("migrateInterests lifts legacy string[] to {id, topic} losslessly + stably"
   // …and the id is deterministic for legacy data (re-migrating yields the same
   // ids, so an unpersisted state.json doesn't drift across loads).
   const again = migrateInterests(legacy);
-  assert.deepEqual(again.map((i) => i.id), out.map((i) => i.id));
+  assert.deepEqual(
+    again.map((i) => i.id),
+    out.map((i) => i.id),
+  );
   assert.equal(out[0].id, legacyInterestId("ai safety"));
 });
 
 test("migrateInterests drops empty/blank topics but keeps everything real", () => {
   const out = migrateInterests(["", "   ", "real"]);
-  assert.deepEqual(out.map((i) => i.topic), ["real"]);
+  assert.deepEqual(
+    out.map((i) => i.topic),
+    ["real"],
+  );
 });
 
 test("migrateInterests passes through the rich {id, topic} shape unchanged", () => {
@@ -79,7 +88,10 @@ test("migrateInterests never collapses two topics onto one id (collision-safe)",
     { id: "int_dupe", topic: "second" },
   ]);
   assert.equal(out.length, 2);
-  assert.deepEqual(out.map((i) => i.topic), ["first", "second"]);
+  assert.deepEqual(
+    out.map((i) => i.topic),
+    ["first", "second"],
+  );
   assert.notEqual(out[0].id, out[1].id);
 });
 
@@ -103,9 +115,14 @@ test("loadState migrates a legacy on-disk state.json to the rich model", async (
       (state.interests ?? []).map((i) => i.topic),
       ["ai safety", "nba"],
     );
-    assert.ok((state.interests ?? []).every((i) => typeof i.id === "string" && i.id));
+    assert.ok(
+      (state.interests ?? []).every((i) => typeof i.id === "string" && i.id),
+    );
     // Absent interests stay absent (distinct from an empty list).
-    await fs.writeFile(path.join(dir, "s2.json"), JSON.stringify({ pairing_token: "t" }));
+    await fs.writeFile(
+      path.join(dir, "s2.json"),
+      JSON.stringify({ pairing_token: "t" }),
+    );
     const s2 = await loadState(path.join(dir, "s2.json"));
     assert.equal(s2.interests, undefined);
   } finally {
@@ -123,7 +140,11 @@ test("reconcileInterests preserves an existing topic's id across reorder/add/rem
   // Reorder + add a new topic + drop none.
   const out = reconcileInterests(existing, ["markets", "ai safety", "rust"]);
   const byTopic = new Map(out.map((i) => [i.topic, i.id]));
-  assert.equal(byTopic.get("ai safety"), "int_a", "id stays attached across reorder");
+  assert.equal(
+    byTopic.get("ai safety"),
+    "int_a",
+    "id stays attached across reorder",
+  );
   assert.equal(byTopic.get("markets"), "int_b");
   assert.match(byTopic.get("rust")!, /^int_/);
   assert.notEqual(byTopic.get("rust"), "int_a");
@@ -152,9 +173,16 @@ test("a doc round-trips by id (write → read), survives across calls", async ()
   const dir = await tmpDir();
   try {
     const id = newInterestId();
-    assert.equal(await readInterestDoc(id, dir), null, "no doc yet → null, not throw");
+    assert.equal(
+      await readInterestDoc(id, dir),
+      null,
+      "no doc yet → null, not throw",
+    );
     await writeInterestDoc(id, "# intent\nonly deep-dive papers", dir);
-    assert.equal(await readInterestDoc(id, dir), "# intent\nonly deep-dive papers");
+    assert.equal(
+      await readInterestDoc(id, dir),
+      "# intent\nonly deep-dive papers",
+    );
     // Overwrite is a plain replace.
     await writeInterestDoc(id, "changed", dir);
     assert.equal(await readInterestDoc(id, dir), "changed");
@@ -216,7 +244,7 @@ test("interestDocPath refuses a path-traversal / hostile id", () => {
 
 // ── GET /v0/interests payload contract (PER-169 / PER-170) ────────────────────
 
-test("GET /v0/interests serves {id, topic, hasDoc, docUpdatedAt} on real doc state", async () => {
+test("GET /v0/interests serves {id, topic, hasDoc, docUpdatedAt, doc} on real doc state", async () => {
   const tmp = await tmpDir("scout-docs-srv-");
   const stateFile = path.join(tmp, "state.json");
   const token = newPairingToken();
@@ -236,23 +264,49 @@ test("GET /v0/interests serves {id, topic, hasDoc, docUpdatedAt} on real doc sta
   const { server, port } = await startServer(0, { stateFile, interestsDir });
   try {
     const unauth = await fetch(`http://127.0.0.1:${port}/v0/interests`);
-    assert.equal(unauth.status, 401, "GET /v0/interests requires the pairing token");
+    assert.equal(
+      unauth.status,
+      401,
+      "GET /v0/interests requires the pairing token",
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       headers: { authorization: `Bearer ${token}` },
     });
     assert.equal(res.status, 200);
     const body = (await res.json()) as {
-      interests: Array<{ id: string; topic: string; hasDoc: boolean; docUpdatedAt: string | null }>;
+      interests: Array<{
+        id: string;
+        topic: string;
+        hasDoc: boolean;
+        docUpdatedAt: string | null;
+        doc: string | null;
+      }>;
     };
-    assert.deepEqual(body.interests.map((i) => i.topic), ["ai safety", "markets"]);
-    assert.deepEqual(body.interests.map((i) => i.id), ["int_withdoc", "int_nodoc"]);
+    assert.deepEqual(
+      body.interests.map((i) => i.topic),
+      ["ai safety", "markets"],
+    );
+    assert.deepEqual(
+      body.interests.map((i) => i.id),
+      ["int_withdoc", "int_nodoc"],
+    );
     const ai = body.interests.find((i) => i.id === "int_withdoc")!;
     const mk = body.interests.find((i) => i.id === "int_nodoc")!;
-    assert.equal(ai.hasDoc, true, "interest with a persisted doc reports hasDoc:true");
+    assert.equal(
+      ai.hasDoc,
+      true,
+      "interest with a persisted doc reports hasDoc:true",
+    );
     assert.ok(ai.docUpdatedAt, "and a docUpdatedAt timestamp");
-    assert.equal(mk.hasDoc, false, "interest without a doc reports hasDoc:false");
+    assert.equal(ai.doc, "# only alignment");
+    assert.equal(
+      mk.hasDoc,
+      false,
+      "interest without a doc reports hasDoc:false",
+    );
     assert.equal(mk.docUpdatedAt, null);
+    assert.equal(mk.doc, null);
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
