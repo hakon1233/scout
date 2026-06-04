@@ -331,6 +331,20 @@ export function isChatInFlight(): boolean {
   return chatInFlight;
 }
 
+// How long a persisted `pending` chat turn may survive WITHOUT this process
+// actively running it before we treat it as abandoned and reclaim the slot. A
+// live turn in this process is guarded by `chatInFlight`; a persisted-only
+// pending turn means the companion likely restarted after writing the slot.
+const STALE_PENDING_CHAT_MS = 5 * 60 * 1000;
+
+function isStalePendingChat(turn: ChatTurn | undefined, now: number): boolean {
+  if (!turn || turn.status !== "pending") return false;
+  if (chatInFlight) return false;
+  const startedAt = Date.parse(turn.created_at);
+  if (!Number.isFinite(startedAt)) return true;
+  return now - startedAt > STALE_PENDING_CHAT_MS;
+}
+
 // Kick a chat turn: persist a `pending` slot, fire the claude round-trip +
 // change-apply fire-and-forget, and return immediately. Callers poll
 // GET /v0/chat?since= to see it flip to `ready` (with reply + applied changes).
@@ -342,7 +356,11 @@ export async function startChatTurn(
   if (!trimmed) return { started: false, reason: "empty_message" };
 
   const state = await loadState(deps.stateFile);
-  if (chatInFlight || state.last_chat?.status === "pending") {
+  if (
+    chatInFlight ||
+    (state.last_chat?.status === "pending" &&
+      !isStalePendingChat(state.last_chat, Date.now()))
+  ) {
     return { started: false, reason: "in_flight", turnId: state.last_chat?.id };
   }
 
