@@ -31,11 +31,15 @@ import {
   type ScheduleConfig,
   type State,
 } from "./state.js";
-import { interestDocMeta } from "./docs.js";
+import { interestDocMeta, readInterestDoc } from "./docs.js";
 import { startRun } from "./runner.js";
 import { startChatTurn } from "./chat.js";
 import { isServiceInstalled } from "./service.js";
-import { resolveStatic, resolveAppShellFallback, trailingSlashRedirect } from "./static.js";
+import {
+  resolveStatic,
+  resolveAppShellFallback,
+  trailingSlashRedirect,
+} from "./static.js";
 
 export const PKG_VERSION = "0.3.0";
 export const DEFAULT_PORT = Number(process.env.SCOUT_AGENT_PORT ?? 47821);
@@ -126,7 +130,10 @@ function extraAllowedOrigins(): RegExp[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
-    .map((origin) => new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+    .map(
+      (origin) =>
+        new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+    );
 }
 
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
@@ -399,12 +406,16 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const interests = state.interests ?? [];
           const withMeta = await Promise.all(
             interests.map(async (it) => {
-              const meta = await interestDocMeta(it.id, interestsDir);
+              const [meta, doc] = await Promise.all([
+                interestDocMeta(it.id, interestsDir),
+                readInterestDoc(it.id, interestsDir),
+              ]);
               return {
                 id: it.id,
                 topic: it.topic,
                 hasDoc: meta.hasDoc,
                 docUpdatedAt: meta.updatedAt ?? null,
+                doc,
               };
             }),
           );
@@ -440,13 +451,26 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           }
           const validated = parseInterestsPayload(parsed.interests);
           if (!validated.ok)
-            return json(res, validated.status, { error: validated.error }, cors);
+            return json(
+              res,
+              validated.status,
+              { error: validated.error },
+              cors,
+            );
           // Persist the rich {id, topic} model, preserving each existing topic's
           // id so its intent doc stays attached across an edit (PER-169). The
           // wire response stays a topic string[] for back-compat.
-          const interests = reconcileInterests(state.interests, validated.interests);
+          const interests = reconcileInterests(
+            state.interests,
+            validated.interests,
+          );
           await saveState({ ...state, interests }, stateFile);
-          json(res, 200, { interests: validated.interests, status: "saved" }, cors);
+          json(
+            res,
+            200,
+            { interests: validated.interests, status: "saved" },
+            cors,
+          );
           return;
         }
 
@@ -479,7 +503,12 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           }
           const validated = parseInterestsPayload(parsed.interests);
           if (!validated.ok)
-            return json(res, validated.status, { error: validated.error }, cors);
+            return json(
+              res,
+              validated.status,
+              { error: validated.error },
+              cors,
+            );
           const topics = validated.interests;
           // Reconcile into the rich {id, topic} model (preserving ids) before the
           // run persists them, so the doc store stays anchored across runs.
@@ -488,7 +517,9 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           // Case-insensitively map a wire topic back to its canonical interest
           // casing, dropping anything not in the current list (no stale/foreign
           // topics). Shared by the retry and run-selector subsets below.
-          const interestByKey = new Map(topics.map((s) => [s.toLowerCase(), s]));
+          const interestByKey = new Map(
+            topics.map((s) => [s.toLowerCase(), s]),
+          );
           const intersectTopics = (raw: unknown): string[] =>
             Array.isArray(raw)
               ? Array.from(
@@ -519,7 +550,13 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           // persists the interests so the scheduler can reuse them.
           const outcome = await startRun(
             interests,
-            { stateFile, claudeBin, spawnFn, interestsDir, onSynthesisDone: deps.onSynthesisDone },
+            {
+              stateFile,
+              claudeBin,
+              spawnFn,
+              interestsDir,
+              onSynthesisDone: deps.onSynthesisDone,
+            },
             "on_demand",
             { retryTopics, selectedTopics },
           );
@@ -537,7 +574,8 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             }
             // interests were validated non-empty above, so the only other reason
             // is a run already in flight → 409, echoing the in-flight id.
-            const briefId = outcome.reason === "in_flight" ? outcome.briefId : undefined;
+            const briefId =
+              outcome.reason === "in_flight" ? outcome.briefId : undefined;
             return json(
               res,
               409,
@@ -546,7 +584,12 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             );
           }
 
-          json(res, 202, { brief_id: outcome.briefId, status: "pending" }, cors);
+          json(
+            res,
+            202,
+            { brief_id: outcome.briefId, status: "pending" },
+            cors,
+          );
           return;
         }
 
@@ -555,7 +598,8 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
           const since = url.searchParams.get("since");
           const last = state.last_brief;
-          const matches = last && (!since || last.generated_at > since) ? [last] : [];
+          const matches =
+            last && (!since || last.generated_at > since) ? [last] : [];
           json(res, 200, { briefs: matches }, cors);
           return;
         }
@@ -591,7 +635,8 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           }
           const message =
             typeof parsed.message === "string" ? parsed.message.trim() : "";
-          if (!message) return json(res, 400, { error: "message required" }, cors);
+          if (!message)
+            return json(res, 400, { error: "message required" }, cors);
           if (message.length > MAX_CHAT_MESSAGE_LEN) {
             return json(
               res,
@@ -634,7 +679,8 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
           const since = url.searchParams.get("since");
           const last = state.last_chat;
-          const matches = last && (!since || last.created_at > since) ? [last] : [];
+          const matches =
+            last && (!since || last.created_at > since) ? [last] : [];
           json(res, 200, { turns: matches }, cors);
           return;
         }
@@ -676,7 +722,12 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           let enabled = current.enabled;
           if (parsed.enabled !== undefined) {
             if (typeof parsed.enabled !== "boolean") {
-              return json(res, 400, { error: "enabled must be a boolean" }, cors);
+              return json(
+                res,
+                400,
+                { error: "enabled must be a boolean" },
+                cors,
+              );
             }
             enabled = parsed.enabled;
           }
@@ -767,7 +818,8 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "GET" || req.method === "HEAD") {
           const accept = (req.headers.accept as string | undefined) ?? "";
           const wantsJsonOnly =
-            accept.includes("application/json") && !accept.includes("text/html");
+            accept.includes("application/json") &&
+            !accept.includes("text/html");
           const looksLikeAsset = /\.[a-z0-9]+$/i.test(url.pathname);
           if (!wantsJsonOnly && !looksLikeAsset) {
             const page = await resolveStatic("/404.html", webroot);
@@ -796,7 +848,9 @@ export async function startServer(
   deps: ServerDeps = {},
 ): Promise<{ server: http.Server; port: number }> {
   const server = createServer(deps);
-  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) =>
+    server.listen(port, "127.0.0.1", resolve),
+  );
   const addr = server.address();
   const boundPort = typeof addr === "object" && addr ? addr.port : port;
   return { server, port: boundPort };

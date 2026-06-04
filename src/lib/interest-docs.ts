@@ -19,6 +19,9 @@ export type InterestDocMeta = {
   // ISO timestamp of the doc's last edit, when known. Drives the "updated …"
   // dateline on the profile row.
   updatedAt?: string;
+  // Full markdown from `~/.config/scout/interests/<id>.md`, when the companion
+  // can read one. This is the research-scope source of truth.
+  body?: string;
 };
 
 export type InterestWithDoc = Interest & { doc: InterestDocMeta };
@@ -54,7 +57,10 @@ export function interestEditorHref(i: Interest): string {
 // unauthenticated read 401s and the doc indicators silently never light up.
 export async function fetchInterestsFull(
   token: string,
-): Promise<{ interests: Interest[]; meta: Record<string, InterestDocMeta> } | null> {
+): Promise<{
+  interests: Interest[];
+  meta: Record<string, InterestDocMeta>;
+} | null> {
   if (typeof window === "undefined") return null;
   if (!(await isServedFromCompanion())) return null;
   try {
@@ -69,6 +75,7 @@ export async function fetchInterestsFull(
         topic?: string;
         hasDoc?: boolean;
         docUpdatedAt?: string;
+        doc?: string | null;
       }>;
     };
     if (!Array.isArray(body.interests)) return null;
@@ -84,6 +91,7 @@ export async function fetchInterestsFull(
         hasDoc: Boolean(it.hasDoc),
         updatedAt:
           typeof it.docUpdatedAt === "string" ? it.docUpdatedAt : undefined,
+        body: typeof it.doc === "string" ? it.doc : undefined,
       };
     }
     return { interests, meta };
@@ -116,7 +124,10 @@ export function mockDocMeta(
   interests.forEach((it, idx) => {
     const has = seed === "full" ? true : idx % 2 === 0;
     out[interestKey(it)] = has
-      ? { hasDoc: true, updatedAt: SAMPLE_DOC_DATES[idx % SAMPLE_DOC_DATES.length] }
+      ? {
+          hasDoc: true,
+          updatedAt: SAMPLE_DOC_DATES[idx % SAMPLE_DOC_DATES.length],
+        }
       : { hasDoc: false };
   });
   return out;
