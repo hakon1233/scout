@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PairedEntryRedirect } from "@/components/PairedEntryRedirect";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 // Direction A — Editorial / "Private Wire Service" (PER-114, founder pick).
@@ -79,6 +80,7 @@ const navLink =
 export default function Home() {
   return (
     <main className="min-h-screen bg-page font-sans text-primary">
+      <PairedEntryRedirect />
       {/* Masthead */}
       <header className="border-b-[1.5px] border-primary">
         <div className="mx-auto w-full max-w-[1120px] px-7">

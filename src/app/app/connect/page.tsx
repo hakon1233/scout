@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Banner, Button } from "@/components/ui";
 import {
   bootstrapCompanionToken,
@@ -28,6 +29,7 @@ const POLL_INTERVAL_MS = 4000;
 const POLL_MAX_ATTEMPTS = 20; // ~80s
 
 export default function ConnectPage() {
+  const router = useRouter();
   const [token, setToken] = useState("");
   // True once a pairing token is saved to storage — either auto-adopted from
   // the same-origin companion (`/v0/config`) or pasted manually. Tracked
@@ -167,6 +169,11 @@ export default function ConnectPage() {
   // "you're all set" success state instead of the install walkthrough. Same
   // semantics as `companionReady` in src/app/app/page.tsx.
   const setupComplete = status === "connected" && hasSavedToken;
+
+  useEffect(() => {
+    if (setupComplete) router.replace("/app/");
+  }, [router, setupComplete]);
+
   // While the first ping is in flight we don't yet know which state to show.
   // Render a neutral placeholder rather than flashing the walkthrough and then
   // collapsing it (Doherty / perceived-performance — PER-140 spec §5).
