@@ -154,10 +154,10 @@ export default function InterestScopePage() {
       <div className="mx-auto max-w-4xl space-y-8 px-5 py-10">
         <div className="flex items-center justify-between font-mono text-[12px] uppercase tracking-[0.06em] text-muted">
           <a
-            href="/app/profile"
+            href="/app/interests"
             className="transition-colors hover:text-primary"
           >
-            ← Profile
+            ← Interests
           </a>
           <div className="flex items-center gap-3">
             <span>Interest scope</span>
@@ -170,7 +170,7 @@ export default function InterestScopePage() {
         ) : !model ? (
           <EmptyState
             title="Interest not found"
-            body="Return to your profile and open an interest from the list."
+            body="Return to Interests and open an interest from the list."
           />
         ) : (
           <>
@@ -204,17 +204,17 @@ export default function InterestScopePage() {
               ) : (
                 <EmptyState
                   title="No intent doc yet"
-                  body="Refine this interest in the profile chat to create the research scope Scout will follow."
+                  body="Refine this interest in chat to create the research scope Scout will follow."
                 />
               )}
             </section>
 
             <div className="flex flex-wrap gap-3 border-t border-border-default pt-5">
               <a
-                href="/app/profile"
+                href="/app/chat"
                 className="rounded-pill border border-border-default px-3 py-2 font-mono text-[11px] uppercase tracking-[0.06em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
               >
-                Refine in profile chat
+                Refine in chat
               </a>
               <a
                 href="/app"

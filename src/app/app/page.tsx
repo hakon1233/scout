@@ -32,11 +32,7 @@ import {
 } from "@/lib/storage";
 import type { Brief, Settings } from "@/lib/types";
 
-// The one and only interests surface is the chat-managed profile at
-// `/app/profile` (the per-interest intent docs + Scout chat). The pre-migration
-// in-page keyword editor (SetupForm / InterestChips) was removed in PER-188 —
-// every "Manage interests" affordance now routes here, nowhere else.
-const PROFILE_PATH = "/app/profile";
+const INTERESTS_PATH = "/app/interests";
 
 const STICKY_THRESHOLD_PX = 480;
 
@@ -70,8 +66,10 @@ function formatBriefDate(b: Brief): string {
 
 export default function AppPage() {
   const router = useRouter();
-  // Every interest-management affordance routes to the single profile surface.
-  const goToProfile = useCallback(() => router.push(PROFILE_PATH), [router]);
+  const goToInterests = useCallback(
+    () => router.push(INTERESTS_PATH),
+    [router],
+  );
   const [hydrated, setHydrated] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [brief, setBrief] = useState<Brief | null>(null);
@@ -368,8 +366,7 @@ export default function AppPage() {
   // full `runScope` runs everything; a strict subset scopes the run to it.
   const runNow = useCallback(() => {
     const allTopics = settings?.interests.map((i) => i.topic) ?? [];
-    const isSubset =
-      runScope.length > 0 && runScope.length < allTopics.length;
+    const isSubset = runScope.length > 0 && runScope.length < allTopics.length;
     void generate(isSubset ? { selectedTopics: runScope } : undefined);
   }, [generate, runScope, settings]);
 
@@ -400,7 +397,7 @@ export default function AppPage() {
               Tell Scout what you want to follow, then run your first brief.
             </p>
           </div>
-          <Button variant="primary" onClick={goToProfile}>
+          <Button variant="primary" onClick={goToInterests}>
             Manage interests
           </Button>
         </header>
@@ -426,7 +423,7 @@ export default function AppPage() {
               {settings.name ? `${settings.name}'s brief` : "Your brief"}
             </h1>
           </div>
-          <Button variant="secondary" onClick={goToProfile}>
+          <Button variant="secondary" onClick={goToInterests}>
             Manage interests
           </Button>
         </header>
@@ -476,7 +473,7 @@ export default function AppPage() {
         <StickyUtilityBar
           running={running}
           onRegenerate={runNow}
-          onEditInterests={goToProfile}
+          onEditInterests={goToInterests}
         />
       )}
 
@@ -516,7 +513,7 @@ export default function AppPage() {
           >
             {runLabel}
           </Button>
-          <Button variant="secondary" onClick={goToProfile}>
+          <Button variant="secondary" onClick={goToInterests}>
             Manage interests
           </Button>
         </div>
@@ -608,7 +605,7 @@ export default function AppPage() {
           name={settings.name}
           running={running}
           onRegenerate={runNow}
-          onEditInterests={goToProfile}
+          onEditInterests={goToInterests}
           onViewPrevious={prevBrief ? () => setViewingPrev(true) : undefined}
           prevDate={prevBrief ? formatBriefDate(prevBrief) : undefined}
         />
@@ -633,8 +630,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-page px-4 py-8 text-primary sm:px-6 sm:py-12">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-        {/* The persistent top-right profile icon lives in AppNav and links to
-            /app/profile (the chat-managed interests view) on every app state. */}
+        {/* The persistent top-right profile icon lives in AppNav and opens the
+            Settings / Chat / Interests menu on every app state. */}
         <AppNav />
         {children}
       </div>

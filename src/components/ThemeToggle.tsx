@@ -22,7 +22,9 @@ function readStored(): Theme {
   return raw === "light" || raw === "dark" || raw === "system" ? raw : "system";
 }
 
-export function ThemeToggle({ showLabels = false }: { showLabels?: boolean } = {}) {
+export function ThemeToggle({
+  showLabels = false,
+}: { showLabels?: boolean } = {}) {
   const [theme, setThemeState] = React.useState<Theme>(() =>
     typeof window === "undefined" ? "system" : readStored(),
   );
@@ -49,10 +51,10 @@ export function ThemeToggle({ showLabels = false }: { showLabels?: boolean } = {
     return () => mq.removeEventListener("change", onChange);
   }, [theme]);
 
-  // Order matches the founder ask (PER-189): Dark / Light / System.
+  // Order matches the founder ask: Light / Dark / System.
   const options: { value: Theme; label: string; icon: React.ReactNode }[] = [
-    { value: "dark", label: "Dark", icon: <MoonIcon /> },
     { value: "light", label: "Light", icon: <SunIcon /> },
+    { value: "dark", label: "Dark", icon: <MoonIcon /> },
     { value: "system", label: "System", icon: <SystemIcon /> },
   ];
 
