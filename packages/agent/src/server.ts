@@ -33,7 +33,11 @@ import {
 } from "./state.js";
 import { interestDocMeta, readInterestDoc } from "./docs.js";
 import { startRun } from "./runner.js";
-import { startChatTurn } from "./chat.js";
+import {
+  defaultChatTranscriptFile,
+  readChatTranscript,
+  startChatTurn,
+} from "./chat.js";
 import { isServiceInstalled } from "./service.js";
 import {
   resolveStatic,
@@ -296,6 +300,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
   // docs.ts INTERESTS_DIR — exact parity. (C2/PER-171)
   const interestsDir =
     deps.interestsDir ?? path.join(path.dirname(stateFile), "interests");
+  const chatTranscriptFile = defaultChatTranscriptFile(stateFile);
 
   async function authed(req: http.IncomingMessage): Promise<State | null> {
     const token = bearer(req);
@@ -648,6 +653,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const outcome = await startChatTurn(message, {
             stateFile,
             interestsDir,
+            chatTranscriptFile,
             claudeBin,
             spawnFn,
             onChatDone: deps.onChatDone,
@@ -678,9 +684,13 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
           const since = url.searchParams.get("since");
+          const transcript = await readChatTranscript(chatTranscriptFile);
           const last = state.last_chat;
-          const matches =
-            last && (!since || last.created_at > since) ? [last] : [];
+          const byId = new Map(transcript.map((turn) => [turn.id, turn]));
+          if (last && !byId.has(last.id)) byId.set(last.id, last);
+          const matches = Array.from(byId.values())
+            .filter((turn) => !since || turn.created_at > since)
+            .sort((a, b) => a.created_at.localeCompare(b.created_at));
           json(res, 200, { turns: matches }, cors);
           return;
         }

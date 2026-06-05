@@ -93,7 +93,10 @@ async function seeded(state: Partial<State> = {}) {
 }
 
 // Kick a turn and wait for the onChatDone callback to fire, then return the turn.
-function awaitTurn(): { onChatDone: (t: ChatTurn) => void; done: Promise<ChatTurn> } {
+function awaitTurn(): {
+  onChatDone: (t: ChatTurn) => void;
+  done: Promise<ChatTurn>;
+} {
   let resolve!: (t: ChatTurn) => void;
   const done = new Promise<ChatTurn>((r) => (resolve = r));
   return { onChatDone: (t) => resolve(t), done };
@@ -108,7 +111,11 @@ test("POST /v0/chat refines an existing interest's doc; the edit persists and is
   const model = JSON.stringify({
     reply: "Tightened your AI-safety focus to alignment evals.",
     changes: [
-      { op: "update", interestId: "int_abc123", doc: "Focus on alignment eval results." },
+      {
+        op: "update",
+        interestId: "int_abc123",
+        doc: "Focus on alignment eval results.",
+      },
     ],
   });
   const { spawnFn } = makeChatSpawn({ output: model, autoClose: true });
@@ -137,7 +144,9 @@ test("POST /v0/chat refines an existing interest's doc; the edit persists and is
     const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({ message: "Make my AI safety topic about alignment evals." }),
+      body: JSON.stringify({
+        message: "Make my AI safety topic about alignment evals.",
+      }),
     });
     assert.equal(kick.status, 202);
     const kickBody = (await kick.json()) as { turn_id: string; status: string };
@@ -169,7 +178,10 @@ test("POST /v0/chat refines an existing interest's doc; the edit persists and is
 
     // ACCEPTANCE: the edit is durable on disk — C2's next run for this interest
     // will read the new doc.
-    assert.equal(await readInterestDoc("int_abc123", interestsDir), "Focus on alignment eval results.");
+    assert.equal(
+      await readInterestDoc("int_abc123", interestsDir),
+      "Focus on alignment eval results.",
+    );
 
     // A future `since` filters the turn out (mirrors GET /v0/briefs).
     const future = new Date(Date.now() + 60_000).toISOString();
@@ -192,7 +204,9 @@ test("POST /v0/chat creates a new interest (+ its doc) with a server-minted id (
   const model = JSON.stringify({
     reply: "Added Formula 1 to your interests.",
     // The model must NOT invent an id for a create — the server mints it.
-    changes: [{ op: "create", topic: "formula 1", doc: "Race results and team news." }],
+    changes: [
+      { op: "create", topic: "formula 1", doc: "Race results and team news." },
+    ],
   });
   const { spawnFn } = makeChatSpawn({ output: model, autoClose: true });
   const { onChatDone, done } = awaitTurn();
@@ -230,9 +244,156 @@ test("POST /v0/chat creates a new interest (+ its doc) with a server-minted id (
       ["ai safety", "formula 1"],
     );
     // …and its doc is on disk under the minted id.
-    assert.equal(await readInterestDoc(change.interestId, interestsDir), "Race results and team news.");
+    assert.equal(
+      await readInterestDoc(change.interestId, interestsDir),
+      "Race results and team news.",
+    );
   } finally {
     server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("GET /v0/chat returns the full persisted transcript after companion restart (PER-201)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  const firstModel = JSON.stringify({
+    reply: "Added your AI safety preference.",
+    changes: [],
+  });
+  const secondModel = JSON.stringify({
+    reply: "You asked me to track AI safety.",
+    changes: [],
+  });
+  const first = makeChatSpawn({ output: firstModel, autoClose: true });
+  const firstDone = awaitTurn();
+
+  const firstServer = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn: first.spawnFn,
+    onChatDone: firstDone.onChatDone,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const kick1 = await fetch(`http://127.0.0.1:${firstServer.port}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "Track AI safety." }),
+    });
+    assert.equal(kick1.status, 202);
+    await firstDone.done;
+  } finally {
+    firstServer.server.close();
+  }
+
+  const second = makeChatSpawn({ output: secondModel, autoClose: true });
+  const secondDone = awaitTurn();
+  const restarted = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn: second.spawnFn,
+    onChatDone: secondDone.onChatDone,
+  });
+
+  try {
+    const kick2 = await fetch(`http://127.0.0.1:${restarted.port}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "What did I ask you to track?" }),
+    });
+    assert.equal(kick2.status, 202);
+    await secondDone.done;
+
+    const transcript = await fetch(
+      `http://127.0.0.1:${restarted.port}/v0/chat`,
+      {
+        headers: auth,
+      },
+    );
+    assert.equal(transcript.status, 200);
+    const body = (await transcript.json()) as { turns: ChatTurn[] };
+    assert.deepEqual(
+      body.turns.map((t) => [t.message, t.reply]),
+      [
+        ["Track AI safety.", "Added your AI safety preference."],
+        ["What did I ask you to track?", "You asked me to track AI safety."],
+      ],
+    );
+    assert.ok(
+      !JSON.stringify(body.turns).includes(token),
+      "token leaked into chat transcript",
+    );
+  } finally {
+    restarted.server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a new chat turn receives earlier transcript turns as model context (PER-201)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  const first = makeChatSpawn({
+    output: JSON.stringify({ reply: "I'll remember AI safety.", changes: [] }),
+    autoClose: true,
+  });
+  const firstDone = awaitTurn();
+  const { server: firstServer, port: firstPort } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn: first.spawnFn,
+    onChatDone: firstDone.onChatDone,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const kick1 = await fetch(`http://127.0.0.1:${firstPort}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "Remember that AI safety means evals." }),
+    });
+    assert.equal(kick1.status, 202);
+    await firstDone.done;
+  } finally {
+    firstServer.close();
+  }
+
+  const second = makeChatSpawn({
+    output: JSON.stringify({ reply: "You meant evals.", changes: [] }),
+    autoClose: true,
+  });
+  const secondDone = awaitTurn();
+  const { server: secondServer, port: secondPort } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn: second.spawnFn,
+    onChatDone: secondDone.onChatDone,
+  });
+
+  try {
+    const kick2 = await fetch(`http://127.0.0.1:${secondPort}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "Make that broader." }),
+    });
+    assert.equal(kick2.status, 202);
+    await secondDone.done;
+
+    assert.equal(second.calls.length, 1);
+    assert.match(
+      second.calls[0].stdin,
+      /Remember that AI safety means evals\./,
+    );
+    assert.match(second.calls[0].stdin, /I'll remember AI safety\./);
+    assert.ok(
+      !second.calls[0].stdin.includes(token),
+      "token leaked into replayed prompt",
+    );
+  } finally {
+    secondServer.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
@@ -295,7 +456,9 @@ test("POST /v0/chat ignores a change targeting an id the companion doesn't hold 
   // foreign id. It must be dropped: never write an arbitrary <id>.md.
   const model = JSON.stringify({
     reply: "Done.",
-    changes: [{ op: "update", interestId: "int_evil99", doc: "should not be written" }],
+    changes: [
+      { op: "update", interestId: "int_evil99", doc: "should not be written" },
+    ],
   });
   const { spawnFn } = makeChatSpawn({ output: model, autoClose: true });
   const { onChatDone, done } = awaitTurn();
@@ -330,7 +493,10 @@ test("POST /v0/chat returns 409 while a turn is in flight; the prior turn isn't 
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
   const model = JSON.stringify({ reply: "ok", changes: [] });
-  const { spawnFn, releaseAll } = makeChatSpawn({ output: model, autoClose: false });
+  const { spawnFn, releaseAll } = makeChatSpawn({
+    output: model,
+    autoClose: false,
+  });
   const { onChatDone, done } = awaitTurn();
 
   const { server, port } = await startServer(0, {
@@ -432,8 +598,15 @@ test("POST /v0/chat rejects an empty message with 400 and never spawns claude", 
       body: JSON.stringify({ message: "   " }),
     });
     assert.equal(res.status, 400);
-    assert.match(((await res.json()) as { error: string }).error, /message required/);
-    assert.equal(recorder.calls.length, 0, "no claude child for a rejected message");
+    assert.match(
+      ((await res.json()) as { error: string }).error,
+      /message required/,
+    );
+    assert.equal(
+      recorder.calls.length,
+      0,
+      "no claude child for a rejected message",
+    );
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
@@ -467,12 +640,18 @@ test("the pairing token never reaches the chat claude child (argv/options/stdin)
 
     assert.equal(recorder.calls.length, 1);
     const call = recorder.calls[0];
-    assert.ok(!JSON.stringify(call.args).includes(token), "token leaked into chat argv");
+    assert.ok(
+      !JSON.stringify(call.args).includes(token),
+      "token leaked into chat argv",
+    );
     assert.ok(
       !JSON.stringify(call.options ?? {}).includes(token),
       "token leaked into chat spawn options/env",
     );
-    assert.ok(!call.stdin.includes(token), "token leaked into the chat prompt (stdin)");
+    assert.ok(
+      !call.stdin.includes(token),
+      "token leaked into the chat prompt (stdin)",
+    );
     // The prompt carries the user's message + interest context, proving we
     // inspected a real prompt.
     assert.match(call.stdin, /quantum computing/);

@@ -5,7 +5,12 @@ import {
   bootstrapCompanionToken,
   fetchCompanionInterests,
 } from "@/lib/companion";
-import { runChatTurn, type ChatChange } from "@/lib/chat";
+import {
+  fetchChatTranscript,
+  runChatTurn,
+  type ChatChange,
+  type ChatTurn,
+} from "@/lib/chat";
 import {
   fetchInterestsFull,
   type InterestDocMeta,
@@ -34,6 +39,43 @@ let msgSeq = 0;
 function nextMsgId(): string {
   msgSeq += 1;
   return `m${msgSeq}`;
+}
+
+function greetingMessage(): ChatMessage {
+  return {
+    id: nextMsgId(),
+    role: "scout",
+    text: "Hi — I'm Scout. Tell me what to track and I'll draft an intent doc for it, refine one you already have, or drop an interest. Pick “Refine” on any card to aim a message at it.",
+  };
+}
+
+function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
+  return turns.flatMap((turn) => {
+    const out: ChatMessage[] = [
+      {
+        id: nextMsgId(),
+        role: "you",
+        text: turn.message,
+        ts: turn.created_at,
+      },
+    ];
+    if (turn.status === "ready" && turn.reply) {
+      out.push({
+        id: nextMsgId(),
+        role: "scout",
+        text: turn.reply,
+        ts: turn.created_at,
+      });
+    } else if (turn.status === "failed" && turn.error_msg) {
+      out.push({
+        id: nextMsgId(),
+        role: "scout",
+        text: `I couldn't finish that turn: ${turn.error_msg}`,
+        ts: turn.created_at,
+      });
+    }
+    return out;
+  });
 }
 
 export function useProfileWorkbench() {
@@ -67,13 +109,7 @@ export function useProfileWorkbench() {
     setInterests(localInterests);
     setMockSeed(seed);
     setFocusKey(params.get("focus"));
-    setMessages([
-      {
-        id: nextMsgId(),
-        role: "scout",
-        text: "Hi — I'm Scout. Tell me what to track and I'll draft an intent doc for it, refine one you already have, or drop an interest. Pick “Refine” on any card to aim a message at it.",
-      },
-    ]);
+    setMessages([greetingMessage()]);
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
@@ -86,6 +122,11 @@ export function useProfileWorkbench() {
       const tok = await bootstrapCompanionToken();
       if (cancelled) return;
       setToken(tok);
+      const transcript = tok ? await fetchChatTranscript(tok) : [];
+      if (cancelled) return;
+      if (transcript.length > 0) {
+        setMessages(transcriptMessages(transcript));
+      }
       const full = await fetchInterestsFull(tok);
       if (cancelled) return;
       if (full && full.interests.length > 0) {
