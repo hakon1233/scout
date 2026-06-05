@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui";
 
 // One rendered line in the chat transcript. `you` is the founder's raw message
@@ -20,6 +21,105 @@ function clock(ts?: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+const CHAT_MD = {
+  h1: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h3
+      className="mt-1 font-serif text-[18px] leading-tight text-primary first:mt-0"
+      {...p}
+    />
+  ),
+  h2: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h3
+      className="mt-1 font-serif text-[17px] leading-tight text-primary first:mt-0"
+      {...p}
+    />
+  ),
+  h3: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h4
+      className="mt-2 font-mono text-[11px] uppercase tracking-[0.08em] text-secondary first:mt-0"
+      {...p}
+    />
+  ),
+  p: (p: React.HTMLAttributes<HTMLParagraphElement>) => (
+    <p className="my-1.5 first:mt-0 last:mb-0" {...p} />
+  ),
+  ul: (p: React.HTMLAttributes<HTMLUListElement>) => (
+    <ul
+      className="my-1.5 list-disc space-y-1 pl-5 first:mt-0 last:mb-0"
+      {...p}
+    />
+  ),
+  ol: (p: React.HTMLAttributes<HTMLOListElement>) => (
+    <ol
+      className="my-1.5 list-decimal space-y-1 pl-5 first:mt-0 last:mb-0"
+      {...p}
+    />
+  ),
+  li: (p: React.HTMLAttributes<HTMLLIElement>) => (
+    <li className="pl-0.5 leading-relaxed" {...p} />
+  ),
+  blockquote: (p: React.HTMLAttributes<HTMLQuoteElement>) => (
+    <blockquote
+      className="my-2 border-l-2 border-border-strong pl-3 text-secondary first:mt-0 last:mb-0"
+      {...p}
+    />
+  ),
+  strong: (p: React.HTMLAttributes<HTMLElement>) => (
+    <strong className="font-semibold text-primary" {...p} />
+  ),
+  em: (p: React.HTMLAttributes<HTMLElement>) => (
+    <em className="italic text-secondary" {...p} />
+  ),
+  a: ({ href, children }: React.AnchorHTMLAttributes<HTMLAnchorElement>) =>
+    href ? (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-signal underline underline-offset-2"
+      >
+        {children}
+      </a>
+    ) : (
+      <>{children}</>
+    ),
+  pre: (p: React.HTMLAttributes<HTMLPreElement>) => (
+    <pre
+      className="my-2 max-w-full overflow-x-auto rounded-md border border-border-default bg-page p-3 font-mono text-[12px] leading-relaxed text-primary first:mt-0 last:mb-0"
+      {...p}
+    />
+  ),
+  code: ({
+    className,
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLElement>) => {
+    if (className) {
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code
+        className="rounded bg-surface-muted px-1 py-0.5 font-mono text-[12px] text-primary"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
+};
+
+function ChatMarkdown({ text }: { text: string }) {
+  return (
+    <div className="break-words font-reading text-[15px] leading-relaxed [&_*]:max-w-full">
+      <ReactMarkdown components={CHAT_MD}>{text}</ReactMarkdown>
+    </div>
+  );
 }
 
 // The conversation surface: a scrolling transcript over a pinned composer. ONE
@@ -96,7 +196,7 @@ export function ChatDock({
                   : "max-w-[90%] rounded-lg rounded-bl-sm border border-border-default bg-surface-muted px-3.5 py-2 font-reading text-[15px] leading-relaxed text-primary"
               }
             >
-              {m.text}
+              <ChatMarkdown text={m.text} />
             </div>
             <span className="px-1 font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
               {m.role === "you" ? "You" : "Scout"}

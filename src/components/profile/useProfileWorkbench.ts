@@ -49,6 +49,33 @@ function greetingMessage(): ChatMessage {
   };
 }
 
+function markdownDemoMessages(): ChatMessage[] {
+  return [
+    {
+      id: nextMsgId(),
+      role: "you",
+      text: "Track **user emphasis** and keep `<script>xss()</script>` as inert text.",
+      ts: "2026-06-05T12:00:00.000Z",
+    },
+    {
+      id: nextMsgId(),
+      role: "scout",
+      text: [
+        "## Scout markdown reply",
+        "",
+        "**assistant emphasis** and a [source link](https://example.com/brief).",
+        "",
+        "> quoted context",
+        "",
+        "```ts",
+        'const topic = "markdown";',
+        "```",
+      ].join("\n"),
+      ts: "2026-06-05T12:01:00.000Z",
+    },
+  ];
+}
+
 function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
   return turns.flatMap((turn) => {
     const out: ChatMessage[] = [
@@ -109,7 +136,9 @@ export function useProfileWorkbench() {
     setInterests(localInterests);
     setMockSeed(seed);
     setFocusKey(params.get("focus"));
-    setMessages([greetingMessage()]);
+    setMessages(
+      seed === "markdown" ? markdownDemoMessages() : [greetingMessage()],
+    );
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
