@@ -78,3 +78,24 @@ test("app home hides the top-left Back link while sub-pages keep it", async ({
 
   await expect(page.getByRole("link", { name: /Scout/ })).toBeVisible();
 });
+
+test("app Back link returns to app home without visiting the public landing route", async ({
+  page,
+}) => {
+  await blockNonLoopback(page);
+  const mainFramePaths: string[] = [];
+
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) {
+      mainFramePaths.push(new URL(frame.url()).pathname);
+    }
+  });
+
+  await page.goto(`${ORIGIN}/app/settings/`);
+  mainFramePaths.length = 0;
+
+  await page.getByRole("link", { name: /Scout/ }).click();
+
+  await expect(page).toHaveURL(`${ORIGIN}/app/`, { timeout: 15_000 });
+  expect(mainFramePaths).not.toContain("/");
+});

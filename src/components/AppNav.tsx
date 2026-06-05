@@ -20,7 +20,7 @@ export function AppNav() {
     <nav className="flex items-center justify-between">
       {showBackLink ? (
         <Link
-          href="/"
+          href="/app/"
           className="text-caption uppercase text-muted transition hover:text-primary"
         >
           ← Scout
