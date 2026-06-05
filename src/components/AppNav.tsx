@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import * as React from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -10,14 +11,21 @@ const ICON_CLASSES =
   "inline-flex size-9 items-center justify-center rounded-pill border border-border-default bg-surface text-muted transition hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page";
 
 export function AppNav() {
+  const pathname = usePathname();
+  const normalizedPathname =
+    pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  const showBackLink = normalizedPathname !== "/app";
+
   return (
     <nav className="flex items-center justify-between">
-      <Link
-        href="/"
-        className="text-caption uppercase text-muted transition hover:text-primary"
-      >
-        ← Scout
-      </Link>
+      {showBackLink ? (
+        <Link
+          href="/"
+          className="text-caption uppercase text-muted transition hover:text-primary"
+        >
+          ← Scout
+        </Link>
+      ) : null}
       <ProfileMenu />
     </nav>
   );
@@ -50,7 +58,7 @@ function ProfileMenu() {
   }, [open]);
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative ml-auto">
       <button
         type="button"
         aria-label="Open settings"
