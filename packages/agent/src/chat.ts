@@ -22,12 +22,15 @@
 // `state.interests`, which a model editing files alone could never accomplish.
 
 import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import {
   loadState,
   saveState,
   newChatTurnId,
   newInterestId,
+  CONFIG_DIR,
   type ChatChange,
   type ChatTurn,
   type Interest,
@@ -79,6 +82,59 @@ type ChatModelOutput = {
 // the model can "read" the doc before proposing an edit.
 type InterestSnapshot = { id: string; topic: string; doc: string };
 
+const CHAT_CONTEXT_TURN_LIMIT = 20;
+
+export function defaultChatTranscriptFile(stateFile?: string): string {
+  return path.join(
+    stateFile ? path.dirname(stateFile) : CONFIG_DIR,
+    "chat",
+    "transcript.json",
+  );
+}
+
+export async function readChatTranscript(
+  file = defaultChatTranscriptFile(),
+): Promise<ChatTurn[]> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(file, "utf8")) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is ChatTurn => {
+      if (!entry || typeof entry !== "object") return false;
+      const turn = entry as Partial<ChatTurn>;
+      return (
+        typeof turn.id === "string" &&
+        typeof turn.created_at === "string" &&
+        typeof turn.message === "string" &&
+        (turn.status === "pending" ||
+          turn.status === "ready" ||
+          turn.status === "failed")
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function writeChatTranscript(
+  turns: ChatTurn[],
+  file = defaultChatTranscriptFile(),
+): Promise<void> {
+  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+  await fs.writeFile(file, JSON.stringify(turns, null, 2), { mode: 0o600 });
+}
+
+async function appendChatTranscript(
+  turn: ChatTurn,
+  file = defaultChatTranscriptFile(),
+): Promise<void> {
+  const turns = await readChatTranscript(file);
+  const idx = turns.findIndex((t) => t.id === turn.id);
+  if (idx === -1) turns.push(turn);
+  else turns[idx] = turn;
+  turns.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  await writeChatTranscript(turns, file);
+}
+
 export async function buildInterestSnapshots(
   interests: Interest[],
   interestsDir: string,
@@ -95,6 +151,7 @@ export async function buildInterestSnapshots(
 export function buildChatPrompt(
   message: string,
   snapshots: InterestSnapshot[],
+  transcript: ChatTurn[] = [],
 ): string {
   const lines: string[] = [];
   lines.push(
@@ -123,6 +180,31 @@ export function buildChatPrompt(
   lines.push(JSON.stringify(snapshots, null, 2));
   lines.push("```");
   lines.push("");
+  const contextTurns = transcript
+    .filter((turn) => turn.status === "ready" || turn.status === "failed")
+    .slice(-CHAT_CONTEXT_TURN_LIMIT);
+  if (contextTurns.length > 0) {
+    lines.push(
+      `Recent conversation (${contextTurns.length} prior turns, oldest first):`,
+    );
+    lines.push("```json");
+    lines.push(
+      JSON.stringify(
+        contextTurns.map((turn) => ({
+          user: turn.message,
+          assistant:
+            turn.status === "ready"
+              ? (turn.reply ?? "")
+              : `[failed: ${turn.error_msg ?? "unknown error"}]`,
+          changes: turn.changes ?? [],
+        })),
+        null,
+        2,
+      ),
+    );
+    lines.push("```");
+    lines.push("");
+  }
   lines.push("The user says:");
   lines.push('"""');
   lines.push(message);
@@ -146,7 +228,9 @@ export function buildChatPrompt(
   lines.push(
     '    { "op": "update", "interestId": "<existing id>", "topic": "<new topic>", "doc": "<full markdown>" },',
   );
-  lines.push("    // Create a new interest (do NOT supply an id — the system mints it):");
+  lines.push(
+    "    // Create a new interest (do NOT supply an id — the system mints it):",
+  );
   lines.push(
     '    { "op": "create", "topic": "<topic>", "doc": "<full markdown>" },',
   );
@@ -163,7 +247,9 @@ export function buildChatPrompt(
     '- For "update"/"delete", `interestId` MUST be one of the ids listed above.',
   );
   lines.push('- For "create", OMIT `interestId`; never invent one.');
-  lines.push('- `doc` must be the COMPLETE new document, never a diff or fragment.');
+  lines.push(
+    "- `doc` must be the COMPLETE new document, never a diff or fragment.",
+  );
   lines.push(
     `- There is a hard cap of ${MAX_INTERESTS} interests; don't create past it.`,
   );
@@ -177,11 +263,12 @@ export function buildChatPrompt(
 export async function chatComplete(
   message: string,
   snapshots: InterestSnapshot[],
+  transcript: ChatTurn[] = [],
   opts: ChatOptions = {},
 ): Promise<ChatModelOutput> {
   const claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ?? "claude";
   const spawnImpl = opts.spawnFn ?? spawn;
-  const prompt = buildChatPrompt(message, snapshots);
+  const prompt = buildChatPrompt(message, snapshots, transcript);
 
   const raw = await new Promise<string>((resolve, reject) => {
     const child = spawnImpl(
@@ -218,7 +305,9 @@ export async function chatComplete(
     );
     child.on("close", (code) => {
       if (code !== 0)
-        return reject(new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`));
+        return reject(
+          new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`),
+        );
       resolve(stdout);
     });
 
@@ -291,7 +380,7 @@ export async function applyChatChanges(
       const doc =
         typeof ch.doc === "string"
           ? ch.doc
-          : (await readInterestDoc(id, interestsDir)) ?? "";
+          : ((await readInterestDoc(id, interestsDir)) ?? "");
       interests[idx] = { id, topic };
       await writeInterestDoc(id, doc, interestsDir);
       applied.push({ interestId: id, op: "update", topic, doc });
@@ -311,6 +400,7 @@ export async function applyChatChanges(
 export type ChatDeps = {
   stateFile: string;
   interestsDir: string;
+  chatTranscriptFile?: string;
   claudeBin?: string;
   spawnFn?: typeof spawn;
   // Fired when a turn finishes (ready or failed). Tests await this.
@@ -391,7 +481,8 @@ async function runChatTurn(
       state.interests ?? [],
       deps.interestsDir,
     );
-    const output = await chatComplete(message, snapshots, {
+    const transcript = await readChatTranscript(deps.chatTranscriptFile);
+    const output = await chatComplete(message, snapshots, transcript, {
       claudeBin: deps.claudeBin,
       spawnFn: deps.spawnFn,
     });
@@ -434,6 +525,7 @@ async function runChatTurn(
       },
       deps.stateFile,
     );
+    await appendChatTranscript(turn, deps.chatTranscriptFile);
   } finally {
     chatInFlight = false;
   }

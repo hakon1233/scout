@@ -37,6 +37,17 @@ export type ChatTurn = {
   error_msg?: string;
 };
 
+export async function fetchChatTranscript(token: string): Promise<ChatTurn[]> {
+  const base = await requireBase();
+  const res = await fetch(`${base}/v0/chat`, {
+    headers: { authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as { turns?: ChatTurn[] };
+  return Array.isArray(json.turns) ? json.turns : [];
+}
+
 async function requireBase(): Promise<string> {
   const base = await discoverCompanion();
   if (!base) {
