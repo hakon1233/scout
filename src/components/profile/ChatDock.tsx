@@ -67,10 +67,10 @@ const CHAT_MD = {
     />
   ),
   strong: (p: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="font-semibold text-primary" {...p} />
+    <strong className="font-semibold" {...p} />
   ),
   em: (p: React.HTMLAttributes<HTMLElement>) => (
-    <em className="italic text-secondary" {...p} />
+    <em className="italic opacity-85" {...p} />
   ),
   a: ({ href, children }: React.AnchorHTMLAttributes<HTMLAnchorElement>) =>
     href ? (
