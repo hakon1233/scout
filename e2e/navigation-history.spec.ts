@@ -64,3 +64,17 @@ test("unpaired users can still reach Connect", async ({ page }) => {
     page.getByRole("heading", { name: "Connect your agent" }),
   ).toBeVisible();
 });
+
+test("app home hides the top-left Back link while sub-pages keep it", async ({
+  page,
+}) => {
+  await blockNonLoopback(page);
+
+  await page.goto(`${ORIGIN}/app/`);
+
+  await expect(page.getByRole("link", { name: /Scout/ })).toHaveCount(0);
+
+  await page.goto(`${ORIGIN}/app/settings/`);
+
+  await expect(page.getByRole("link", { name: /Scout/ })).toBeVisible();
+});
