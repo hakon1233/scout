@@ -241,9 +241,14 @@ export function buildResearchPrompt(
   lines.push("- When the source page has a usable lead image, add the optional");
   lines.push("  `![source image](url)` line right under that story's citation, per the");
   lines.push("  SOURCE IMAGE rules above. Omit it when there isn't one — never invent it.");
+  lines.push("- Under each story, add the IN-DEPTH BODY as an indented `> …` blockquote");
+  lines.push("  per the rules above: ~2-4 short, concise paragraphs that go deeper than the");
+  lines.push("  one-line summary, grounded in the same sources. This is what the reader");
+  lines.push("  sees only on click; keep the bullet summary itself to one sentence.");
   lines.push("- If you genuinely can't find anything within the last 30 days, STILL emit");
   lines.push(`  the \`## ${topic}\` heading with a single line \`_no fresh news_\` underneath.`);
-  lines.push("- Keep the section under ~200 words.");
+  lines.push("- Keep each story's one-line summary tight; the in-depth blockquote body may");
+  lines.push("  run a few short paragraphs. Keep the whole section under ~500 words.");
   lines.push("");
   lines.push("Write the section now.");
   return lines.join("\n");

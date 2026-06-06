@@ -15,6 +15,9 @@ type FeedItem = {
   id: string;
   headline: string;
   blurb?: string;
+  // In-depth write-up shown ONLY in the detail view (PER-214). A few concise
+  // paragraphs (`\n\n`-separated); absent when the story had nothing deeper.
+  body?: string;
   imageUrl?: string;
   url: string;
   source: string;
@@ -189,7 +192,22 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
       )}
 
       {item.blurb && (
-        <p className="font-reading text-body text-secondary">{item.blurb}</p>
+        <p className="font-reading text-body font-medium text-primary">
+          {item.blurb}
+        </p>
+      )}
+
+      {item.body && (
+        <div className="flex flex-col gap-4">
+          {item.body.split(/\n{2,}/).map((para, i) => (
+            <p
+              key={i}
+              className="font-reading text-body leading-relaxed text-secondary"
+            >
+              {para}
+            </p>
+          ))}
+        </div>
       )}
 
       <div className="flex flex-col gap-2 rounded-md border border-border-default bg-surface-muted p-4">
@@ -276,6 +294,7 @@ function buildFeed(articles: Article[]): FeedItem[] {
       id: a.id,
       headline: deriveHeadline(a.title, a.url),
       blurb: a.text,
+      body: a.body,
       imageUrl: a.imageUrl,
       url: a.url,
       source: a.source ?? hostname(a.url),

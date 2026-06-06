@@ -43,6 +43,14 @@ function emit() {
     "- A research lab published new alignment results this week.",
     "  [example.com — Alignment update](https://example.com/alignment)",
     `  ![source image](${SOURCE_IMAGE})`,
+    // In-depth body blockquote (PER-214): the few concise paragraphs the detail
+    // view renders on click. The feed card stays short (just the bullet above);
+    // this depth must appear ONLY after the card is opened.
+    "  > The lab reported a measurable drop in deceptive behavior under its new",
+    "  > training regime, and published the evaluation harness alongside.",
+    "  >",
+    "  > Independent researchers called the methodology promising but said the",
+    "  > results need replication on larger models before they generalize.",
     "",
     "## Markets",
     "- Indices closed higher on fresh inflation data.",

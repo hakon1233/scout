@@ -244,6 +244,11 @@ const LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
 const IMAGE_RE = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g;
 const TOPIC_HEADING_RE = /^##\s+(.+?)\s*$/;
 const STORY_BULLET_RE = /^\s*[-*]\s+/;
+// In-depth body line: an indented markdown blockquote under the story's
+// citation/image (PER-214). `> text` → a body paragraph line; a bare `>` is a
+// paragraph break. We collect these into Article.body for the click-through
+// detail view. Captured value excludes the `> ` marker.
+const STORY_BODY_RE = /^\s*>\s?(.*)$/;
 // Per-story publish date: each story bullet may lead with its date as an ISO date
 // (or `undated`) in backticks — the contract set by the shared search-skills
 // fragment (packages/agent/src/search-skills.ts STORY_DATE_RE). We capture it
@@ -271,6 +276,9 @@ type PendingStory = {
   blurb: string;
   links: Array<{ label: string; url: string }>;
   image?: string;
+  // Raw blockquote body lines (marker stripped). A bare `>` line lands here as
+  // "" and becomes a paragraph break when joined. Flushed into Article.body.
+  bodyLines: string[];
 };
 
 function parseArticlesFromMarkdown(markdown: string, briefId: string) {
@@ -282,6 +290,11 @@ function parseArticlesFromMarkdown(markdown: string, briefId: string) {
 
   const flush = () => {
     if (!story) return;
+    // Join blockquote lines into paragraphs: bare `>` lines (captured as "")
+    // become blank lines, so trimming + collapsing 3+ newlines yields clean
+    // `\n\n`-separated paragraphs the detail view can split on.
+    const body =
+      story.bodyLines.join("\n").replace(/\n{3,}/g, "\n\n").trim() || undefined;
     for (const link of story.links) {
       articles.push({
         id: `${briefId}-${idx++}`,
@@ -291,6 +304,7 @@ function parseArticlesFromMarkdown(markdown: string, briefId: string) {
         publishedAt: story.date,
         text: story.blurb || undefined,
         imageUrl: story.image,
+        body,
       });
     }
     story = null;
@@ -346,7 +360,22 @@ function parseArticlesFromMarkdown(markdown: string, briefId: string) {
           ? line.slice(dateMatch[0].length)
           : line.replace(STORY_BULLET_RE, ""),
       );
-      story = { topic: currentTopic, date, blurb, links: [], image: undefined };
+      story = {
+        topic: currentTopic,
+        date,
+        blurb,
+        links: [],
+        image: undefined,
+        bodyLines: [],
+      };
+    }
+    // In-depth body blockquote (`> …`): pure prose — collect it and DON'T run the
+    // link/image scanners on it, so a stray markdown link inside the body never
+    // pollutes the citation/source list (PER-214).
+    const bodyMatch = STORY_BODY_RE.exec(line);
+    if (bodyMatch && story) {
+      story.bodyLines.push(bodyMatch[1]);
+      continue;
     }
     // Image first so its URL is parked on the story; then citations (which skip
     // the `!`-prefixed image match). Order within a line doesn't matter here.

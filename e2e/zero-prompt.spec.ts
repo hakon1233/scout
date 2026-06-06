@@ -88,9 +88,15 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
     card.locator('img[src*="icon-192.png"]'),
   ).toBeVisible();
 
-  // Clicking a card opens the still-short headline detail, where the source link
-  // lives. Citations survive parse → render as a real, safe link there, and the
-  // source image carries through to the larger detail view.
+  // The feed stays SHORT (PER-214): the in-depth blockquote body must NOT leak
+  // onto the feed card — depth appears only after a click.
+  await expect(page.locator("body")).not.toContainText(
+    "need replication on larger models",
+  );
+
+  // Clicking a card opens the detail, where the source link and the in-depth
+  // body live. Citations survive parse → render as a real, safe link there, and
+  // the source image carries through to the larger detail view.
   await card.click();
   await expect(
     page.locator('a[href="https://example.com/alignment"]').first(),
@@ -98,6 +104,13 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   await expect(
     page.locator('img[src*="icon-192.png"]').first(),
   ).toBeVisible();
+
+  // The in-depth body (PER-214): the stub's `> …` blockquote paragraphs parse
+  // into Article.body and render ONLY in this detail view, not on the feed card.
+  // Prove a sentence that lives solely in the blockquote is now visible here.
+  await expect(page.locator("body")).toContainText(
+    "need replication on larger models",
+  );
 
   // No preamble leak: the stub's leading "I have enough to write the brief now."
   // line must be stripped before render (PER-113 #1).
