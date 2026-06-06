@@ -94,6 +94,9 @@ function ProfileMenu() {
             <MenuLink href="/app/interests" onSelect={() => setOpen(false)}>
               Interests
             </MenuLink>
+            <MenuLink href="/app/skills" onSelect={() => setOpen(false)}>
+              Skills
+            </MenuLink>
           </div>
         </div>
       )}
