@@ -238,43 +238,122 @@ type AgentBrief = {
 // We parse those out so the rest of the UI (Sources panel, interest chips) keeps
 // working without changing its data shape.
 const LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+// Markdown image: `![alt](url)`. Captured into Article.imageUrl (PER-211). Run
+// BEFORE/alongside LINK_RE; LINK_RE deliberately skips `!`-prefixed matches so an
+// image's `[alt](url)` tail is never collected as a citation.
+const IMAGE_RE = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g;
 const TOPIC_HEADING_RE = /^##\s+(.+?)\s*$/;
-// Per-story publish date: each story bullet leads with its date as an ISO date
+const STORY_BULLET_RE = /^\s*[-*]\s+/;
+// Per-story publish date: each story bullet may lead with its date as an ISO date
 // (or `undated`) in backticks — the contract set by the shared search-skills
 // fragment (packages/agent/src/search-skills.ts STORY_DATE_RE). We capture it
 // into Article.publishedAt so the UI can show it per item and sort newest-first.
-const STORY_DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`/;
+// (The sample brief uses dateless bullets, so a leading date is not required.)
+const STORY_DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`\s*(?:—|–|-)?\s*/;
+
+// Reduce inline markdown to plain text for the card blurb: drop images entirely,
+// unwrap links to their label, collapse leftover emphasis markers.
+function stripInlineMarkdown(s: string): string {
+  return s
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// A story accumulates its lines (bullet + continuation citation/image lines)
+// before being flushed into articles, because the source-image line follows the
+// citation line — so the image URL isn't known yet when the citation is seen.
+type PendingStory = {
+  topic: string;
+  date?: string;
+  blurb: string;
+  links: Array<{ label: string; url: string }>;
+  image?: string;
+};
 
 function parseArticlesFromMarkdown(markdown: string, briefId: string) {
   const articles: AppBrief["articles"] = [];
   const interests = new Set<string>();
   let currentTopic = "general";
-  let currentDate: string | undefined;
   let idx = 0;
+  let story: PendingStory | null = null;
+
+  const flush = () => {
+    if (!story) return;
+    for (const link of story.links) {
+      articles.push({
+        id: `${briefId}-${idx++}`,
+        title: link.label.trim(),
+        url: link.url,
+        interest: story.topic,
+        publishedAt: story.date,
+        text: story.blurb || undefined,
+        imageUrl: story.image,
+      });
+    }
+    story = null;
+  };
+
+  const collectImages = (line: string) => {
+    let im: RegExpExecArray | null;
+    IMAGE_RE.lastIndex = 0;
+    while ((im = IMAGE_RE.exec(line)) !== null) {
+      if (story && !story.image) story.image = im[1];
+    }
+  };
+
+  const collectLinks = (line: string) => {
+    let m: RegExpExecArray | null;
+    LINK_RE.lastIndex = 0;
+    while ((m = LINK_RE.exec(line)) !== null) {
+      // Skip image markdown: `![alt](url)` — the `[alt](url)` tail matches LINK_RE
+      // but is preceded by `!`. Those are handled by collectImages, not citations.
+      if (m.index > 0 && line[m.index - 1] === "!") continue;
+      const [, label, url] = m;
+      if (story) {
+        story.links.push({ label, url });
+      } else {
+        // A citation outside any story bullet (e.g. inline in prose). Preserve the
+        // prior behavior of surfacing it as a standalone, dateless article.
+        articles.push({
+          id: `${briefId}-${idx++}`,
+          title: label.trim(),
+          url,
+          interest: currentTopic,
+        });
+      }
+    }
+  };
 
   for (const line of markdown.split("\n")) {
     const heading = TOPIC_HEADING_RE.exec(line);
     if (heading) {
+      flush();
       currentTopic = heading[1].trim();
       interests.add(currentTopic);
-      currentDate = undefined;
       continue;
     }
-    // A new story bullet resets the active date; `undated` → no date.
-    const dateMatch = STORY_DATE_RE.exec(line);
-    if (dateMatch) currentDate = dateMatch[1] === "undated" ? undefined : dateMatch[1];
-    let m: RegExpExecArray | null;
-    while ((m = LINK_RE.exec(line)) !== null) {
-      const [, label, url] = m;
-      articles.push({
-        id: `${briefId}-${idx++}`,
-        title: label.trim(),
-        url,
-        interest: currentTopic,
-        publishedAt: currentDate,
-      });
+    if (STORY_BULLET_RE.test(line)) {
+      flush();
+      const dateMatch = STORY_DATE_RE.exec(line);
+      const date =
+        dateMatch && dateMatch[1] !== "undated" ? dateMatch[1] : undefined;
+      // Blurb = bullet text minus the marker and the leading `date` — token.
+      const blurb = stripInlineMarkdown(
+        dateMatch
+          ? line.slice(dateMatch[0].length)
+          : line.replace(STORY_BULLET_RE, ""),
+      );
+      story = { topic: currentTopic, date, blurb, links: [], image: undefined };
     }
+    // Image first so its URL is parked on the story; then citations (which skip
+    // the `!`-prefixed image match). Order within a line doesn't matter here.
+    collectImages(line);
+    collectLinks(line);
   }
+  flush();
   return { articles, interests: [...interests] };
 }
 
