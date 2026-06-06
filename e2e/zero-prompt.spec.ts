@@ -80,11 +80,23 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   const card = page.getByRole("button", { name: /Alignment update/ });
   await expect(card).toBeVisible({ timeout: 30_000 });
 
+  // The handpicked source image (the stub's `![source image](…)` line, pointed
+  // at the companion's own loopback asset) parses and renders on the card —
+  // proving the PER-211 image path end-to-end (capture contract → parser →
+  // FeedImage), not just the text fallback.
+  await expect(
+    card.locator('img[src*="icon-192.png"]'),
+  ).toBeVisible();
+
   // Clicking a card opens the still-short headline detail, where the source link
-  // lives. Citations survive parse → render as a real, safe link there.
+  // lives. Citations survive parse → render as a real, safe link there, and the
+  // source image carries through to the larger detail view.
   await card.click();
   await expect(
     page.locator('a[href="https://example.com/alignment"]').first(),
+  ).toBeVisible();
+  await expect(
+    page.locator('img[src*="icon-192.png"]').first(),
   ).toBeVisible();
 
   // No preamble leak: the stub's leading "I have enough to write the brief now."
