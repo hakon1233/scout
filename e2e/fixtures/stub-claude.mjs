@@ -23,6 +23,15 @@ process.stdin.on("data", (chunk) => {
   stdin += chunk.toString();
 });
 
+// Point the canned source image at the companion's OWN loopback origin so it
+// actually loads under the E2E offline guard (which aborts every non-loopback
+// request). The companion serves /icon-192.png from its static webroot, so the
+// `![source image](…)` line below exercises the real image parse → render path
+// (PER-211) without a network dependency. Port mirrors playwright.config's
+// SCOUT_E2E_PORT default; the stub inherits the companion's env.
+const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
+const SOURCE_IMAGE = `http://127.0.0.1:${PORT}/icon-192.png`;
+
 function emit() {
   const brief = [
     // Preamble that MUST be stripped before render (PER-113 #1).
@@ -33,6 +42,7 @@ function emit() {
     "## AI safety",
     "- A research lab published new alignment results this week.",
     "  [example.com — Alignment update](https://example.com/alignment)",
+    `  ![source image](${SOURCE_IMAGE})`,
     "",
     "## Markets",
     "- Indices closed higher on fresh inflation data.",
