@@ -237,11 +237,16 @@ type AgentBrief = {
 // emits the brief markdown directly, with citations inline as `[domain — Title](url)`.
 // We parse those out so the rest of the UI (Sources panel, interest chips) keeps
 // working without changing its data shape.
-const LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+// URL body inside a markdown `(...)` link/image. Tolerates ONE level of balanced
+// parens inside the URL so filenames like `...AI%20(13).png` — common on Webflow/
+// CDN hosts — are not truncated at the first `)` (PER-216). A bare `)` ends the
+// group, so it's still the closing markdown paren that terminates the match.
+const MD_URL = "https?:\\/\\/(?:[^()\\s]|\\([^()\\s]*\\))+";
+const LINK_RE = new RegExp(`\\[([^\\]]+)\\]\\((${MD_URL})\\)`, "g");
 // Markdown image: `![alt](url)`. Captured into Article.imageUrl (PER-211). Run
 // BEFORE/alongside LINK_RE; LINK_RE deliberately skips `!`-prefixed matches so an
 // image's `[alt](url)` tail is never collected as a citation.
-const IMAGE_RE = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g;
+const IMAGE_RE = new RegExp(`!\\[[^\\]]*\\]\\((${MD_URL})\\)`, "g");
 const TOPIC_HEADING_RE = /^##\s+(.+?)\s*$/;
 const STORY_BULLET_RE = /^\s*[-*]\s+/;
 // In-depth body line: an indented markdown blockquote under the story's
@@ -259,9 +264,13 @@ const STORY_DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`\s*(?:—|–|-)?
 // Reduce inline markdown to plain text for the card blurb: drop images entirely,
 // unwrap links to their label, collapse leftover emphasis markers.
 function stripInlineMarkdown(s: string): string {
+  // Balanced-paren tolerance (PER-216) so a `(13)` in a CDN filename doesn't
+  // leave a stray `).png)` tail in the card blurb. Kept scheme-agnostic (unlike
+  // LINK_RE/IMAGE_RE) to match the original strip breadth.
+  const inner = "(?:[^()]|\\([^()]*\\))*";
   return s
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(new RegExp(`!\\[[^\\]]*\\]\\(${inner}\\)`, "g"), "")
+    .replace(new RegExp(`\\[([^\\]]+)\\]\\(${inner}\\)`, "g"), "$1")
     .replace(/[*_`]+/g, "")
     .replace(/\s+/g, " ")
     .trim();
