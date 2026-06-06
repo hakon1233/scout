@@ -241,11 +241,14 @@ function FeedImage({ src, className }: { src: string; className: string }) {
   if (failed) return null;
   // Remote, unknown-host source images — next/image needs preconfigured domains
   // we can't predict, so a plain <img> with graceful onError is correct here.
+  // referrerPolicy="no-referrer" so referer-checking CDNs (Crunchbase etc.) that
+  // 403 a request carrying our ts.net origin still serve the image (PER-217).
   return (
     <img
       src={src}
       alt=""
       loading="lazy"
+      referrerPolicy="no-referrer"
       className={className}
       onError={() => setFailed(true)}
     />
