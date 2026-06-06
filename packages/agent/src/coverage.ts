@@ -19,6 +19,11 @@
 //                This is the only state that warrants an automatic retry.
 //
 // All functions here are PURE so they can be unit-tested without spawning claude.
+//
+// The user-facing, plain-language description of these assembly behaviors lives
+// in assembly-skills.ts (ASSEMBLY_SKILLS) and is rendered on the in-development
+// `/app/skills` transparency page. When you change the assembly logic below,
+// update that constant too so the page stays honest about what the engine does.
 
 export type TopicStatus = "covered" | "empty" | "missing";
 export type TopicCoverage = { topic: string; status: TopicStatus };
