@@ -19,6 +19,14 @@ export type Article = {
   // Optional extra images for the detail view. Reserved for future multi-image
   // stories; the feed card uses `imageUrl`. May be empty/absent.
   images?: string[];
+  // The in-depth write-up shown ONLY in the click-through detail view (PER-214):
+  // a few short, concise paragraphs (what happened, why it matters, key
+  // specifics), distinct from the one-line `text` blurb the feed card shows.
+  // Captured during research as an indented markdown blockquote (`> …`) under the
+  // story's citation/image; paragraphs are separated by blank lines (`\n\n`).
+  // Optional: a story with little to say degrades to just the blurb. Never
+  // fabricated filler — grounded in the same sources as the rest of the item.
+  body?: string;
 };
 
 // Per-topic coverage status the companion computes authoritatively over the

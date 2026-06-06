@@ -19,6 +19,13 @@
 // news-feed card's main image. It must sit on its own line under the citation so
 // it stays a markdown image (the parser skips `!`-prefixed links so an image
 // URL is never mistaken for a citation).
+//
+// The optional IN-DEPTH BODY (an indented `> …` blockquote under the citation/
+// image) is the third part of that contract (PER-214): the parser reads those
+// blockquote lines into Article.body — the few concise paragraphs the detail
+// view renders on click. It must be plain prose (no links/images) so it never
+// collides with the citation or source-image parse, and the feed bullet's
+// one-sentence summary stays the SHORT card blurb.
 
 export const STORY_DATE_RE = /`(\d{4}-\d{2}-\d{2}|undated)`/;
 
@@ -70,6 +77,28 @@ SOURCE IMAGE (one per item, OPTIONAL, handpicked from the source — never inven
   correct and expected. Do not output a broken or guessed URL.
 - One image per story maximum. Prefer a wide/landscape editorial lead image; skip
   sprites, avatars, share-button icons, and sub-200px thumbnails.
+
+IN-DEPTH BODY (one per item, render contract for the click-through detail — PER-214):
+- The one-sentence summary on the bullet line is the SHORT feed blurb. In ADDITION,
+  give each story a few short paragraphs of depth — what happened, why it matters,
+  the key specifics — that the reader sees only after clicking into that story.
+- Aim for ~2–4 SHORT paragraphs. Concise but genuinely informative — not a wall of
+  text, and not a rehash of the one-line blurb. If a story honestly has little to
+  say, a shorter body (or none) is fine — NEVER pad, invent, or speculate to hit a
+  length. Stay grounded in the SAME sources you already read; add no new claims you
+  can't back from them.
+- Emit it as an INDENTED markdown blockquote on the lines AFTER the citation (and
+  the optional source-image line), each paragraph a \`> \` line, paragraphs
+  separated by a bare \`>\` line:
+  - \`YYYY-MM-DD\` — one-sentence summary of what happened.
+    [domain — Title](url)
+    ![source image](https://image-url-from-the-source)
+    > First paragraph: what happened, in a few concise sentences.
+    >
+    > Second paragraph: why it matters and the key specifics.
+- The blockquote is the ONLY place depth goes — keep the bullet's summary to one
+  sentence so the feed card stays short. Do not put links or images inside the
+  blockquote; keep it plain prose.
 
 SOURCES & QUALITY:
 - Prefer primary / original sources — the company's own announcement, the filing,
