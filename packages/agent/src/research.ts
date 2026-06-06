@@ -238,6 +238,9 @@ export function buildResearchPrompt(
   lines.push("- Under the heading, 2-4 story bullets following the date-first format and");
   lines.push("  recency rules in the search skills above (newest first, ISO date in");
   lines.push("  backticks leading each bullet, citation on the next line).");
+  lines.push("- When the source page has a usable lead image, add the optional");
+  lines.push("  `![source image](url)` line right under that story's citation, per the");
+  lines.push("  SOURCE IMAGE rules above. Omit it when there isn't one — never invent it.");
   lines.push("- If you genuinely can't find anything within the last 30 days, STILL emit");
   lines.push(`  the \`## ${topic}\` heading with a single line \`_no fresh news_\` underneath.`);
   lines.push("- Keep the section under ~200 words.");
