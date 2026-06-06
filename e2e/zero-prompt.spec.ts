@@ -42,16 +42,23 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
 }, testInfo) => {
   await blockNonLoopback(page);
 
-  // Fresh profile (Playwright gives each test a clean context → empty
-  // localStorage), loaded straight from the companion's own origin.
-  await page.goto(`${ORIGIN}/app/`);
+  // Seed the interest set before the app boots. The in-page keyword setup form
+  // was removed in PER-188 — interests are now set via the chat-driven profile,
+  // which a hermetic stub run can't drive. Seeding localStorage (the exact shape
+  // saveSettings writes) reproduces the post-setup precondition directly, so the
+  // test exercises the part that matters here: the zero-prompt run + feed render.
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "scout.settings.v1",
+      JSON.stringify({
+        name: "E2E Tester",
+        interests: [{ id: "int_0_aisafety", topic: "AI safety" }],
+      }),
+    );
+  });
 
-  // First run shows the setup form (no stored settings). It's a single step
-  // (name + interests) — the BYO-key step was removed (PER-133) since briefs
-  // are generated only via the local companion.
-  await page.getByLabel("Your name").fill("E2E Tester");
-  await page.getByLabel(/Interests/).fill("AI safety\nMarkets");
-  await page.getByRole("button", { name: "Continue" }).click();
+  // Loaded straight from the companion's own origin.
+  await page.goto(`${ORIGIN}/app/`);
 
   // THE zero-prompt assertion: with no paste step, the token is auto-adopted
   // same-origin and the companion ping succeeds, so "Run now" enables itself.
