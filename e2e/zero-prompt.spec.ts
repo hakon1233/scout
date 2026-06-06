@@ -67,14 +67,15 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   // Generate and wait for the brief to render in-app.
   await generate.click();
 
-  // The stub brief has a `## AI safety` topic heading → BriefView renders it as
-  // an <h2>. (The `# Your brief` H1 is intentionally hidden by BriefView.)
-  await expect(page.getByRole("heading", { name: "AI safety" })).toBeVisible({
-    timeout: 30_000,
-  });
+  // The brief now renders as a news feed (PER-211): the stub's `## AI safety`
+  // topic becomes a feed card whose headline is the citation title ("Alignment
+  // update", from `[example.com — Alignment update](url)`). The card is a button.
+  const card = page.getByRole("button", { name: /Alignment update/ });
+  await expect(card).toBeVisible({ timeout: 30_000 });
 
-  // Citations survive parse → render: the stub's [example.com — Alignment
-  // update](https://example.com/alignment) must appear as a real link.
+  // Clicking a card opens the still-short headline detail, where the source link
+  // lives. Citations survive parse → render as a real, safe link there.
+  await card.click();
   await expect(
     page.locator('a[href="https://example.com/alignment"]').first(),
   ).toBeVisible();

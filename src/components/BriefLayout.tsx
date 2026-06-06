@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BriefView } from "@/components/BriefView";
+import { FeedView } from "@/components/FeedView";
 import { Banner, Button, Card } from "@/components/ui";
 import type { Brief } from "@/lib/types";
 
@@ -88,11 +88,7 @@ export function BriefLayout({
         </Banner>
       </div>
 
-      <Card tone="default" padding="lg">
-        <div className="measure-prose">
-          <BriefView brief={brief} />
-        </div>
-      </Card>
+      <FeedView brief={brief} />
 
       {!preview && (
         <Card
