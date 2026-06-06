@@ -42,6 +42,12 @@ export default function ProfileRedirectPage() {
             >
               Interests
             </Link>
+            <Link
+              className="rounded-pill border border-border-default px-3 py-2 font-mono text-[11px] uppercase tracking-[0.06em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+              href="/app/skills"
+            >
+              Skills
+            </Link>
           </div>
         </section>
       </div>
