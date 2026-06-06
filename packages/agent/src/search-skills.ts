@@ -13,6 +13,12 @@
 // web app (src/lib/companion.ts `parseArticlesFromMarkdown`) parses that token
 // into Article.publishedAt and renders it per item. If you change the on-the-
 // wire format here, update that parser and BriefView together.
+//
+// The optional SOURCE IMAGE line (`![source image](URL)`) is ALSO part of that
+// contract (PER-211): the parser reads it into Article.imageUrl to render the
+// news-feed card's main image. It must sit on its own line under the citation so
+// it stays a markdown image (the parser skips `!`-prefixed links so an image
+// URL is never mistaken for a citation).
 
 export const STORY_DATE_RE = /`(\d{4}-\d{2}-\d{2}|undated)`/;
 
@@ -47,6 +53,23 @@ PUBLISH DATES (one per item, mandatory, captured as a field — not buried in li
 - If a date genuinely cannot be determined, write \`undated\` in place of the date,
   place that item LAST in its section, and prefer not to include it at all if a
   dated alternative exists. Never drop the date marker entirely.
+
+SOURCE IMAGE (one per item, OPTIONAL, handpicked from the source — never invented):
+- For each story, try to capture ONE representative image taken FROM THE NEWS
+  SOURCE PAGE ITSELF — the article's own lead image. WebFetch the cited page and
+  read, in order of preference: \`<meta property="og:image">\`, then
+  \`<meta name="twitter:image">\`, then the first meaningful inline \`<img>\` in the
+  article body. Use the absolute (https) image URL.
+- Put it on its OWN line immediately AFTER the citation line, as a markdown image:
+  - \`YYYY-MM-DD\` — one-sentence summary of what happened.
+    [domain — Title](url)
+    ![source image](https://image-url-from-the-source)
+- NEVER invent, generate, screenshot, or substitute a stock/placeholder image. If
+  the source has no usable lead image, or it's paywalled / blocked / a tiny
+  logo-icon / a tracking pixel, simply OMIT the image line — a text-only item is
+  correct and expected. Do not output a broken or guessed URL.
+- One image per story maximum. Prefer a wide/landscape editorial lead image; skip
+  sprites, avatars, share-button icons, and sub-200px thumbnails.
 
 SOURCES & QUALITY:
 - Prefer primary / original sources — the company's own announcement, the filing,

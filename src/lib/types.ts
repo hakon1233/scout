@@ -10,6 +10,15 @@ export type Article = {
   source?: string;
   text?: string;
   interest: string;
+  // One representative image handpicked FROM THE NEWS SOURCE itself (the article's
+  // own lead image — og:image / twitter:image / first meaningful inline <img>),
+  // captured during research as an `![source image](url)` line under the citation
+  // (PER-211). Optional: missing/blocked/paywalled images degrade to a text-only
+  // card. Never a stock/generated/placeholder image.
+  imageUrl?: string;
+  // Optional extra images for the detail view. Reserved for future multi-image
+  // stories; the feed card uses `imageUrl`. May be empty/absent.
+  images?: string[];
 };
 
 // Per-topic coverage status the companion computes authoritatively over the
