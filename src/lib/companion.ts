@@ -487,6 +487,42 @@ export async function updateSchedule(
   return res.json() as Promise<CompanionSchedule>;
 }
 
+// Page the companion's rolling brief history, newest-first (PER-219). Backs the
+// feed's "previous briefs" pager: the current brief is shown at the top of the
+// page, so the pager starts at offset 1 to skip it. Returns the adapted (parsed)
+// ready briefs in this page plus the server's total ready-brief count so the
+// caller knows whether a "Load older briefs" button is still warranted.
+//
+// Uses the limit/offset form of GET /v0/briefs (distinct from the no-param
+// single-slot poller contract `pollBriefsRaw` relies on). Filters to ready
+// briefs with summary markdown — a half-written/failed brief never renders as a
+// past edition. Returns an empty page (and total 0) on any error so the feed
+// degrades to "no older briefs" rather than throwing.
+export async function fetchBriefHistory(
+  token: string,
+  opts: { limit: number; offset: number },
+): Promise<{ briefs: AppBrief[]; total: number }> {
+  try {
+    const base = await requireBase();
+    const url = `${base}/v0/briefs?limit=${opts.limit}&offset=${opts.offset}`;
+    const res = await fetch(url, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return { briefs: [], total: 0 };
+    const json = (await res.json()) as {
+      briefs: AgentBrief[];
+      total?: number;
+    };
+    const briefs = (json.briefs ?? [])
+      .filter((b) => b.status === "ready" && b.summary_md)
+      .map(adaptBrief);
+    return { briefs, total: json.total ?? briefs.length };
+  } catch {
+    return { briefs: [], total: 0 };
+  }
+}
+
 export async function pollBriefsRaw(sinceTs: string, token: string): Promise<AgentBrief[]> {
   const base = await requireBase();
   const url = `${base}/v0/briefs?since=${encodeURIComponent(sinceTs)}`;

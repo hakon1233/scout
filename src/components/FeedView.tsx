@@ -28,21 +28,18 @@ type FeedItem = {
 export function FeedView({ brief }: { brief: Brief }) {
   const items = React.useMemo(() => buildFeed(brief.articles), [brief.articles]);
 
-  // Topic filter chips, in first-seen (document) order so they line up with the
-  // feed's reading order. Mirrors BriefView's per-topic filter (PER-191).
-  const topics = React.useMemo(() => {
-    const seen: string[] = [];
-    for (const it of items) if (!seen.includes(it.topic)) seen.push(it.topic);
-    return seen;
-  }, [items]);
+  // PER-219: the per-topic filter chips were removed from the feed — the founder
+  // wanted a clean read straight into headlines, no filter UI. The chip logic
+  // (a `topics` memo + `activeTopic` state + the `FilterChip` component + the
+  // chip render block) is intentionally gone, not just hidden, so the feed has
+  // one obvious reading order. To reintroduce later: derive topics from `items`,
+  // hold an `activeTopic` state, and filter `items` by it before the grid map.
 
-  const [activeTopic, setActiveTopic] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
-  // No reset effect on brief change is needed: a stale topic auto-nullifies via
-  // `active` below (it's only honored if still in `topics`), and a stale
-  // selection resolves to null because story ids embed the brief id, so a
-  // previous edition's selectedId never matches a new brief's items.
+  // No reset effect on brief change is needed: a stale selection resolves to null
+  // because story ids embed the brief id, so a previous edition's selectedId
+  // never matches a new brief's items.
 
   // Close the detail on browser/OS Back. openDetail() pushes one history entry;
   // Back (hardware, gesture, or our in-app button via history.back()) pops it and
@@ -52,9 +49,6 @@ export function FeedView({ brief }: { brief: Brief }) {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
-
-  const active = activeTopic && topics.includes(activeTopic) ? activeTopic : null;
-  const visible = active ? items.filter((it) => it.topic === active) : items;
 
   const selected = selectedId
     ? items.find((it) => it.id === selectedId) ?? null
@@ -95,29 +89,8 @@ export function FeedView({ brief }: { brief: Brief }) {
 
   return (
     <div className="flex flex-col gap-5">
-      {topics.length > 1 && (
-        <div
-          className="flex flex-wrap gap-2"
-          role="group"
-          aria-label="Filter feed by topic"
-        >
-          <FilterChip active={!active} onClick={() => setActiveTopic(null)}>
-            All topics
-          </FilterChip>
-          {topics.map((t) => (
-            <FilterChip
-              key={t}
-              active={active === t}
-              onClick={() => setActiveTopic(t)}
-            >
-              {t}
-            </FilterChip>
-          ))}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-4 min-[680px]:grid-cols-2">
-        {visible.map((it) => (
+        {items.map((it) => (
           <FeedCard key={it.id} item={it} onOpen={() => openDetail(it.id)} />
         ))}
       </div>
@@ -252,33 +225,6 @@ function FeedImage({ src, className }: { src: string; className: string }) {
       className={className}
       onError={() => setFailed(true)}
     />
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={[
-        "inline-flex min-h-[44px] items-center rounded-pill border px-3 py-1.5 text-caption transition",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
-        active
-          ? "border-border-strong bg-surface-strong font-medium text-primary"
-          : "border-border-default bg-surface text-muted hover:bg-surface-muted hover:text-secondary",
-      ].join(" ")}
-    >
-      <span className="max-w-[16ch] truncate">{children}</span>
-    </button>
   );
 }
 
