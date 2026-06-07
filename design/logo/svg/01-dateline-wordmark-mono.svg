@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 264 72" width="264" height="72" role="img" aria-label="Scout">
+  <!-- Concept 1 — Dateline Wordmark, ink-only mono variant. -->
+  <style>
+    .wm { font-family: "Fraunces", Georgia, "Times New Roman", serif; font-weight: 600; font-size: 46px; letter-spacing: -0.5px; }
+  </style>
+  <rect x="12" y="27" width="9" height="18" fill="#1c1a17"/>
+  <text class="wm" x="34" y="51" fill="#1c1a17">Scout<tspan fill="#1c1a17">.</tspan></text>
+</svg>

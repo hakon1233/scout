@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" width="300" height="72" role="img" aria-label="Scout">
+  <!-- Concept 5 — Spyglass. The scout spots distant news; the lens catches the signal (red). Observation made tactile. -->
+  <style>.wm{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:42px;letter-spacing:-0.5px;}</style>
+  <g transform="rotate(-20 31 36)">
+    <!-- eyepiece ring -->
+    <rect x="8" y="30" width="5" height="12" rx="1.5" fill="#1c1a17"/>
+    <!-- tube, widening toward the objective -->
+    <path d="M13 41 L13 31 L46 25 L46 47 Z" fill="#1c1a17"/>
+    <!-- draw-tube segment seams (reads as a telescope, not a megaphone) -->
+    <line x1="24" y1="29" x2="24" y2="43" stroke="#f6f2ea" stroke-width="1.4"/>
+    <line x1="34" y1="27.2" x2="34" y2="44.8" stroke="#f6f2ea" stroke-width="1.4"/>
+    <!-- objective ring -->
+    <rect x="44" y="22.5" width="5.5" height="27" rx="2" fill="#1c1a17"/>
+    <!-- lens catching the signal -->
+    <ellipse cx="46.7" cy="36" rx="2.4" ry="10.5" fill="#9a3b2e"/>
+  </g>
+  <text class="wm" x="74" y="49" fill="#1c1a17">Scout</text>
+</svg>

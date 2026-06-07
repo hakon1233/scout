@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" width="300" height="72" role="img" aria-label="Scout">
+  <!-- Concept 3 — Compass Star. A four-point navigation star; the north point is signal-red. The scout knows which way to look. -->
+  <style>.wm{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:42px;letter-spacing:-0.5px;}</style>
+  <g>
+    <path d="M32 7 L39.5 28.5 L57 36 L39.5 43.5 L32 65 L24.5 43.5 L7 36 L24.5 28.5 Z" fill="#1c1a17"/>
+    <path d="M32 7 L39.5 28.5 L24.5 28.5 Z" fill="#9a3b2e"/>
+    <circle cx="32" cy="36" r="2.4" fill="#f6f2ea"/>
+  </g>
+  <text class="wm" x="74" y="49" fill="#1c1a17">Scout</text>
+</svg>

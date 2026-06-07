@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" width="300" height="72" role="img" aria-label="Scout">
+  <!-- Concept 4 — Signal Arcs. A wire-service transmission radiating from a single source: the scout brings back the signal. -->
+  <style>.wm{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:42px;letter-spacing:-0.5px;}</style>
+  <g fill="none" stroke="#1c1a17" stroke-width="4" stroke-linecap="round">
+    <path d="M14 40 A14 14 0 0 1 28 54"/>
+    <path d="M14 30 A24 24 0 0 1 38 54"/>
+    <path d="M14 20 A34 34 0 0 1 48 54"/>
+  </g>
+  <circle cx="14" cy="54" r="4.5" fill="#9a3b2e"/>
+  <text class="wm" x="74" y="49" fill="#1c1a17">Scout</text>
+</svg>

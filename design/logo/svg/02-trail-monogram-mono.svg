@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Scout">
+  <!-- Concept 2 — Trail Monogram, ink-only mono variant: outline badge so it degrades to line art. -->
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="14" fill="none" stroke="#1c1a17" stroke-width="2.5"/>
+  <path d="M43 23 C43 16 22 15 22 25 C22 34 42 32 42 41 C42 51 21 50 21 42"
+        fill="none" stroke="#1c1a17" stroke-width="5.5" stroke-linecap="round"/>
+  <circle cx="43" cy="23" r="4.5" fill="#1c1a17"/>
+</svg>

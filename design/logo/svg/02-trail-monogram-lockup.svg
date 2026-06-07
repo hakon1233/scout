@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" width="300" height="72" role="img" aria-label="Scout">
+  <!-- Concept 2 — Trail Monogram lockup: badge mark + Fraunces wordmark. -->
+  <style>.wm{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:42px;letter-spacing:-0.5px;}</style>
+  <g transform="translate(8,8) scale(0.875)">
+    <rect x="2" y="2" width="60" height="60" rx="15" fill="#1c1a17"/>
+    <path d="M43 23 C43 16 22 15 22 25 C22 34 42 32 42 41 C42 51 21 50 21 42"
+          fill="none" stroke="#f6f2ea" stroke-width="5.5" stroke-linecap="round"/>
+    <circle cx="43" cy="23" r="4.5" fill="#9a3b2e"/>
+  </g>
+  <text class="wm" x="78" y="49" fill="#1c1a17">Scout</text>
+</svg>
