@@ -16,6 +16,8 @@
 // whether to 409 (HTTP) or record a "skipped" schedule entry.
 
 import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   loadState,
@@ -46,6 +48,10 @@ export type RunDeps = {
   // automatically lands in the tmp dir alongside the tmp stateFile, so the lazy
   // doc-backfill never touches the real config dir.
   interestsDir?: string;
+  // Internal: a throwaway interests dir to delete once synthesis finishes. Set
+  // ONLY by an ephemeral run (see RunOptions.ephemeral) so its lazily-backfilled
+  // default docs never accumulate. Never set by callers.
+  ephemeralDir?: string;
   // Fired when synthesis finishes (ready or failed). Tests await this.
   onSynthesisDone?: (brief: Brief) => void;
 };
@@ -69,6 +75,17 @@ export type RunOptions = {
   // when `retryTopics` is set (a retry already carries its own subset) or when
   // it covers the whole list (that's just a normal full run).
   selectedTopics?: string[];
+  // Ephemeral / dry-run path (PER-218). Research the supplied `interests` and
+  // produce a brief WITHOUT mutating the founder's saved config: the persisted
+  // `state.interests` is left exactly as-is, and the lazy intent-doc backfill is
+  // redirected to a throwaway temp dir so no real `interests/<id>.md` is created
+  // or overwritten. This is the ONLY safe way for QA/automation to trigger test
+  // runs with an arbitrary topic set: a normal POST /v0/interests persists its
+  // `interests` body as the new saved list, so a reduced/test payload would
+  // otherwise clobber the founder's authored interests (the PER-218 incident).
+  // The transient `last_brief` slot is still written (callers poll it for the
+  // result); briefs are derived, not authored, and regenerate on the next run.
+  ephemeral?: boolean;
 };
 
 export type RunOutcome =
@@ -182,6 +199,8 @@ export async function startRun(
   // "missing"); a retry and a full run both cover the whole list.
   const coverageInterests = isSelected ? researchInterests : interests;
 
+  const ephemeral = opts.ephemeral === true;
+
   runInFlight = true;
   const briefId = newBriefId();
   const pending: Brief = {
@@ -190,10 +209,28 @@ export async function startRun(
     status: "pending",
   };
   // Persist interests alongside the pending slot so a later scheduled fire has
-  // something to research even with no browser attached.
-  await saveState({ ...state, interests, last_brief: pending }, deps.stateFile);
+  // something to research even with no browser attached. An EPHEMERAL run (PER-218)
+  // must never touch the founder's saved config, so we re-persist the existing
+  // `state.interests` verbatim (leaving it absent if it was absent) instead of the
+  // run's topic set — a test/QA payload can research arbitrary topics without
+  // shrinking or replacing the saved list.
+  const persistedInterests = ephemeral ? state.interests : interests;
+  await saveState(
+    { ...state, interests: persistedInterests, last_brief: pending },
+    deps.stateFile,
+  );
 
-  void runSynthesis(briefId, deps, source, {
+  // Redirect the lazy intent-doc backfill to a throwaway dir for ephemeral runs so
+  // researching a test topic never creates/overwrites a real `interests/<id>.md`.
+  let runDeps = deps;
+  if (ephemeral) {
+    const ephemeralDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "scout-ephemeral-"),
+    );
+    runDeps = { ...deps, interestsDir: ephemeralDir, ephemeralDir };
+  }
+
+  void runSynthesis(briefId, runDeps, source, {
     researchInterests,
     coverageInterests,
     baseMarkdown: isRetry ? baseMarkdown : undefined,
@@ -329,6 +366,14 @@ async function runSynthesis(
     }
     await saveState({ ...fresh, last_brief: brief, schedule }, deps.stateFile);
   } finally {
+    // An ephemeral run's intent docs live in a throwaway dir (PER-218) — remove it
+    // so its default backfills never accumulate. Best-effort: a failed cleanup
+    // must not wedge the run.
+    if (deps.ephemeralDir) {
+      await fs
+        .rm(deps.ephemeralDir, { recursive: true, force: true })
+        .catch(() => {});
+    }
     // Always clear the in-flight guard, even if persistence throws, so the
     // companion can't wedge into a permanent "in progress" state.
     runInFlight = false;
