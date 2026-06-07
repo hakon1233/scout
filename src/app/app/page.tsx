@@ -6,10 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentProgressPanel } from "@/components/AgentProgressPanel";
 import { AppNav } from "@/components/AppNav";
 import { AppSkeleton } from "@/components/AppSkeleton";
+import { BriefHistory } from "@/components/BriefHistory";
 import { BriefLayout } from "@/components/BriefLayout";
 import { BriefSkeleton } from "@/components/BriefSkeleton";
 import { ErrorBanner } from "@/components/ErrorBanner";
-import { RunScopeSelector } from "@/components/RunScopeSelector";
 import { Banner, Button } from "@/components/ui";
 import type { AgentProgress } from "@/lib/agent";
 import {
@@ -24,17 +24,13 @@ import { classifyError, type ClassifiedError } from "@/lib/errors";
 import { SAMPLE_BRIEF } from "@/lib/sample-brief";
 import {
   loadLastBrief,
-  loadPrevBrief,
   loadSettings,
   saveLastBrief,
-  savePrevBrief,
   saveSettings,
 } from "@/lib/storage";
 import type { Brief, Settings } from "@/lib/types";
 
 const INTERESTS_PATH = "/app/interests";
-
-const STICKY_THRESHOLD_PX = 480;
 
 // Bucket a brief's topics into the two states the UI treats differently
 // (PER-154). `missing` = the model dropped the section → actionable, Retry can
@@ -54,16 +50,6 @@ function coverageBuckets(b: Brief): { missing: string[]; empty: string[] } {
   return { missing: b.failedTopics ?? [], empty: [] };
 }
 
-// Mirrors BriefLayout's header date format so the "filed {date}" recovery
-// affordance and the PREVIOUS banner read identically to the brief header.
-function formatBriefDate(b: Brief): string {
-  return new Date(b.generatedAt).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 export default function AppPage() {
   const router = useRouter();
   const goToInterests = useCallback(
@@ -73,9 +59,6 @@ export default function AppPage() {
   const [hydrated, setHydrated] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [brief, setBrief] = useState<Brief | null>(null);
-  // PER-146: one-deep recoverable archive of the brief a regenerate replaced.
-  const [prevBrief, setPrevBrief] = useState<Brief | null>(null);
-  const [viewingPrev, setViewingPrev] = useState(false);
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [running, setRunning] = useState(false);
   // PER-150: explicit success state for an on-demand "Run now". Holds the
@@ -86,24 +69,7 @@ export default function AppPage() {
   const [error, setError] = useState<ClassifiedError | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [companionReady, setCompanionReady] = useState(false);
-  // Run-selector (C6/PER-173): which interest topics the next "Run now" should
-  // research. An empty array means "all" (the default). This is a transient
-  // run-time choice that NEVER edits the saved interest list — it only narrows
-  // which per-interest sessions fire. Reset to "all" whenever the interest set
-  // itself changes (effect below) so a stale subset can't silently scope a run.
-  const [runScope, setRunScope] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
-
-  // Reset the run scope to "all" whenever the set of interest topics changes.
-  // Keyed on the topic list by value (not the settings reference) so unrelated
-  // re-renders don't clobber a deliberate subset selection mid-session.
-  const interestKey = settings
-    ? settings.interests.map((i) => i.topic).join(" ")
-    : "";
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRunScope([]);
-  }, [interestKey]);
 
   useEffect(() => {
     // Hydrate from localStorage on mount. Static export means first render runs
@@ -112,8 +78,6 @@ export default function AppPage() {
     setSettings(loadSettings());
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBrief(loadLastBrief());
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPrevBrief(loadPrevBrief());
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
@@ -321,18 +285,12 @@ export default function AppPage() {
           },
         );
         // Per-topic status rides along on `next.topics` from the companion — no
-        // client-side heading diff (PER-154).
-        // PER-146: archive the outgoing brief BEFORE overwriting the slot so a
-        // regenerate is recoverable, never a silent total loss. Only in this
-        // user-initiated path (see the load-time adoption effect for why not
-        // there). First-ever generate has no `brief`, so no previous is created.
-        if (brief) {
-          savePrevBrief(brief);
-          setPrevBrief(brief);
-        }
+        // client-side heading diff (PER-154). The outgoing brief isn't archived
+        // client-side anymore: previous editions now come from the companion's
+        // rolling history via the BriefHistory pager (PER-219), so there's no
+        // local prevBrief slot to rotate.
         saveLastBrief(next);
         setBrief(next);
-        setViewingPrev(false);
         setProgress(null);
         setRanAt(next.generatedAt);
       } catch (e) {
@@ -359,16 +317,14 @@ export default function AppPage() {
     return generate({ retryTopics: missing });
   }, [brief, generate]);
 
-  // Zero-arg wrapper for UI handler props (onClick / onRetry / onRegenerate).
+  // Zero-arg wrapper for UI handler props (profile-menu Run-now / onRetry).
   // `generate` takes an optional `{ retryTopics, selectedTopics }`, so binding it
   // directly to a DOM event handler would forward the MouseEvent as that argument
-  // (and fail strict type-checking). Forwards the current run scope: an empty or
-  // full `runScope` runs everything; a strict subset scopes the run to it.
+  // (and fail strict type-checking). PER-219: the run-scope selector was removed
+  // (AC5) — Run-now always fires a full pass over the saved interest list.
   const runNow = useCallback(() => {
-    const allTopics = settings?.interests.map((i) => i.topic) ?? [];
-    const isSubset = runScope.length > 0 && runScope.length < allTopics.length;
-    void generate(isSubset ? { selectedTopics: runScope } : undefined);
-  }, [generate, runScope, settings]);
+    void generate();
+  }, [generate]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -405,120 +361,15 @@ export default function AppPage() {
         <Banner tone="info">
           Example brief — set up your interests to make your own.
         </Banner>
-        <BriefLayout brief={SAMPLE_BRIEF} name="" preview />
-      </Shell>
-    );
-  }
-
-  // State PREVIOUS (PER-146): read-only view of the previous edition. Regenerate
-  // is suppressed entirely here — you go back to latest first. Manage interests
-  // stays reachable and returns context to latest on save.
-  if (viewingPrev && prevBrief) {
-    return (
-      <Shell>
-        <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-          <div className="flex flex-col gap-2">
-            <p className="text-caption uppercase text-muted">Scout · MVP</p>
-            <h1 className="text-title-1 text-primary">
-              {settings.name ? `${settings.name}'s brief` : "Your brief"}
-            </h1>
-          </div>
-          <Button variant="secondary" onClick={goToInterests}>
-            Manage interests
-          </Button>
-        </header>
-
-        <Banner
-          tone="info"
-          aria-live="polite"
-          className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <span>
-            Viewing your previous edition · filed {formatBriefDate(prevBrief)}
-          </span>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setViewingPrev(false)}
-          >
-            Back to latest
-          </Button>
-        </Banner>
-
-        <BriefLayout brief={prevBrief} name={settings.name} preview />
+        <BriefLayout brief={SAMPLE_BRIEF} name="" />
       </Shell>
     );
   }
 
   const showSkeleton = progress?.stage === "synthesizing";
 
-  // Run-scope summary for the "Run now" label. Empty or full scope → a plain
-  // full run; a strict subset → "Run N of M" so the button states exactly what
-  // it'll fire (C6/PER-173).
-  const totalInterests = settings.interests.length;
-  const scopeCount =
-    runScope.length > 0 && runScope.length < totalInterests
-      ? runScope.length
-      : totalInterests;
-  const isSubsetRun = scopeCount < totalInterests;
-  const runLabel = running
-    ? "Working…"
-    : isSubsetRun
-      ? `Run ${scopeCount} of ${totalInterests}`
-      : "Run now";
-
   return (
-    <Shell>
-      {brief && (
-        <StickyUtilityBar
-          running={running}
-          onRegenerate={runNow}
-          onEditInterests={goToInterests}
-        />
-      )}
-
-      <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-        <div className="flex flex-col gap-2">
-          <p className="text-caption uppercase text-muted">Scout · MVP</p>
-          <h1 className="text-title-1 text-primary">
-            {settings.name ? `${settings.name}'s brief` : "Your brief"}
-          </h1>
-          {/* Run-selector (C6/PER-173): pick one / several / all interests for
-              the next run. Only meaningful with more than one interest — a
-              single-interest run is always "all". */}
-          {settings.interests.length > 1 && (
-            <RunScopeSelector
-              interests={settings.interests}
-              selected={runScope}
-              onChange={setRunScope}
-              disabled={running}
-            />
-          )}
-        </div>
-        <div className="flex flex-col gap-2 min-[480px]:flex-row">
-          <Button
-            variant="primary"
-            loading={running}
-            disabled={!companionReady || settings.interests.length === 0}
-            onClick={runNow}
-            title={
-              settings.interests.length === 0
-                ? "Add at least one interest to run a brief"
-                : isSubsetRun
-                  ? `Run a fresh pass for the ${scopeCount} selected interest${scopeCount === 1 ? "" : "s"}`
-                  : companionReady
-                    ? "Run a fresh research pass now with the local Scout companion"
-                    : "Start the Scout companion to run a brief"
-            }
-          >
-            {runLabel}
-          </Button>
-          <Button variant="secondary" onClick={goToInterests}>
-            Manage interests
-          </Button>
-        </div>
-      </header>
-
+    <Shell onRunNow={runNow} running={running}>
       {!companionReady && (
         <Banner tone="info">
           <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -600,25 +451,29 @@ export default function AppPage() {
         })()}
 
       {brief && !showSkeleton ? (
-        <BriefLayout
-          brief={brief}
-          name={settings.name}
-          running={running}
-          onRegenerate={runNow}
-          onEditInterests={goToInterests}
-          onViewPrevious={prevBrief ? () => setViewingPrev(true) : undefined}
-          prevDate={prevBrief ? formatBriefDate(prevBrief) : undefined}
-        />
+        <>
+          {/* PER-219 (AC1): the clean current edition — header reads exactly
+              "Your brief — <date>", then straight into headlines. */}
+          <BriefLayout brief={brief} name="" />
+          {/* PER-219 (AC6): previous editions, paged 3 at a time from the
+              companion's rolling history, with "Load older briefs" + "Manage
+              interests" at the bottom. */}
+          <BriefHistory
+            token={loadCompanionToken()}
+            currentBriefId={brief.id}
+            onManageInterests={goToInterests}
+          />
+        </>
       ) : (
         !running &&
         !brief &&
         !error && (
           <div className="flex flex-col gap-3">
             <Banner tone="info">
-              Example brief — click <span className="font-medium">Run now</span>{" "}
-              to make your own.
+              Example brief — open the profile menu and click{" "}
+              <span className="font-medium">Run now</span> to make your own.
             </Banner>
-            <BriefLayout brief={SAMPLE_BRIEF} name={settings.name} preview />
+            <BriefLayout brief={SAMPLE_BRIEF} name={settings.name} />
           </div>
         )
       )}
@@ -626,66 +481,24 @@ export default function AppPage() {
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+// PER-219 (AC3/AC4): the Scout wordmark (top-left logo slot) and the profile
+// menu both live in AppNav. The feed view threads its Run-now wiring through so
+// the action shows inside the profile menu; other states omit it.
+function Shell({
+  children,
+  onRunNow,
+  running,
+}: {
+  children: React.ReactNode;
+  onRunNow?: () => void;
+  running?: boolean;
+}) {
   return (
     <main className="min-h-screen bg-page px-4 py-8 text-primary sm:px-6 sm:py-12">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-        {/* The persistent top-right profile icon lives in AppNav and opens the
-            Settings / Chat / Interests menu on every app state. */}
-        <AppNav />
+        <AppNav onRunNow={onRunNow} running={running} />
         {children}
       </div>
     </main>
-  );
-}
-
-function StickyUtilityBar({
-  running,
-  onRegenerate,
-  onEditInterests,
-}: {
-  running: boolean;
-  onRegenerate: () => void;
-  onEditInterests: () => void;
-}) {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    function onScroll() {
-      setVisible(window.scrollY > STICKY_THRESHOLD_PX);
-    }
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  return (
-    <div
-      aria-hidden={!visible}
-      className={`fixed inset-x-0 top-0 z-40 border-b border-border-default bg-surface/90 backdrop-blur transition-opacity ${
-        visible
-          ? "pointer-events-auto opacity-100"
-          : "pointer-events-none opacity-0"
-      }`}
-    >
-      <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-2 px-4 py-2 sm:px-6">
-        <p className="truncate text-caption uppercase text-muted">
-          Scout · brief
-        </p>
-        <div className="flex flex-row gap-2">
-          <Button variant="ghost" size="sm" onClick={onEditInterests}>
-            Manage
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            loading={running}
-            onClick={onRegenerate}
-          >
-            {running ? "Working…" : "Run now"}
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }

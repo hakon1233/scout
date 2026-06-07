@@ -1,37 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import * as React from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
-// Shared top nav for every `/app/*` route. The profile menu owns direct theme
-// controls plus navigation to the split Settings / Chat / Interests pages.
+// Shared top nav for every `/app/*` route. Left: the Scout wordmark (logo slot +
+// home link). Right: the profile menu, which owns theme controls, a Run-now
+// action, and navigation to the split Settings / Chat / Interests pages.
 const ICON_CLASSES =
   "inline-flex size-9 items-center justify-center rounded-pill border border-border-default bg-surface text-muted transition hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page";
 
-export function AppNav() {
-  const pathname = usePathname();
-  const normalizedPathname =
-    pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  const showBackLink = normalizedPathname !== "/app";
-
+export function AppNav({
+  // PER-219 (AC3): Run-now moved off the feed body into the profile menu. The
+  // feed page passes its existing run-now wiring (a full, persisting run over the
+  // saved interest list — never ephemeral, never mutating the saved set). Omitted
+  // on routes that have no brief to run (Settings/Chat/etc.), where the menu
+  // simply doesn't show the action.
+  onRunNow,
+  running = false,
+}: {
+  onRunNow?: () => void;
+  running?: boolean;
+} = {}) {
   return (
     <nav className="flex items-center justify-between">
-      {showBackLink ? (
-        <Link
-          href="/app/"
-          className="text-caption uppercase text-muted transition hover:text-primary"
-        >
-          ← Scout
-        </Link>
-      ) : null}
-      <ProfileMenu />
+      <ScoutWordmark />
+      <ProfileMenu onRunNow={onRunNow} running={running} />
     </nav>
   );
 }
 
-function ProfileMenu() {
+// PER-219 (AC4): tasteful editorial wordmark in the top-left logo slot. A
+// placeholder until a real logo lands — a signal-red mark + the Fraunces serif
+// wordmark, matching the warm-paper editorial theme. Doubles as the home link
+// (back to the feed) from any /app/* route.
+function ScoutWordmark() {
+  return (
+    <Link
+      href="/app/"
+      aria-label="Scout — home"
+      className="group inline-flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-page"
+    >
+      <span
+        aria-hidden="true"
+        className="inline-block size-3 rounded-[3px] bg-signal transition group-hover:scale-110"
+      />
+      <span className="font-serif text-title-3 leading-none text-primary">
+        Scout
+      </span>
+    </Link>
+  );
+}
+
+function ProfileMenu({
+  onRunNow,
+  running = false,
+}: {
+  onRunNow?: () => void;
+  running?: boolean;
+}) {
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -77,6 +104,27 @@ function ProfileMenu() {
           aria-label="Settings"
           className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border-default bg-surface p-3 shadow-lg"
         >
+          {/* PER-219 (AC3): Run-now lives here now. Fires the feed's full,
+              persisting run over the saved interest list — the saved interests
+              are never altered by running. Hidden on routes that pass no handler. */}
+          {onRunNow && (
+            <div className="mb-3">
+              <button
+                type="button"
+                role="menuitem"
+                disabled={running}
+                onClick={() => {
+                  setOpen(false);
+                  onRunNow();
+                }}
+                className="flex w-full items-center justify-between rounded-md border border-border-strong bg-surface-strong px-3 py-2 text-body-sm font-medium text-primary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span>{running ? "Working…" : "Run now"}</span>
+                <span aria-hidden="true">↻</span>
+              </button>
+            </div>
+          )}
+
           <div className="mb-3">
             <p className="mb-2 font-mono text-caption uppercase tracking-[0.06em] text-muted">
               Theme
