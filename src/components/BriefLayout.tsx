@@ -11,9 +11,21 @@ type Props = {
   // brief" / "<name>'s brief"); historical editions in the pager pass
   // "Daily brief" so each past brief reads "Daily brief — <date>".
   heading?: string;
+  // PER-222: bubble up when a single-story detail opens/closes. The page uses it
+  // to hide its own siblings (banners, history pager); we use it to drop this
+  // brief's "Your brief — <date>" header so the focused view is ONLY the story.
+  onDetailOpenChange?: (open: boolean) => void;
 };
 
-export function BriefLayout({ brief, name, heading }: Props) {
+export function BriefLayout({ brief, name, heading, onDetailOpenChange }: Props) {
+  const [detailOpen, setDetailOpen] = React.useState(false);
+  const handleDetailOpenChange = React.useCallback(
+    (open: boolean) => {
+      setDetailOpen(open);
+      onDetailOpenChange?.(open);
+    },
+    [onDetailOpenChange],
+  );
   const generated = new Date(brief.generatedAt);
   const dateLabel = generated.toLocaleDateString(undefined, {
     month: "short",
@@ -37,13 +49,18 @@ export function BriefLayout({ brief, name, heading }: Props) {
   // at the bottom of the feed.
   return (
     <article aria-label={`${title} — ${dateLabel}`} className="flex flex-col gap-6">
-      <header className="measure-prose flex flex-col gap-1">
-        <h1 className="text-title-1 text-primary">
-          {title} — {dateLabel}
-        </h1>
-      </header>
+      {/* PER-222: in single-story mode the brief header is part of "the feed"
+          the founder doesn't want to see — the detail carries its own headline
+          and meta. Hide it so only the story remains. */}
+      {!detailOpen && (
+        <header className="measure-prose flex flex-col gap-1">
+          <h1 className="text-title-1 text-primary">
+            {title} — {dateLabel}
+          </h1>
+        </header>
+      )}
 
-      <FeedView brief={brief} />
+      <FeedView brief={brief} onDetailOpenChange={handleDetailOpenChange} />
     </article>
   );
 }
