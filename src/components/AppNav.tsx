@@ -30,10 +30,15 @@ export function AppNav({
   );
 }
 
-// PER-219 (AC4): tasteful editorial wordmark in the top-left logo slot. A
-// placeholder until a real logo lands — a signal-red mark + the Fraunces serif
-// wordmark, matching the warm-paper editorial theme. Doubles as the home link
-// (back to the feed) from any /app/* route.
+// PER-225: the chosen logo — concept #2 "Trail Monogram" — in the top-left logo
+// slot PER-219 reserved. The mark is the founder-picked Trail Monogram badge:
+// an "S" drawn as a scouting trail ending in a signal-red node (#9a3b2e, the
+// brand Direction-A signal red). It's inlined as pure SVG paths, so it carries
+// no font dependency and renders identically everywhere. The badge is a fixed-
+// colour app-icon tile (same mark as the favicon), paired with the live Fraunces
+// "Scout" wordmark — identical to every masthead/title in the editorial UI, so
+// it stays theme-adaptive (light/dark) and consistent with the rest of the type.
+// Doubles as the home link (back to the feed) from any /app/* route.
 function ScoutWordmark() {
   return (
     <Link
@@ -41,14 +46,37 @@ function ScoutWordmark() {
       aria-label="Scout — home"
       className="group inline-flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-page"
     >
-      <span
-        aria-hidden="true"
-        className="inline-block size-3 rounded-[3px] bg-signal transition group-hover:scale-110"
-      />
+      <TrailMonogram />
       <span className="font-serif text-title-3 leading-none text-primary">
         Scout
       </span>
     </Link>
+  );
+}
+
+// Trail Monogram mark (concept #2). Pure SVG, fixed app-icon colours so it reads
+// as the same tile in the header and the browser tab: ink badge, cream trail,
+// signal-red node. 28px in the header slot — crisp at desktop 1440 and mobile
+// 390, no overflow, vertically centred by the flex row.
+function TrailMonogram() {
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      className="size-7 shrink-0 transition group-hover:scale-105"
+      role="img"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="2" y="2" width="60" height="60" rx="15" fill="#1c1a17" />
+      <path
+        d="M43 23 C43 16 22 15 22 25 C22 34 42 32 42 41 C42 51 21 50 21 42"
+        fill="none"
+        stroke="#f6f2ea"
+        strokeWidth="5.5"
+        strokeLinecap="round"
+      />
+      <circle cx="43" cy="23" r="4.5" fill="#9a3b2e" />
+    </svg>
   );
 }
 
