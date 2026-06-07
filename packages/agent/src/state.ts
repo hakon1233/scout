@@ -111,9 +111,22 @@ export type Interest = {
   topic: string;
 };
 
+// How many ready briefs to retain in the rolling history (PER-219). Each brief
+// is a few KB of markdown, so 30 keeps the state file small while giving the
+// feed plenty of "previous editions" to page through 3 at a time.
+export const BRIEF_HISTORY_CAP = 30;
+
 export type State = {
   pairing_token?: string;
   last_brief?: Brief;
+  // Rolling history of READY briefs, newest-first (PER-219). Distinct from
+  // `last_brief`, which is the single last-writer-wins slot the poller watches
+  // (and may be pending/failed). The feed pages this list 3 at a time via
+  // GET /v0/briefs?limit=&offset= to show previous editions under their own
+  // "Daily brief — <date>" headers. Appended on every ready synthesis (see
+  // runner.ts runSynthesis), capped at BRIEF_HISTORY_CAP, and never written by
+  // an ephemeral/QA run (which must leave saved state untouched, PER-218).
+  briefs?: Brief[];
   // Last interests the user submitted, persisted so the scheduler can run an
   // autonomous brief without the browser in the loop. Updated on every
   // POST/PUT /v0/interests. Stored as rich {id, topic} objects (PER-169); a

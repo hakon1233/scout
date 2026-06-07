@@ -24,6 +24,7 @@ import {
   newBriefId,
   saveState,
   interestTopics,
+  BRIEF_HISTORY_CAP,
   type Brief,
   type Interest,
   type ScheduleConfig,
@@ -364,7 +365,31 @@ async function runSynthesis(
         last_run_note: brief.status === "failed" ? brief.error_msg : undefined,
       };
     }
-    await saveState({ ...fresh, last_brief: brief, schedule }, deps.stateFile);
+    // Roll the brief history (PER-219). A READY brief from a NON-ephemeral run is
+    // pushed newest-first and capped; pending/failed briefs and ephemeral/QA runs
+    // (which must never mutate saved state, PER-218 — detected via the throwaway
+    // interests dir) leave the history untouched. Seed the history with the brief
+    // being replaced the first time we append, so an existing companion that
+    // upgraded into this feature immediately has one "previous edition" to show
+    // instead of an empty history that only fills going forward.
+    let briefs = fresh.briefs;
+    const isEphemeral = Boolean(deps.ephemeralDir);
+    if (brief.status === "ready" && !isEphemeral) {
+      const seed =
+        briefs === undefined &&
+        fresh.last_brief?.status === "ready" &&
+        fresh.last_brief.id !== brief.id
+          ? [fresh.last_brief]
+          : (briefs ?? []);
+      briefs = [brief, ...seed.filter((b) => b.id !== brief.id)].slice(
+        0,
+        BRIEF_HISTORY_CAP,
+      );
+    }
+    await saveState(
+      { ...fresh, last_brief: brief, briefs, schedule },
+      deps.stateFile,
+    );
   } finally {
     // An ephemeral run's intent docs live in a throwaway dir (PER-218) — remove it
     // so its default backfills never accumulate. Best-effort: a failed cleanup
