@@ -61,15 +61,20 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   await page.goto(`${ORIGIN}/app/`);
 
   // THE zero-prompt assertion: with no paste step, the token is auto-adopted
-  // same-origin and the companion ping succeeds, so "Run now" enables itself.
-  const generate = page.getByRole("button", { name: "Run now" });
-  await expect(generate).toBeEnabled({ timeout: 15_000});
-
-  // The "Pair companion" prompt (shown only when !companionReady) must be gone —
-  // if same-origin auto-adoption regressed, this banner/link would reappear and
-  // the user would be forced through /app/connect to paste a token.
+  // same-origin and the companion ping succeeds. The "Pair companion" prompt
+  // (shown only when !companionReady) must be gone — if same-origin
+  // auto-adoption regressed, this banner/link would reappear and the user would
+  // be forced through /app/connect to paste a token. This toHaveCount(0) also
+  // gates on the companion becoming ready before we fire the run (PER-219 moved
+  // Run-now into the profile menu, so its disabled-state no longer encodes
+  // readiness — the pairing prompt's disappearance is the readiness signal now).
   await expect(page.getByRole("link", { name: /Pair companion/i })).toHaveCount(0);
   await expect(page.getByText(/scout-agent run/)).toHaveCount(0);
+
+  // Run-now lives in the profile menu now (PER-219 AC3). Open it and fire the run.
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const generate = page.getByRole("menuitem", { name: "Run now" });
+  await expect(generate).toBeEnabled({ timeout: 15_000 });
 
   // Generate and wait for the brief to render in-app.
   await generate.click();

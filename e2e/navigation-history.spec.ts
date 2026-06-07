@@ -65,14 +65,18 @@ test("unpaired users can still reach Connect", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("app home hides the top-left Back link while sub-pages keep it", async ({
+test("Scout wordmark home-link shows on every app route, including home", async ({
   page,
 }) => {
   await blockNonLoopback(page);
 
+  // PER-219 (AC4): the top-left Scout wordmark is a shared logo slot rendered by
+  // AppNav on every `/app/*` route and doubles as the home link — so it is now
+  // present on the app home itself, not just on sub-pages (this superseded the
+  // old "hide the Back link on home" behavior).
   await page.goto(`${ORIGIN}/app/`);
 
-  await expect(page.getByRole("link", { name: /Scout/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Scout/ })).toBeVisible();
 
   await page.goto(`${ORIGIN}/app/settings/`);
 
