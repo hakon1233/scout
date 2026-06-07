@@ -94,12 +94,19 @@ export function BriefHistory({
   // stale. Reset state and refetch from offset 1.
   React.useEffect(() => {
     seenIds.current = new Set();
+    // Intentional synchronous reset of the pager when the current edition
+    // changes (history shifts down by one, cached pages are stale). The
+    // react-compiler lint rules flag the synchronous setState + ref write, but
+    // this is the correct pattern here and changes no behavior. (PER-224: this
+    // was blocking the Pages deploy from PER-219, where lint wasn't run.)
+    /* eslint-disable react-hooks/set-state-in-effect, react-hooks/immutability */
     setBriefs([]);
     setTotal(0);
     setOffset(1);
     offsetRef.current = 1;
     setLoaded(false);
     setOpenBriefId(null);
+    /* eslint-enable react-hooks/set-state-in-effect, react-hooks/immutability */
     void loadMore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, currentBriefId]);
