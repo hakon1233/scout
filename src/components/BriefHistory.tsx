@@ -24,10 +24,17 @@ export function BriefHistory({
   token,
   currentBriefId,
   onManageInterests,
+  onDetailOpenChange,
 }: {
   token: string;
   currentBriefId: string | null;
   onManageInterests: () => void;
+  // PER-223: bubble up when a story inside ONE of the history editions opens its
+  // focused detail. The page uses it to collapse the current edition + banners
+  // above; we use it to collapse to just the open section (hide the other
+  // editions and this footer) so the focused view is ONLY that one story — the
+  // same isolation the current edition already had (PER-222).
+  onDetailOpenChange?: (open: boolean) => void;
 }) {
   const [briefs, setBriefs] = React.useState<Brief[]>([]);
   // `total` is the companion's full ready-brief count (includes the current
@@ -41,6 +48,14 @@ export function BriefHistory({
   const [loading, setLoading] = React.useState(false);
 
   const seenIds = React.useRef<Set<string>>(new Set());
+
+  // PER-223: which history edition (if any) currently has a story open in its
+  // focused detail view. When set, we render ONLY that edition and drop the
+  // pager footer, so the page below the story is empty — matching AC1.
+  const [openBriefId, setOpenBriefId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    onDetailOpenChange?.(openBriefId != null);
+  }, [openBriefId, onDetailOpenChange]);
 
   const loadMore = React.useCallback(async () => {
     if (!token) return;
@@ -84,6 +99,7 @@ export function BriefHistory({
     setOffset(1);
     offsetRef.current = 1;
     setLoaded(false);
+    setOpenBriefId(null);
     void loadMore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, currentBriefId]);
@@ -96,18 +112,36 @@ export function BriefHistory({
   // than a bare "Manage interests" bar that would flash then grow.
   if (!loaded && briefs.length === 0) return null;
 
+  // PER-223: in single-story mode show ONLY the edition holding the open story;
+  // its BriefLayout already drops its own "Daily brief — <date>" header, so the
+  // focused view is just the one story (matching the current-edition path).
+  const visibleBriefs = openBriefId
+    ? briefs.filter((b) => b.id === openBriefId)
+    : briefs;
+
   return (
     <div className="flex flex-col gap-10">
-      {briefs.map((b) => (
+      {visibleBriefs.map((b) => (
         <section
           key={b.id}
           aria-label={`Daily brief — ${formatBriefDate(b)}`}
-          className="border-t border-border-default pt-8"
+          // Drop the divider/top padding when this section is the isolated open
+          // story — a focused story should have nothing (not even a rule) above
+          // its "← Back to feed" affordance.
+          className={openBriefId ? undefined : "border-t border-border-default pt-8"}
         >
-          <BriefLayout brief={b} name="" heading="Daily brief" />
+          <BriefLayout
+            brief={b}
+            name=""
+            heading="Daily brief"
+            onDetailOpenChange={(open) => setOpenBriefId(open ? b.id : null)}
+          />
         </section>
       ))}
 
+      {/* PER-223: the pager footer is feed chrome — hide it while a history
+          story is open so nothing shows below the focused story. */}
+      {!openBriefId && (
       <div className="measure-prose flex flex-col gap-3 border-t border-border-default pt-6 min-[480px]:flex-row min-[480px]:items-center min-[480px]:justify-between">
         <p className="text-caption text-muted">
           {briefs.length > 0
@@ -129,6 +163,7 @@ export function BriefHistory({
           </Button>
         </div>
       </div>
+      )}
     </div>
   );
 }

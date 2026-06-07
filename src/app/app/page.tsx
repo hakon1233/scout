@@ -69,10 +69,16 @@ export default function AppPage() {
   const [error, setError] = useState<ClassifiedError | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [companionReady, setCompanionReady] = useState(false);
-  // PER-222: true while a single story is open in the focused detail view. The
-  // feed signals this up through BriefLayout so the page can hide everything
-  // else — banners and the history pager — leaving ONLY that one story.
-  const [storyOpen, setStoryOpen] = useState(false);
+  // PER-222: a single story can be opened from EITHER the current edition or the
+  // history pager. We track the origin separately (PER-223 fix) because the two
+  // collapse in opposite directions: a current-edition story hides the history
+  // pager below it, while a history-pager story hides the current edition ABOVE
+  // it. Collapsing the wrong one would unmount the very feed holding the open
+  // story. `storyOpen` (either source) drives the page chrome (banners) which
+  // hides in both cases.
+  const [todayStoryOpen, setTodayStoryOpen] = useState(false);
+  const [historyStoryOpen, setHistoryStoryOpen] = useState(false);
+  const storyOpen = todayStoryOpen || historyStoryOpen;
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -466,17 +472,29 @@ export default function AppPage() {
           {/* PER-219 (AC1): the clean current edition — header reads exactly
               "Your brief — <date>", then straight into headlines.
               PER-222: BriefLayout reports when a story detail is open so the
-              page can collapse to that single story. */}
-          <BriefLayout brief={brief} name="" onDetailOpenChange={setStoryOpen} />
+              page can collapse to that single story.
+              PER-223: when a HISTORY-pager story is open instead, collapse the
+              current edition away too so only the focused story remains. */}
+          {!historyStoryOpen && (
+            <BriefLayout
+              brief={brief}
+              name=""
+              onDetailOpenChange={setTodayStoryOpen}
+            />
+          )}
           {/* PER-219 (AC6): previous editions, paged 3 at a time from the
               companion's rolling history, with "Load older briefs" + "Manage
-              interests" at the bottom. PER-222: hidden in single-story mode so
-              nothing from the feed shows below the focused story. */}
-          {!storyOpen && (
+              interests" at the bottom. PER-222: hidden when a CURRENT-edition
+              story is open so nothing from the feed shows below it.
+              PER-223: when a story is opened FROM the pager, it stays mounted
+              (it holds the open story) and collapses internally to that one
+              section, reporting up via onDetailOpenChange. */}
+          {!todayStoryOpen && (
             <BriefHistory
               token={loadCompanionToken()}
               currentBriefId={brief.id}
               onManageInterests={goToInterests}
+              onDetailOpenChange={setHistoryStoryOpen}
             />
           )}
         </>
