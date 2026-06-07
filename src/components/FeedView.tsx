@@ -25,7 +25,17 @@ type FeedItem = {
   publishedAt?: string;
 };
 
-export function FeedView({ brief }: { brief: Brief }) {
+export function FeedView({
+  brief,
+  onDetailOpenChange,
+}: {
+  brief: Brief;
+  // PER-222: notify the page when a single-story detail opens/closes so it can
+  // hide everything else (brief header, coverage banners, the history pager) and
+  // render ONLY the focused story. The feed itself already swaps grid→detail; the
+  // surrounding page chrome is what made "the rest of the feed" show below it.
+  onDetailOpenChange?: (open: boolean) => void;
+}) {
   const items = React.useMemo(() => buildFeed(brief.articles), [brief.articles]);
 
   // PER-219: the per-topic filter chips were removed from the feed — the founder
@@ -53,8 +63,28 @@ export function FeedView({ brief }: { brief: Brief }) {
   const selected = selectedId
     ? items.find((it) => it.id === selectedId) ?? null
     : null;
+  const detailOpen = selected != null;
+
+  // PER-222: tell the page when we're in single-story mode so it can drop the
+  // brief header, banners, and history pager — leaving only this one story.
+  React.useEffect(() => {
+    onDetailOpenChange?.(detailOpen);
+  }, [detailOpen, onDetailOpenChange]);
+
+  // PER-222 (AC2): remember where the feed was scrolled so Back lands the reader
+  // back on the story they came from. Opening a story jumps to the top (the
+  // dedicated page starts at its headline); closing restores the saved offset.
+  const feedScrollY = React.useRef(0);
+  React.useLayoutEffect(() => {
+    if (detailOpen) {
+      window.scrollTo(0, 0);
+    } else if (feedScrollY.current > 0) {
+      window.scrollTo(0, feedScrollY.current);
+    }
+  }, [detailOpen]);
 
   function openDetail(id: string) {
+    feedScrollY.current = window.scrollY;
     setSelectedId(id);
     try {
       window.history.pushState({ scoutFeedDetail: id }, "");
