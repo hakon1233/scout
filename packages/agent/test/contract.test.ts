@@ -148,6 +148,72 @@ test("GET /v0/briefs returns the render contract the web app parses (PER-106)", 
   }
 });
 
+test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (PER-219)", async () => {
+  const { tmp, stateFile, token } = await seededServer();
+  const { spawnFn } = makeSpawnRecorder({ autoClose: true });
+
+  // Re-armable synthesis barrier so we can drive several sequential runs.
+  let resolveDone: (b: Brief) => void = () => {};
+  let doneP = new Promise<Brief>((r) => (resolveDone = r));
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn,
+    onSynthesisDone: (b) => resolveDone(b),
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  async function runOnce(interests: string[]) {
+    doneP = new Promise<Brief>((r) => (resolveDone = r));
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests }),
+    });
+    assert.equal(kick.status, 202);
+    return doneP;
+  }
+
+  try {
+    // Three sequential ready briefs → history holds all three, newest-first.
+    const first = await runOnce(["ai safety"]);
+    const second = await runOnce(["harness news"]);
+    const third = await runOnce(["ai coding tools"]);
+
+    // Page 1: the two most-recent, with the full total.
+    const page1 = await fetch(
+      `http://127.0.0.1:${port}/v0/briefs?limit=2&offset=0`,
+      { headers: auth },
+    );
+    assert.equal(page1.status, 200);
+    const p1 = (await page1.json()) as { briefs: Brief[]; total: number };
+    assert.equal(p1.total, 3, "total reflects the whole history");
+    assert.equal(p1.briefs.length, 2);
+    assert.equal(p1.briefs[0].id, third.id, "newest-first");
+    assert.equal(p1.briefs[1].id, second.id);
+
+    // Page 2: the older remainder via offset.
+    const page2 = await fetch(
+      `http://127.0.0.1:${port}/v0/briefs?limit=2&offset=2`,
+      { headers: auth },
+    );
+    const p2 = (await page2.json()) as { briefs: Brief[]; total: number };
+    assert.equal(p2.briefs.length, 1, "last page is short");
+    assert.equal(p2.briefs[0].id, first.id, "oldest is last");
+
+    // No params → the legacy single-slot poller contract is untouched.
+    const legacy = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      headers: auth,
+    });
+    const lg = (await legacy.json()) as { briefs: Brief[]; total?: number };
+    assert.equal(lg.briefs.length, 1, "legacy returns only last_brief");
+    assert.equal(lg.briefs[0].id, third.id);
+    assert.equal(lg.total, undefined, "legacy response carries no total");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("a second kick while a brief is in flight is rejected without clobbering the slot (PER-92)", async () => {
   const { tmp, stateFile, token } = await seededServer();
   // autoClose:false → the first synthesis hangs, holding last_brief = pending.

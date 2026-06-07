@@ -148,6 +148,13 @@ test("ephemeral run produces a brief but never mutates the founder's saved inter
       );
       assert.equal(body, docs[it.id]);
     }
+
+    // INVARIANT 3 (PER-219): an ephemeral run must NOT pollute the rolling brief
+    // history. `state.briefs` is the channel the feed's "previous briefs" pager
+    // reads — a QA/dry-run brief landing there would surface to the founder as a
+    // real past edition. The runner gates the append on `!isEphemeral`, so the
+    // history stays empty here even though a brief was produced above.
+    assert.equal(state.briefs, undefined);
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
