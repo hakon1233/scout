@@ -500,6 +500,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             interests?: unknown;
             retry_topics?: unknown;
             selected_topics?: unknown;
+            ephemeral?: unknown;
           };
           try {
             parsed = JSON.parse(body || "{}");
@@ -549,6 +550,14 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           // runner when a retry is set or when it covers the whole list.
           const selectedTopics = intersectTopics(parsed.selected_topics);
 
+          // Ephemeral / dry-run trigger (PER-218): research the supplied topics
+          // and produce a brief WITHOUT persisting them as the founder's saved
+          // interests or touching the real intent-doc store. This is the path QA
+          // and automation MUST use to fire test runs — a normal POST persists its
+          // `interests` body as the new saved list, so a reduced test payload would
+          // otherwise overwrite the founder's authored interests.
+          const ephemeral = parsed.ephemeral === true;
+
           // One brief slot, last-writer-wins. The shared runner enforces single-
           // flight (in-memory guard + persisted pending check) so an on-demand
           // kick and a scheduled fire can never overlap (PER-151). It also
@@ -563,7 +572,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
               onSynthesisDone: deps.onSynthesisDone,
             },
             "on_demand",
-            { retryTopics, selectedTopics },
+            { retryTopics, selectedTopics, ephemeral },
           );
           if (!outcome.started) {
             // A retry asked for but there's no prior brief to merge into → tell
