@@ -275,6 +275,25 @@ export function buildChatPrompt(
   lines.push(
     "    `update` for when the user wants to KEEP the topic but change what it tracks.",
   );
+  lines.push(
+    "- A `delete` is CONFIRM-GATED: emitting it does NOT remove the interest. The user",
+  );
+  lines.push(
+    "    still has to press [Delete] on a confirmation card. So when your changes include",
+  );
+  lines.push(
+    '    a `delete`, phrase `reply` as a PENDING REQUEST, never as a completed action.',
+  );
+  lines.push(
+    '    Say e.g. "Delete \\"X\\"? Confirm below — this would bring you to N of 6 interests."',
+  );
+  lines.push(
+    '    NEVER claim it is done ("Done — deleted", "Removed X", "You\'re back to N") on a',
+  );
+  lines.push(
+    "    delete turn; the interest is still there until the user confirms. Create/update",
+  );
+  lines.push("    apply immediately, so for those a done-style reply is correct.");
   lines.push("- Do not use any tools. Output only the JSON object.");
   return lines.join("\n");
 }

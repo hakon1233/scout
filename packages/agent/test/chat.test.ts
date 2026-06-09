@@ -767,3 +767,16 @@ test("buildChatPrompt steers removal intents to the delete op, not update (PER-2
   assert.match(prompt, /Deleting is the ONLY way to remove an interest/);
   assert.match(prompt, /NEVER try to/i);
 });
+
+// PER-231 #2: a `delete` is confirm-gated, so the model's reply must read as a
+// pending request, not a done-action. Guards the prompt rule that stops the
+// "Done — deleted X" / "Removed X" copy appearing before the user confirms.
+test("buildChatPrompt tells the model a delete is confirm-gated and the reply must be a pending request (PER-231)", () => {
+  const prompt = buildChatPrompt("delete my ai safety interest", [
+    { id: "int_abc123", topic: "ai safety", doc: "Track alignment research." },
+  ]);
+  assert.match(prompt, /CONFIRM-GATED/);
+  // The model must NOT claim the delete is done before confirmation.
+  assert.match(prompt, /PENDING REQUEST/);
+  assert.match(prompt, /NEVER claim it is done/i);
+});
