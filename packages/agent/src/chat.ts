@@ -34,6 +34,7 @@ import {
   type ChatChange,
   type ChatTurn,
   type Interest,
+  type PendingDelete,
   type State,
 } from "./state.js";
 import {
@@ -371,13 +372,24 @@ export function parseChatOutput(raw: string): ChatModelOutput {
 // arbitrary `<id>.md`), and a create past MAX_INTERESTS is dropped. The applied
 // list — never the model's raw proposal — is what we return to the client, so the
 // FE only ever sees confirmed writes (PER-139).
+//
+// PER-230: delete is the one DESTRUCTIVE op, so it is confirm-gated. A model
+// `delete` is NOT applied here; it is collected into `pendingDeletes` and surfaced
+// to the FE as a [Delete]/[Cancel] proposal. The interest stays alive until the
+// user explicitly confirms via applyConfirmedDelete. create/update remain
+// auto-apply (CEO decision on PER-230 — do not gate those).
 export async function applyChatChanges(
   current: Interest[],
   proposed: ProposedChange[],
   interestsDir: string,
-): Promise<{ interests: Interest[]; applied: ChatChange[] }> {
+): Promise<{
+  interests: Interest[];
+  applied: ChatChange[];
+  pendingDeletes: PendingDelete[];
+}> {
   const interests = [...current];
   const applied: ChatChange[] = [];
+  const pendingDeletes: PendingDelete[] = [];
 
   for (const ch of proposed) {
     const op = ch.op;
@@ -409,13 +421,36 @@ export async function applyChatChanges(
       const id = typeof ch.interestId === "string" ? ch.interestId : "";
       const idx = interests.findIndex((i) => i.id === id);
       if (idx === -1) continue;
-      const [removed] = interests.splice(idx, 1);
-      await deleteInterestDoc(id, interestsDir);
-      applied.push({ interestId: id, op: "delete", topic: removed.topic });
+      // Confirm-gated: propose, do NOT remove. Dedup so a model that lists the
+      // same id twice still surfaces one card.
+      if (!pendingDeletes.some((p) => p.interestId === id)) {
+        pendingDeletes.push({ interestId: id, topic: interests[idx].topic });
+      }
     }
   }
 
-  return { interests, applied };
+  return { interests, applied, pendingDeletes };
+}
+
+// Perform a confirmed delete (PER-230): the deterministic removal that runs only
+// after the user presses [Delete] on the confirm card. No model involved — we
+// validate the id is one we hold, splice it out, and delete its doc. Returns the
+// applied delete change (for the FE to render + flash) or null if the interest is
+// already gone (a double-confirm or a stale card → 404 at the route).
+export async function applyConfirmedDelete(
+  current: Interest[],
+  interestId: string,
+  interestsDir: string,
+): Promise<{ interests: Interest[]; applied: ChatChange | null }> {
+  const interests = [...current];
+  const idx = interests.findIndex((i) => i.id === interestId);
+  if (idx === -1) return { interests, applied: null };
+  const [removed] = interests.splice(idx, 1);
+  await deleteInterestDoc(interestId, interestsDir);
+  return {
+    interests,
+    applied: { interestId, op: "delete", topic: removed.topic },
+  };
 }
 
 export type ChatDeps = {
@@ -489,6 +524,49 @@ export async function startChatTurn(
   return { started: true, turnId };
 }
 
+export type ConfirmDeleteOutcome =
+  | { ok: true; turn: ChatTurn }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "in_flight" };
+
+// Confirm-gated delete (PER-230): the deterministic, no-model path that actually
+// removes an interest after the user presses [Delete]. It writes a `ready` turn
+// (with the delete in `changes`) to the same slot + transcript a model turn would,
+// so the FE applies it through the exact same confirmed-write seam (flash + the
+// docs-rail card disappears) and it survives a reload. Refuses while a model turn
+// is in flight so the two writers can't clobber the interest set.
+export async function confirmDeleteTurn(
+  interestId: string,
+  deps: ChatDeps,
+): Promise<ConfirmDeleteOutcome> {
+  if (chatInFlight) return { ok: false, reason: "in_flight" };
+
+  const state = await loadState(deps.stateFile);
+  const { interests, applied } = await applyConfirmedDelete(
+    state.interests ?? [],
+    interestId,
+    deps.interestsDir,
+  );
+  if (!applied) return { ok: false, reason: "not_found" };
+
+  const turn: ChatTurn = {
+    id: newChatTurnId(),
+    created_at: new Date().toISOString(),
+    status: "ready",
+    message: `Delete "${applied.topic}"`,
+    reply: `Removed "${applied.topic}" from your interests.`,
+    changes: [applied],
+  };
+
+  // Reload before persisting so we don't clobber a concurrent writer (e.g. the
+  // scheduler updating next_run_at), exactly as runChatTurn does.
+  const fresh = await loadState(deps.stateFile);
+  await saveState({ ...fresh, interests, last_chat: turn }, deps.stateFile);
+  await appendChatTranscript(turn, deps.chatTranscriptFile);
+  deps.onChatDone?.(turn);
+  return { ok: true, turn };
+}
+
 async function runChatTurn(
   message: string,
   turnId: string,
@@ -509,7 +587,9 @@ async function runChatTurn(
     });
     // Apply against the freshly-loaded interest list so the change set is durable
     // on disk BEFORE the turn flips to `ready` (observable-in-same-response).
-    const { interests, applied } = await applyChatChanges(
+    // Deletes are gated: they come back as `pendingDeletes` (NOT applied) for the
+    // FE to confirm. We surface the first one — the confirm card is single-op.
+    const { interests, applied, pendingDeletes } = await applyChatChanges(
       state.interests ?? [],
       output.changes,
       deps.interestsDir,
@@ -522,6 +602,9 @@ async function runChatTurn(
       message,
       reply: output.reply,
       changes: applied,
+      ...(pendingDeletes.length > 0
+        ? { pending_delete: pendingDeletes[0] }
+        : {}),
     };
   } catch (err) {
     turn = {

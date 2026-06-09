@@ -61,6 +61,18 @@ export type ChatChange = {
   doc?: string;
 };
 
+// A delete the turn resolved to but did NOT apply (PER-230 confirm-gated delete).
+// Delete is the one destructive op, so it is the ONLY gated one: when a turn
+// resolves to removing an interest we surface this proposal instead of removing,
+// and the FE renders a [Delete]/[Cancel] card. The actual removal happens via
+// POST /v0/chat/confirm-delete only on an explicit [Delete] press. The gate sits
+// BEFORE the destructive write, so create/update stay auto-apply (CEO decision
+// on PER-230) — apply-before-stream is untouched for those.
+export type PendingDelete = {
+  interestId: string;
+  topic: string;
+};
+
 // One chat turn, held in a single last-writer-wins slot (`State.last_chat`) that
 // mirrors `last_brief`. A turn is kicked async (POST /v0/chat) and polled
 // (GET /v0/chat?since=) the same way briefs are, so the UI never blocks on the
@@ -76,8 +88,12 @@ export type ChatTurn = {
   // The assistant's conversational reply (present once ready).
   reply?: string;
   // The change set actually applied this turn (present once ready; [] when the
-  // turn only answered a question without touching any doc).
+  // turn only answered a question without touching any doc). Deletes never
+  // appear here from a model turn — they are gated into `pending_delete`.
   changes?: ChatChange[];
+  // A delete the turn resolved to but is waiting on user confirmation for
+  // (PER-230). Present at most once per turn; the interest is NOT yet removed.
+  pending_delete?: PendingDelete;
   error_msg?: string;
 };
 
@@ -267,7 +283,10 @@ export async function loadState(file = STATE_FILE): Promise<State> {
   }
 }
 
-export async function saveState(state: State, file = STATE_FILE): Promise<void> {
+export async function saveState(
+  state: State,
+  file = STATE_FILE,
+): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
   await fs.writeFile(file, JSON.stringify(state, null, 2), { mode: 0o600 });
 }
@@ -295,7 +314,10 @@ export type PairResolution = {
 // Decide which token a `pair` invocation should persist. Pure + side-effect free
 // so it can be unit-tested without touching the filesystem. With `force`, always
 // mint a fresh token (rotation); otherwise reuse an existing token if present.
-export function resolvePairingToken(state: State, force = false): PairResolution {
+export function resolvePairingToken(
+  state: State,
+  force = false,
+): PairResolution {
   if (state.pairing_token && !force) {
     return { token: state.pairing_token, rotated: false };
   }
