@@ -402,6 +402,34 @@ body {
     background-position: -100% 0;
   }
 }
+
+/* Docs-rail card flash-highlight (PER-230 AC6). Fired the instant a chat turn
+   confirms a durable write to this interest's doc — the visible proof the
+   conversation moved the card. A brief accent ring + tint that settles back to
+   the resting border. Gated motion-safe at the call site; the global
+   reduce-motion rule clamps the duration so reduce-motion users see no sweep. */
+@keyframes scout-doc-flash {
+  0% {
+    border-color: var(--accent-signal);
+    box-shadow: 0 0 0 2px
+      color-mix(in srgb, var(--accent-signal) 45%, transparent);
+    background-color: color-mix(
+      in srgb,
+      var(--accent-signal) 7%,
+      var(--bg-surface)
+    );
+  }
+  100% {
+    border-color: var(--border-default);
+    box-shadow: 0 0 0 0 transparent;
+    background-color: var(--bg-surface);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .scout-doc-flash {
+    animation: scout-doc-flash 2.4s ease-out 1;
+  }
+}
 @keyframes scout-shimmer-sweep {
   0% {
     transform: translateX(-100%);
