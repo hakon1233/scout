@@ -15,10 +15,7 @@ export default function ChatPage() {
   const [tab, setTab] = useState<"chat" | "docs">("chat");
 
   const rail = (
-    <DocsRail
-      workbench={workbench}
-      onAfterFocus={() => setTab("chat")}
-    />
+    <DocsRail workbench={workbench} onAfterFocus={() => setTab("chat")} />
   );
 
   return (
@@ -66,6 +63,8 @@ export default function ChatPage() {
             onStop={workbench.stop}
             onRetry={workbench.retry}
             onUndo={workbench.undo}
+            onConfirmDelete={workbench.confirmDelete}
+            onCancelDelete={workbench.cancelDelete}
           />
         </div>
 
@@ -84,7 +83,12 @@ export default function ChatPage() {
 
       {/* Mobile docs bottom-sheet (<768px). */}
       {tab === "docs" ? (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Interest docs">
+        <div
+          className="fixed inset-0 z-50 md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Interest docs"
+        >
           <button
             type="button"
             aria-label="Close docs"

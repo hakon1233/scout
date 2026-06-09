@@ -25,6 +25,15 @@ export type ChatChange = {
   doc?: string;
 };
 
+// A delete the turn resolved to but did NOT apply (PER-230 confirm-gated delete).
+// The interest is still alive; the FE renders a [Delete]/[Cancel] card and only
+// calls confirmDeleteInterest() when the user presses [Delete]. Mirrors the
+// agent's PendingDelete.
+export type PendingDelete = {
+  interestId: string;
+  topic: string;
+};
+
 // One chat turn held in the companion's single last-writer-wins slot. Mirrors
 // the agent's ChatTurn.
 export type ChatTurn = {
@@ -34,6 +43,8 @@ export type ChatTurn = {
   message: string;
   reply?: string;
   changes?: ChatChange[];
+  // A delete awaiting [Delete]/[Cancel] confirmation (PER-230). Not yet applied.
+  pending_delete?: PendingDelete;
   error_msg?: string;
 };
 
@@ -125,6 +136,46 @@ export async function pollChatTurn(
     }
   }
   throw new Error("Timed out waiting for Scout to reply.");
+}
+
+// Confirm a gated delete (PER-230): the deterministic [Delete] press. POSTs the
+// interestId to the companion, which removes the interest + its doc and returns
+// a `ready` turn whose `changes` carry the applied delete. No model round-trip,
+// so this resolves fast. Throws human-readable errors on 404 (already gone) /
+// 409 (a turn is in flight).
+export async function confirmDeleteInterest(
+  interestId: string,
+  token: string,
+): Promise<ChatTurn> {
+  const base = await requireBase();
+  const res = await fetch(`${base}/v0/chat/confirm-delete`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ interestId }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (res.status === 409) {
+    throw new Error(
+      "Scout is still working on your last message — give it a moment.",
+    );
+  }
+  if (res.status === 404) {
+    throw new Error("That interest was already removed.");
+  }
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
+      error?: string;
+    };
+    throw new Error(
+      err.error ?? `Couldn't remove that interest (${res.status}).`,
+    );
+  }
+  const body = (await res.json()) as { turn?: ChatTurn };
+  if (!body.turn) throw new Error("Scout didn't confirm the removal.");
+  return body.turn;
 }
 
 // Kick + poll one turn end-to-end. The resolved turn's `changes` are confirmed,

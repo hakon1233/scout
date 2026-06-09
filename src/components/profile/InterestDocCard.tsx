@@ -6,8 +6,10 @@ import ReactMarkdown from "react-markdown";
 // The "just changed" beat fired the instant a chat turn confirms a durable
 // write to this interest's doc. It is the PER-139 no-dead-control proof: the
 // conversation visibly moves the card, and only on a confirmed write — never
-// optimistically. `created` for a brand-new interest, `updated` for a refine.
-export type DocBeat = "created" | "updated" | null;
+// optimistically. `created` for a brand-new interest, `updated` for a refine,
+// `removed` for the brief flash a confirmed delete plays before the card leaves
+// the rail (PER-230).
+export type DocBeat = "created" | "updated" | "removed" | null;
 
 // One interest's doc card. `body` is the markdown the companion persisted,
 // known only when a chat turn returned it this session (there is no GET-doc
@@ -197,13 +199,19 @@ function DocLine({
   beat: DocBeat;
 }) {
   if (beat) {
+    const label =
+      beat === "created"
+        ? "Doc created just now"
+        : beat === "removed"
+          ? "Removing…"
+          : "Doc updated just now";
     return (
       <span className="mt-1 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-signal">
         <span
           aria-hidden="true"
           className="inline-block h-1.5 w-1.5 rounded-full bg-signal motion-safe:animate-pulse"
         />
-        {beat === "created" ? "Doc created just now" : "Doc updated just now"}
+        {label}
       </span>
     );
   }
