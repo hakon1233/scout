@@ -92,6 +92,7 @@ function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
         role: "scout",
         text: turn.reply,
         ts: turn.created_at,
+        changes: turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
       });
     } else if (turn.status === "failed" && turn.error_msg) {
       out.push({
@@ -99,10 +100,19 @@ function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
         role: "scout",
         text: `I couldn't finish that turn: ${turn.error_msg}`,
         ts: turn.created_at,
+        failed: true,
       });
     }
     return out;
   });
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 export function useProfileWorkbench() {
@@ -119,7 +129,24 @@ export function useProfileWorkbench() {
   const [error, setError] = useState<string | null>(null);
   const [mockSeed, setMockSeed] = useState<string | null>(null);
 
+  // Simulated token streaming (PER-228 chunk 3). The companion is kick→poll, not
+  // SSE, so a reply arrives whole; we reveal it with a client-side typewriter so
+  // turns feel alive. `streamId` is the scout message being revealed; `streamLen`
+  // is how many chars are shown so far. Reduced-motion users skip the reveal.
+  const [streamId, setStreamId] = useState<string | null>(null);
+  const [streamLen, setStreamLen] = useState(0);
+
   const beatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const streamTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const abortedRef = useRef(false);
+  const docBodiesRef = useRef<Record<string, string>>({});
+
+  // Mirror docBodies into a ref so `send` can read the pre-change body for the
+  // diff/undo without re-binding on every keystroke-driven body update.
+  useEffect(() => {
+    docBodiesRef.current = docBodies;
+  }, [docBodies]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -184,6 +211,8 @@ export function useProfileWorkbench() {
     const timers = beatTimers.current;
     return () => {
       Object.values(timers).forEach(clearTimeout);
+      if (streamTimer.current) clearInterval(streamTimer.current);
+      abortRef.current?.abort();
     };
   }, []);
 
@@ -252,6 +281,87 @@ export function useProfileWorkbench() {
     [flashBeat],
   );
 
+  // Reveal a freshly-arrived scout reply with the typewriter. Reduced-motion
+  // users get the whole text at once (no streamId set).
+  const startStream = useCallback((id: string, text: string) => {
+    if (streamTimer.current) clearInterval(streamTimer.current);
+    if (prefersReducedMotion() || text.length === 0) {
+      setStreamId(null);
+      return;
+    }
+    setStreamId(id);
+    setStreamLen(0);
+    const step = Math.max(1, Math.ceil(text.length / 80));
+    streamTimer.current = setInterval(() => {
+      setStreamLen((prev) => {
+        const next = prev + step;
+        if (next >= text.length) {
+          if (streamTimer.current) clearInterval(streamTimer.current);
+          streamTimer.current = null;
+          setStreamId(null);
+          return text.length;
+        }
+        return next;
+      });
+    }, 24);
+  }, []);
+
+  // Run one turn against the companion. `wire` is the scope-prefixed message sent
+  // to the agent; the matching `you` bubble is appended by the caller (send) or
+  // intentionally omitted (retry, which re-runs an existing bubble).
+  const dispatch = useCallback(
+    (wire: string) => {
+      setSending(true);
+      setError(null);
+      abortedRef.current = false;
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      (async () => {
+        try {
+          const turn = await runChatTurn(wire, token, {
+            signal: controller.signal,
+          });
+          const replyAt = new Date().toISOString();
+          const changes =
+            turn.changes && turn.changes.length > 0 ? turn.changes : undefined;
+          // Snapshot the pre-change bodies so the action card can diff and undo.
+          let prev: Record<string, string | null> | undefined;
+          if (changes) {
+            prev = {};
+            for (const ch of changes) {
+              if (ch.interestId)
+                prev[ch.interestId] = docBodiesRef.current[ch.interestId] ?? null;
+            }
+          }
+          if (turn.reply || changes) {
+            const id = nextMsgId();
+            setMessages((prevMsgs) => [
+              ...prevMsgs,
+              {
+                id,
+                role: "scout",
+                text: turn.reply ?? "Done — updated your interests.",
+                ts: replyAt,
+                changes,
+                prev,
+              },
+            ]);
+            startStream(id, turn.reply ?? "");
+          }
+          if (changes) applyChanges(changes, replyAt);
+        } catch (e) {
+          if (abortedRef.current) return; // user stopped — not an error
+          setError(e instanceof Error ? e.message : "Something went wrong.");
+        } finally {
+          if (abortRef.current === controller) abortRef.current = null;
+          setSending(false);
+        }
+      })();
+    },
+    [token, applyChanges, startStream],
+  );
+
   const send = useCallback(
     (raw: string) => {
       const text = raw.trim();
@@ -269,35 +379,72 @@ export function useProfileWorkbench() {
         ...prev,
         { id: nextMsgId(), role: "you", text, ts: at },
       ]);
-      setSending(true);
-      setError(null);
-
-      (async () => {
-        try {
-          const turn = await runChatTurn(wire, token);
-          const replyAt = new Date().toISOString();
-          if (turn.reply) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: nextMsgId(),
-                role: "scout",
-                text: turn.reply!,
-                ts: replyAt,
-              },
-            ]);
-          }
-          if (turn.changes && turn.changes.length > 0) {
-            applyChanges(turn.changes, replyAt);
-          }
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "Something went wrong.");
-        } finally {
-          setSending(false);
-        }
-      })();
+      dispatch(wire);
     },
-    [sending, focusKey, interests, token, applyChanges],
+    [sending, focusKey, interests, dispatch],
+  );
+
+  // Stop the in-flight turn (PER-228 chunk 3). Aborting the poll before `ready`
+  // means NO uncommitted changes apply. If the reply already arrived and is mid-
+  // typewriter, just finish the reveal — those changes are already durable.
+  const stop = useCallback(() => {
+    abortedRef.current = true;
+    abortRef.current?.abort();
+    if (streamTimer.current) {
+      clearInterval(streamTimer.current);
+      streamTimer.current = null;
+    }
+    setStreamId(null);
+    setSending(false);
+  }, []);
+
+  // Retry a scout turn: re-run the preceding `you` message without adding a new
+  // bubble. We drop the old scout reply (and anything after it) first so the log
+  // stays one-reply-per-turn.
+  const retry = useCallback(
+    (scoutId: string) => {
+      if (sending) return;
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === scoutId);
+        if (idx <= 0) return prev;
+        let youIdx = idx - 1;
+        while (youIdx >= 0 && prev[youIdx].role !== "you") youIdx--;
+        if (youIdx < 0) return prev;
+        const youText = prev[youIdx].text;
+        const focusTopic = focusKey
+          ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
+          : null;
+        const wire = focusTopic
+          ? `Regarding my interest "${focusTopic}": ${youText}`
+          : youText;
+        // Defer the dispatch out of the updater.
+        queueMicrotask(() => dispatch(wire));
+        return prev.slice(0, idx);
+      });
+    },
+    [sending, focusKey, interests, dispatch],
+  );
+
+  // Undo a durable change by asking Scout to reverse it (no propose/pending mode
+  // exists — this is the honest reversal channel). Shows as a normal turn.
+  const undo = useCallback(
+    (change: ChatChange, prev: string | null) => {
+      const topic = change.topic ?? "that interest";
+      let instruction: string;
+      if (change.op === "create") {
+        instruction = `Delete the interest "${topic}" you just created.`;
+      } else if (change.op === "delete") {
+        instruction = prev
+          ? `Re-create the interest "${topic}" with exactly this doc, verbatim:\n\n${prev}`
+          : `Re-add the interest "${topic}" you just removed.`;
+      } else {
+        instruction = prev
+          ? `Revert the doc for "${topic}" to exactly this earlier version, verbatim:\n\n${prev}`
+          : `Undo your last change to "${topic}".`;
+      }
+      send(instruction);
+    },
+    [send],
   );
 
   const cards: DocCardModel[] = useMemo(() => {
@@ -332,7 +479,12 @@ export function useProfileWorkbench() {
     error,
     focusKey,
     focusTopic,
+    streamId,
+    streamLen,
     setFocusKey,
     send,
+    stop,
+    retry,
+    undo,
   };
 }

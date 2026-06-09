@@ -386,6 +386,14 @@ body {
     animation: scout-shimmer-sweep 1.4s ease-in-out infinite;
   }
 }
+/* Streaming caret blink for the chat (PER-228 chunk 3). Gated behind
+   motion-safe at the call site, and the global reduce-motion rule clamps it. */
+@keyframes scout-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
 @keyframes scout-shimmer {
   0% {
     background-position: 100% 0;
