@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+<title>Scout chat redesign — mobile 390 wireframe (PER-227)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f6f2ea; --paper-2:#efe9dd; --ink:#1c1a17; --ink-2:#46413a; --ink-3:#6f685d;
+    --line:#d8d0c1; --line-2:#cabfac; --card:#fffdf8; --signal:#9a3b2e;
+    --success-bg:#e9efe4; --success-fg:#3f5a32; --success-border:#c2d2b4;
+    --danger-bg:#f7e9e6; --danger-fg:#8a2f23; --danger-border:#e0b3aa;
+    --add-bg:#e9efe4; --del-bg:#f7e9e6;
+    --sans:'Inter',system-ui,sans-serif; --serif:'Fraunces',Georgia,serif;
+    --reading:'Newsreader',Georgia,serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:#cdc4b2;font-family:var(--sans);padding:18px 0 40px;
+    display:flex;flex-direction:column;align-items:center;gap:14px}
+  .cap{font-family:var(--mono);font-size:11px;color:#5b5346;text-align:center}
+  /* phone */
+  .phone{width:390px;height:844px;background:var(--paper);border-radius:30px;overflow:hidden;
+    position:relative;box-shadow:0 10px 40px rgba(0,0,0,.25);display:flex;flex-direction:column;
+    background-image:radial-gradient(circle at 1px 1px, rgba(28,26,23,.04) 1px, transparent 0);background-size:22px 22px}
+  .pin{position:absolute;display:inline-flex;align-items:center;justify-content:center;
+    width:18px;height:18px;border-radius:9999px;background:var(--signal);color:#fff;
+    font:600 10px/1 var(--mono);z-index:9;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+
+  .statusbar{height:30px}
+  .topbar{display:flex;align-items:center;gap:8px;padding:6px 16px 10px;border-bottom:1px solid var(--line)}
+  .topbar .tick{width:18px;height:2px;background:var(--signal)}
+  .topbar .k{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--signal)}
+  .topbar .menu{margin-left:auto;font-size:18px;color:var(--ink-3)}
+
+  /* segmented Chat | Docs */
+  .seg{display:flex;margin:10px 16px;border:1px solid var(--line);border-radius:9999px;background:var(--paper-2);padding:3px}
+  .seg button{flex:1;border:0;background:none;font-family:var(--mono);font-size:11px;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--ink-3);padding:7px 0;border-radius:9999px;cursor:pointer}
+  .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .seg .badge{display:inline-block;margin-left:5px;color:var(--signal)}
+
+  .log{flex:1;overflow:auto;padding:4px 16px 12px}
+
+  .msg-you{margin:14px 0 4px}
+  .msg-you .who{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin:0 0 4px}
+  .msg-you .body{display:inline-block;background:var(--paper-2);border:1px solid var(--line);border-radius:10px;
+    padding:8px 11px;font-family:var(--reading);font-size:16px;line-height:1.5;color:var(--ink)}
+
+  .msg-scout{margin:12px 0 4px}
+  .msg-scout .who{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--signal);margin:0 0 5px;display:flex;align-items:center;gap:6px}
+  .msg-scout .who .dot{width:6px;height:6px;border-radius:9999px;background:var(--signal)}
+  .prose{font-family:var(--reading);font-size:17px;line-height:1.6;color:var(--ink)}
+  .prose p{margin:6px 0}
+  .caret{display:inline-block;width:7px;height:17px;background:var(--signal);margin-left:2px;vertical-align:-3px;animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  .card-action{border:1px solid var(--line-2);border-radius:10px;background:var(--card);margin:12px 0;overflow:hidden}
+  .ca-head{display:flex;align-items:center;gap:7px;padding:8px 10px;border-bottom:1px solid var(--line)}
+  .ca-icon{width:17px;height:17px;border-radius:5px;display:grid;place-items:center;font:600 10px/1 var(--mono);color:#fff;background:var(--signal)}
+  .ca-title{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-2)}
+  .ca-state{margin-left:auto;font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:9999px}
+  .st-applied{color:var(--success-fg);background:var(--success-bg);border:1px solid var(--success-border)}
+  .st-pending{color:#7a5a1e;background:#f6ecd6;border:1px solid #ddc89a}
+  .diff{font-family:var(--mono);font-size:11px;line-height:1.5;padding:6px 0}
+  .diff .ln{display:flex;padding:0 10px}
+  .diff .g{width:14px;color:var(--ink-3)}
+  .diff .add{background:var(--add-bg)}.diff .add .g{color:var(--success-fg)}
+  .diff .del{background:var(--del-bg)}.diff .del .g{color:var(--danger-fg)}
+  .ca-foot{display:flex;gap:7px;align-items:center;padding:8px 10px;border-top:1px solid var(--line)}
+  .btn{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;border-radius:8px;padding:7px 12px;border:1px solid var(--line-2);min-height:36px}
+  .btn-danger{background:var(--danger-bg);color:var(--danger-fg);border-color:var(--danger-border)}
+  .btn-ghost{background:none;color:var(--ink-2)}
+
+  /* scroll pill */
+  .pill{position:absolute;left:50%;transform:translateX(-50%);bottom:150px;
+    font-family:var(--mono);font-size:11px;color:var(--paper);background:var(--ink);border-radius:9999px;padding:6px 14px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+
+  /* sticky composer */
+  .composer{border-top:1px solid var(--line);background:var(--paper);
+    padding:10px 16px max(12px, env(safe-area-inset-bottom))}
+  .focuschip{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;
+    text-transform:uppercase;letter-spacing:.05em;color:var(--signal);border:1px solid var(--line-2);border-radius:9999px;padding:3px 9px;margin-bottom:8px}
+  .focuschip .d{width:5px;height:5px;border-radius:9999px;background:var(--signal)}
+  .field{display:flex;align-items:flex-end;gap:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:7px 7px 7px 12px}
+  .field textarea{flex:1;border:0;outline:0;resize:none;background:none;font-family:var(--reading);font-size:16px;line-height:1.5;color:var(--ink);min-height:24px;max-height:140px}
+  .send{width:40px;height:40px;border-radius:10px;border:0;background:var(--ink);color:var(--paper);font-size:17px;flex:none}
+  .send.stop{background:var(--signal)}
+  .hint{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin:7px 2px 0}
+
+  /* docs bottom-sheet (second phone) */
+  .scrim{position:absolute;inset:0;background:rgba(28,26,23,.28)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;
+    border-top:1px solid var(--line);max-height:78%;display:flex;flex-direction:column;overflow:hidden}
+  .grab{width:38px;height:4px;border-radius:9999px;background:var(--line-2);margin:10px auto 4px}
+  .sheet-head{display:flex;align-items:baseline;justify-content:space-between;padding:6px 18px 12px;border-bottom:1px solid var(--line)}
+  .sheet-head .t{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3)}
+  .sheet-head .c{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+  .sheet-body{overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+  .dcard{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:13px}
+  .dcard.flash{border-color:var(--signal);box-shadow:0 0 0 3px rgba(154,59,46,.14)}
+  .dcard h4{font-family:var(--serif);font-size:17px;font-weight:600;margin:0}
+  .dcard .line{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin-top:5px}
+  .dcard .line.live{color:var(--signal)}
+  .dcard .line .d{width:5px;height:5px;border-radius:9999px;background:var(--signal)}
+  .dcard .prev{margin-top:9px;border-top:1px solid var(--line);padding-top:9px;font-family:var(--reading);font-size:13px;line-height:1.45;color:var(--ink-2)}
+</style>
+</head>
+<body>
+  <p class="cap">Scout chat · iPhone 12/13/14 · 390×844 · PER-227</p>
+
+  <!-- PHONE 1: chat tab -->
+  <div class="phone">
+    <div class="statusbar"></div>
+    <div class="topbar">
+      <span class="tick"></span><span class="k">Scout</span>
+      <span class="menu">☰</span>
+    </div>
+
+    <span class="pin" style="left:150px;top:78px">A</span>
+    <div class="seg">
+      <button class="on">Chat</button>
+      <button>Docs<span class="badge">2</span></button>
+    </div>
+
+    <div class="log">
+      <div class="msg-you">
+        <p class="who">You · 2:14 PM</p>
+        <span class="body">Track EU AI Act enforcement, and drop crypto.</span>
+      </div>
+
+      <span class="pin" style="left:8px;top:210px">B</span>
+      <div class="msg-scout">
+        <p class="who"><span class="dot"></span>Scout</p>
+        <div class="prose"><p>Done — started a doc for <b>EU AI Act enforcement</b> and queued crypto for removal.</p></div>
+      </div>
+
+      <span class="pin" style="left:8px;top:300px">C</span>
+      <div class="card-action">
+        <div class="ca-head"><span class="ca-icon">+</span><span class="ca-title">Created · EU AI Act</span><span class="ca-state st-applied">Applied</span></div>
+        <div class="diff">
+          <div class="ln add"><span class="g">+</span><span># EU AI Act enforcement</span></div>
+          <div class="ln add"><span class="g">+</span><span>Fines, authority actions, GPAI…</span></div>
+        </div>
+        <div class="ca-foot"><button class="btn btn-ghost">Undo</button></div>
+      </div>
+
+      <div class="card-action">
+        <div class="ca-head"><span class="ca-icon" style="background:var(--danger-fg)">−</span><span class="ca-title">Remove · Crypto markets</span><span class="ca-state st-pending">Confirm</span></div>
+        <div class="diff"><div class="ln del"><span class="g">−</span><span># Crypto markets</span></div></div>
+        <div class="ca-foot"><button class="btn btn-danger">Apply</button><button class="btn btn-ghost">Discard</button></div>
+      </div>
+
+      <div class="msg-scout">
+        <p class="who"><span class="dot"></span>Scout</p>
+        <div class="prose"><p>These steer your next run<span class="caret"></span></p></div>
+      </div>
+    </div>
+
+    <span class="pin" style="left:16px;top:660px">D</span>
+    <div class="composer">
+      <span class="focuschip"><span class="d"></span>Editing: EU AI Act ✕</span>
+      <div class="field">
+        <textarea rows="1" placeholder="Message Scout…"></textarea>
+        <button class="send" title="Send">↑</button>
+      </div>
+      <p class="hint">Enter sends · 100dvh + safe-area inset · 16px font</p>
+    </div>
+  </div>
+
+  <p class="cap">Docs as bottom-sheet (segmented "Docs" tab) — not a side rail</p>
+
+  <!-- PHONE 2: docs bottom sheet -->
+  <div class="phone">
+    <div class="statusbar"></div>
+    <div class="topbar"><span class="tick"></span><span class="k">Scout</span><span class="menu">☰</span></div>
+    <div class="seg"><button>Chat</button><button class="on">Docs<span class="badge">2</span></button></div>
+    <div class="log" style="filter:blur(.5px)">
+      <div class="msg-scout"><p class="who"><span class="dot"></span>Scout</p><div class="prose"><p>Done — started a doc…</p></div></div>
+    </div>
+    <div class="scrim"></div>
+    <span class="pin" style="left:16px;top:300px">E</span>
+    <div class="sheet">
+      <div class="grab"></div>
+      <div class="sheet-head"><span class="t">Interests</span><span class="c">2 of 3 with doc</span></div>
+      <div class="sheet-body">
+        <div class="dcard flash">
+          <h4>EU AI Act enforcement</h4>
+          <span class="line live"><span class="d"></span>Doc created just now</span>
+          <div class="prev">Fines, national-authority actions, GPAI code-of-practice…</div>
+        </div>
+        <div class="dcard">
+          <h4>Fusion energy</h4>
+          <span class="line"><span class="d"></span>Intent doc · updated Jun 6</span>
+          <div class="prev">Net-energy-gain claims, funding rounds, ITER…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="cap">Legend — A: segmented Chat|Docs toggle · B: assistant no-bubble full-bleed (16px pad) · C: stacked diff cards (auto-apply+Undo / confirm) · D: sticky composer w/ safe-area inset · E: Docs bottom-sheet w/ flash-highlight</p>
+</body>
+</html>

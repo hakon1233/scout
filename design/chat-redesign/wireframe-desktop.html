@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Scout chat redesign — desktop 1440 wireframe (PER-227)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f6f2ea; --paper-2:#efe9dd; --ink:#1c1a17; --ink-2:#46413a; --ink-3:#6f685d;
+    --line:#d8d0c1; --line-2:#cabfac; --card:#fffdf8; --signal:#9a3b2e;
+    --success-bg:#e9efe4; --success-fg:#3f5a32; --success-border:#c2d2b4;
+    --danger-bg:#f7e9e6; --danger-fg:#8a2f23; --danger-border:#e0b3aa;
+    --add-bg:#e9efe4; --del-bg:#f7e9e6;
+    --sans:'Inter',system-ui,sans-serif; --serif:'Fraunces',Georgia,serif;
+    --reading:'Newsreader',Georgia,serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    background-image:radial-gradient(circle at 1px 1px, rgba(28,26,23,.04) 1px, transparent 0);
+    background-size:22px 22px;}
+  .pin{position:absolute;display:inline-flex;align-items:center;justify-content:center;
+    width:20px;height:20px;border-radius:9999px;background:var(--signal);color:#fff;
+    font:600 11px/1 var(--mono);box-shadow:0 1px 3px rgba(0,0,0,.25);z-index:5}
+  .frame{max-width:1440px;margin:0 auto;padding:28px 32px 64px;position:relative}
+  .doc-title{font-family:var(--serif);font-weight:600;font-size:13px;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--signal);display:flex;align-items:center;gap:10px;margin:0 0 4px}
+  .doc-title::before{content:"";width:26px;height:2px;background:var(--signal)}
+  .doc-sub{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin:0 0 22px}
+
+  /* App chrome */
+  .nav{display:flex;align-items:center;gap:18px;border-bottom:1px solid var(--line);
+    padding-bottom:14px;margin-bottom:22px}
+  .brand{font-family:var(--serif);font-weight:600;font-size:18px}
+  .nav a{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--ink-3);text-decoration:none}
+  .nav a.active{color:var(--signal)}
+
+  /* Two-pane shell */
+  .shell{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:0;
+    border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden;
+    height:840px}
+  .divider{position:absolute;top:0;bottom:0;left:calc(100% - 420px);width:1px;background:var(--line)}
+
+  /* CHAT PANE */
+  .chat{display:flex;flex-direction:column;min-width:0;background:var(--paper)}
+  .chat-head{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line)}
+  .chat-head .tick{width:22px;height:2px;background:var(--signal)}
+  .chat-head .k{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--signal)}
+  .chat-head .h{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+  .seg{margin-left:auto;display:none} /* desktop: docs are a fixed rail, no toggle */
+
+  .log{flex:1;overflow:auto;padding:8px 0}
+  .column{max-width:720px;margin:0 auto;padding:16px 28px 8px}
+
+  /* user message — quiet, left aligned, faint tint */
+  .msg-you{margin:18px 0 6px}
+  .msg-you .who{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin:0 0 4px}
+  .msg-you .body{display:inline-block;background:var(--paper-2);border:1px solid var(--line);
+    border-radius:10px;padding:8px 12px;font-family:var(--reading);font-size:15px;line-height:1.55;color:var(--ink)}
+
+  /* assistant — NO bubble, full column typographic */
+  .msg-scout{margin:14px 0 6px}
+  .msg-scout .who{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--signal);margin:0 0 6px;display:flex;align-items:center;gap:6px}
+  .msg-scout .who .dot{width:6px;height:6px;border-radius:9999px;background:var(--signal)}
+  .prose{font-family:var(--reading);font-size:17px;line-height:1.6;color:var(--ink)}
+  .prose h3{font-family:var(--serif);font-weight:600;font-size:18px;margin:2px 0 6px}
+  .prose p{margin:8px 0}
+  .prose ul{margin:8px 0;padding-left:20px}
+  .prose li{margin:4px 0}
+  .caret{display:inline-block;width:8px;height:18px;background:var(--signal);
+    margin-left:2px;vertical-align:-3px;animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .tools-row{display:flex;gap:8px;margin-top:6px}
+  .toolbtn{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--ink-3);background:none;border:1px solid var(--line);border-radius:9999px;padding:3px 9px;cursor:pointer}
+
+  /* DIFF / ACTION CARD */
+  .card-action{border:1px solid var(--line-2);border-radius:10px;background:var(--card);margin:14px 0;overflow:hidden}
+  .ca-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line)}
+  .ca-icon{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font:600 11px/1 var(--mono);color:#fff;background:var(--signal)}
+  .ca-title{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2)}
+  .ca-state{margin-left:auto;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+    padding:2px 8px;border-radius:9999px}
+  .st-pending{color:#7a5a1e;background:#f6ecd6;border:1px solid #ddc89a}
+  .st-applied{color:var(--success-fg);background:var(--success-bg);border:1px solid var(--success-border)}
+  .st-failed{color:var(--danger-fg);background:var(--danger-bg);border:1px solid var(--danger-border)}
+  .diff{font-family:var(--mono);font-size:12px;line-height:1.55;padding:8px 0}
+  .diff .ln{display:flex;padding:0 12px}
+  .diff .g{width:16px;color:var(--ink-3);user-select:none}
+  .diff .add{background:var(--add-bg)}
+  .diff .add .g{color:var(--success-fg)}
+  .diff .del{background:var(--del-bg)}
+  .diff .del .g{color:var(--danger-fg)}
+  .ca-foot{display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--line)}
+  .btn{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-radius:8px;padding:6px 14px;cursor:pointer;border:1px solid var(--line-2)}
+  .btn-primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .btn-ghost{background:none;color:var(--ink-2)}
+  .btn-danger{background:var(--danger-bg);color:var(--danger-fg);border-color:var(--danger-border)}
+  .ca-foot .meta{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+
+  /* tool output block */
+  .toolout{border:1px solid var(--line);border-radius:8px;background:var(--paper-2);margin:12px 0}
+  .toolout summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;
+    font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2)}
+  .toolout summary::-webkit-details-marker{display:none}
+  .toolout pre{margin:0;padding:0 12px 12px;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--ink-2);white-space:pre-wrap}
+
+  /* scroll-to-latest pill */
+  .pill{position:absolute;left:50%;transform:translateX(-50%);bottom:118px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--paper);background:var(--ink);
+    border-radius:9999px;padding:6px 14px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+
+  /* composer */
+  .composer{border-top:1px solid var(--line);background:var(--paper);padding:12px 28px 14px}
+  .composer .inner{max-width:720px;margin:0 auto}
+  .focuschip{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;
+    text-transform:uppercase;letter-spacing:.06em;color:var(--signal);border:1px solid var(--line-2);
+    border-radius:9999px;padding:3px 10px;margin-bottom:8px}
+  .focuschip .d{width:6px;height:6px;border-radius:9999px;background:var(--signal)}
+  .field{display:flex;align-items:flex-end;gap:10px;border:1px solid var(--line);border-radius:12px;
+    background:var(--card);padding:8px 8px 8px 14px}
+  .field textarea{flex:1;border:0;outline:0;resize:none;background:none;font-family:var(--reading);
+    font-size:16px;line-height:1.5;color:var(--ink);min-height:26px;max-height:160px}
+  .send{width:38px;height:38px;border-radius:9px;border:0;background:var(--ink);color:var(--paper);
+    font-size:16px;cursor:pointer;display:grid;place-items:center;flex:none}
+  .send.stop{background:var(--signal)}
+  .hint{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin:8px 2px 0}
+
+  /* DOCS RAIL */
+  .rail{display:flex;flex-direction:column;min-width:0;background:var(--card)}
+  .rail-head{display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .rail-head .t{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3)}
+  .rail-head .c{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+  .rail-body{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+  .dcard{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:14px}
+  .dcard.flash{border-color:var(--signal);box-shadow:0 0 0 3px rgba(154,59,46,.12);animation:flash 1.6s ease}
+  @keyframes flash{0%{box-shadow:0 0 0 6px rgba(154,59,46,.22)}100%{box-shadow:0 0 0 3px rgba(154,59,46,.12)}}
+  .dcard h4{font-family:var(--serif);font-size:18px;font-weight:600;margin:0}
+  .dcard .line{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;
+    text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-top:5px}
+  .dcard .line .d{width:6px;height:6px;border-radius:9999px;background:var(--signal)}
+  .dcard .line.live{color:var(--signal)}
+  .dcard .prev{margin-top:10px;border-top:1px solid var(--line);padding-top:10px;
+    font-family:var(--reading);font-size:13px;line-height:1.5;color:var(--ink-2)}
+
+  .legend{margin-top:30px;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:18px 22px}
+  .legend h2{font-family:var(--serif);font-size:18px;margin:0 0 10px}
+  .legend ol{margin:0;padding-left:20px;font-size:13px;line-height:1.7;color:var(--ink-2)}
+  .legend b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="frame">
+  <p class="doc-title">PER-227 · Chat redesign · Desktop 1440</p>
+  <p class="doc-sub">Surface: /app/chat (ChatDock + docs rail). Brand: Private Wire Service. Numbered pins ↔ legend below.</p>
+
+  <div class="nav">
+    <span class="brand">Scout</span>
+    <a>Feed</a><a class="active">Chat</a><a>Interests</a><a>Skills</a><a>Settings</a>
+  </div>
+
+  <div class="shell">
+    <span class="divider"></span>
+
+    <!-- CHAT PANE -->
+    <section class="chat">
+      <div class="chat-head">
+        <span class="tick"></span>
+        <span class="k">Scout</span>
+        <span class="h">talk to shape your interests</span>
+      </div>
+
+      <div class="log">
+        <div class="column">
+          <span class="pin" style="left:-4px;top:18px">1</span>
+
+          <!-- user -->
+          <div class="msg-you">
+            <p class="who">You · 2:14 PM</p>
+            <span class="body">Track EU AI Act enforcement, and drop the crypto one.</span>
+          </div>
+          <span class="pin" style="left:-4px;top:118px">2</span>
+
+          <!-- assistant: no bubble -->
+          <div class="msg-scout">
+            <p class="who"><span class="dot"></span>Scout</p>
+            <div class="prose">
+              <p>Done — I started an intent doc for <b>EU AI Act enforcement</b> and queued the crypto interest for removal. Here's what each change looks like.</p>
+            </div>
+          </div>
+
+          <!-- DIFF CARD: create, auto-applied + Undo -->
+          <span class="pin" style="left:-4px;top:250px">3</span>
+          <div class="card-action">
+            <div class="ca-head">
+              <span class="ca-icon">+</span>
+              <span class="ca-title">Created intent doc · EU AI Act enforcement</span>
+              <span class="ca-state st-applied">Applied</span>
+            </div>
+            <div class="diff">
+              <div class="ln add"><span class="g">+</span><span># EU AI Act enforcement</span></div>
+              <div class="ln add"><span class="g">+</span><span>Track fines, national authority actions, and GPAI</span></div>
+              <div class="ln add"><span class="g">+</span><span>code-of-practice milestones. Prioritise primary sources.</span></div>
+            </div>
+            <div class="ca-foot">
+              <button class="btn btn-ghost">Undo</button>
+              <span class="meta">Auto-applied · writes are durable on disk</span>
+            </div>
+          </div>
+
+          <!-- DIFF CARD: delete, confirm-before-apply -->
+          <span class="pin" style="left:-4px;top:430px">4</span>
+          <div class="card-action">
+            <div class="ca-head">
+              <span class="ca-icon" style="background:var(--danger-fg)">−</span>
+              <span class="ca-title">Remove interest · Crypto markets</span>
+              <span class="ca-state st-pending">Needs confirm</span>
+            </div>
+            <div class="diff">
+              <div class="ln del"><span class="g">−</span><span># Crypto markets</span></div>
+              <div class="ln del"><span class="g">−</span><span>Daily BTC/ETH moves, ETF flows, regulation.</span></div>
+            </div>
+            <div class="ca-foot">
+              <button class="btn btn-danger">Apply removal</button>
+              <button class="btn btn-ghost">Discard</button>
+              <span class="meta">Destructive · focus lands here</span>
+            </div>
+          </div>
+
+          <!-- tool output -->
+          <span class="pin" style="left:-4px;top:600px">5</span>
+          <details class="toolout" open>
+            <summary>▾ Tool output · search_web (3 sources)</summary>
+            <pre>1. eur-lex.europa.eu  — Regulation (EU) 2024/1689
+2. digital-strategy.ec.europa.eu — GPAI code of practice
+3. reuters.com — first national-authority fine, May 2026</pre>
+          </details>
+
+          <!-- streaming assistant -->
+          <span class="pin" style="left:-4px;top:712px">6</span>
+          <div class="msg-scout">
+            <p class="who"><span class="dot"></span>Scout</p>
+            <div class="prose"><p>Both docs steer your next research run automatically<span class="caret"></span></p></div>
+          </div>
+        </div>
+      </div>
+
+      <span class="pill">↓ 1 new message · Jump to latest</span>
+
+      <!-- composer -->
+      <div class="composer">
+        <span class="pin" style="left:18px;top:-10px">7</span>
+        <div class="inner">
+          <span class="focuschip"><span class="d"></span>Editing: EU AI Act enforcement ✕</span>
+          <div class="field">
+            <textarea rows="1" placeholder="Add, refine, or remove an interest…">Add a watch on member-state transposition deadlines</textarea>
+            <button class="send" title="Send">↑</button>
+          </div>
+          <p class="hint">Enter to send · Shift+Enter newline · ⌘+Enter force-send · 16px = no iOS zoom</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- DOCS RAIL -->
+    <section class="rail">
+      <span class="pin" style="right:404px;top:78px">8</span>
+      <div class="rail-head">
+        <span class="t">Interests</span>
+        <span class="c">2 of 3 with intent doc</span>
+      </div>
+      <div class="rail-body">
+        <div class="dcard flash">
+          <h4>EU AI Act enforcement</h4>
+          <span class="line live"><span class="d"></span>Doc created just now</span>
+          <div class="prev">Track fines, national authority actions, and GPAI code-of-practice milestones…</div>
+        </div>
+        <div class="dcard">
+          <h4>Fusion energy</h4>
+          <span class="line"><span class="d"></span>Intent doc · updated Jun 6</span>
+          <div class="prev">Net-energy-gain claims, private-sector funding rounds, ITER schedule…</div>
+        </div>
+        <div class="dcard" style="opacity:.55">
+          <h4 style="text-decoration:line-through">Crypto markets</h4>
+          <span class="line"><span class="d" style="background:var(--ink-3)"></span>Pending removal</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="legend">
+    <h2>Annotation legend — desktop</h2>
+    <ol>
+      <li><b>Reading column</b> — chat content clamped to <b>max-width 720px</b>, centered in the chat pane; pane ≈62% / rail ≈38% with a 1px <code>border-default</code> divider.</li>
+      <li><b>User message</b> — quiet, left-aligned, faint <code>surface-muted</code> (#efe9dd) tint with hairline; mono "You · time" label in <code>text-muted</code>. No heavy bubble.</li>
+      <li><b>Assistant message</b> — <b>no bubble</b>, full-column Newsreader 17px/1.6 on paper. Mono signal "Scout" dateline. This is the calm Claude-Code reading feel.</li>
+      <li><b>Diff card — create/append/minor-edit</b>: <b>auto-apply + Undo</b>. Header chip, JetBrains-Mono diff with +/- gutters, <code>Applied</code> state, "Undo" affordance.</li>
+      <li><b>Diff card — delete/full-rewrite</b>: <b>confirm-before-apply</b> (Apply / Discard), <code>Needs confirm</code> state, focus management lands here. See spec for contract caveat.</li>
+      <li><b>Tool-output block</b> — framed, collapsible, JetBrains Mono, recessed <code>surface-muted</code>. Reserved for machine output only.</li>
+      <li><b>Composer</b> — auto-grow (1→~6 rows), 16px reading font, send↕Stop morph (Stop = signal-red), sticky to pane bottom; <b>scroll-to-latest pill</b> appears when user is >80px from bottom.</li>
+      <li><b>Docs rail</b> — existing InterestDocCard list; on Apply the matching card <b>flash-highlights</b> (signal ring) — the visible proof a turn moved a card.</li>
+    </ol>
+  </div>
+</div>
+</body>
+</html>
