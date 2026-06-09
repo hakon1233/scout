@@ -106,6 +106,10 @@ export function InterestDocCard({
         focused
           ? "border-signal"
           : "border-border-default hover:border-border-strong",
+        // PER-230 AC6: an unmistakable card-level flash the instant a turn
+        // confirms a durable write. The dateline pill (below) names what
+        // changed; this ring/tint sweep makes the moved card impossible to miss.
+        beat ? "scout-doc-flash" : "",
       ].join(" ")}
       aria-label={`Interest: ${topic}`}
       role="link"
