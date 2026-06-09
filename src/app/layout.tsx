@@ -75,6 +75,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Mobile keyboard resizes the layout instead of overlaying the sticky chat
+  // composer (PER-228, chunk 2). Pairs with the 100dvh/svh + safe-area paddings
+  // in the chat composer so the input is never hidden behind the keyboard.
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f6f2ea" },
     { media: "(prefers-color-scheme: dark)", color: "#16140f" },
