@@ -34,7 +34,7 @@ function rgb(styleValue: string): [number, number, number] {
 }
 
 test("chat renders user and assistant markdown safely", async ({ page }) => {
-  await page.goto(`${ORIGIN}/app/chat?mock=markdown`);
+  await page.goto(`${ORIGIN}/app/interests?mock=markdown`);
 
   await expect(
     page.getByRole("heading", { name: "Scout markdown reply" }),
@@ -60,7 +60,7 @@ test("chat renders user and assistant markdown safely", async ({ page }) => {
 test("user bubble strong markdown remains legible on the dark surface", async ({
   page,
 }) => {
-  await page.goto(`${ORIGIN}/app/chat?mock=markdown`);
+  await page.goto(`${ORIGIN}/app/interests?mock=markdown`);
 
   const styles = await page
     .locator("strong", { hasText: "user emphasis" })
