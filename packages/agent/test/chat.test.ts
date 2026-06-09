@@ -23,6 +23,7 @@ import {
   type State,
 } from "../src/state.js";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
+import { buildChatPrompt } from "../src/chat.js";
 import { startServer } from "../src/server.js";
 
 // A spawn() stand-in that returns a fixed text payload (the model's JSON) and
@@ -660,4 +661,19 @@ test("the pairing token never reaches the chat claude child (argv/options/stdin)
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
+});
+
+// PER-230 AC6 #1: "delete is non-functional" was a model op-selection bug, not
+// missing plumbing — the model rewrote/blanked the doc with `update` instead of
+// emitting `delete`. The fix is prompt steering. This guards that the steering
+// stays in the prompt so a future prompt edit can't silently regress delete.
+test("buildChatPrompt steers removal intents to the delete op, not update (PER-230)", () => {
+  const prompt = buildChatPrompt("delete my ai safety interest", [
+    { id: "int_abc123", topic: "ai safety", doc: "Track alignment research." },
+  ]);
+  // Names removal verbs the user actually says, so the model maps them to delete.
+  assert.match(prompt, /remove|delete|drop|get rid of|stop\s+tracking/i);
+  // The load-bearing instruction: never fake a removal with an update.
+  assert.match(prompt, /Deleting is the ONLY way to remove an interest/);
+  assert.match(prompt, /NEVER try to/i);
 });

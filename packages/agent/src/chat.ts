@@ -253,6 +253,27 @@ export function buildChatPrompt(
   lines.push(
     `- There is a hard cap of ${MAX_INTERESTS} interests; don't create past it.`,
   );
+  lines.push(
+    "- Choosing the op is important. If the user wants to REMOVE a topic from",
+  );
+  lines.push(
+    '    their interests — "delete X", "remove X", "drop X", "get rid of X", "stop',
+  );
+  lines.push(
+    '    tracking X", "I no longer care about X" — emit a `delete` op for that',
+  );
+  lines.push(
+    "    interest's id. Deleting is the ONLY way to remove an interest: NEVER try to",
+  );
+  lines.push(
+    '    "remove" it by emptying, blanking, or rewriting its `doc` with an `update` —',
+  );
+  lines.push(
+    "    an update keeps the interest alive and still feeds the next brief. Reserve",
+  );
+  lines.push(
+    "    `update` for when the user wants to KEEP the topic but change what it tracks.",
+  );
   lines.push("- Do not use any tools. Output only the JSON object.");
   return lines.join("\n");
 }
