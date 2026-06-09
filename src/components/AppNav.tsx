@@ -164,11 +164,8 @@ function ProfileMenu({
             <MenuLink href="/app/settings" onSelect={() => setOpen(false)}>
               Settings
             </MenuLink>
-            <MenuLink href="/app/chat" onSelect={() => setOpen(false)}>
-              Chat
-            </MenuLink>
             <MenuLink href="/app/interests" onSelect={() => setOpen(false)}>
-              Interests
+              Interests &amp; chat
             </MenuLink>
             <MenuLink href="/app/skills" onSelect={() => setOpen(false)}>
               Skills

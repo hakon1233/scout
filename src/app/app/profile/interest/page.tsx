@@ -211,7 +211,7 @@ export default function InterestScopePage() {
 
             <div className="flex flex-wrap gap-3 border-t border-border-default pt-5">
               <a
-                href="/app/chat"
+                href="/app/interests"
                 className="rounded-pill border border-border-default px-3 py-2 font-mono text-[11px] uppercase tracking-[0.06em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
               >
                 Refine in chat
