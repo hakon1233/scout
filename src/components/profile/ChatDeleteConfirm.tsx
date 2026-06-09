@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useId, useRef } from "react";
+
 import type { PendingDelete } from "@/lib/chat";
 
 // The confirm-gated delete card (PER-230). Delete is the ONE destructive op, so
@@ -22,8 +24,38 @@ export function ChatDeleteConfirm({
   onCancel: () => void;
   disabled: boolean;
 }) {
+  const labelId = useId();
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  // Remember what had focus when the card appeared so we can hand it back after
+  // the user resolves the confirmation (AC8 — focus management). Captured once.
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  // On mount, move focus onto the freshly-appeared destructive confirmation so a
+  // keyboard/SR user is taken to it (the spec's "focus moves correctly to confirm
+  // cards"). We land on Cancel — the SAFE default — so a stray Enter keeps the
+  // interest rather than deleting it.
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const active = document.activeElement;
+      returnFocusRef.current =
+        active instanceof HTMLElement ? active : null;
+    }
+    cancelRef.current?.focus();
+  }, []);
+
+  // Once the turn resolves (Delete/Cancel pressed), the action buttons unmount.
+  // Return focus to wherever it was before the card took it (the composer), so a
+  // keyboard/SR user is not stranded on a now-inert card.
+  useEffect(() => {
+    if (resolved) returnFocusRef.current?.focus();
+  }, [resolved]);
+
   return (
-    <div className="my-3 overflow-hidden rounded-md border border-border-strong bg-surface">
+    <div
+      role="alertdialog"
+      aria-labelledby={labelId}
+      className="my-3 overflow-hidden rounded-md border border-border-strong bg-surface"
+    >
       <div className="flex items-center gap-2 border-b border-border-default px-2.5 py-2">
         <span
           aria-hidden="true"
@@ -31,7 +63,10 @@ export function ChatDeleteConfirm({
         >
           −
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.05em] text-secondary">
+        <span
+          id={labelId}
+          className="font-mono text-[10px] uppercase tracking-[0.05em] text-secondary"
+        >
           Confirm delete · {pd.topic}
         </span>
         {resolved && (
@@ -71,6 +106,7 @@ export function ChatDeleteConfirm({
               Delete
             </button>
             <button
+              ref={cancelRef}
               type="button"
               disabled={disabled}
               onClick={onCancel}
