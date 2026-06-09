@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatChange } from "@/lib/chat";
+import type { ChatChange, PendingDelete } from "@/lib/chat";
 import { ChatActionCard } from "./ChatActionCard";
+import { ChatDeleteConfirm, type DeleteResolution } from "./ChatDeleteConfirm";
 import { ChatMarkdown } from "./ChatMarkdown";
 
 // One rendered line in the chat transcript. `you` is the founder's raw message
@@ -18,6 +19,11 @@ export type ChatMessage = {
   changes?: ChatChange[];
   // Pre-change doc bodies keyed by interestId, for the diff/undo affordance.
   prev?: Record<string, string | null>;
+  // A confirm-gated delete this turn proposed (PER-230). Renders a
+  // [Delete]/[Cancel] card; the interest is removed only on [Delete].
+  pendingDelete?: PendingDelete;
+  // Whether the founder resolved the pending delete (and how).
+  deleteResolved?: DeleteResolution;
   // A turn that failed — offer retry, render quietly.
   failed?: boolean;
 };
@@ -88,6 +94,8 @@ export function ChatDock({
   onStop,
   onRetry,
   onUndo,
+  onConfirmDelete,
+  onCancelDelete,
 }: {
   messages: ChatMessage[];
   sending: boolean;
@@ -100,6 +108,8 @@ export function ChatDock({
   onStop: () => void;
   onRetry: (scoutId: string) => void;
   onUndo: (change: ChatChange, prev: string | null) => void;
+  onConfirmDelete: (pd: PendingDelete, msgId: string) => void;
+  onCancelDelete: (msgId: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
@@ -249,6 +259,16 @@ export function ChatDock({
                     />
                   ))}
 
+                  {m.pendingDelete && (
+                    <ChatDeleteConfirm
+                      pd={m.pendingDelete}
+                      resolved={m.deleteResolved}
+                      onConfirm={() => onConfirmDelete(m.pendingDelete!, m.id)}
+                      onCancel={() => onCancelDelete(m.id)}
+                      disabled={sending}
+                    />
+                  )}
+
                   {/* Per-message actions (chunk 6) — quiet, reveal on hover/focus. */}
                   {!isStreaming && (
                     <div className="mt-1.5 flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/msg:opacity-100">
@@ -375,7 +395,10 @@ export function ChatDock({
                   aria-label="Stop"
                   className="grid size-9 shrink-0 place-items-center rounded-md bg-signal text-[color:var(--accent-fg)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                 >
-                  <span aria-hidden="true" className="block size-2.5 rounded-[2px] bg-current" />
+                  <span
+                    aria-hidden="true"
+                    className="block size-2.5 rounded-[2px] bg-current"
+                  />
                 </button>
               ) : (
                 <button
@@ -384,7 +407,9 @@ export function ChatDock({
                   disabled={!draft.trim()}
                   className="grid size-9 shrink-0 place-items-center rounded-md bg-accent text-accent-fg transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-40"
                 >
-                  <span aria-hidden="true" className="text-[15px] leading-none">↑</span>
+                  <span aria-hidden="true" className="text-[15px] leading-none">
+                    ↑
+                  </span>
                 </button>
               )}
             </div>

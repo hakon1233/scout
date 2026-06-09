@@ -6,10 +6,12 @@ import {
   fetchCompanionInterests,
 } from "@/lib/companion";
 import {
+  confirmDeleteInterest,
   fetchChatTranscript,
   runChatTurn,
   type ChatChange,
   type ChatTurn,
+  type PendingDelete,
 } from "@/lib/chat";
 import {
   fetchInterestsFull,
@@ -86,13 +88,15 @@ function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
         ts: turn.created_at,
       },
     ];
-    if (turn.status === "ready" && turn.reply) {
+    if (turn.status === "ready" && (turn.reply || turn.pending_delete)) {
       out.push({
         id: nextMsgId(),
         role: "scout",
-        text: turn.reply,
+        text: turn.reply ?? "",
         ts: turn.created_at,
-        changes: turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
+        changes:
+          turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
+        pendingDelete: turn.pending_delete,
       });
     } else if (turn.status === "failed" && turn.error_msg) {
       out.push({
@@ -281,6 +285,81 @@ export function useProfileWorkbench() {
     [flashBeat],
   );
 
+  // Play the "removed" flash on a card, then actually drop the interest, doc,
+  // and meta from the rail (PER-230 #3). The card stays mounted with the
+  // scout-doc-flash for ~2.4s so QA automation can observe the highlight before
+  // the card disappears — "card disappears with the flash" per the CEO. Reduced-
+  // motion users skip the dwell and remove immediately.
+  const flashRemove = useCallback((key: string) => {
+    setBeats((prev) => ({ ...prev, [key]: "removed" }));
+    const drop = () => {
+      setInterests((prev) =>
+        prev.filter((i) => interestKey(i) !== key && i.id !== key),
+      );
+      setDocBodies((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setDocMeta((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setBeats((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setFocusKey((cur) => (cur === key ? null : cur));
+      delete beatTimers.current[key];
+    };
+    if (beatTimers.current[key]) clearTimeout(beatTimers.current[key]);
+    if (prefersReducedMotion()) {
+      drop();
+      return;
+    }
+    beatTimers.current[key] = setTimeout(drop, 2400);
+  }, []);
+
+  // Confirm a gated delete (PER-230 #1): the deterministic [Delete] press. Hits
+  // the no-model confirm-delete route, which actually removes the interest + doc
+  // and returns a ready turn. On success we flash-and-drop the card and mark the
+  // confirm message resolved so it locks to "Removed".
+  const confirmDelete = useCallback(
+    (pd: PendingDelete, msgId: string) => {
+      if (sending) return;
+      setSending(true);
+      setError(null);
+      (async () => {
+        try {
+          await confirmDeleteInterest(pd.interestId, token);
+          flashRemove(pd.interestId);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msgId ? { ...m, deleteResolved: "deleted" } : m,
+            ),
+          );
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Couldn't remove that.");
+        } finally {
+          setSending(false);
+        }
+      })();
+    },
+    [sending, token, flashRemove],
+  );
+
+  // Cancel a gated delete: nothing touches the store — just lock the card to
+  // "Kept" so the dead-control proof is visible.
+  const cancelDelete = useCallback((msgId: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId ? { ...m, deleteResolved: "cancelled" } : m,
+      ),
+    );
+  }, []);
+
   // Reveal a freshly-arrived scout reply with the typewriter. Reduced-motion
   // users get the whole text at once (no streamId set).
   const startStream = useCallback((id: string, text: string) => {
@@ -331,20 +410,27 @@ export function useProfileWorkbench() {
             prev = {};
             for (const ch of changes) {
               if (ch.interestId)
-                prev[ch.interestId] = docBodiesRef.current[ch.interestId] ?? null;
+                prev[ch.interestId] =
+                  docBodiesRef.current[ch.interestId] ?? null;
             }
           }
-          if (turn.reply || changes) {
+          const pendingDelete = turn.pending_delete;
+          if (turn.reply || changes || pendingDelete) {
             const id = nextMsgId();
             setMessages((prevMsgs) => [
               ...prevMsgs,
               {
                 id,
                 role: "scout",
-                text: turn.reply ?? "Done — updated your interests.",
+                text:
+                  turn.reply ??
+                  (pendingDelete
+                    ? `Want me to remove “${pendingDelete.topic}”?`
+                    : "Done — updated your interests."),
                 ts: replyAt,
                 changes,
                 prev,
+                pendingDelete,
               },
             ]);
             startStream(id, turn.reply ?? "");
@@ -486,5 +572,7 @@ export function useProfileWorkbench() {
     stop,
     retry,
     undo,
+    confirmDelete,
+    cancelDelete,
   };
 }
