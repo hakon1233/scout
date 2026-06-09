@@ -34,6 +34,7 @@ import {
 import { interestDocMeta, readInterestDoc } from "./docs.js";
 import { startRun } from "./runner.js";
 import {
+  confirmDeleteTurn,
   defaultChatTranscriptFile,
   readChatTranscript,
   startChatTurn,
@@ -179,6 +180,7 @@ const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
   "/v0/briefs": ["GET", "OPTIONS"],
   "/v0/schedule": ["GET", "PUT", "OPTIONS"],
   "/v0/chat": ["GET", "POST", "OPTIONS"],
+  "/v0/chat/confirm-delete": ["POST", "OPTIONS"],
 };
 
 function corsHeaders(origin: string | undefined): Record<string, string> {
@@ -702,6 +704,55 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             );
           }
           json(res, 202, { turn_id: outcome.turnId, status: "pending" }, cors);
+          return;
+        }
+
+        // Confirm a gated delete (PER-230). The destructive op is the ONLY one
+        // behind a confirmation: a model turn that resolved to a delete returns
+        // a `pending_delete` proposal (the interest stays alive); the FE renders
+        // a [Delete]/[Cancel] card and calls this route ONLY when the user presses
+        // [Delete]. Deterministic — no model spawn — so it returns the applied
+        // turn synchronously (200) for the FE to flash + drop the docs-rail card.
+        if (
+          req.method === "POST" &&
+          url.pathname === "/v0/chat/confirm-delete"
+        ) {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          let body: string;
+          try {
+            body = await readBody(req);
+          } catch (err) {
+            if (err instanceof BodyTooLargeError) {
+              return json(res, 413, { error: "request body too large" }, cors);
+            }
+            throw err;
+          }
+          let parsed: { interestId?: unknown };
+          try {
+            parsed = JSON.parse(body || "{}");
+          } catch {
+            return json(res, 400, { error: "invalid json" }, cors);
+          }
+          const interestId =
+            typeof parsed.interestId === "string" ? parsed.interestId : "";
+          if (!interestId)
+            return json(res, 400, { error: "interestId required" }, cors);
+          const outcome = await confirmDeleteTurn(interestId, {
+            stateFile,
+            interestsDir,
+            chatTranscriptFile,
+            claudeBin,
+            spawnFn,
+            onChatDone: deps.onChatDone,
+          });
+          if (!outcome.ok) {
+            if (outcome.reason === "in_flight") {
+              return json(res, 409, { error: "chat turn in progress" }, cors);
+            }
+            return json(res, 404, { error: "interest not found" }, cors);
+          }
+          json(res, 200, { turn: outcome.turn }, cors);
           return;
         }
 

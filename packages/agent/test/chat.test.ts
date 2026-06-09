@@ -399,7 +399,7 @@ test("a new chat turn receives earlier transcript turns as model context (PER-20
   }
 });
 
-test("POST /v0/chat deletes an interest and removes its doc (PER-172)", async () => {
+test("POST /v0/chat GATES a delete: surfaces pending_delete and leaves the interest intact (PER-230)", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [
       { id: "int_keep01", topic: "ai safety" },
@@ -409,7 +409,7 @@ test("POST /v0/chat deletes an interest and removes its doc (PER-172)", async ()
   await writeInterestDoc("int_drop02", "crypto doc", interestsDir);
 
   const model = JSON.stringify({
-    reply: "Removed crypto.",
+    reply: "Want me to remove crypto?",
     changes: [{ op: "delete", interestId: "int_drop02" }],
   });
   const { spawnFn } = makeChatSpawn({ output: model, autoClose: true });
@@ -432,9 +432,66 @@ test("POST /v0/chat deletes an interest and removes its doc (PER-172)", async ()
     assert.equal(kick.status, 202);
     const turn = await done;
     assert.equal(turn.status, "ready");
-    assert.deepEqual(turn.changes, [
+    // The delete is NOT applied — it is surfaced as a pending confirmation.
+    assert.deepEqual(turn.changes ?? [], []);
+    assert.deepEqual(turn.pending_delete, {
+      interestId: "int_drop02",
+      topic: "crypto",
+    });
+
+    // The interest and its doc are untouched until the user confirms.
+    const state = await loadState(stateFile);
+    assert.deepEqual(
+      (state.interests ?? []).map((i) => i.id),
+      ["int_keep01", "int_drop02"],
+    );
+    assert.equal(
+      await readInterestDoc("int_drop02", interestsDir),
+      "crypto doc",
+    );
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/chat/confirm-delete removes the interest + doc and returns a ready turn (PER-230)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [
+      { id: "int_keep01", topic: "ai safety" },
+      { id: "int_drop02", topic: "crypto" },
+    ],
+  });
+  await writeInterestDoc("int_drop02", "crypto doc", interestsDir);
+
+  // confirm-delete is deterministic — no model round-trip. Spawn must never run.
+  const { spawnFn, calls } = makeChatSpawn({ output: "{}", autoClose: true });
+  const { onChatDone, done } = awaitTurn();
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/chat/confirm-delete`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interestId: "int_drop02" }),
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { turn?: ChatTurn };
+    assert.ok(body.turn, "confirm-delete returned a turn");
+    assert.equal(body.turn!.status, "ready");
+    assert.deepEqual(body.turn!.changes, [
       { interestId: "int_drop02", op: "delete", topic: "crypto" },
     ]);
+
+    const turn = await done; // onChatDone fired with the same ready turn
+    assert.equal(turn.status, "ready");
 
     const state = await loadState(stateFile);
     assert.deepEqual(
@@ -442,6 +499,39 @@ test("POST /v0/chat deletes an interest and removes its doc (PER-172)", async ()
       ["int_keep01"],
     );
     assert.equal(await readInterestDoc("int_drop02", interestsDir), null);
+    assert.equal(calls.length, 0, "confirm-delete must not spawn the model");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/chat/confirm-delete returns 404 for an unknown id (nothing removed)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_keep01", topic: "ai safety" }],
+  });
+  const { spawnFn } = makeChatSpawn({ output: "{}", autoClose: true });
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/chat/confirm-delete`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interestId: "int_nope99" }),
+    });
+    assert.equal(res.status, 404);
+
+    const state = await loadState(stateFile);
+    assert.deepEqual(
+      (state.interests ?? []).map((i) => i.id),
+      ["int_keep01"],
+    );
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
