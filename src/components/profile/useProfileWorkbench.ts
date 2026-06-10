@@ -9,6 +9,7 @@ import {
   confirmDeleteInterest,
   fetchChatTranscript,
   runChatTurn,
+  stopChatTurn,
   type ChatChange,
   type ChatTurn,
   type PendingDelete,
@@ -144,6 +145,11 @@ export function useProfileWorkbench() {
   const streamTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const abortedRef = useRef(false);
+  // PER-232: the in-flight turn's server id (set once the kick lands) and
+  // whether the user pressed Stop before we even had it — so the server-side
+  // abort can fire as soon as the id arrives instead of being silently lost.
+  const turnIdRef = useRef<string | null>(null);
+  const stopRequestedRef = useRef(false);
   const docBodiesRef = useRef<Record<string, string>>({});
 
   // Mirror docBodies into a ref so `send` can read the pre-change body for the
@@ -393,6 +399,8 @@ export function useProfileWorkbench() {
       setSending(true);
       setError(null);
       abortedRef.current = false;
+      turnIdRef.current = null;
+      stopRequestedRef.current = false;
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -400,6 +408,12 @@ export function useProfileWorkbench() {
         try {
           const turn = await runChatTurn(wire, token, {
             signal: controller.signal,
+            // PER-232: capture the server turn id the moment the kick lands.
+            // If Stop already fired (sub-kick-latency click), abort it now.
+            onKick: (id) => {
+              turnIdRef.current = id;
+              if (stopRequestedRef.current) void stopChatTurn(token, id);
+            },
           });
           const replyAt = new Date().toISOString();
           const changes =
@@ -470,19 +484,28 @@ export function useProfileWorkbench() {
     [sending, focusKey, interests, dispatch],
   );
 
-  // Stop the in-flight turn (PER-228 chunk 3). Aborting the poll before `ready`
-  // means NO uncommitted changes apply. If the reply already arrived and is mid-
-  // typewriter, just finish the reveal — those changes are already durable.
+  // Stop the in-flight turn (PER-228 chunk 3, fixed in PER-232). Aborting the
+  // client poll is NOT enough — the companion is kick→poll, so the server-side
+  // model edit would still complete and persist (~14s later, the AC3/AC5 fail).
+  // We also tell the companion to abort the turn itself: it kills the model
+  // child and writes the turn as stopped with NO changes applied. If the reply
+  // already arrived and is mid-typewriter, those changes are already durable —
+  // the server stop is then a no-op and we just finish the reveal.
   const stop = useCallback(() => {
     abortedRef.current = true;
+    stopRequestedRef.current = true;
     abortRef.current?.abort();
+    // Best-effort server abort: with the turn id when the kick already landed,
+    // otherwise stop whatever is in flight (single-flight slot); onKick retries
+    // with the concrete id if it arrives after this click.
+    void stopChatTurn(token, turnIdRef.current ?? undefined);
     if (streamTimer.current) {
       clearInterval(streamTimer.current);
       streamTimer.current = null;
     }
     setStreamId(null);
     setSending(false);
-  }, []);
+  }, [token]);
 
   // Retry a scout turn: re-run the preceding `you` message without adding a new
   // bubble. We drop the old scout reply (and anything after it) first so the log

@@ -38,6 +38,7 @@ import {
   defaultChatTranscriptFile,
   readChatTranscript,
   startChatTurn,
+  stopChatTurn,
 } from "./chat.js";
 import { isServiceInstalled } from "./service.js";
 import {
@@ -180,6 +181,7 @@ const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
   "/v0/briefs": ["GET", "OPTIONS"],
   "/v0/schedule": ["GET", "PUT", "OPTIONS"],
   "/v0/chat": ["GET", "POST", "OPTIONS"],
+  "/v0/chat/stop": ["POST", "OPTIONS"],
   "/v0/chat/confirm-delete": ["POST", "OPTIONS"],
 };
 
@@ -704,6 +706,39 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             );
           }
           json(res, 202, { turn_id: outcome.turnId, status: "pending" }, cors);
+          return;
+        }
+
+        // Abort the in-flight chat turn (PER-232). Stop in the UI must cancel
+        // the SERVER-side operation, not just the client poll — without this
+        // the in-flight model edit completed and persisted ~14s after Stop
+        // (AC3/AC5 fail). Kills the `claude` child and gates the change-apply,
+        // so the turn lands `failed` ("Stopped — no changes were applied.")
+        // with NO write to any interest doc. `turn_id` is optional: when given
+        // it must match the in-flight turn (a stale Stop can't kill a newer
+        // turn); without it, whatever is in flight is stopped (single-flight).
+        if (req.method === "POST" && url.pathname === "/v0/chat/stop") {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          let body: string;
+          try {
+            body = await readBody(req);
+          } catch (err) {
+            if (err instanceof BodyTooLargeError) {
+              return json(res, 413, { error: "request body too large" }, cors);
+            }
+            throw err;
+          }
+          let parsed: { turn_id?: unknown };
+          try {
+            parsed = JSON.parse(body || "{}");
+          } catch {
+            return json(res, 400, { error: "invalid json" }, cors);
+          }
+          const turnId =
+            typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
+          const stopped = stopChatTurn(turnId);
+          json(res, 200, { stopped }, cors);
           return;
         }
 

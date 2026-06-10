@@ -63,6 +63,9 @@ export type ChatOptions = {
   // Spawn override for tests — injects a stub `claude` without the real binary
   // or network, exactly like ResearchOptions.spawnFn.
   spawnFn?: typeof spawn;
+  // Abort signal (PER-232): when fired, the `claude` child is killed and the
+  // round-trip rejects, so the turn can land as stopped WITHOUT applying changes.
+  signal?: AbortSignal;
 };
 
 // What the model is asked to return: a reply plus the changes it wants applied.
@@ -312,6 +315,9 @@ export async function chatComplete(
   const prompt = buildChatPrompt(message, snapshots, transcript);
 
   const raw = await new Promise<string>((resolve, reject) => {
+    if (opts.signal?.aborted) {
+      return reject(new ChatStoppedError());
+    }
     const child = spawnImpl(
       claudeBin,
       [
@@ -333,6 +339,15 @@ export async function chatComplete(
       }
     }
 
+    // PER-232: a Stop mid-round-trip kills the child and rejects immediately,
+    // so the caller can mark the turn stopped instead of waiting out the model.
+    // The stub children in tests have no kill(); guard with `?.`.
+    const onAbort = () => {
+      (child as { kill?: (sig?: string) => void }).kill?.("SIGTERM");
+      reject(new ChatStoppedError());
+    };
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+
     let stdout = "";
     let stderr = "";
     child.stdout!.on("data", (b: Buffer) => (stdout += b.toString()));
@@ -345,6 +360,8 @@ export async function chatComplete(
       ),
     );
     child.on("close", (code) => {
+      opts.signal?.removeEventListener("abort", onAbort);
+      if (opts.signal?.aborted) return reject(new ChatStoppedError());
       if (code !== 0)
         return reject(
           new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`),
@@ -492,6 +509,37 @@ export type ChatOutcome =
 // clobber each other's edits.
 let chatInFlight = false;
 
+// PER-232: Stop must abort the SERVER-side turn, not just the client poll. The
+// architecture is kick→poll (no SSE), so the client dropping its fetch is
+// invisible here — without this, the in-flight `claude` edit completed and was
+// persisted ~14s after the user pressed Stop. We hold one AbortController per
+// in-flight turn (single-flight, so at most one); stopChatTurn() fires it, which
+// kills the child AND gates applyChatChanges, so a stopped turn commits nothing.
+let currentTurnAbort: { turnId: string; controller: AbortController } | null =
+  null;
+
+// Canonical "user pressed Stop" outcome. The turn lands as `failed` with this
+// message (a new status value would ripple through every ChatTurn consumer);
+// the FE recognizes a stop locally anyway and suppresses the error bubble.
+export const CHAT_STOPPED_MSG = "Stopped — no changes were applied.";
+
+class ChatStoppedError extends Error {
+  constructor() {
+    super(CHAT_STOPPED_MSG);
+    this.name = "ChatStoppedError";
+  }
+}
+
+// Abort the in-flight chat turn (PER-232). With a turnId, only aborts when it
+// matches the in-flight turn (a stale Stop can't kill a newer turn); without
+// one, aborts whatever is in flight. Returns whether a turn was aborted.
+export function stopChatTurn(turnId?: string): boolean {
+  if (!currentTurnAbort) return false;
+  if (turnId && currentTurnAbort.turnId !== turnId) return false;
+  currentTurnAbort.controller.abort();
+  return true;
+}
+
 export function isChatInFlight(): boolean {
   return chatInFlight;
 }
@@ -593,6 +641,8 @@ async function runChatTurn(
 ): Promise<void> {
   let turn: ChatTurn;
   let nextInterests: Interest[] | null = null;
+  const abort = new AbortController();
+  currentTurnAbort = { turnId, controller: abort };
   try {
     const state = await loadState(deps.stateFile);
     const snapshots = await buildInterestSnapshots(
@@ -603,7 +653,13 @@ async function runChatTurn(
     const output = await chatComplete(message, snapshots, transcript, {
       claudeBin: deps.claudeBin,
       spawnFn: deps.spawnFn,
+      signal: abort.signal,
     });
+    // PER-232: last abort gate BEFORE anything persists. Even if the model
+    // round-trip outraced the Stop (or the killed child still flushed output),
+    // a stopped turn must commit nothing — this is AC3/AC5's "no uncommitted
+    // change is written".
+    if (abort.signal.aborted) throw new ChatStoppedError();
     // Apply against the freshly-loaded interest list so the change set is durable
     // on disk BEFORE the turn flips to `ready` (observable-in-same-response).
     // Deletes are gated: they come back as `pendingDeletes` (NOT applied) for the
@@ -631,7 +687,10 @@ async function runChatTurn(
       created_at: new Date().toISOString(),
       status: "failed",
       message,
-      error_msg: String(err),
+      // A user Stop is not an error — land the canonical message verbatim so
+      // clients (and QA) can tell "stopped, nothing written" from a real failure.
+      error_msg:
+        err instanceof ChatStoppedError ? CHAT_STOPPED_MSG : String(err),
     };
   }
 
@@ -650,6 +709,7 @@ async function runChatTurn(
     );
     await appendChatTranscript(turn, deps.chatTranscriptFile);
   } finally {
+    if (currentTurnAbort?.turnId === turnId) currentTurnAbort = null;
     chatInFlight = false;
   }
 
