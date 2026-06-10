@@ -42,11 +42,18 @@ test("chat renders user and assistant markdown safely", async ({ page }) => {
   await expect(
     page.locator("strong", { hasText: "assistant emphasis" }),
   ).toBeVisible();
+  // Since the PER-228 redesign, user messages render as PLAIN text in a
+  // faint-tint block — markdown is NOT interpreted (the literal `**` markers
+  // stay visible), which also keeps any user-pasted HTML inert.
+  await expect(page.getByText("Track **user emphasis**")).toBeVisible();
   await expect(
     page.locator("strong", { hasText: "user emphasis" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(page.locator("blockquote")).toContainText("quoted context");
-  await expect(page.locator("pre code")).toContainText("const topic");
+  // Block code renders in ChatMarkdown's framed CodeBlock (a <pre> with a
+  // copy button header — no nested <code> element).
+  await expect(page.locator("pre")).toContainText("const topic");
+  await expect(page.getByRole("button", { name: /Copy code|Copied/ })).toBeVisible();
 
   const link = page.getByRole("link", { name: "source link" });
   await expect(link).toHaveAttribute("href", "https://example.com/brief");
@@ -57,19 +64,21 @@ test("chat renders user and assistant markdown safely", async ({ page }) => {
   await expect(page.locator("script", { hasText: "xss()" })).toHaveCount(0);
 });
 
-test("user bubble strong markdown remains legible on the dark surface", async ({
+test("user message text remains legible on its faint-tint block", async ({
   page,
 }) => {
   await page.goto(`${ORIGIN}/app/interests?mock=markdown`);
 
+  // Post-PER-228 design: the user message is plain text inside a
+  // bg-surface-muted block. Assert WCAG AA contrast on the live tokens.
   const styles = await page
-    .locator("strong", { hasText: "user emphasis" })
-    .evaluate((strong) => {
-      const bubble = strong.closest(".bg-accent");
-      if (!bubble) throw new Error("Missing user message bubble");
+    .getByText("Track **user emphasis**")
+    .evaluate((text) => {
+      const block = text.closest("div");
+      if (!block) throw new Error("Missing user message block");
       return {
-        color: getComputedStyle(strong).color,
-        backgroundColor: getComputedStyle(bubble).backgroundColor,
+        color: getComputedStyle(text).color,
+        backgroundColor: getComputedStyle(block).backgroundColor,
       };
     });
 
