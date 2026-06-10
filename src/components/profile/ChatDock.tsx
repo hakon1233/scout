@@ -1,8 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatChange, PendingDelete } from "@/lib/chat";
-import { ChatActionCard } from "./ChatActionCard";
+import type { ChatChange, PendingDelete, PendingRewrite } from "@/lib/chat";
+import {
+  ChatActionCard,
+  ChatRewriteProposal,
+  type RewriteResolution,
+} from "./ChatActionCard";
 import { ChatDeleteConfirm, type DeleteResolution } from "./ChatDeleteConfirm";
 import { ChatMarkdown } from "./ChatMarkdown";
 
@@ -24,6 +28,11 @@ export type ChatMessage = {
   pendingDelete?: PendingDelete;
   // Whether the founder resolved the pending delete (and how).
   deleteResolved?: DeleteResolution;
+  // A confirm-gated full rewrite this turn proposed (PER-235). Renders an
+  // [Apply]/[Discard] diff card; the doc is written only on [Apply].
+  pendingRewrite?: PendingRewrite;
+  // Whether the founder resolved the pending rewrite (and how).
+  rewriteResolved?: RewriteResolution;
   // A turn that failed — offer retry, render quietly.
   failed?: boolean;
 };
@@ -96,6 +105,8 @@ export function ChatDock({
   onUndo,
   onConfirmDelete,
   onCancelDelete,
+  onConfirmRewrite,
+  onDiscardRewrite,
 }: {
   messages: ChatMessage[];
   sending: boolean;
@@ -110,6 +121,8 @@ export function ChatDock({
   onUndo: (change: ChatChange, prev: string | null) => void;
   onConfirmDelete: (pd: PendingDelete, msgId: string) => void;
   onCancelDelete: (msgId: string) => void;
+  onConfirmRewrite: (pr: PendingRewrite, msgId: string) => void;
+  onDiscardRewrite: (msgId: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
@@ -265,6 +278,17 @@ export function ChatDock({
                       resolved={m.deleteResolved}
                       onConfirm={() => onConfirmDelete(m.pendingDelete!, m.id)}
                       onCancel={() => onCancelDelete(m.id)}
+                      disabled={sending}
+                    />
+                  )}
+
+                  {m.pendingRewrite && (
+                    <ChatRewriteProposal
+                      pr={m.pendingRewrite}
+                      prev={m.prev?.[m.pendingRewrite.interestId] ?? null}
+                      resolved={m.rewriteResolved}
+                      onApply={() => onConfirmRewrite(m.pendingRewrite!, m.id)}
+                      onDiscard={() => onDiscardRewrite(m.id)}
                       disabled={sending}
                     />
                   )}

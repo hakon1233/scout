@@ -73,6 +73,22 @@ export type PendingDelete = {
   topic: string;
 };
 
+// A full-document rewrite the turn resolved to but did NOT apply (PER-235
+// confirm-gated rewrite). A from-scratch rewrite replaces the ENTIRE doc, so —
+// like delete — it is destructive enough to gate: the turn surfaces the FULL
+// proposed doc here instead of writing it, and the FE renders an [Apply]/
+// [Discard] proposal card with a diff. The actual write happens via
+// POST /v0/chat/confirm-rewrite only on an explicit [Apply] press, using THIS
+// stored doc (the server never trusts a doc echoed back by the client).
+// Incremental refinements stay auto-apply `update`s — only full rewrites gate.
+export type PendingRewrite = {
+  interestId: string;
+  topic: string;
+  // The complete proposed markdown document, verbatim — what confirm-rewrite
+  // will persist on [Apply]. Never a diff or fragment.
+  doc: string;
+};
+
 // One chat turn, held in a single last-writer-wins slot (`State.last_chat`) that
 // mirrors `last_brief`. A turn is kicked async (POST /v0/chat) and polled
 // (GET /v0/chat?since=) the same way briefs are, so the UI never blocks on the
@@ -88,12 +104,16 @@ export type ChatTurn = {
   // The assistant's conversational reply (present once ready).
   reply?: string;
   // The change set actually applied this turn (present once ready; [] when the
-  // turn only answered a question without touching any doc). Deletes never
-  // appear here from a model turn — they are gated into `pending_delete`.
+  // turn only answered a question without touching any doc). Deletes and full
+  // rewrites never appear here from a model turn — they are gated into
+  // `pending_delete` / `pending_rewrite`.
   changes?: ChatChange[];
   // A delete the turn resolved to but is waiting on user confirmation for
   // (PER-230). Present at most once per turn; the interest is NOT yet removed.
   pending_delete?: PendingDelete;
+  // A full rewrite the turn resolved to but is waiting on user confirmation
+  // for (PER-235). Present at most once per turn; the doc is NOT yet written.
+  pending_rewrite?: PendingRewrite;
   error_msg?: string;
 };
 
