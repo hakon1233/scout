@@ -780,3 +780,181 @@ test("buildChatPrompt tells the model a delete is confirm-gated and the reply mu
   assert.match(prompt, /PENDING REQUEST/);
   assert.match(prompt, /NEVER claim it is done/i);
 });
+
+// PER-232 (AC3/AC5 CRITICAL): Stop must abort the SERVER-side turn. The QA fail
+// was exactly this shape: Stop fired while the model child was in flight, the
+// client poll was dropped, and the completed edit still persisted ~14s later.
+// Here the child hangs (autoClose:false), we POST /v0/chat/stop, then release
+// the child's (full-rewrite) output — the turn must land stopped with NO write
+// to the interest doc and the interest set untouched.
+test("POST /v0/chat/stop aborts the in-flight turn — no doc edit is committed (PER-232)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  await writeInterestDoc("int_abc123", "old doc", interestsDir);
+
+  const model = JSON.stringify({
+    reply: "Rewrote your doc into three long paragraphs.",
+    changes: [
+      { op: "update", interestId: "int_abc123", doc: "full rewrite, much longer" },
+    ],
+  });
+  const { spawnFn, releaseAll } = makeChatSpawn({
+    output: model,
+    autoClose: false,
+  });
+  // Two turns land in this test (the stopped one + the follow-up proving the
+  // slot freed), so queue landings instead of the single-shot awaitTurn.
+  const landings: ChatTurn[] = [];
+  const waiters: Array<(t: ChatTurn) => void> = [];
+  const nextLanding = () =>
+    new Promise<ChatTurn>((resolve) => {
+      const queued = landings.shift();
+      if (queued) resolve(queued);
+      else waiters.push(resolve);
+    });
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone: (t) => {
+      const w = waiters.shift();
+      if (w) w(t);
+      else landings.push(t);
+    },
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "rewrite my ai safety doc" }),
+    });
+    assert.equal(kick.status, 202);
+    const turnId = ((await kick.json()) as { turn_id: string }).turn_id;
+
+    // Stop while the child is unambiguously in flight.
+    const stop = await fetch(`http://127.0.0.1:${port}/v0/chat/stop`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ turn_id: turnId }),
+    });
+    assert.equal(stop.status, 200);
+    assert.equal(((await stop.json()) as { stopped: boolean }).stopped, true);
+
+    // The late-commit race: the model output still arrives AFTER the stop.
+    releaseAll();
+
+    const landed = await nextLanding();
+    assert.equal(landed.id, turnId);
+    assert.equal(landed.status, "failed");
+    assert.match(landed.error_msg ?? "", /Stopped — no changes were applied/);
+
+    // THE acceptance: nothing was committed despite the completed model output.
+    assert.equal(await readInterestDoc("int_abc123", interestsDir), "old doc");
+    const after = await loadState(stateFile);
+    assert.deepEqual(after.interests, [{ id: "int_abc123", topic: "ai safety" }]);
+    assert.equal(after.last_chat?.status, "failed");
+
+    // The slot is free again: a new turn is accepted (no stuck pending state).
+    const again = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "hello again" }),
+    });
+    assert.equal(again.status, 202);
+
+    // Land the follow-up turn too — chat.ts holds module-level in-flight state,
+    // so leaving it pending would leak an abortable turn into the next test.
+    // The child's stdin lands asynchronously after the 202, so keep releasing
+    // until the turn arrives.
+    const landing = nextLanding();
+    let followUp: ChatTurn | undefined;
+    while (!followUp) {
+      releaseAll();
+      followUp = (await Promise.race([
+        landing,
+        new Promise<undefined>((r) => setTimeout(r, 10)),
+      ])) as ChatTurn | undefined;
+    }
+    assert.equal(followUp.status, "ready");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// A stale Stop (wrong turn id) and a Stop with nothing in flight are both
+// harmless no-ops — they must never abort a turn they don't name.
+test("POST /v0/chat/stop is a no-op for a stale turn id or no in-flight turn (PER-232)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  await writeInterestDoc("int_abc123", "old doc", interestsDir);
+  const model = JSON.stringify({
+    reply: "ok",
+    changes: [
+      { op: "update", interestId: "int_abc123", doc: "legit edit" },
+    ],
+  });
+  const { spawnFn, releaseAll } = makeChatSpawn({
+    output: model,
+    autoClose: false,
+  });
+  const { onChatDone, done } = awaitTurn();
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    // Nothing in flight yet → stopped:false.
+    const idle = await fetch(`http://127.0.0.1:${port}/v0/chat/stop`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: "{}",
+    });
+    assert.equal(idle.status, 200);
+    assert.equal(((await idle.json()) as { stopped: boolean }).stopped, false);
+
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "refine my doc" }),
+    });
+    assert.equal(kick.status, 202);
+
+    // A stale id must NOT abort the newer in-flight turn.
+    const stale = await fetch(`http://127.0.0.1:${port}/v0/chat/stop`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ turn_id: "chat_stale_999" }),
+    });
+    assert.equal(stale.status, 200);
+    assert.equal(((await stale.json()) as { stopped: boolean }).stopped, false);
+
+    // The child's stdin lands asynchronously after the 202, so keep releasing
+    // until the turn arrives.
+    let landed: ChatTurn | undefined;
+    while (!landed) {
+      releaseAll();
+      landed = (await Promise.race([
+        done,
+        new Promise<undefined>((r) => setTimeout(r, 10)),
+      ])) as ChatTurn | undefined;
+    }
+    assert.equal(landed.status, "ready");
+    assert.equal(
+      await readInterestDoc("int_abc123", interestsDir),
+      "legit edit",
+    );
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});

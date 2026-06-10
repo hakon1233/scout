@@ -138,6 +138,35 @@ export async function pollChatTurn(
   throw new Error("Timed out waiting for Scout to reply.");
 }
 
+// Abort the in-flight chat turn server-side (PER-232). Stop must cancel the
+// OPERATION, not just our poll — the companion is kick→poll, so dropping the
+// fetch alone left the model edit to complete and persist ~14s later. This
+// tells the companion to kill the model child and write the turn as stopped
+// with NO changes applied. Best-effort: errors are swallowed (the worst case
+// is the pre-PER-232 behavior, and the caller has already stopped the UI).
+export async function stopChatTurn(
+  token: string,
+  turnId?: string,
+): Promise<boolean> {
+  try {
+    const base = await requireBase();
+    const res = await fetch(`${base}/v0/chat/stop`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(turnId ? { turn_id: turnId } : {}),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { stopped?: boolean };
+    return body.stopped === true;
+  } catch {
+    return false;
+  }
+}
+
 // Confirm a gated delete (PER-230): the deterministic [Delete] press. POSTs the
 // interestId to the companion, which removes the interest + its doc and returns
 // a `ready` turn whose `changes` carry the applied delete. No model round-trip,
@@ -183,8 +212,11 @@ export async function confirmDeleteInterest(
 export async function runChatTurn(
   message: string,
   token: string,
-  opts: { signal?: AbortSignal } = {},
+  opts: { signal?: AbortSignal; onKick?: (turnId: string) => void } = {},
 ): Promise<ChatTurn> {
   const turnId = await kickChatTurn(message, token);
+  // Hand the turn id to the caller as soon as the kick lands, so a Stop can
+  // target this exact turn server-side (PER-232).
+  opts.onKick?.(turnId);
   return pollChatTurn(turnId, token, opts);
 }
