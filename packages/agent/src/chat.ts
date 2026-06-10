@@ -35,6 +35,7 @@ import {
   type ChatTurn,
   type Interest,
   type PendingDelete,
+  type PendingRewrite,
   type State,
 } from "./state.js";
 import {
@@ -238,6 +239,12 @@ export function buildChatPrompt(
   lines.push(
     '    { "op": "create", "topic": "<topic>", "doc": "<full markdown>" },',
   );
+  lines.push(
+    "    // Completely rewrite an interest's doc from scratch (full replacement):",
+  );
+  lines.push(
+    '    { "op": "rewrite", "interestId": "<existing id>", "doc": "<full new markdown>" },',
+  );
   lines.push("    // Delete an interest:");
   lines.push('    { "op": "delete", "interestId": "<existing id>" }');
   lines.push("  ]");
@@ -248,7 +255,7 @@ export function buildChatPrompt(
     "- Include ONLY the changes you are actually making this turn; use [] when none.",
   );
   lines.push(
-    '- For "update"/"delete", `interestId` MUST be one of the ids listed above.',
+    '- For "update"/"rewrite"/"delete", `interestId` MUST be one of the ids listed above.',
   );
   lines.push('- For "create", OMIT `interestId`; never invent one.');
   lines.push(
@@ -297,6 +304,39 @@ export function buildChatPrompt(
     "    delete turn; the interest is still there until the user confirms. Create/update",
   );
   lines.push("    apply immediately, so for those a done-style reply is correct.");
+  lines.push(
+    "- A `rewrite` is for a FULL from-scratch replacement of an interest's doc — the",
+  );
+  lines.push(
+    '    user asks to "completely rewrite", "start over", "rewrite from scratch", or',
+  );
+  lines.push(
+    "    otherwise wants the WHOLE doc replaced rather than refined. Like `delete`, a",
+  );
+  lines.push(
+    "    `rewrite` is CONFIRM-GATED: emitting it does NOT change the doc. The user still",
+  );
+  lines.push(
+    "    has to press [Apply] on a proposal card showing the diff. `doc` MUST be the",
+  );
+  lines.push(
+    "    COMPLETE proposed document. When your changes include a `rewrite`, phrase",
+  );
+  lines.push(
+    '    `reply` as a PENDING PROPOSAL, never as a completed action. Say e.g. "Here\'s',
+  );
+  lines.push(
+    '    a full rewrite of \\"X\\" — review the diff and Apply below." NEVER claim it is',
+  );
+  lines.push(
+    '    done ("Done — rewrote it", "Updated X") on a rewrite turn; the doc is unchanged',
+  );
+  lines.push(
+    "    until the user applies. Reserve `update` for incremental refinements the user",
+  );
+  lines.push(
+    "    asked to make directly — those still apply immediately.",
+  );
   lines.push("- Do not use any tools. Output only the JSON object.");
   return lines.join("\n");
 }
@@ -414,6 +454,11 @@ export function parseChatOutput(raw: string): ChatModelOutput {
 // to the FE as a [Delete]/[Cancel] proposal. The interest stays alive until the
 // user explicitly confirms via applyConfirmedDelete. create/update remain
 // auto-apply (CEO decision on PER-230 — do not gate those).
+//
+// PER-235: a full from-scratch `rewrite` replaces the ENTIRE doc, so it is gated
+// the same way: collected into `pendingRewrites` (with the FULL proposed doc),
+// NOT written. The doc on disk stays byte-identical until the user presses
+// [Apply], which routes through applyConfirmedRewrite.
 export async function applyChatChanges(
   current: Interest[],
   proposed: ProposedChange[],
@@ -422,10 +467,12 @@ export async function applyChatChanges(
   interests: Interest[];
   applied: ChatChange[];
   pendingDeletes: PendingDelete[];
+  pendingRewrites: PendingRewrite[];
 }> {
   const interests = [...current];
   const applied: ChatChange[] = [];
   const pendingDeletes: PendingDelete[] = [];
+  const pendingRewrites: PendingRewrite[] = [];
 
   for (const ch of proposed) {
     const op = ch.op;
@@ -453,6 +500,21 @@ export async function applyChatChanges(
       interests[idx] = { id, topic };
       await writeInterestDoc(id, doc, interestsDir);
       applied.push({ interestId: id, op: "update", topic, doc });
+    } else if (op === "rewrite") {
+      const id = typeof ch.interestId === "string" ? ch.interestId : "";
+      const idx = interests.findIndex((i) => i.id === id);
+      if (idx === -1) continue; // never touch an id we don't own
+      const doc = typeof ch.doc === "string" ? ch.doc : "";
+      if (!doc.trim()) continue; // a rewrite without a full doc is meaningless
+      // Confirm-gated (PER-235): propose with the FULL doc, do NOT write. Dedup
+      // so a model that lists the same id twice still surfaces one card.
+      if (!pendingRewrites.some((p) => p.interestId === id)) {
+        pendingRewrites.push({
+          interestId: id,
+          topic: interests[idx].topic,
+          doc,
+        });
+      }
     } else if (op === "delete") {
       const id = typeof ch.interestId === "string" ? ch.interestId : "";
       const idx = interests.findIndex((i) => i.id === id);
@@ -465,7 +527,7 @@ export async function applyChatChanges(
     }
   }
 
-  return { interests, applied, pendingDeletes };
+  return { interests, applied, pendingDeletes, pendingRewrites };
 }
 
 // Perform a confirmed delete (PER-230): the deterministic removal that runs only
@@ -634,6 +696,63 @@ export async function confirmDeleteTurn(
   return { ok: true, turn };
 }
 
+export type ConfirmRewriteOutcome =
+  | { ok: true; turn: ChatTurn }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "in_flight" };
+
+// Confirm-gated rewrite (PER-235): the deterministic, no-model path that writes
+// the STORED proposed doc after the user presses [Apply]. The proposal lives on
+// the persisted turn (`last_chat.pending_rewrite`) — the client sends only the
+// interestId, never the doc, so a tampered or stale client can't write arbitrary
+// content. Like confirmDeleteTurn it emits a `ready` turn (with the rewrite as
+// an `update` in `changes`) into the same slot + transcript, so the FE applies
+// it through the exact same confirmed-write seam (flash on the docs-rail card)
+// and it survives a reload. Refuses while a model turn is in flight.
+export async function confirmRewriteTurn(
+  interestId: string,
+  deps: ChatDeps,
+): Promise<ConfirmRewriteOutcome> {
+  if (chatInFlight) return { ok: false, reason: "in_flight" };
+
+  const state = await loadState(deps.stateFile);
+  const pending = state.last_chat?.pending_rewrite;
+  // The proposal must still be the live one for THIS interest, and the interest
+  // must still exist (it could have been deleted since the proposal).
+  if (!pending || pending.interestId !== interestId) {
+    return { ok: false, reason: "not_found" };
+  }
+  const target = (state.interests ?? []).find((i) => i.id === interestId);
+  if (!target) return { ok: false, reason: "not_found" };
+
+  await writeInterestDoc(interestId, pending.doc, deps.interestsDir);
+  const applied: ChatChange = {
+    interestId,
+    op: "update",
+    topic: target.topic,
+    doc: pending.doc,
+  };
+
+  const turn: ChatTurn = {
+    id: newChatTurnId(),
+    created_at: new Date().toISOString(),
+    status: "ready",
+    message: `Apply rewrite of "${target.topic}"`,
+    reply: `Applied the rewrite of "${target.topic}".`,
+    changes: [applied],
+  };
+
+  // Reload before persisting so we don't clobber a concurrent writer (e.g. the
+  // scheduler updating next_run_at), exactly as runChatTurn does. The new turn
+  // replaces the proposal turn in the slot, so the pending_rewrite can't be
+  // re-applied later from a stale card (a second confirm 404s).
+  const fresh = await loadState(deps.stateFile);
+  await saveState({ ...fresh, last_chat: turn }, deps.stateFile);
+  await appendChatTranscript(turn, deps.chatTranscriptFile);
+  deps.onChatDone?.(turn);
+  return { ok: true, turn };
+}
+
 async function runChatTurn(
   message: string,
   turnId: string,
@@ -662,13 +781,15 @@ async function runChatTurn(
     if (abort.signal.aborted) throw new ChatStoppedError();
     // Apply against the freshly-loaded interest list so the change set is durable
     // on disk BEFORE the turn flips to `ready` (observable-in-same-response).
-    // Deletes are gated: they come back as `pendingDeletes` (NOT applied) for the
-    // FE to confirm. We surface the first one — the confirm card is single-op.
-    const { interests, applied, pendingDeletes } = await applyChatChanges(
-      state.interests ?? [],
-      output.changes,
-      deps.interestsDir,
-    );
+    // Deletes and full rewrites are gated: they come back as `pendingDeletes` /
+    // `pendingRewrites` (NOT applied) for the FE to confirm. We surface the
+    // first of each — the confirm cards are single-op.
+    const { interests, applied, pendingDeletes, pendingRewrites } =
+      await applyChatChanges(
+        state.interests ?? [],
+        output.changes,
+        deps.interestsDir,
+      );
     nextInterests = interests;
     turn = {
       id: turnId,
@@ -679,6 +800,9 @@ async function runChatTurn(
       changes: applied,
       ...(pendingDeletes.length > 0
         ? { pending_delete: pendingDeletes[0] }
+        : {}),
+      ...(pendingRewrites.length > 0
+        ? { pending_rewrite: pendingRewrites[0] }
         : {}),
     };
   } catch (err) {

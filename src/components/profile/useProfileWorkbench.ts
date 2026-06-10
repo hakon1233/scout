@@ -7,12 +7,14 @@ import {
 } from "@/lib/companion";
 import {
   confirmDeleteInterest,
+  confirmRewriteInterest,
   fetchChatTranscript,
   runChatTurn,
   stopChatTurn,
   type ChatChange,
   type ChatTurn,
   type PendingDelete,
+  type PendingRewrite,
 } from "@/lib/chat";
 import {
   fetchInterestsFull,
@@ -89,7 +91,10 @@ function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
         ts: turn.created_at,
       },
     ];
-    if (turn.status === "ready" && (turn.reply || turn.pending_delete)) {
+    if (
+      turn.status === "ready" &&
+      (turn.reply || turn.pending_delete || turn.pending_rewrite)
+    ) {
       out.push({
         id: nextMsgId(),
         role: "scout",
@@ -98,6 +103,7 @@ function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
         changes:
           turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
         pendingDelete: turn.pending_delete,
+        pendingRewrite: turn.pending_rewrite,
       });
     } else if (turn.status === "failed" && turn.error_msg) {
       out.push({
@@ -366,6 +372,51 @@ export function useProfileWorkbench() {
     );
   }, []);
 
+  // Confirm a gated rewrite (PER-235): the deterministic [Apply] press. Hits the
+  // no-model confirm-rewrite route, which writes the server-stored proposed doc
+  // and returns a ready turn whose `changes` carry the applied update. Routing
+  // that change set through applyChanges gives the docs-rail card the exact same
+  // confirmed-write flash as any other update, then the proposal card locks to
+  // "Applied".
+  const confirmRewrite = useCallback(
+    (pr: PendingRewrite, msgId: string) => {
+      if (sending) return;
+      setSending(true);
+      setError(null);
+      (async () => {
+        try {
+          const turn = await confirmRewriteInterest(pr.interestId, token);
+          if (turn.changes && turn.changes.length > 0) {
+            applyChanges(turn.changes, new Date().toISOString());
+          }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msgId ? { ...m, rewriteResolved: "applied" } : m,
+            ),
+          );
+        } catch (e) {
+          setError(
+            e instanceof Error ? e.message : "Couldn't apply that rewrite.",
+          );
+        } finally {
+          setSending(false);
+        }
+      })();
+    },
+    [sending, token, applyChanges],
+  );
+
+  // Discard a gated rewrite: FE-local, nothing touches the store — the doc on
+  // disk was never changed (the "Kept" pattern from cancelDelete). The card
+  // locks to "Discarded".
+  const discardRewrite = useCallback((msgId: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId ? { ...m, rewriteResolved: "discarded" } : m,
+      ),
+    );
+  }, []);
+
   // Reveal a freshly-arrived scout reply with the typewriter. Reduced-motion
   // users get the whole text at once (no streamId set).
   const startStream = useCallback((id: string, text: string) => {
@@ -418,18 +469,24 @@ export function useProfileWorkbench() {
           const replyAt = new Date().toISOString();
           const changes =
             turn.changes && turn.changes.length > 0 ? turn.changes : undefined;
-          // Snapshot the pre-change bodies so the action card can diff and undo.
+          const pendingDelete = turn.pending_delete;
+          const pendingRewrite = turn.pending_rewrite;
+          // Snapshot the pre-change bodies so the action card can diff and undo
+          // — and the rewrite proposal card can diff current vs proposed.
           let prev: Record<string, string | null> | undefined;
-          if (changes) {
+          if (changes || pendingRewrite) {
             prev = {};
-            for (const ch of changes) {
+            for (const ch of changes ?? []) {
               if (ch.interestId)
                 prev[ch.interestId] =
                   docBodiesRef.current[ch.interestId] ?? null;
             }
+            if (pendingRewrite) {
+              prev[pendingRewrite.interestId] =
+                docBodiesRef.current[pendingRewrite.interestId] ?? null;
+            }
           }
-          const pendingDelete = turn.pending_delete;
-          if (turn.reply || changes || pendingDelete) {
+          if (turn.reply || changes || pendingDelete || pendingRewrite) {
             const id = nextMsgId();
             setMessages((prevMsgs) => [
               ...prevMsgs,
@@ -440,11 +497,14 @@ export function useProfileWorkbench() {
                   turn.reply ??
                   (pendingDelete
                     ? `Want me to remove “${pendingDelete.topic}”?`
-                    : "Done — updated your interests."),
+                    : pendingRewrite
+                      ? `Here's a proposed rewrite of “${pendingRewrite.topic}” — apply below.`
+                      : "Done — updated your interests."),
                 ts: replyAt,
                 changes,
                 prev,
                 pendingDelete,
+                pendingRewrite,
               },
             ]);
             startStream(id, turn.reply ?? "");
@@ -597,5 +657,7 @@ export function useProfileWorkbench() {
     undo,
     confirmDelete,
     cancelDelete,
+    confirmRewrite,
+    discardRewrite,
   };
 }

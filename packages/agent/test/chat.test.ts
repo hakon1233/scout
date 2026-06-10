@@ -538,6 +538,172 @@ test("POST /v0/chat/confirm-delete returns 404 for an unknown id (nothing remove
   }
 });
 
+test("POST /v0/chat GATES a full rewrite: surfaces pending_rewrite and leaves the doc byte-identical (PER-235)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  await writeInterestDoc("int_abc123", "old doc", interestsDir);
+
+  const model = JSON.stringify({
+    reply: "Here's a full rewrite — review and Apply below.",
+    changes: [
+      { op: "rewrite", interestId: "int_abc123", doc: "brand new doc" },
+    ],
+  });
+  const { spawnFn } = makeChatSpawn({ output: model, autoClose: true });
+  const { onChatDone, done } = awaitTurn();
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "Completely rewrite ai safety from scratch." }),
+    });
+    assert.equal(kick.status, 202);
+    const turn = await done;
+    assert.equal(turn.status, "ready");
+    // The rewrite is NOT applied — it is surfaced as a pending proposal.
+    assert.deepEqual(turn.changes ?? [], []);
+    assert.deepEqual(turn.pending_rewrite, {
+      interestId: "int_abc123",
+      topic: "ai safety",
+      doc: "brand new doc",
+    });
+
+    // The doc on disk is byte-identical until the user presses [Apply].
+    assert.equal(await readInterestDoc("int_abc123", interestsDir), "old doc");
+    const state = await loadState(stateFile);
+    assert.deepEqual(state.last_chat?.pending_rewrite, {
+      interestId: "int_abc123",
+      topic: "ai safety",
+      doc: "brand new doc",
+    });
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/chat/confirm-rewrite writes the STORED proposed doc and returns a ready turn (PER-235)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+    last_chat: {
+      id: "chat_proposal1",
+      created_at: new Date().toISOString(),
+      status: "ready",
+      message: "Completely rewrite ai safety from scratch.",
+      reply: "Here's a full rewrite — review and Apply below.",
+      changes: [],
+      pending_rewrite: {
+        interestId: "int_abc123",
+        topic: "ai safety",
+        doc: "brand new doc",
+      },
+    },
+  });
+  await writeInterestDoc("int_abc123", "old doc", interestsDir);
+
+  // confirm-rewrite is deterministic — no model round-trip. Spawn must never run.
+  const { spawnFn, calls } = makeChatSpawn({ output: "{}", autoClose: true });
+  const { onChatDone, done } = awaitTurn();
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const res = await fetch(
+      `http://127.0.0.1:${port}/v0/chat/confirm-rewrite`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...auth },
+        body: JSON.stringify({ interestId: "int_abc123" }),
+      },
+    );
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { turn?: ChatTurn };
+    assert.ok(body.turn, "confirm-rewrite returned a turn");
+    assert.equal(body.turn!.status, "ready");
+    // The applied change carries the STORED doc, through the same confirmed-
+    // write seam an update takes (so the FE flashes the docs-rail card).
+    assert.deepEqual(body.turn!.changes, [
+      {
+        interestId: "int_abc123",
+        op: "update",
+        topic: "ai safety",
+        doc: "brand new doc",
+      },
+    ]);
+
+    const turn = await done; // onChatDone fired with the same ready turn
+    assert.equal(turn.status, "ready");
+
+    assert.equal(
+      await readInterestDoc("int_abc123", interestsDir),
+      "brand new doc",
+    );
+    assert.equal(calls.length, 0, "confirm-rewrite must not spawn the model");
+
+    // The proposal turn was replaced in the slot — a second [Apply] from a
+    // stale card finds no pending rewrite and 404s (no double-write channel).
+    const again = await fetch(
+      `http://127.0.0.1:${port}/v0/chat/confirm-rewrite`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...auth },
+        body: JSON.stringify({ interestId: "int_abc123" }),
+      },
+    );
+    assert.equal(again.status, 404);
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/chat/confirm-rewrite returns 404 when no pending rewrite matches (nothing written)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  await writeInterestDoc("int_abc123", "old doc", interestsDir);
+  const { spawnFn } = makeChatSpawn({ output: "{}", autoClose: true });
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const res = await fetch(
+      `http://127.0.0.1:${port}/v0/chat/confirm-rewrite`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...auth },
+        body: JSON.stringify({ interestId: "int_abc123" }),
+      },
+    );
+    assert.equal(res.status, 404);
+    assert.equal(await readInterestDoc("int_abc123", interestsDir), "old doc");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/chat ignores a change targeting an id the companion doesn't hold (no arbitrary writes)", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],

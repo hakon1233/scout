@@ -9,6 +9,10 @@
 // The contract that makes C5 honest (PER-139 no-dead-control): a `ready` turn's
 // `changes` are ALREADY durable on disk before the poll sees them, so the FE
 // fires its "Updated" beat only on a confirmed write — never optimistically.
+// The TWO structured exceptions are `pending_delete` (PER-230) and
+// `pending_rewrite` (PER-235): proposals the companion explicitly did NOT
+// apply, with their own deterministic confirm routes — so the confirm cards
+// the FE renders for them are real controls, not dead ones.
 
 import { discoverCompanion } from "./companion";
 
@@ -34,6 +38,18 @@ export type PendingDelete = {
   topic: string;
 };
 
+// A full-doc rewrite the turn proposed but did NOT apply (PER-235 confirm-gated
+// rewrite). The doc on disk is untouched; the FE renders an [Apply]/[Discard]
+// diff card and only calls confirmRewriteInterest() when the user presses
+// [Apply]. `doc` is the complete proposed markdown — the server stores its own
+// copy and writes THAT on confirm (the client never sends the doc back).
+// Mirrors the agent's PendingRewrite.
+export type PendingRewrite = {
+  interestId: string;
+  topic: string;
+  doc: string;
+};
+
 // One chat turn held in the companion's single last-writer-wins slot. Mirrors
 // the agent's ChatTurn.
 export type ChatTurn = {
@@ -45,6 +61,9 @@ export type ChatTurn = {
   changes?: ChatChange[];
   // A delete awaiting [Delete]/[Cancel] confirmation (PER-230). Not yet applied.
   pending_delete?: PendingDelete;
+  // A full rewrite awaiting [Apply]/[Discard] confirmation (PER-235). Not yet
+  // written — the doc on disk is unchanged until confirmRewriteInterest().
+  pending_rewrite?: PendingRewrite;
   error_msg?: string;
 };
 
@@ -204,6 +223,45 @@ export async function confirmDeleteInterest(
   }
   const body = (await res.json()) as { turn?: ChatTurn };
   if (!body.turn) throw new Error("Scout didn't confirm the removal.");
+  return body.turn;
+}
+
+// Confirm a gated rewrite (PER-235): the deterministic [Apply] press. POSTs the
+// interestId to the companion, which writes its STORED proposed doc (the client
+// never sends the doc) and returns a `ready` turn whose `changes` carry the
+// applied update — so the caller routes it through the same confirmed-write
+// seam as any other change (docs-rail flash). No model round-trip. Throws
+// human-readable errors on 404 (proposal gone/stale) / 409 (a turn in flight).
+export async function confirmRewriteInterest(
+  interestId: string,
+  token: string,
+): Promise<ChatTurn> {
+  const base = await requireBase();
+  const res = await fetch(`${base}/v0/chat/confirm-rewrite`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ interestId }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (res.status === 409) {
+    throw new Error(
+      "Scout is still working on your last message — give it a moment.",
+    );
+  }
+  if (res.status === 404) {
+    throw new Error("That proposal expired — ask Scout for the rewrite again.");
+  }
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
+      error?: string;
+    };
+    throw new Error(err.error ?? `Couldn't apply that rewrite (${res.status}).`);
+  }
+  const body = (await res.json()) as { turn?: ChatTurn };
+  if (!body.turn) throw new Error("Scout didn't confirm the rewrite.");
   return body.turn;
 }
 

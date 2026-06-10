@@ -35,6 +35,7 @@ import { interestDocMeta, readInterestDoc } from "./docs.js";
 import { startRun } from "./runner.js";
 import {
   confirmDeleteTurn,
+  confirmRewriteTurn,
   defaultChatTranscriptFile,
   readChatTranscript,
   startChatTurn,
@@ -183,6 +184,7 @@ const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
   "/v0/chat": ["GET", "POST", "OPTIONS"],
   "/v0/chat/stop": ["POST", "OPTIONS"],
   "/v0/chat/confirm-delete": ["POST", "OPTIONS"],
+  "/v0/chat/confirm-rewrite": ["POST", "OPTIONS"],
 };
 
 function corsHeaders(origin: string | undefined): Record<string, string> {
@@ -786,6 +788,56 @@ export function createServer(deps: ServerDeps = {}): http.Server {
               return json(res, 409, { error: "chat turn in progress" }, cors);
             }
             return json(res, 404, { error: "interest not found" }, cors);
+          }
+          json(res, 200, { turn: outcome.turn }, cors);
+          return;
+        }
+
+        // Confirm a gated full rewrite (PER-235). Mirrors confirm-delete: a model
+        // turn that resolved to a from-scratch rewrite returns a `pending_rewrite`
+        // proposal (the doc on disk is untouched); the FE renders an [Apply]/
+        // [Discard] diff card and calls this route ONLY when the user presses
+        // [Apply]. The proposed doc is read from the STORED turn — the client
+        // sends only the interestId. Deterministic — no model spawn — so it
+        // returns the applied turn synchronously (200) for the FE to flash.
+        if (
+          req.method === "POST" &&
+          url.pathname === "/v0/chat/confirm-rewrite"
+        ) {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          let body: string;
+          try {
+            body = await readBody(req);
+          } catch (err) {
+            if (err instanceof BodyTooLargeError) {
+              return json(res, 413, { error: "request body too large" }, cors);
+            }
+            throw err;
+          }
+          let parsed: { interestId?: unknown };
+          try {
+            parsed = JSON.parse(body || "{}");
+          } catch {
+            return json(res, 400, { error: "invalid json" }, cors);
+          }
+          const interestId =
+            typeof parsed.interestId === "string" ? parsed.interestId : "";
+          if (!interestId)
+            return json(res, 400, { error: "interestId required" }, cors);
+          const outcome = await confirmRewriteTurn(interestId, {
+            stateFile,
+            interestsDir,
+            chatTranscriptFile,
+            claudeBin,
+            spawnFn,
+            onChatDone: deps.onChatDone,
+          });
+          if (!outcome.ok) {
+            if (outcome.reason === "in_flight") {
+              return json(res, 409, { error: "chat turn in progress" }, cors);
+            }
+            return json(res, 404, { error: "no pending rewrite" }, cors);
           }
           json(res, 200, { turn: outcome.turn }, cors);
           return;

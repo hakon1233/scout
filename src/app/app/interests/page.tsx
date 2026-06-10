@@ -39,6 +39,8 @@ export default function InterestsPage() {
       onUndo={workbench.undo}
       onConfirmDelete={workbench.confirmDelete}
       onCancelDelete={workbench.cancelDelete}
+      onConfirmRewrite={workbench.confirmRewrite}
+      onDiscardRewrite={workbench.discardRewrite}
     />
   );
 
