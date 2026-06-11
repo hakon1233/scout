@@ -179,7 +179,9 @@ test("a NON-ephemeral POST still persists its interests (normal path unbroken)",
     const kick = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({ interests: ["ai", "robotics"] }),
+      // confirm_replace satisfies the PER-240 wipe guard — this intentionally
+      // replaces the seeded founder list with a fresh one.
+      body: JSON.stringify({ interests: ["ai", "robotics"], confirm_replace: true }),
     });
     assert.equal(kick.status, 202);
     await done;
