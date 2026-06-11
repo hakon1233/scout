@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated, git-ignored build artifacts — linting their minified bundles
+    // floods the run with bogus errors once a local e2e/agent build exists.
+    "e2e/.artifact/**",
+    "packages/agent/webroot/**",
+    "packages/agent/dist/**",
   ]),
 ]);
 
