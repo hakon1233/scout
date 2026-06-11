@@ -1,0 +1,72 @@
+// Build provenance for exact-SHA QA gating (PER-239).
+//
+// `scripts/write-build-info.mjs` runs as part of the agent build (after tsc)
+// and writes `dist/build-info.json` capturing the git SHA the build was made
+// from, the Next.js BUILD_ID of the bundled webroot, and the build timestamp.
+// The server exposes it via GET /v0/version (and folds git_sha into /healthz)
+// so a QA gate can byte-verify "the served bundle IS commit X" instead of
+// inferring deployment from code fingerprints.
+//
+// The compiled module lives at dist/build-info.js, so the JSON sits beside it
+// (`./build-info.json`). When the file is absent — e.g. running from source
+// via tsx, or a tarball built before this existed — every field degrades to
+// null rather than failing the endpoint.
+
+import { promises as fs } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+export type BuildInfo = {
+  // Full 40-char git SHA of HEAD at build time; "-dirty" suffixed when the
+  // worktree had uncommitted changes (so QA never mistakes a dirty build for
+  // the clean commit under test). Null when built outside a git checkout.
+  git_sha: string | null;
+  git_sha_short: string | null;
+  // Next.js BUILD_ID of the static webroot bundled into this build, when the
+  // webroot build ran first (pnpm build:agent does). Null otherwise.
+  next_build_id: string | null;
+  built_at: string | null;
+};
+
+const EMPTY: BuildInfo = {
+  git_sha: null,
+  git_sha_short: null,
+  next_build_id: null,
+  built_at: null,
+};
+
+export const DEFAULT_BUILD_INFO_FILE = fileURLToPath(
+  new URL("./build-info.json", import.meta.url),
+);
+
+// Read once, then serve from memory: the JSON is baked at build time and can
+// only change across a rebuild+restart, so per-request rereads buy nothing.
+const cache = new Map<string, Promise<BuildInfo>>();
+
+export function readBuildInfo(
+  file = DEFAULT_BUILD_INFO_FILE,
+): Promise<BuildInfo> {
+  let p = cache.get(file);
+  if (!p) {
+    p = fs.readFile(file, "utf8").then(
+      (raw) => {
+        const parsed = JSON.parse(raw) as Partial<BuildInfo>;
+        return {
+          git_sha: typeof parsed.git_sha === "string" ? parsed.git_sha : null,
+          git_sha_short:
+            typeof parsed.git_sha_short === "string"
+              ? parsed.git_sha_short
+              : null,
+          next_build_id:
+            typeof parsed.next_build_id === "string"
+              ? parsed.next_build_id
+              : null,
+          built_at:
+            typeof parsed.built_at === "string" ? parsed.built_at : null,
+        };
+      },
+      () => EMPTY,
+    );
+    cache.set(file, p);
+  }
+  return p;
+}
