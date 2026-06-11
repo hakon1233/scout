@@ -117,6 +117,19 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
     "need replication on larger models",
   );
 
+  // PER-236 fix 1: the body's inline markdown renders as REAL elements — the
+  // stub's `**measurable drop**` becomes a <strong>, its backticked
+  // `eval-harness` becomes a <code> chip — and no literal asterisks/backticks
+  // survive into the visible text.
+  await expect(
+    page.locator("article strong", { hasText: "measurable drop" }),
+  ).toBeVisible();
+  await expect(
+    page.locator("article code", { hasText: "eval-harness" }),
+  ).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("**measurable drop**");
+  await expect(page.locator("body")).not.toContainText("`eval-harness`");
+
   // No preamble leak: the stub's leading "I have enough to write the brief now."
   // line must be stripped before render (PER-113 #1).
   await expect(page.locator("body")).not.toContainText(

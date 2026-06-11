@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
 import type { Article, Brief } from "@/lib/types";
 
 // News-feed presentation of a brief (PER-211). Replaces the sectioned-markdown
@@ -200,18 +202,7 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
         </p>
       )}
 
-      {item.body && (
-        <div className="flex flex-col gap-4">
-          {item.body.split(/\n{2,}/).map((para, i) => (
-            <p
-              key={i}
-              className="font-reading text-body leading-relaxed text-secondary"
-            >
-              {para}
-            </p>
-          ))}
-        </div>
-      )}
+      {item.body && <FeedBody markdown={item.body} />}
 
       <div className="flex flex-col gap-2 rounded-md border border-border-default bg-surface-muted p-4">
         <p className="text-caption uppercase tracking-wide text-muted">Source</p>
@@ -233,6 +224,75 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
         </a>
       </div>
     </article>
+  );
+}
+
+// The in-depth body arrives as RAW markdown from the brief's `> ` blockquote
+// lines (companion.ts keeps it unstripped on purpose — only card blurbs are
+// plain-stripped). Render it as sanitized markdown styled to the editorial
+// type, instead of dumping literal `**bold**`/backticks into <p> tags
+// (PER-236 fix 1). Live briefs use bold + inline code heavily; links, lists,
+// and quotes are styled too so future bodies degrade gracefully.
+const BODY_MD = {
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="font-reading text-body leading-relaxed text-secondary">
+      {children}
+    </p>
+  ),
+  strong: ({ children }: { children?: React.ReactNode }) => (
+    <strong className="font-semibold text-primary">{children}</strong>
+  ),
+  em: ({ children }: { children?: React.ReactNode }) => (
+    <em className="italic">{children}</em>
+  ),
+  // The default <pre> wraps a <code>; pass through so the code chip styling
+  // applies once (same trick as ChatMarkdown).
+  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  code: ({ children }: React.HTMLAttributes<HTMLElement>) => (
+    <code className="rounded bg-surface-muted px-1 py-0.5 font-mono text-[0.85em] text-primary">
+      {children}
+    </code>
+  ),
+  a: ({ href, children }: React.AnchorHTMLAttributes<HTMLAnchorElement>) =>
+    href ? (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-signal underline underline-offset-2"
+      >
+        {children}
+      </a>
+    ) : (
+      <>{children}</>
+    ),
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="list-disc pl-5 font-reading text-body leading-relaxed text-secondary">
+      {children}
+    </ul>
+  ),
+  ol: ({ children }: { children?: React.ReactNode }) => (
+    <ol className="list-decimal pl-5 font-reading text-body leading-relaxed text-secondary">
+      {children}
+    </ol>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => (
+    <li className="my-1">{children}</li>
+  ),
+  blockquote: ({ children }: { children?: React.ReactNode }) => (
+    <blockquote className="border-l-2 border-border-strong pl-4 text-secondary">
+      {children}
+    </blockquote>
+  ),
+};
+
+function FeedBody({ markdown }: { markdown: string }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <ReactMarkdown rehypePlugins={[rehypeSanitize]} components={BODY_MD}>
+        {markdown}
+      </ReactMarkdown>
+    </div>
   );
 }
 

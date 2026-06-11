@@ -46,8 +46,11 @@ function emit() {
     // In-depth body blockquote (PER-214): the few concise paragraphs the detail
     // view renders on click. The feed card stays short (just the bullet above);
     // this depth must appear ONLY after the card is opened.
-    "  > The lab reported a measurable drop in deceptive behavior under its new",
-    "  > training regime, and published the evaluation harness alongside.",
+    // Body carries inline markdown (**bold** + `code`) on purpose: real briefs
+    // use both heavily, and PER-236 asserts the detail view renders them as
+    // real <strong>/<code> elements instead of literal asterisks/backticks.
+    "  > The lab reported a **measurable drop** in deceptive behavior under its",
+    "  > new training regime, and published the `eval-harness` alongside.",
     "  >",
     "  > Independent researchers called the methodology promising but said the",
     "  > results need replication on larger models before they generalize.",
