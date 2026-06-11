@@ -89,15 +89,25 @@ export function InterestDocCard({
   model,
   focused,
   onFocusToggle,
+  onOpen,
 }: {
   model: DocCardModel;
   focused: boolean;
   onFocusToggle: () => void;
+  // PER-236 fix 2: when provided, opening the card stays in-page (the
+  // workbench swaps its left pane to the scope view, chat stays mounted on
+  // the right) instead of navigating away and losing the chat. `href` is
+  // kept on the title anchor so middle-click/new-tab still deep-links.
+  onOpen?: () => void;
 }) {
   const [showRaw, setShowRaw] = useState(false);
   const { topic, hasDoc, updatedAt, body, beat, href } = model;
 
   const open = () => {
+    if (onOpen) {
+      onOpen();
+      return;
+    }
     window.location.assign(href);
   };
 
@@ -130,6 +140,22 @@ export function InterestDocCard({
         <div className="min-w-0">
           <a
             href={href}
+            onClick={(event) => {
+              if (!onOpen) return;
+              // Plain left-click opens in-page; modified clicks (new tab,
+              // middle click) keep native anchor behavior via `href`.
+              if (
+                event.defaultPrevented ||
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+              )
+                return;
+              event.preventDefault();
+              onOpen();
+            }}
             className="block truncate font-serif text-[19px] leading-tight text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
           >
             {topic}

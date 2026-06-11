@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppNav } from "@/components/AppNav";
 import { ChatDock } from "@/components/profile/ChatDock";
 import { InterestDocCard } from "@/components/profile/InterestDocCard";
+import { InterestScopeView } from "@/components/profile/InterestScopeView";
 import { ProfileSkeleton } from "@/components/profile/ProfileSkeleton";
 import { SkillSection } from "@/components/skills/SkillSection";
 import { useProfileWorkbench } from "@/components/profile/useProfileWorkbench";
@@ -20,8 +21,61 @@ export default function InterestsPage() {
   const workbench = useProfileWorkbench();
   const [tab, setTab] = useState<"chat" | "docs">("chat");
 
+  // PER-236 fix 2: drilling into one interest doc swaps ONLY the left pane to
+  // the scope view — the chat column stays mounted, so the live transcript,
+  // streaming state, and focus survive the drill-in. URL carries `?id=` (the
+  // companion serves only the `/app/` shell, so this is in-page state synced
+  // to history, same pattern as FeedView's story detail).
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const readId = () =>
+      new URLSearchParams(window.location.search).get("id");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- URL → state hydration on mount
+    setSelectedKey(readId());
+    const onPop = () => setSelectedKey(readId());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  function openDoc(key: string) {
+    setSelectedKey(key);
+    setTab("docs"); // on small screens the detail lives in the docs tab
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("id", key);
+      window.history.pushState({ scoutInterestDoc: key }, "", url);
+    } catch {
+      // pushState can throw in rare sandboxed contexts — detail still opens.
+    }
+  }
+
+  function closeDoc() {
+    const state = window.history.state as
+      | { scoutInterestDoc?: string }
+      | null;
+    if (state?.scoutInterestDoc) {
+      window.history.back(); // pops our entry → popstate clears the selection
+    } else {
+      setSelectedKey(null);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("id");
+        window.history.replaceState(window.history.state, "", url);
+      } catch {
+        /* selection already cleared */
+      }
+    }
+  }
+
   const primary = (
-    <PrimaryPane workbench={workbench} onAfterFocus={() => setTab("chat")} />
+    <PrimaryPane
+      workbench={workbench}
+      onAfterFocus={() => setTab("chat")}
+      selectedKey={selectedKey}
+      onOpenDoc={openDoc}
+      onCloseDoc={closeDoc}
+    />
   );
 
   const chat = (
@@ -129,11 +183,48 @@ function SegButton({
 function PrimaryPane({
   workbench,
   onAfterFocus,
+  selectedKey,
+  onOpenDoc,
+  onCloseDoc,
 }: {
   workbench: ReturnType<typeof useProfileWorkbench>;
   onAfterFocus: () => void;
+  selectedKey: string | null;
+  onOpenDoc: (key: string) => void;
+  onCloseDoc: () => void;
 }) {
   const { hydrated, cards, docCount, focusKey, setFocusKey } = workbench;
+
+  // Single-doc drill-in (PER-236 fix 2): the scope view replaces the card
+  // list + skills in THIS pane only; the chat aside is untouched. Wait for
+  // hydration before declaring an id "not found".
+  if (selectedKey !== null) {
+    if (!hydrated) {
+      return (
+        <div className="mx-auto w-full max-w-[880px] px-4 py-6 sm:px-6 lg:py-8">
+          <ProfileSkeleton />
+        </div>
+      );
+    }
+    const selected = cards.find((c) => c.key === selectedKey) ?? null;
+    return (
+      <div className="mx-auto w-full max-w-[880px] px-4 py-6 sm:px-6 lg:py-8">
+        <InterestScopeView
+          model={selected}
+          onBack={onCloseDoc}
+          onRefine={
+            selected
+              ? () => {
+                  setFocusKey(selected.key);
+                  onAfterFocus();
+                }
+              : undefined
+          }
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-[880px] flex-col gap-10 px-4 py-6 sm:px-6 lg:py-8">
       <section>
@@ -165,6 +256,7 @@ function PrimaryPane({
                   setFocusKey(focusKey === c.key ? null : c.key);
                   onAfterFocus();
                 }}
+                onOpen={() => onOpenDoc(c.key)}
               />
             ))}
           </div>

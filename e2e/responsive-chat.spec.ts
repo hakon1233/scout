@@ -61,4 +61,75 @@ test.describe("responsive interest workbench", () => {
     await page.getByRole("button", { name: "Chat", exact: true }).click();
     await expect(page.getByLabel("Chat with Scout")).toBeVisible();
   });
+
+  // PER-236 fix 2: drilling into a single interest doc must NOT lose the chat.
+  // The scope view replaces only the left pane; the chat column stays mounted.
+  test("desktop: opening an interest doc keeps the chat visible", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${ORIGIN}/app/interests/?mock=1`);
+
+    // Open the first interest card by its title link.
+    await page
+      .getByRole("link", { name: "AI policy & regulation" })
+      .first()
+      .click();
+
+    // In-page drill-in: scope view in the left pane, ?id= in the URL, no
+    // navigation to the chat-less standalone page.
+    await expect(page.getByText("Research scope")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "AI policy & regulation" }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/interests\/\?.*id=/);
+
+    // THE assertion: chat is still there, same narrow right column.
+    await expect(page.getByLabel("Chat with Scout")).toBeVisible();
+    await expect(page.getByLabel("Message Scout")).toBeVisible();
+    const chatBox = await page.getByLabel("Chat with Scout").boundingBox();
+    expect(chatBox).not.toBeNull();
+    expect(chatBox!.width).toBeLessThanOrEqual(420);
+    expect(chatBox!.x).toBeGreaterThan(1440 / 2);
+
+    // "Refine in chat" focuses this interest in the adjacent chat.
+    await page.getByRole("button", { name: "Refine in chat" }).click();
+    await expect(page.getByLabel("Message Scout")).toHaveAttribute(
+      "placeholder",
+      /AI policy & regulation/,
+    );
+
+    // Back returns to the card list without losing the chat.
+    await page.getByRole("button", { name: "← Interests" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Skills setup" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Chat with Scout")).toBeVisible();
+  });
+
+  test("mobile: interest doc detail opens in the docs tab; chat one toggle away", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${ORIGIN}/app/interests/?mock=1`);
+
+    await page.getByRole("button", { name: /Interests & skills/ }).click();
+    await page
+      .getByRole("link", { name: "AI policy & regulation" })
+      .first()
+      .click();
+
+    await expect(page.getByText("Research scope")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "AI policy & regulation" }),
+    ).toBeVisible();
+
+    // Chat stays one toggle away (collapsed, reachable — the mobile contract).
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
+    await expect(page.getByLabel("Chat with Scout")).toBeVisible();
+
+    // …and toggling back returns to the doc detail, not the card list.
+    await page.getByRole("button", { name: /Interests & skills/ }).click();
+    await expect(page.getByText("Research scope")).toBeVisible();
+  });
 });
