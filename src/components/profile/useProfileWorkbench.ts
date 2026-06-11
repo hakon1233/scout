@@ -629,7 +629,10 @@ export function useProfileWorkbench() {
         updatedAt: m.updatedAt,
         body,
         beat: beats[key] ?? null,
-        href: `/app/interests/interest?id=${encodeURIComponent(key)}`,
+        // Deep-links into the workbench itself (PER-236 fix 2) so a new-tab
+        // open lands on the scope view WITH the chat column, not the
+        // chat-less standalone page (which stays alive for old links).
+        href: `/app/interests/?id=${encodeURIComponent(key)}`,
       };
     });
   }, [interests, docMeta, docBodies, beats, mockSeed]);
