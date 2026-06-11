@@ -199,12 +199,19 @@ export async function postInterests(
 export async function saveInterests(
   interests: string[],
   token: string,
+  // Wipe-guard token (PER-240): the companion's PUT is replace-all and 409s any
+  // payload that would drop a currently-saved interest. A caller making a
+  // deliberate, user-confirmed removal must pass true; additive saves never
+  // need it.
+  confirmReplace?: boolean,
 ): Promise<{ interests: string[]; status: string }> {
   const base = await requireBase();
+  const body: { interests: string[]; confirm_replace?: boolean } = { interests };
+  if (confirmReplace) body.confirm_replace = true;
   const res = await fetch(`${base}/v0/interests`, {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify({ interests }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) {

@@ -167,7 +167,9 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (
     const kick = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({ interests }),
+      // Each sequential run intentionally replaces the prior topic list, so it
+      // must carry the PER-240 wipe-guard token.
+      body: JSON.stringify({ interests, confirm_replace: true }),
     });
     assert.equal(kick.status, 202);
     return doneP;
@@ -248,7 +250,9 @@ test("a second kick while a brief is in flight is rejected without clobbering th
     const kick2 = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({ interests: ["topic two"] }),
+      // confirm_replace satisfies the PER-240 wipe guard so this kick reaches
+      // the single-flight check — the rejection under test here.
+      body: JSON.stringify({ interests: ["topic two"], confirm_replace: true }),
     });
     assert.equal(kick2.status, 409);
     const body2 = (await kick2.json()) as { error: string; brief_id: string };
@@ -417,6 +421,197 @@ test("PUT /v0/interests rejects an empty/oversized interest list (PER-160)", asy
 
     const state = await loadState(stateFile);
     assert.equal(state.interests, undefined, "no rejected write should land");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Wipe guard (PER-240). Both interest writes are replace-all; on 2026-06-11 a
+// one-topic QA payload (`ephemeral:true` against a pre-PER-218 build) silently
+// destroyed the founder's 5 saved interests. The guard: any write that would
+// DROP a currently-saved topic is refused with 409 unless the caller passes an
+// explicit `confirm_replace: true` (mirroring the PER-230 confirm-delete seam).
+// Additive writes (same set / supersets) pass untouched, and ephemeral runs
+// skip the guard because they persist nothing (PER-218).
+// ---------------------------------------------------------------------------
+
+async function seededServerWithInterests() {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-wipeguard-"));
+  const stateFile = path.join(tmp, "state.json");
+  const token = newPairingToken();
+  const saved = [
+    { id: "i-ai", topic: "ai safety" },
+    { id: "i-mk", topic: "markets" },
+    { id: "i-cl", topic: "climate" },
+  ];
+  await saveState({ pairing_token: token, interests: saved }, stateFile);
+  return { tmp, stateFile, token, saved };
+}
+
+test("POST /v0/interests refuses a subset payload that would drop saved interests (PER-240)", async () => {
+  const { tmp, stateFile, token, saved } = await seededServerWithInterests();
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    // The incident shape: a single throwaway topic replacing the whole set.
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["qa throwaway topic"] }),
+    });
+    assert.equal(res.status, 409);
+    const body = (await res.json()) as { error: string; dropped: string[]; hint: string };
+    assert.equal(body.error, "replace would drop saved interests");
+    assert.deepEqual(body.dropped, ["ai safety", "markets", "climate"]);
+    assert.ok(body.hint.includes("confirm_replace"), "hint names the confirm token");
+
+    // Nothing persisted, no synthesis kicked.
+    const state = await loadState(stateFile);
+    assert.deepEqual(state.interests, saved, "saved interests must be untouched");
+    assert.equal(state.last_brief, undefined, "no brief slot may be created");
+    assert.equal(recorder.calls.length, 0, "claude must not be spawned");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/interests with confirm_replace:true performs the intentional replace (PER-240)", async () => {
+  const { tmp, stateFile, token } = await seededServerWithInterests();
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  let synthesisDone: (b: unknown) => void = () => {};
+  const done = new Promise((r) => (synthesisDone = r));
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn: recorder.spawnFn,
+    onSynthesisDone: (b) => synthesisDone(b),
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["space"], confirm_replace: true }),
+    });
+    assert.equal(res.status, 202);
+
+    // Wait out the kicked run so tmp-dir cleanup can't race its file writes.
+    await done;
+    const state = await loadState(stateFile);
+    assert.deepEqual(
+      (state.interests ?? []).map((i) => i.topic),
+      ["space"],
+      "a confirmed replace persists the new list",
+    );
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/interests passes a superset (additive) payload without confirmation (PER-240)", async () => {
+  const { tmp, stateFile, token } = await seededServerWithInterests();
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  let synthesisDone: (b: unknown) => void = () => {};
+  const done = new Promise((r) => (synthesisDone = r));
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn: recorder.spawnFn,
+    onSynthesisDone: (b) => synthesisDone(b),
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    // Same three topics (one re-cased to prove case-insensitive matching) plus
+    // one new — drops nothing, so the guard must not fire.
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["AI Safety", "markets", "climate", "space"] }),
+    });
+    assert.equal(res.status, 202);
+
+    // Wait out the kicked run so tmp-dir cleanup can't race its file writes.
+    await done;
+    const state = await loadState(stateFile);
+    assert.deepEqual(
+      (state.interests ?? []).map((i) => i.topic),
+      ["AI Safety", "markets", "climate", "space"],
+    );
+    // Id-preservation across the additive write keeps intent docs attached.
+    assert.equal(state.interests?.find((i) => i.topic === "AI Safety")?.id, "i-ai");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/interests {ephemeral:true} never alters persisted interests (PER-240 acceptance)", async () => {
+  const { tmp, stateFile, token, saved } = await seededServerWithInterests();
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  let synthesisDone: (b: unknown) => void = () => {};
+  const done = new Promise((r) => (synthesisDone = r));
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn: recorder.spawnFn,
+    onSynthesisDone: (b) => synthesisDone(b),
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    // A disjoint test topic, exactly like a QA fire — accepted (202, a brief is
+    // produced) but the founder's saved set must be byte-identical afterwards.
+    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["qa throwaway topic"], ephemeral: true }),
+    });
+    assert.equal(res.status, 202);
+
+    // Let the autoClose synthesis land fully before inspecting persisted state.
+    await done;
+    const state = await loadState(stateFile);
+    assert.deepEqual(state.interests, saved, "ephemeral run must not touch saved interests");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("PUT /v0/interests applies the same wipe guard as POST (PER-240)", async () => {
+  const { tmp, stateFile, token, saved } = await seededServerWithInterests();
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    // Unconfirmed destructive PUT → 409, untouched state.
+    const blocked = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["markets"] }),
+    });
+    assert.equal(blocked.status, 409);
+    const blockedBody = (await blocked.json()) as { dropped: string[] };
+    assert.deepEqual(blockedBody.dropped, ["ai safety", "climate"]);
+    assert.deepEqual((await loadState(stateFile)).interests, saved);
+
+    // Confirmed destructive PUT → 200, persisted, id of the kept topic survives.
+    const ok = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["markets"], confirm_replace: true }),
+    });
+    assert.equal(ok.status, 200);
+    const state = await loadState(stateFile);
+    assert.deepEqual((state.interests ?? []).map((i) => i.topic), ["markets"]);
+    assert.equal(state.interests?.[0]?.id, "i-mk", "kept topic retains its id");
+    assert.equal(recorder.calls.length, 0, "PUT never spawns a synthesis");
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });

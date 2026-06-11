@@ -263,6 +263,33 @@ function parseInterestsPayload(raw: unknown): InterestParse {
   return { ok: true, interests };
 }
 
+// Wipe guard (PER-240): which currently-saved topics an incoming interests list
+// would silently drop. Both interest writes (PUT persist-only, POST run+persist)
+// are replace-all — a "safe-looking" subset payload from any authed client used
+// to atomically destroy the founder's saved set (the 2026-06-11 incident: a
+// one-topic QA payload wiped 5 real interests). A write that drops anything now
+// requires an explicit `confirm_replace: true` token, mirroring the PER-230
+// confirm-delete seam. Case-insensitive to match parseInterestsPayload's dedupe
+// and reconcileInterests' id-preserving match.
+function droppedTopics(
+  saved: State["interests"],
+  incoming: string[],
+): string[] {
+  const incomingKeys = new Set(incoming.map((s) => s.toLowerCase()));
+  return interestTopics(saved).filter((t) => !incomingKeys.has(t.toLowerCase()));
+}
+
+// Shared 409 body for a guarded destructive replace. `dropped` tells the caller
+// exactly what it was about to destroy; the hint names both intentional paths.
+function wipeGuardError(dropped: string[]) {
+  return {
+    error: "replace would drop saved interests",
+    dropped,
+    hint:
+      "This endpoint replaces the whole saved list. Pass confirm_replace:true to intentionally drop these, or ephemeral:true (POST only) for a test run that persists nothing.",
+  };
+}
+
 // Thrown by readBody when the request body exceeds MAX_BODY_BYTES, so the
 // handler can answer 413 instead of buffering an unbounded body into memory.
 export class BodyTooLargeError extends Error {
@@ -493,7 +520,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             }
             throw err;
           }
-          let parsed: { interests?: unknown };
+          let parsed: { interests?: unknown; confirm_replace?: unknown };
           try {
             parsed = JSON.parse(body || "{}");
           } catch {
@@ -507,6 +534,14 @@ export function createServer(deps: ServerDeps = {}): http.Server {
               { error: validated.error },
               cors,
             );
+          // Wipe guard (PER-240): PUT is replace-all, so a payload missing any
+          // currently-saved topic is destructive. Refuse it unless the caller
+          // explicitly confirms — additive edits (same set or supersets) pass
+          // through untouched.
+          const dropped = droppedTopics(state.interests, validated.interests);
+          if (dropped.length > 0 && parsed.confirm_replace !== true) {
+            return json(res, 409, wipeGuardError(dropped), cors);
+          }
           // Persist the rich {id, topic} model, preserving each existing topic's
           // id so its intent doc stays attached across an edit (PER-169). The
           // wire response stays a topic string[] for back-compat.
@@ -546,6 +581,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             retry_topics?: unknown;
             selected_topics?: unknown;
             ephemeral?: unknown;
+            confirm_replace?: unknown;
           };
           try {
             parsed = JSON.parse(body || "{}");
@@ -561,6 +597,26 @@ export function createServer(deps: ServerDeps = {}): http.Server {
               cors,
             );
           const topics = validated.interests;
+
+          // Ephemeral / dry-run trigger (PER-218): research the supplied topics
+          // and produce a brief WITHOUT persisting them as the founder's saved
+          // interests or touching the real intent-doc store. This is the path QA
+          // and automation MUST use to fire test runs.
+          const ephemeral = parsed.ephemeral === true;
+
+          // Wipe guard (PER-240): a non-ephemeral POST persists its `interests`
+          // body as the new saved list (replace-all). If that would drop any
+          // currently-saved topic, refuse unless explicitly confirmed — this is
+          // exactly the incident path (a one-topic test payload silently wiped
+          // the founder's 5 saved interests). Ephemeral runs skip the guard
+          // because they persist nothing.
+          if (!ephemeral) {
+            const dropped = droppedTopics(state.interests, topics);
+            if (dropped.length > 0 && parsed.confirm_replace !== true) {
+              return json(res, 409, wipeGuardError(dropped), cors);
+            }
+          }
+
           // Reconcile into the rich {id, topic} model (preserving ids) before the
           // run persists them, so the doc store stays anchored across runs.
           const interests = reconcileInterests(state.interests, topics);
@@ -594,14 +650,6 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           // truth) — a partial run never shrinks the saved set. Ignored by the
           // runner when a retry is set or when it covers the whole list.
           const selectedTopics = intersectTopics(parsed.selected_topics);
-
-          // Ephemeral / dry-run trigger (PER-218): research the supplied topics
-          // and produce a brief WITHOUT persisting them as the founder's saved
-          // interests or touching the real intent-doc store. This is the path QA
-          // and automation MUST use to fire test runs — a normal POST persists its
-          // `interests` body as the new saved list, so a reduced test payload would
-          // otherwise overwrite the founder's authored interests.
-          const ephemeral = parsed.ephemeral === true;
 
           // One brief slot, last-writer-wins. The shared runner enforces single-
           // flight (in-memory guard + persisted pending check) so an on-demand
