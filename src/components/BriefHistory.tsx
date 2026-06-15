@@ -131,16 +131,18 @@ export function BriefHistory({
       {visibleBriefs.map((b) => (
         <section
           key={b.id}
-          aria-label={`Daily brief — ${formatBriefDate(b)}`}
+          aria-label={`${briefHeading(b)} — ${formatBriefDate(b)}`}
           // Drop the divider/top padding when this section is the isolated open
           // story — a focused story should have nothing (not even a rule) above
           // its "← Back to feed" affordance.
-          className={openBriefId ? undefined : "border-t border-border-default pt-8"}
+          className={
+            openBriefId ? undefined : "border-t border-border-default pt-8"
+          }
         >
           <BriefLayout
             brief={b}
             name=""
-            heading="Daily brief"
+            heading={briefHeading(b)}
             onDetailOpenChange={(open) => setOpenBriefId(open ? b.id : null)}
           />
         </section>
@@ -149,30 +151,34 @@ export function BriefHistory({
       {/* PER-223: the pager footer is feed chrome — hide it while a history
           story is open so nothing shows below the focused story. */}
       {!openBriefId && (
-      <div className="measure-prose flex flex-col gap-3 border-t border-border-default pt-6 min-[480px]:flex-row min-[480px]:items-center min-[480px]:justify-between">
-        <p className="text-caption text-muted">
-          {briefs.length > 0
-            ? `Showing ${briefs.length} previous brief${briefs.length === 1 ? "" : "s"}`
-            : "No previous briefs yet — they'll appear here after future runs."}
-        </p>
-        <div className="flex flex-col gap-2 min-[480px]:flex-row">
-          {hasMore && (
-            <Button
-              variant="secondary"
-              loading={loading}
-              onClick={() => void loadMore()}
-            >
-              {loading ? "Loading…" : "Load older briefs"}
+        <div className="measure-prose flex flex-col gap-3 border-t border-border-default pt-6 min-[480px]:flex-row min-[480px]:items-center min-[480px]:justify-between">
+          <p className="text-caption text-muted">
+            {briefs.length > 0
+              ? `Showing ${briefs.length} previous brief${briefs.length === 1 ? "" : "s"}`
+              : "No previous briefs yet — they'll appear here after future runs."}
+          </p>
+          <div className="flex flex-col gap-2 min-[480px]:flex-row">
+            {hasMore && (
+              <Button
+                variant="secondary"
+                loading={loading}
+                onClick={() => void loadMore()}
+              >
+                {loading ? "Loading…" : "Load older briefs"}
+              </Button>
+            )}
+            <Button variant="link" onClick={onManageInterests}>
+              Manage interests
             </Button>
-          )}
-          <Button variant="link" onClick={onManageInterests}>
-            Manage interests
-          </Button>
+          </div>
         </div>
-      </div>
       )}
     </div>
   );
+}
+
+function briefHeading(b: Brief): string {
+  return b.kind === "weekly" ? "Weekly brief" : "Daily brief";
 }
 
 // Mirrors BriefLayout's header date format so each historical section's aria

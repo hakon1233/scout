@@ -18,6 +18,7 @@ export function AppNav({
   // on routes that have no brief to run (Settings/Chat/etc.), where the menu
   // simply doesn't show the action.
   onRunNow,
+  onWeeklyBrief,
   running = false,
   // PER-241: feed filter by interest/topic. Only shown when interests are
   // provided. Filtering is read-only and client-side; never mutates saved state.
@@ -26,6 +27,7 @@ export function AppNav({
   onFilterChange,
 }: {
   onRunNow?: () => void;
+  onWeeklyBrief?: () => void;
   running?: boolean;
   interests?: Interest[];
   activeFilter?: string | null;
@@ -42,7 +44,11 @@ export function AppNav({
             onFilterChange={onFilterChange}
           />
         )}
-        <ProfileMenu onRunNow={onRunNow} running={running} />
+        <ProfileMenu
+          onRunNow={onRunNow}
+          onWeeklyBrief={onWeeklyBrief}
+          running={running}
+        />
       </div>
     </nav>
   );
@@ -236,9 +242,11 @@ function FunnelIcon({ active }: { active: boolean }) {
 
 function ProfileMenu({
   onRunNow,
+  onWeeklyBrief,
   running = false,
 }: {
   onRunNow?: () => void;
+  onWeeklyBrief?: () => void;
   running?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -290,7 +298,7 @@ function ProfileMenu({
               persisting run over the saved interest list — the saved interests
               are never altered by running. Hidden on routes that pass no handler. */}
           {onRunNow && (
-            <div className="mb-3">
+            <div className="mb-3 flex flex-col gap-2">
               <button
                 type="button"
                 role="menuitem"
@@ -304,6 +312,21 @@ function ProfileMenu({
                 <span>{running ? "Working…" : "Run now"}</span>
                 <span aria-hidden="true">↻</span>
               </button>
+              {onWeeklyBrief && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={running}
+                  onClick={() => {
+                    setOpen(false);
+                    onWeeklyBrief();
+                  }}
+                  className="flex w-full items-center justify-between rounded-md border border-border-default bg-surface px-3 py-2 text-body-sm font-medium text-primary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <span>{running ? "Working…" : "Weekly brief"}</span>
+                  <span aria-hidden="true">7d</span>
+                </button>
+              )}
             </div>
           )}
 

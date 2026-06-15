@@ -43,6 +43,7 @@ import {
   stopChatTurn,
 } from "./chat.js";
 import { isServiceInstalled } from "./service.js";
+import { createAndPersistWeeklyBrief } from "./weekly.js";
 import { readBuildInfo, DEFAULT_BUILD_INFO_FILE } from "./build-info.js";
 import {
   resolveStatic,
@@ -185,6 +186,7 @@ const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
   "/v0/config": ["GET", "OPTIONS"],
   "/v0/interests": ["GET", "POST", "PUT", "OPTIONS"],
   "/v0/briefs": ["GET", "OPTIONS"],
+  "/v0/weekly-brief": ["POST", "OPTIONS"],
   "/v0/schedule": ["GET", "PUT", "OPTIONS"],
   "/v0/chat": ["GET", "POST", "OPTIONS"],
   "/v0/chat/stop": ["POST", "OPTIONS"],
@@ -276,7 +278,9 @@ function droppedTopics(
   incoming: string[],
 ): string[] {
   const incomingKeys = new Set(incoming.map((s) => s.toLowerCase()));
-  return interestTopics(saved).filter((t) => !incomingKeys.has(t.toLowerCase()));
+  return interestTopics(saved).filter(
+    (t) => !incomingKeys.has(t.toLowerCase()),
+  );
 }
 
 // Shared 409 body for a guarded destructive replace. `dropped` tells the caller
@@ -285,8 +289,7 @@ function wipeGuardError(dropped: string[]) {
   return {
     error: "replace would drop saved interests",
     dropped,
-    hint:
-      "This endpoint replaces the whole saved list. Pass confirm_replace:true to intentionally drop these, or ephemeral:true (POST only) for a test run that persists nothing.",
+    hint: "This endpoint replaces the whole saved list. Pass confirm_replace:true to intentionally drop these, or ephemeral:true (POST only) for a test run that persists nothing.",
   };
 }
 
@@ -730,6 +733,14 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const matches =
             last && (!since || last.generated_at > since) ? [last] : [];
           json(res, 200, { briefs: matches }, cors);
+          return;
+        }
+
+        if (req.method === "POST" && url.pathname === "/v0/weekly-brief") {
+          const state = await authed(req);
+          if (!state) return json(res, 401, { error: "unauthorized" }, cors);
+          const brief = await createAndPersistWeeklyBrief(stateFile);
+          json(res, 201, { brief }, cors);
           return;
         }
 

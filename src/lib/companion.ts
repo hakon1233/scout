@@ -130,7 +130,13 @@ export async function discoverCompanion(): Promise<string | null> {
     return cachedBase;
   }
   if (cachedBase) {
-    if (await pingPort(new URL(cachedBase).port ? Number(new URL(cachedBase).port) : COMPANION_PORT)) {
+    if (
+      await pingPort(
+        new URL(cachedBase).port
+          ? Number(new URL(cachedBase).port)
+          : COMPANION_PORT,
+      )
+    ) {
       return cachedBase;
     }
     cachedBase = null;
@@ -150,7 +156,10 @@ export async function pingCompanion(): Promise<boolean> {
 
 async function requireBase(): Promise<string> {
   const base = await discoverCompanion();
-  if (!base) throw new Error("Companion not reachable. Start `scout-agent run` and try again.");
+  if (!base)
+    throw new Error(
+      "Companion not reachable. Start `scout-agent run` and try again.",
+    );
   return base;
 }
 
@@ -176,7 +185,10 @@ export async function postInterests(
     body.selected_topics = selectedTopics;
   const res = await fetch(`${base}/v0/interests`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
   });
@@ -206,11 +218,16 @@ export async function saveInterests(
   confirmReplace?: boolean,
 ): Promise<{ interests: string[]; status: string }> {
   const base = await requireBase();
-  const body: { interests: string[]; confirm_replace?: boolean } = { interests };
+  const body: { interests: string[]; confirm_replace?: boolean } = {
+    interests,
+  };
   if (confirmReplace) body.confirm_replace = true;
   const res = await fetch(`${base}/v0/interests`, {
     method: "PUT",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(8_000),
   });
@@ -219,7 +236,9 @@ export async function saveInterests(
       error?: string;
       hint?: string;
     };
-    throw new Error(err.hint ?? err.error ?? `Couldn't save interests (${res.status}).`);
+    throw new Error(
+      err.hint ?? err.error ?? `Couldn't save interests (${res.status}).`,
+    );
   }
   return res.json() as Promise<{ interests: string[]; status: string }>;
 }
@@ -228,6 +247,7 @@ type AgentBrief = {
   id: string;
   generated_at: string;
   status: string;
+  kind?: "daily" | "weekly";
   summary_md?: string;
   error_msg?: string;
   // Authoritative per-topic coverage (PER-154); present on briefs from a
@@ -266,7 +286,8 @@ const STORY_BODY_RE = /^\s*>\s?(.*)$/;
 // fragment (packages/agent/src/search-skills.ts STORY_DATE_RE). We capture it
 // into Article.publishedAt so the UI can show it per item and sort newest-first.
 // (The sample brief uses dateless bullets, so a leading date is not required.)
-const STORY_DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`\s*(?:—|–|-)?\s*/;
+const STORY_DATE_RE =
+  /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`\s*(?:—|–|-)?\s*/;
 
 // Reduce inline markdown to plain text for the card blurb: drop images entirely,
 // unwrap links to their label, collapse leftover emphasis markers.
@@ -310,7 +331,10 @@ function parseArticlesFromMarkdown(markdown: string, briefId: string) {
     // become blank lines, so trimming + collapsing 3+ newlines yields clean
     // `\n\n`-separated paragraphs the detail view can split on.
     const body =
-      story.bodyLines.join("\n").replace(/\n{3,}/g, "\n\n").trim() || undefined;
+      story.bodyLines
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim() || undefined;
     for (const link of story.links) {
       articles.push({
         id: `${briefId}-${idx++}`,
@@ -408,6 +432,7 @@ function adaptBrief(b: AgentBrief): AppBrief {
   return {
     id: b.id,
     generatedAt: b.generated_at,
+    kind: b.kind,
     interests,
     articles,
     markdown,
@@ -418,15 +443,22 @@ function adaptBrief(b: AgentBrief): AppBrief {
 
 // Returns ready briefs strictly newer than `sinceTs`. Pending/failed are surfaced
 // via `pollBriefsRaw` for the polling loop.
-export async function pollBriefs(sinceTs: string, token: string): Promise<AppBrief[]> {
+export async function pollBriefs(
+  sinceTs: string,
+  token: string,
+): Promise<AppBrief[]> {
   const briefs = await pollBriefsRaw(sinceTs, token);
-  return briefs.filter((b) => b.status === "ready" && b.summary_md).map(adaptBrief);
+  return briefs
+    .filter((b) => b.status === "ready" && b.summary_md)
+    .map(adaptBrief);
 }
 
 // Fetch the most recent ready brief the companion holds (any age), or null if
 // none exist / the companion is unreachable. Used on `/app/` load so a brief
 // generated in a previous session shows immediately instead of the example.
-export async function fetchLatestBrief(token: string): Promise<AppBrief | null> {
+export async function fetchLatestBrief(
+  token: string,
+): Promise<AppBrief | null> {
   try {
     const briefs = await pollBriefs(new Date(0).toISOString(), token);
     if (briefs.length === 0) return null;
@@ -481,7 +513,10 @@ export async function updateSchedule(
   const base = await requireBase();
   const res = await fetch(`${base}/v0/schedule`, {
     method: "PUT",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify(patch),
     signal: AbortSignal.timeout(8_000),
   });
@@ -530,7 +565,10 @@ export async function fetchBriefHistory(
   }
 }
 
-export async function pollBriefsRaw(sinceTs: string, token: string): Promise<AgentBrief[]> {
+export async function pollBriefsRaw(
+  sinceTs: string,
+  token: string,
+): Promise<AgentBrief[]> {
   const base = await requireBase();
   const url = `${base}/v0/briefs?since=${encodeURIComponent(sinceTs)}`;
   const res = await fetch(url, {
@@ -574,8 +612,32 @@ export async function refreshBriefViaCompanion(
     const briefs = await pollBriefsRaw(since, token);
     const latest = briefs[0];
     if (!latest) continue;
-    if (latest.status === "ready" && latest.summary_md) return adaptBrief(latest);
-    if (latest.status === "failed") throw new Error(latest.error_msg ?? "synthesis failed");
+    if (latest.status === "ready" && latest.summary_md)
+      return adaptBrief(latest);
+    if (latest.status === "failed")
+      throw new Error(latest.error_msg ?? "synthesis failed");
   }
   throw new Error("Timed out waiting for the companion brief.");
+}
+
+// Build a weekly digest from the companion's retained ready daily briefs. This
+// never writes interests or kicks a live research/model run; it re-ranks the
+// existing local history into one top-stories edition.
+export async function generateWeeklyBrief(token: string): Promise<AppBrief> {
+  const base = await requireBase();
+  const res = await fetch(`${base}/v0/weekly-brief`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
+      error?: string;
+    };
+    throw new Error(
+      err.error ?? `Couldn't generate weekly brief (${res.status}).`,
+    );
+  }
+  const json = (await res.json()) as { brief: AgentBrief };
+  return adaptBrief(json.brief);
 }
