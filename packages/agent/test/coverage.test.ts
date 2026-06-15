@@ -16,6 +16,9 @@ import {
   mergeBriefSections,
   extractTopicSection,
   sortSectionStoriesNewestFirst,
+  enforceBriefFreshness,
+  interestWantsEvergreen,
+  FRESHNESS_CUTOFF_DAYS,
 } from "../src/coverage.js";
 
 test("normalizeTopic collapses casing, punctuation and whitespace", () => {
@@ -224,4 +227,155 @@ test("extractTopicSection emits the section already sorted newest-first", () => 
   assert.ok(section);
   const dates = [...section.matchAll(/`(\d{4}-\d{2}-\d{2})`/g)].map((m) => m[1]);
   assert.deepEqual(dates, ["2026-06-02", "2026-05-29", "2026-05-27"]);
+});
+
+// ─── Freshness validator (PER-250) ───────────────────────────────────────────
+// Founder reported briefs surfacing months-old stories. SEARCH_SKILLS forbids
+// ordinary news older than ~30 days but only via the prompt; PER-247 confirmed
+// the backend accepted a stale item the model emitted anyway. enforceBriefFreshness
+// CODE-enforces the cutoff over the assembled brief just before it is saved.
+
+// A fixed "now" so the day-math is deterministic and offline.
+const NOW = new Date("2026-06-15T12:00:00Z");
+
+test("FRESHNESS_CUTOFF_DAYS is the ~30-day search rule", () => {
+  assert.equal(FRESHNESS_CUTOFF_DAYS, 30);
+});
+
+test("ordinary >30-day items are dropped, in-window items kept (acceptance #1)", () => {
+  // ai: a stale (>30d) item plus a fresh one; openai: two fresh items.
+  const brief = [
+    "# Your brief",
+    "",
+    "## ai",
+    "- `2026-06-10` — fresh model release.",
+    "  [example.com — Fresh](https://example.com/fresh)",
+    "- `2026-01-05` — months-old story the model snuck in.",
+    "  [example.com — Stale](https://example.com/stale)",
+    "",
+    "## openai",
+    "- `2026-06-12` — recent.",
+    "  [example.com — A](https://example.com/a)",
+    "- `2026-06-01` — also recent.",
+    "  [example.com — B](https://example.com/b)",
+    "",
+  ].join("\n");
+  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+  // The stale ai item and its citation are gone; the fresh ai item survives.
+  assert.ok(!out.includes("2026-01-05"), "stale dated bullet should be dropped");
+  assert.ok(!out.includes("https://example.com/stale"), "stale citation gone");
+  assert.ok(out.includes("2026-06-10"), "fresh ai item kept");
+  // openai had nothing stale ⇒ its section is preserved byte-identical.
+  assert.ok(out.includes("https://example.com/a") && out.includes("https://example.com/b"));
+  // ai stays "covered" (still has a fresh citation); openai stays "covered".
+  assert.deepEqual(computeCoverage(["ai", "openai"], out), [
+    { topic: "ai", status: "covered" },
+    { topic: "openai", status: "covered" },
+  ]);
+});
+
+test("evergreen/background interests keep older items (acceptance #2)", () => {
+  const brief = [
+    "# Your brief",
+    "",
+    "## history of computing",
+    "- `2019-03-01` — a deliberately old, evergreen piece.",
+    "  [example.com — Old](https://example.com/old)",
+    "",
+  ].join("\n");
+  // The interest doc explicitly opts into historical/background context.
+  assert.ok(
+    interestWantsEvergreen(
+      "history of computing",
+      "I want background and historical context on this topic.",
+    ),
+  );
+  const evergreenKeys = new Set([normalizeTopic("history of computing")]);
+  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys });
+  // Untouched: the old item and its citation remain.
+  assert.equal(out, brief);
+  assert.ok(out.includes("2019-03-01"));
+});
+
+test("legitimate 7–30 day 'older items' note path is preserved (acceptance #3)", () => {
+  // The model found nothing in the last week, widened to 30 days, and emitted the
+  // required note. Those items are inside the window, so none are dropped and the
+  // note survives verbatim.
+  const note = "_Nothing notable in the last week — showing older items._";
+  const brief = [
+    "# Your brief",
+    "",
+    "## climate policy",
+    note,
+    "- `2026-05-25` — 21 days old, within the 30-day window.",
+    "  [example.com — C](https://example.com/c)",
+    "- `2026-05-20` — 26 days old, still within the window.",
+    "  [example.com — D](https://example.com/d)",
+    "",
+  ].join("\n");
+  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+  assert.equal(out, brief, "in-window section untouched");
+  assert.ok(out.includes(note), "older-items note preserved");
+});
+
+test("per-topic no-news state recorded when everything drops (acceptance #4)", () => {
+  // Every item is stale AND the model had wrongly emitted the older-items note.
+  const brief = [
+    "# Your brief",
+    "",
+    "## crypto",
+    "_Nothing notable in the last week — showing older items._",
+    "- `2026-02-01` — stale.",
+    "  [example.com — S1](https://example.com/s1)",
+    "- `2026-01-15` — staler.",
+    "  [example.com — S2](https://example.com/s2)",
+    "",
+  ].join("\n");
+  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+  // No stale citations remain, the now-false note is gone, and the section is
+  // rewritten to an honest no-news marker.
+  assert.ok(!out.includes("https://example.com/s1"));
+  assert.ok(!out.includes("https://example.com/s2"));
+  assert.ok(!out.includes("showing older items"));
+  assert.ok(/_no fresh news_/.test(out));
+  // computeCoverage now reports the topic as an honest "empty", not "covered".
+  assert.deepEqual(computeCoverage(["crypto"], out), [
+    { topic: "crypto", status: "empty" },
+  ]);
+});
+
+test("undated items are kept regardless of the cutoff (PER-250 keeps undated as-is)", () => {
+  const brief = [
+    "# Your brief",
+    "",
+    "## ai",
+    "- `2026-06-10` — fresh.",
+    "  [example.com — F](https://example.com/f)",
+    "- `undated` — no determinable date.",
+    "  [example.com — U](https://example.com/u)",
+    "",
+  ].join("\n");
+  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+  assert.equal(out, brief, "nothing stale ⇒ section untouched, undated kept");
+});
+
+test("a clean brief comes back byte-identical (no stale items anywhere)", () => {
+  const brief = [
+    "# Your brief",
+    "",
+    "## ai",
+    "- `2026-06-14` — yesterday.",
+    "  [example.com — A](https://example.com/a)",
+    "",
+  ].join("\n");
+  assert.equal(
+    enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() }),
+    brief,
+  );
+});
+
+test("interestWantsEvergreen matches topic wording too, not just the doc", () => {
+  assert.ok(interestWantsEvergreen("WW2 history", ""));
+  assert.ok(interestWantsEvergreen("ai explainer", ""));
+  assert.ok(!interestWantsEvergreen("ai", "latest model releases this week"));
 });

@@ -45,6 +45,16 @@ HONEST COVERAGE (covered / nothing-new / didn't-come-back):
   re-researches just that one topic and splices it back in — the sections that
   already worked are preserved exactly, not regenerated.
 
+FRESHNESS ENFORCED, NOT JUST REQUESTED:
+- Ordinary news older than ~30 days is dropped from your brief in code before it's
+  saved — not merely discouraged in the research instructions — so a months-old
+  story can't slip through even if a research session surfaces one.
+- Interests that explicitly ask for background, evergreen, historical, or
+  explainer-style context are exempt: there Scout keeps the older material you
+  asked for on purpose.
+- If enforcing freshness empties a topic, it's shown honestly as "nothing fresh"
+  rather than padded with stale items.
+
 DATED, DEDUPED, SOURCED:
 - Every story carries its real publish date, a one-sentence summary of what
   happened, and a link to the strongest source — primary sources are preferred
