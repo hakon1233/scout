@@ -35,6 +35,9 @@ import {
   mergeBriefSections,
   extractTopicSection,
   assembleBrief,
+  enforceBriefFreshness,
+  interestWantsEvergreen,
+  normalizeTopic,
 } from "./coverage.js";
 import { ensureInterestDoc } from "./docs.js";
 
@@ -353,10 +356,24 @@ async function runSynthesis(
     // On a focused retry, splice the fresh sections into the prior brief so the
     // topics that already worked are preserved verbatim; otherwise the freshly
     // assembled markdown IS the whole brief.
-    const summary =
+    const merged =
       plan.baseMarkdown && plan.retryTopics
         ? mergeBriefSections(plan.baseMarkdown, patch, plan.retryTopics)
         : patch;
+    // Code-enforce the freshness cutoff before the brief is saved (PER-250): drop
+    // ordinary stories older than ~30 days that the model emitted in defiance of
+    // SEARCH_SKILLS. Topics whose intent doc explicitly asks for background /
+    // evergreen / historical context are exempt. Runs over the full assembled
+    // (and, on retry, merged) markdown so no stale section can slip through.
+    const evergreenKeys = new Set(
+      bases
+        .filter((b) => interestWantsEvergreen(b.topic, b.doc))
+        .map((b) => normalizeTopic(b.topic)),
+    );
+    const summary = enforceBriefFreshness(merged, {
+      now: new Date(),
+      evergreenKeys,
+    });
     brief = {
       id: briefId,
       generated_at: new Date().toISOString(),

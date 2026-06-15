@@ -167,6 +167,112 @@ export function sortSectionStoriesNewestFirst(body: string): string {
   return [...head, ...sorted.flatMap((b) => b.lines)].join("\n");
 }
 
+// ─── Freshness validator (PER-250) ──────────────────────────────────────────
+//
+// SEARCH_SKILLS forbids the model from emitting ordinary news older than ~30
+// days, but that rule is PROMPT-enforced only: if the model includes a stale
+// article anyway, assembly used to accept it as long as it had the right story
+// shape. PER-247 confirmed this is the genuine freshness defect the founder hit
+// (briefs surfacing months-old stories). This validator CODE-enforces the cutoff
+// deterministically over the assembled brief, just before it is saved, so
+// months-old ordinary news can no longer slip through.
+
+// Ordinary news older than this many days is dropped. "~30 days" in the search
+// rules; we treat strictly-older-than-30-days as stale.
+export const FRESHNESS_CUTOFF_DAYS = 30;
+
+// Words in an interest's topic or its intent doc that explicitly opt the topic
+// into background / evergreen / historical content. Such a topic is EXEMPT from
+// the freshness cutoff — the reader asked for older material on purpose.
+const EVERGREEN_RE =
+  /\b(evergreen|background|historical|history|retrospective|timeline|explainer|primer|deep[ -]dive|long[ -]read)\b/i;
+
+// Does this interest explicitly ask for background / evergreen / historical
+// context? Checked against BOTH the topic wording and its intent doc (PER-250).
+export function interestWantsEvergreen(topic: string, doc: string): boolean {
+  return EVERGREEN_RE.test(topic) || EVERGREEN_RE.test(doc);
+}
+
+// Drop ordinary stories older than `cutoffDays` from ONE section block's raw
+// markdown (its `## heading` line plus body). Undated stories are kept as-is
+// (we never had a date to judge them by — PER-250 keeps undated handling
+// unchanged). Stories with an unparseable date marker are also kept rather than
+// silently lost. When EVERY story in the section is dropped, the section body is
+// replaced with the `_no fresh news_` marker so computeCoverage reports the
+// topic as an honest "empty" (nothing fresh) state instead of leaving a dangling
+// intro line — and any "showing older items" note, now false, is removed with
+// it. Returns the block byte-identical when nothing is dropped.
+function filterStaleStoriesFromBlock(
+  raw: string,
+  nowMs: number,
+  cutoffDays: number,
+): string {
+  const endsNl = raw.endsWith("\n");
+  const lines = raw.split("\n");
+  const head: string[] = [];
+  type Story = { date: string | null; lines: string[] };
+  const stories: Story[] = [];
+  let cur: Story | null = null;
+  for (const line of lines) {
+    const m = STORY_BULLET_RE.exec(line);
+    if (m) {
+      cur = { date: m[1] === "undated" ? null : m[1], lines: [line] };
+      stories.push(cur);
+    } else if (cur) {
+      cur.lines.push(line);
+    } else {
+      head.push(line);
+    }
+  }
+  if (stories.length === 0) return raw; // no dated bullets to validate
+  const cutoffMs = nowMs - cutoffDays * 24 * 60 * 60 * 1000;
+  const kept = stories.filter((s) => {
+    if (s.date === null) return true; // undated kept as-is
+    const t = Date.parse(s.date); // ISO date → UTC midnight
+    if (!Number.isFinite(t)) return true; // unparseable → keep, don't lose content
+    return t >= cutoffMs; // within the window survives; strictly older drops
+  });
+  if (kept.length === stories.length) return raw; // nothing stale ⇒ byte-identical
+
+  // The heading line (`## topic`) is the first head line; preserve it exactly.
+  const headingLine = head.find((l) => /^##\s/.test(l)) ?? head[0] ?? "";
+  let out: string;
+  if (kept.length === 0) {
+    // Every item was stale — record an honest no-news section, dropping any now-
+    // false intro/"older items" note along with the stale bullets.
+    out = `${headingLine}\n_no fresh news_\n`;
+  } else {
+    out = [...head, ...kept.flatMap((s) => s.lines)].join("\n");
+  }
+  if (endsNl && !out.endsWith("\n")) out += "\n";
+  return out;
+}
+
+// Code-enforce the staleness cutoff across a whole assembled brief just before it
+// is saved (PER-250). Each `## topic` section is filtered independently: a topic
+// whose normalized key is in `evergreenKeys` is left untouched (it opted into
+// older content); every other section has its ordinary stories older than
+// `cutoffDays` dropped. The preamble (`# Your brief`) and section order are
+// preserved, and untouched sections come back byte-identical. Pure: `now` and the
+// evergreen set are passed in so it is fully unit-testable without a clock.
+export function enforceBriefFreshness(
+  markdown: string,
+  opts: { now: Date; evergreenKeys: Set<string>; cutoffDays?: number },
+): string {
+  const cutoffDays = opts.cutoffDays ?? FRESHNESS_CUTOFF_DAYS;
+  const nowMs = opts.now.getTime();
+  const { pre, blocks } = sectionBlocks(markdown);
+  const rebuilt = blocks.map((b) =>
+    opts.evergreenKeys.has(b.key)
+      ? b.raw
+      : filterStaleStoriesFromBlock(b.raw, nowMs, cutoffDays),
+  );
+  // sectionBlocks split losslessly (the `## ` delimiter stays at each block's
+  // start), so plain concatenation reproduces the document; filtered blocks keep
+  // their own trailing newline so headings stay line-anchored.
+  return pre + rebuilt.join("");
+}
+
 // Assemble per-interest sections into one brief (C2/PER-171). Each entry is a
 // requested interest's topic plus the section extractTopicSection produced for
 // it (or null when its session yielded nothing usable). Order follows the
