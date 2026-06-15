@@ -79,6 +79,9 @@ export default function AppPage() {
   const [todayStoryOpen, setTodayStoryOpen] = useState(false);
   const [historyStoryOpen, setHistoryStoryOpen] = useState(false);
   const storyOpen = todayStoryOpen || historyStoryOpen;
+  // PER-241: client-side interest filter. null = show all; string = show only
+  // articles whose `interest` field matches that topic. Never mutates settings.
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -378,8 +381,26 @@ export default function AppPage() {
 
   const showSkeleton = progress?.stage === "synthesizing";
 
+  // PER-241: derive a filtered brief for BriefLayout; leaves the stored brief
+  // untouched. When no filter is active we pass the brief as-is.
+  const filteredBrief =
+    brief && activeFilter
+      ? {
+          ...brief,
+          articles: brief.articles.filter(
+            (a) => a.interest === activeFilter,
+          ),
+        }
+      : brief;
+
   return (
-    <Shell onRunNow={runNow} running={running}>
+    <Shell
+      onRunNow={runNow}
+      running={running}
+      interests={settings.interests}
+      activeFilter={activeFilter}
+      onFilterChange={setActiveFilter}
+    >
       {/* PER-222: every banner/skeleton here is page chrome that sits around the
           feed. In single-story mode the founder wants ONLY the story, so the
           whole cluster collapses while a story is open. */}
@@ -467,17 +488,18 @@ export default function AppPage() {
         </>
       )}
 
-      {brief && !showSkeleton ? (
+      {filteredBrief && !showSkeleton ? (
         <>
           {/* PER-219 (AC1): the clean current edition — header reads exactly
               "Your brief — <date>", then straight into headlines.
               PER-222: BriefLayout reports when a story detail is open so the
               page can collapse to that single story.
               PER-223: when a HISTORY-pager story is open instead, collapse the
-              current edition away too so only the focused story remains. */}
+              current edition away too so only the focused story remains.
+              PER-241: filteredBrief has articles narrowed by activeFilter. */}
           {!historyStoryOpen && (
             <BriefLayout
-              brief={brief}
+              brief={filteredBrief}
               name=""
               onDetailOpenChange={setTodayStoryOpen}
             />
@@ -492,7 +514,7 @@ export default function AppPage() {
           {!todayStoryOpen && (
             <BriefHistory
               token={loadCompanionToken()}
-              currentBriefId={brief.id}
+              currentBriefId={filteredBrief.id}
               onManageInterests={goToInterests}
               onDetailOpenChange={setHistoryStoryOpen}
             />
@@ -518,19 +540,32 @@ export default function AppPage() {
 // PER-219 (AC3/AC4): the Scout wordmark (top-left logo slot) and the profile
 // menu both live in AppNav. The feed view threads its Run-now wiring through so
 // the action shows inside the profile menu; other states omit it.
+// PER-241: also threads interest filter props through to AppNav.
 function Shell({
   children,
   onRunNow,
   running,
+  interests,
+  activeFilter,
+  onFilterChange,
 }: {
   children: React.ReactNode;
   onRunNow?: () => void;
   running?: boolean;
+  interests?: import("@/lib/types").Interest[];
+  activeFilter?: string | null;
+  onFilterChange?: (topic: string | null) => void;
 }) {
   return (
     <main className="min-h-screen bg-page px-4 py-8 text-primary sm:px-6 sm:py-12">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-        <AppNav onRunNow={onRunNow} running={running} />
+        <AppNav
+          onRunNow={onRunNow}
+          running={running}
+          interests={interests}
+          activeFilter={activeFilter}
+          onFilterChange={onFilterChange}
+        />
         {children}
       </div>
     </main>

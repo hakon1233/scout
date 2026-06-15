@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import type { Interest } from "@/lib/types";
 
 // Shared top nav for every `/app/*` route. Left: the Scout wordmark (logo slot +
 // home link). Right: the profile menu, which owns theme controls, a Run-now
@@ -18,14 +19,31 @@ export function AppNav({
   // simply doesn't show the action.
   onRunNow,
   running = false,
+  // PER-241: feed filter by interest/topic. Only shown when interests are
+  // provided. Filtering is read-only and client-side; never mutates saved state.
+  interests,
+  activeFilter,
+  onFilterChange,
 }: {
   onRunNow?: () => void;
   running?: boolean;
+  interests?: Interest[];
+  activeFilter?: string | null;
+  onFilterChange?: (topic: string | null) => void;
 } = {}) {
   return (
     <nav className="flex items-center justify-between">
       <ScoutWordmark />
-      <ProfileMenu onRunNow={onRunNow} running={running} />
+      <div className="flex items-center gap-2">
+        {interests && interests.length > 0 && onFilterChange && (
+          <FeedFilter
+            interests={interests}
+            activeFilter={activeFilter ?? null}
+            onFilterChange={onFilterChange}
+          />
+        )}
+        <ProfileMenu onRunNow={onRunNow} running={running} />
+      </div>
     </nav>
   );
 }
@@ -76,6 +94,132 @@ function TrailMonogram() {
         strokeLinecap="round"
       />
       <circle cx="43" cy="23" r="4.5" fill="#9a3b2e" />
+    </svg>
+  );
+}
+
+// PER-241: funnel-icon filter button + dropdown. Reads interests; never writes.
+function FeedFilter({
+  interests,
+  activeFilter,
+  onFilterChange,
+}: {
+  interests: Interest[];
+  activeFilter: string | null;
+  onFilterChange: (topic: string | null) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const isFiltered = activeFilter !== null;
+
+  React.useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  function select(topic: string | null) {
+    onFilterChange(topic);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        aria-label={isFiltered ? `Filtering by ${activeFilter}` : "Filter feed"}
+        title={isFiltered ? `Filtering by ${activeFilter}` : "Filter feed"}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={[
+          ICON_CLASSES,
+          isFiltered
+            ? "border-[#9a3b2e] bg-[#efe9dd] text-[#9a3b2e] hover:bg-[#efe9dd] hover:text-[#9a3b2e]"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <FunnelIcon active={isFiltered} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label="Filter feed by topic"
+          className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-[#d8d0c1] bg-[#f6f2ea] p-2 shadow-lg"
+        >
+          <p className="mb-2 px-2 font-mono text-caption uppercase tracking-[0.06em] text-[#6f685d]">
+            Filter by topic
+          </p>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => select(null)}
+            className={[
+              "mb-1 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9a3b2e] focus-visible:ring-offset-1 focus-visible:ring-offset-[#f6f2ea]",
+              activeFilter === null
+                ? "bg-[#9a3b2e] text-[#f6f2ea]"
+                : "text-[#1c1a17] hover:bg-[#efe9dd]",
+            ].join(" ")}
+          >
+            <span>All topics</span>
+            {activeFilter === null && <span aria-hidden="true">✓</span>}
+          </button>
+          {interests.map((interest) => (
+            <button
+              key={interest.id}
+              type="button"
+              role="menuitem"
+              onClick={() => select(interest.topic)}
+              className={[
+                "mb-1 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9a3b2e] focus-visible:ring-offset-1 focus-visible:ring-offset-[#f6f2ea] last:mb-0",
+                activeFilter === interest.topic
+                  ? "bg-[#9a3b2e] text-[#f6f2ea]"
+                  : "text-[#1c1a17] hover:bg-[#efe9dd]",
+              ].join(" ")}
+            >
+              <span className="truncate">{interest.topic}</span>
+              {activeFilter === interest.topic && (
+                <span aria-hidden="true">✓</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FunnelIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-5"
+      fill={active ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
     </svg>
   );
 }
