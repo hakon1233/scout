@@ -49,11 +49,14 @@ function emit() {
     // Body carries inline markdown (**bold** + `code`) on purpose: real briefs
     // use both heavily, and PER-236 asserts the detail view renders them as
     // real <strong>/<code> elements instead of literal asterisks/backticks.
-    "  > The lab reported a **measurable drop** in deceptive behavior under its",
-    "  > new training regime, and published the `eval-harness` alongside.",
+    "  > The lab reported a **measurable drop** in deceptive behavior under its new training regime, and published the `eval-harness` alongside.",
     "  >",
     "  > Independent researchers called the methodology promising but said the",
     "  > results need replication on larger models before they generalize.",
+    "  >",
+    "  > The useful signal is not only the score change; it is that the team exposed",
+    "  > enough setup detail for outside labs to compare prompts, failure modes, and",
+    "  > training data assumptions instead of taking the headline claim at face value.",
     "",
     "## Markets",
     "- Indices closed higher on fresh inflation data.",

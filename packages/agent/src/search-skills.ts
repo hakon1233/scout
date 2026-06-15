@@ -23,9 +23,10 @@
 // The optional IN-DEPTH BODY (an indented `> …` blockquote under the citation/
 // image) is the third part of that contract (PER-214): the parser reads those
 // blockquote lines into Article.body — the few concise paragraphs the detail
-// view renders on click. It must be plain prose (no links/images) so it never
-// collides with the citation or source-image parse, and the feed bullet's
-// one-sentence summary stays the SHORT card blurb.
+// view renders on click. Its first paragraph is the bold lead summary; later
+// paragraphs carry deeper insight. It must be plain prose (no links/images) so
+// it never collides with the citation or source-image parse, and the feed
+// bullet's one-sentence summary stays the SHORT card blurb.
 
 export const STORY_DATE_RE = /`(\d{4}-\d{2}-\d{2}|undated)`/;
 
@@ -78,24 +79,31 @@ SOURCE IMAGE (one per item, OPTIONAL, handpicked from the source — never inven
 - One image per story maximum. Prefer a wide/landscape editorial lead image; skip
   sprites, avatars, share-button icons, and sub-200px thumbnails.
 
-IN-DEPTH BODY (one per item, render contract for the click-through detail — PER-214):
+IN-DEPTH BODY (one per item, render contract for the click-through detail — PER-214/PER-256):
 - The one-sentence summary on the bullet line is the SHORT feed blurb. In ADDITION,
-  give each story a few short paragraphs of depth — what happened, why it matters,
-  the key specifics — that the reader sees only after clicking into that story.
-- Aim for ~2–4 SHORT paragraphs. Concise but genuinely informative — not a wall of
-  text, and not a rehash of the one-line blurb. If a story honestly has little to
-  say, a shorter body (or none) is fine — NEVER pad, invent, or speculate to hit a
-  length. Stay grounded in the SAME sources you already read; add no new claims you
-  can't back from them.
+  give each story a multi-paragraph detail body that the reader sees only after
+  clicking into that story.
+- The FIRST paragraph must be a short lead summary: 1-2 sentences that quickly
+  state what happened and why the reader should care. The UI renders this first
+  paragraph in bold, so write it as the crisp lead, not as background.
+- Follow-on paragraphs must be deeper insight/analysis: concrete specifics,
+  implications, context, what changed, what remains uncertain, and why it matters
+  for this interest. Aim for 2-4 additional short paragraphs. Concise but
+  genuinely informative — not a wall of text, and not a rehash of the bullet.
+  If a story honestly has little to say, a shorter body (or none) is fine —
+  NEVER pad, invent, or speculate to hit a length. Stay grounded in the SAME
+  sources you already read; add no new claims you can't back from them.
 - Emit it as an INDENTED markdown blockquote on the lines AFTER the citation (and
   the optional source-image line), each paragraph a \`> \` line, paragraphs
   separated by a bare \`>\` line:
   - \`YYYY-MM-DD\` — one-sentence summary of what happened.
     [domain — Title](url)
     ![source image](https://image-url-from-the-source)
-    > First paragraph: what happened, in a few concise sentences.
+    > First paragraph: 1-2 sentence lead summary.
     >
-    > Second paragraph: why it matters and the key specifics.
+    > Second paragraph: deeper insight, implications, and key specifics.
+    >
+    > Third paragraph: useful context, tradeoffs, or what to watch next.
 - The blockquote is the ONLY place depth goes — keep the bullet's summary to one
   sentence so the feed card stays short. Do not put links or images inside the
   blockquote; keep it plain prose.

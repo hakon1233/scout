@@ -93,6 +93,16 @@ test("the prompt scopes the session to the single topic and its output section",
   assert.match(prompt, /_no fresh news_/);
 });
 
+test("the prompt asks for a bold lead paragraph followed by deeper detail", () => {
+  const prompt = buildResearchPrompt({ topic: "ai", doc: "track ai" });
+
+  assert.match(prompt, /FIRST paragraph/i);
+  assert.match(prompt, /1[-–]2 sentences/i);
+  assert.match(prompt, /bold/i);
+  assert.match(prompt, /follow[- ]on paragraphs/i);
+  assert.match(prompt, /insight|analysis|implication/i);
+});
+
 // A `claude` stub that NEVER closes — models a hung session (model stall /
 // network wedge / a rate-limit retry that never returns). Records whether the
 // timeout path killed it. This is the PER-181 regression: before the per-session
