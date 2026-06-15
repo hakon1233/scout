@@ -109,3 +109,37 @@ test("feed filter keeps the established light theme colors", async ({
   await expect(activeFilter).toHaveCSS("border-color", "rgb(154, 59, 46)");
   await expect(activeFilter).toHaveCSS("color", "rgb(154, 59, 46)");
 });
+
+test("feed filter topic labels use available dropdown space before ellipsis", async ({
+  page,
+}) => {
+  await blockNonLoopback(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  const topic = "International energy storage policy";
+
+  await page.addInitScript((seedTopic) => {
+    window.localStorage.setItem("scout.theme", "light");
+    window.localStorage.setItem(
+      "scout.settings.v1",
+      JSON.stringify({
+        name: "Layout Tester",
+        interests: [{ id: "int_energy_storage", topic: seedTopic }],
+      }),
+    );
+  }, topic);
+
+  await page.goto(`${ORIGIN}/app/`);
+  await page.getByRole("button", { name: "Filter feed" }).click();
+
+  const menu = page.getByRole("menu", { name: "Filter feed by topic" });
+  const label = menu.getByRole("menuitem", { name: topic }).locator("span");
+
+  await expect(label).toBeVisible();
+
+  const metrics = await label.evaluate((node) => ({
+    clientWidth: node.clientWidth,
+    scrollWidth: node.scrollWidth,
+  }));
+  expect(metrics.clientWidth).toBeGreaterThanOrEqual(metrics.scrollWidth);
+});
