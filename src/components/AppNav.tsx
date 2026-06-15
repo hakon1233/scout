@@ -139,7 +139,7 @@ function FeedFilter({
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative shrink-0">
       <button
         type="button"
         aria-label={isFiltered ? `Filtering by ${activeFilter}` : "Filter feed"}
@@ -163,7 +163,7 @@ function FeedFilter({
         <div
           role="menu"
           aria-label="Filter feed by topic"
-          className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-border-default bg-page p-2 shadow-lg"
+          className="absolute right-0 z-50 mt-2 w-[min(calc(100vw-2rem),24rem)] max-w-[calc(100vw-2rem)] rounded-lg border border-border-default bg-page p-2 shadow-lg"
         >
           <p className="mb-2 px-2 font-mono text-caption uppercase tracking-[0.06em] text-muted">
             Filter by topic
@@ -173,14 +173,20 @@ function FeedFilter({
             role="menuitem"
             onClick={() => select(null)}
             className={[
-              "mb-1 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page",
+              "mb-1 flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page",
               activeFilter === null
                 ? "bg-signal text-page dark:bg-accent dark:text-accent-fg"
                 : "text-primary hover:bg-surface-muted",
             ].join(" ")}
           >
-            <span>All topics</span>
-            {activeFilter === null && <span aria-hidden="true">✓</span>}
+            <span className="min-w-0 flex-1 text-left truncate">
+              All topics
+            </span>
+            {activeFilter === null && (
+              <span className="shrink-0" aria-hidden="true">
+                ✓
+              </span>
+            )}
           </button>
           {interests.map((interest) => (
             <button
@@ -189,15 +195,19 @@ function FeedFilter({
               role="menuitem"
               onClick={() => select(interest.topic)}
               className={[
-                "mb-1 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page last:mb-0",
+                "mb-1 flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page last:mb-0",
                 activeFilter === interest.topic
                   ? "bg-signal text-page dark:bg-accent dark:text-accent-fg"
                   : "text-primary hover:bg-surface-muted",
               ].join(" ")}
             >
-              <span className="truncate">{interest.topic}</span>
+              <span className="min-w-0 flex-1 text-left truncate">
+                {interest.topic}
+              </span>
               {activeFilter === interest.topic && (
-                <span aria-hidden="true">✓</span>
+                <span className="shrink-0" aria-hidden="true">
+                  ✓
+                </span>
               )}
             </button>
           ))}
