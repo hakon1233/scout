@@ -44,6 +44,7 @@ export function AppNav({
             onFilterChange={onFilterChange}
           />
         )}
+        <LikedNavLink />
         <ProfileMenu
           onRunNow={onRunNow}
           onWeeklyBrief={onWeeklyBrief}
@@ -101,6 +102,35 @@ function TrailMonogram() {
       />
       <circle cx="43" cy="23" r="4.5" fill="#9a3b2e" />
     </svg>
+  );
+}
+
+// PER-249: top-bar entry point to the Liked feed (CEO-locked: the heart in the
+// top bar opens the saved-stories view, NOT the profile menu). A plain Link to
+// the real `/app/liked/` export route — present on every /app/* screen so saved
+// stories are always one tap away. The per-story heart toggles like state; this
+// one navigates.
+function LikedNavLink() {
+  return (
+    <Link
+      href="/app/liked/"
+      aria-label="Liked stories"
+      title="Liked stories"
+      className={ICON_CLASSES}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="size-5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M12 20.25l-7.1-7.02a4.5 4.5 0 0 1 6.36-6.36L12 7.6l.74-.73a4.5 4.5 0 1 1 6.36 6.36L12 20.25z" />
+      </svg>
+    </Link>
   );
 }
 
