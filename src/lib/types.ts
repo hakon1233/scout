@@ -49,6 +49,7 @@ export type TopicBasis = { topic: string; doc: string };
 export type Brief = {
   id: string;
   generatedAt: string;
+  kind?: "daily" | "weekly";
   interests: string[];
   articles: Article[];
   markdown: string;

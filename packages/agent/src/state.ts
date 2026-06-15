@@ -28,6 +28,9 @@ export type Brief = {
   id: string;
   generated_at: string;
   status: "pending" | "ready" | "failed";
+  // Distinguishes normal per-run editions from weekly digests. Older persisted
+  // briefs have no kind and are treated as daily by callers.
+  kind?: "daily" | "weekly";
   summary_md?: string;
   error_msg?: string;
   // Per-topic coverage, computed by the companion over the FULL interest list

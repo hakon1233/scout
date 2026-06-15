@@ -144,14 +144,25 @@ export async function startRun(
   // A live run in THIS process always blocks (in-memory guard, set synchronously
   // before the pending slot is persisted — closes the loadState→saveState gap).
   if (runInFlight) {
-    return { started: false, reason: "in_flight", briefId: state.last_brief?.id };
+    return {
+      started: false,
+      reason: "in_flight",
+      briefId: state.last_brief?.id,
+    };
   }
   // A persisted `pending` blocks a new run too — UNLESS it's stale, meaning the
   // process that wrote it died mid-run (PER-181). A stale pending is reclaimed:
   // we fall through and overwrite it with a fresh run rather than wedging
   // forever on a brief no live process will ever finish.
-  if (state.last_brief?.status === "pending" && !isStalePending(state.last_brief, Date.now())) {
-    return { started: false, reason: "in_flight", briefId: state.last_brief?.id };
+  if (
+    state.last_brief?.status === "pending" &&
+    !isStalePending(state.last_brief, Date.now())
+  ) {
+    return {
+      started: false,
+      reason: "in_flight",
+      briefId: state.last_brief?.id,
+    };
   }
   if (interests.length === 0) {
     return { started: false, reason: "no_interests" };
@@ -168,7 +179,9 @@ export async function startRun(
   // then map them back to the rich interests so each retried session still
   // carries its own intent doc.
   const baseMarkdown = state.last_brief?.summary_md;
-  const retryTopics = (opts.retryTopics ?? []).filter((t) => topics.includes(t));
+  const retryTopics = (opts.retryTopics ?? []).filter((t) =>
+    topics.includes(t),
+  );
   const isRetry = retryTopics.length > 0;
   if (isRetry && !baseMarkdown) {
     return { started: false, reason: "no_base_brief" };
@@ -208,6 +221,7 @@ export async function startRun(
     id: briefId,
     generated_at: new Date().toISOString(),
     status: "pending",
+    kind: "daily",
   };
   // Persist interests alongside the pending slot so a later scheduled fire has
   // something to research even with no browser attached. An EPHEMERAL run (PER-218)
@@ -282,7 +296,11 @@ async function runSynthesis(
     let anyOk = false;
     for (const interest of plan.researchInterests) {
       try {
-        const doc = await ensureInterestDoc(interest.id, interest.topic, interestsDir);
+        const doc = await ensureInterestDoc(
+          interest.id,
+          interest.topic,
+          interestsDir,
+        );
         basisByTopic.set(interest.topic, doc);
         const sessionMd = await researchAndSynthesize(
           { topic: interest.topic, doc },
@@ -311,7 +329,11 @@ async function runSynthesis(
       let doc = basisByTopic.get(interest.topic);
       if (doc === undefined) {
         try {
-          doc = await ensureInterestDoc(interest.id, interest.topic, interestsDir);
+          doc = await ensureInterestDoc(
+            interest.id,
+            interest.topic,
+            interestsDir,
+          );
         } catch {
           continue;
         }
@@ -339,6 +361,7 @@ async function runSynthesis(
       id: briefId,
       generated_at: new Date().toISOString(),
       status: "ready",
+      kind: "daily",
       summary_md: summary,
       topics: computeCoverage(interestTopics(plan.coverageInterests), summary),
       bases,
@@ -348,6 +371,7 @@ async function runSynthesis(
       id: briefId,
       generated_at: new Date().toISOString(),
       status: "failed",
+      kind: "daily",
       error_msg: String(err),
     };
   }

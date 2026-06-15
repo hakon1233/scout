@@ -16,6 +16,7 @@ import {
   bootstrapCompanionToken,
   fetchCompanionInterests,
   fetchLatestBrief,
+  generateWeeklyBrief,
   loadCompanionToken,
   pingCompanion,
   refreshBriefViaCompanion,
@@ -339,6 +340,42 @@ export default function AppPage() {
     void generate();
   }, [generate]);
 
+  const runWeekly = useCallback(async () => {
+    const token = loadCompanionToken();
+    if (!token) {
+      setError(
+        classifyError(
+          new Error(
+            "Scout companion isn't paired yet. Start `scout-agent run` and open the app it prints, or visit /app/connect to pair.",
+          ),
+        ),
+      );
+      return;
+    }
+    setRunning(true);
+    setError(null);
+    setCancelled(false);
+    setRanAt(null);
+    setProgress({
+      stage: "synthesizing",
+      message:
+        "Scout is assembling your weekly brief from the last seven days…",
+      perInterest: [],
+    });
+    try {
+      const next = await generateWeeklyBrief(token);
+      saveLastBrief(next);
+      setBrief(next);
+      setProgress(null);
+      setRanAt(next.generatedAt);
+    } catch (e) {
+      setError(classifyError(e));
+      setProgress(null);
+    } finally {
+      setRunning(false);
+    }
+  }, []);
+
   const cancel = useCallback(() => {
     abortRef.current?.abort();
   }, []);
@@ -387,15 +424,14 @@ export default function AppPage() {
     brief && activeFilter
       ? {
           ...brief,
-          articles: brief.articles.filter(
-            (a) => a.interest === activeFilter,
-          ),
+          articles: brief.articles.filter((a) => a.interest === activeFilter),
         }
       : brief;
 
   return (
     <Shell
       onRunNow={runNow}
+      onWeeklyBrief={() => void runWeekly()}
       running={running}
       interests={settings.interests}
       activeFilter={activeFilter}
@@ -406,85 +442,93 @@ export default function AppPage() {
           whole cluster collapses while a story is open. */}
       {!storyOpen && (
         <>
-      {!companionReady && (
-        <Banner tone="info">
-          <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              Scout builds your brief with its local companion. Start{" "}
-              <code className="font-mono text-mono-xs">scout-agent run</code>{" "}
-              and open the app link it prints.
-            </span>
-            <Link
-              href="/app/connect"
-              className="shrink-0 text-caption uppercase text-muted underline transition hover:text-primary"
-            >
-              Pair companion →
-            </Link>
-          </span>
-        </Banner>
-      )}
+          {!companionReady && (
+            <Banner tone="info">
+              <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Scout builds your brief with its local companion. Start{" "}
+                  <code className="font-mono text-mono-xs">
+                    scout-agent run
+                  </code>{" "}
+                  and open the app link it prints.
+                </span>
+                <Link
+                  href="/app/connect"
+                  className="shrink-0 text-caption uppercase text-muted underline transition hover:text-primary"
+                >
+                  Pair companion →
+                </Link>
+              </span>
+            </Banner>
+          )}
 
-      {/* PER-150: explicit success state for an on-demand run — a fresh brief
+          {/* PER-150: explicit success state for an on-demand run — a fresh brief
           actually landed, not a silent swap. Suppressed while another run
           starts or an error is showing. */}
-      {ranAt && !running && !error && (
-        <Banner tone="success" aria-live="polite">
-          Fresh brief delivered ·{" "}
-          {new Date(ranAt).toLocaleTimeString(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </Banner>
-      )}
+          {ranAt && !running && !error && (
+            <Banner tone="success" aria-live="polite">
+              Fresh brief delivered ·{" "}
+              {new Date(ranAt).toLocaleTimeString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </Banner>
+          )}
 
-      {progress && <AgentProgressPanel progress={progress} onCancel={cancel} />}
+          {progress && (
+            <AgentProgressPanel progress={progress} onCancel={cancel} />
+          )}
 
-      {showSkeleton && <BriefSkeleton />}
+          {showSkeleton && <BriefSkeleton />}
 
-      {cancelled && !running && <Banner tone="info">Cancelled.</Banner>}
+          {cancelled && !running && <Banner tone="info">Cancelled.</Banner>}
 
-      {error && <ErrorBanner error={error} onRetry={runNow} />}
+          {error && <ErrorBanner error={error} onRetry={runNow} />}
 
-      {/* PER-154: distinguish two honest states. "Missing" = the model dropped
+          {/* PER-154: distinguish two honest states. "Missing" = the model dropped
           the section → warning + a Retry that re-researches ONLY those topics.
           "Empty" = a section came back with no fresh news today → info, not an
           error, no Retry (re-running won't conjure news that doesn't exist). */}
-      {brief &&
-        !running &&
-        (() => {
-          const { missing, empty } = coverageBuckets(brief);
-          return (
-            <>
-              {missing.length > 0 && (
-                <Banner tone="warning">
-                  <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <span>
-                      Some topics didn&apos;t come back:{" "}
-                      <span className="font-medium">{missing.join(", ")}</span>.
-                    </span>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={retryMissingTopics}
-                    >
-                      Retry{" "}
-                      {missing.length === 1
-                        ? "topic"
-                        : `${missing.length} topics`}
-                    </Button>
-                  </span>
-                </Banner>
-              )}
-              {empty.length > 0 && (
-                <Banner tone="info" aria-live="polite">
-                  No fresh news today for{" "}
-                  <span className="font-medium">{empty.join(", ")}</span>. We
-                  checked — there just wasn&apos;t anything new worth flagging.
-                </Banner>
-              )}
-            </>
-          );
-        })()}
+          {brief &&
+            !running &&
+            (() => {
+              const { missing, empty } = coverageBuckets(brief);
+              return (
+                <>
+                  {missing.length > 0 && (
+                    <Banner tone="warning">
+                      <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                          Some topics didn&apos;t come back:{" "}
+                          <span className="font-medium">
+                            {missing.join(", ")}
+                          </span>
+                          .
+                        </span>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={retryMissingTopics}
+                        >
+                          Retry{" "}
+                          {missing.length === 1
+                            ? "topic"
+                            : `${missing.length} topics`}
+                        </Button>
+                      </span>
+                    </Banner>
+                  )}
+                  {empty.length > 0 && (
+                    <Banner tone="info" aria-live="polite">
+                      No fresh news today for{" "}
+                      <span className="font-medium">{empty.join(", ")}</span>.
+                      We checked — there just wasn&apos;t anything new worth
+                      flagging.
+                    </Banner>
+                  )}
+                </>
+              );
+            })()}
         </>
       )}
 
@@ -544,6 +588,7 @@ export default function AppPage() {
 function Shell({
   children,
   onRunNow,
+  onWeeklyBrief,
   running,
   interests,
   activeFilter,
@@ -551,6 +596,7 @@ function Shell({
 }: {
   children: React.ReactNode;
   onRunNow?: () => void;
+  onWeeklyBrief?: () => void;
   running?: boolean;
   interests?: import("@/lib/types").Interest[];
   activeFilter?: string | null;
@@ -561,6 +607,7 @@ function Shell({
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <AppNav
           onRunNow={onRunNow}
+          onWeeklyBrief={onWeeklyBrief}
           running={running}
           interests={interests}
           activeFilter={activeFilter}

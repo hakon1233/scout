@@ -17,7 +17,12 @@ type Props = {
   onDetailOpenChange?: (open: boolean) => void;
 };
 
-export function BriefLayout({ brief, name, heading, onDetailOpenChange }: Props) {
+export function BriefLayout({
+  brief,
+  name,
+  heading,
+  onDetailOpenChange,
+}: Props) {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const handleDetailOpenChange = React.useCallback(
     (open: boolean) => {
@@ -38,7 +43,8 @@ export function BriefLayout({ brief, name, heading, onDetailOpenChange }: Props)
   // right when there's actually a name to own it.
   const trimmedName = name.trim();
   const ownerLabel = trimmedName ? `${trimmedName}'s brief` : "Your brief";
-  const title = heading ?? ownerLabel;
+  const title =
+    heading ?? (brief.kind === "weekly" ? "Weekly brief" : ownerLabel);
 
   // PER-219: a deliberately bare header — title + date and NOTHING else. The
   // old "Generated … · time" caption and the "Searched N topics · X articles"
@@ -48,7 +54,10 @@ export function BriefLayout({ brief, name, heading, onDetailOpenChange }: Props)
   // the top-right profile menu, and Manage interests lives in the history pager
   // at the bottom of the feed.
   return (
-    <article aria-label={`${title} — ${dateLabel}`} className="flex flex-col gap-6">
+    <article
+      aria-label={`${title} — ${dateLabel}`}
+      className="flex flex-col gap-6"
+    >
       {/* PER-222: in single-story mode the brief header is part of "the feed"
           the founder doesn't want to see — the detail carries its own headline
           and meta. Hide it so only the story remains. */}
