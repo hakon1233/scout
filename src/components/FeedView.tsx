@@ -4,6 +4,8 @@ import * as React from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import type { Article, Brief } from "@/lib/types";
+import { canonicalUrl, type LikeInput } from "@/lib/likes";
+import { LikeButton } from "@/components/LikeButton";
 
 // News-feed presentation of a brief (PER-211). Replaces the sectioned-markdown
 // BriefView as the default home view: each story is a card with a headline, one
@@ -130,44 +132,70 @@ export function FeedView({
   );
 }
 
+// Map a feed item to the display snapshot we persist when it's liked.
+function likeInputFor(item: FeedItem): LikeInput {
+  return {
+    url: item.url,
+    headline: item.headline,
+    blurb: item.blurb,
+    source: item.source,
+    topic: item.topic,
+    imageUrl: item.imageUrl,
+    publishedAt: item.publishedAt,
+  };
+}
+
 function FeedCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
+  // The card is a relative wrapper holding TWO siblings: a full-area open button
+  // and the like button overlaid top-right. They're siblings (not nested) because
+  // a <button> inside a <button> is invalid HTML — the heart must never be a child
+  // of the open button. The wrapper carries the card's border/bg/hover so both
+  // controls share one visual frame.
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group flex h-full flex-col overflow-hidden rounded-md border border-border-default bg-surface text-left transition hover:border-border-strong hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
-    >
-      {item.imageUrl && (
-        <FeedImage
-          src={item.imageUrl}
-          className="aspect-[16/9] w-full object-cover"
-        />
-      )}
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption uppercase tracking-wide text-muted">
-          <span className="font-medium text-signal">{item.topic}</span>
-          {item.publishedAt && (
-            <span className="tabular-nums">· {formatDate(item.publishedAt)}</span>
-          )}
-        </div>
-        <h3 className="font-serif text-title-3 leading-snug text-primary line-clamp-3">
-          {item.headline}
-        </h3>
-        {item.blurb && (
-          <p className="font-reading text-body-sm text-secondary line-clamp-2">
-            {item.blurb}
-          </p>
+    <div className="group relative flex h-full flex-col overflow-hidden rounded-md border border-border-default bg-surface transition focus-within:ring-2 focus-within:ring-focus-ring hover:border-border-strong hover:bg-surface-muted">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex h-full flex-col text-left focus:outline-none"
+      >
+        {item.imageUrl && (
+          <FeedImage
+            src={item.imageUrl}
+            className="aspect-[16/9] w-full object-cover"
+          />
         )}
-        <span className="mt-auto pt-1 text-caption text-muted">{item.source}</span>
-      </div>
-    </button>
+        <div className="flex flex-1 flex-col gap-2 p-4">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption uppercase tracking-wide text-muted">
+            <span className="font-medium text-signal">{item.topic}</span>
+            {item.publishedAt && (
+              <span className="tabular-nums">
+                · {formatDate(item.publishedAt)}
+              </span>
+            )}
+          </div>
+          <h3 className="font-serif text-title-3 leading-snug text-primary line-clamp-3">
+            {item.headline}
+          </h3>
+          {item.blurb && (
+            <p className="font-reading text-body-sm text-secondary line-clamp-2">
+              {item.blurb}
+            </p>
+          )}
+          {/* pr keeps the source clear of the absolutely-positioned heart */}
+          <span className="mt-auto pr-11 pt-1 text-caption text-muted">
+            {item.source}
+          </span>
+        </div>
+      </button>
+      <LikeButton story={likeInputFor(item)} className="absolute right-2 top-2" />
+    </div>
   );
 }
 
 function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
   return (
     <article className="flex flex-col gap-5">
-      <div>
+      <div className="flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={onBack}
@@ -175,6 +203,7 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
         >
           ← Back to feed
         </button>
+        <LikeButton story={likeInputFor(item)} />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -299,7 +328,7 @@ function FeedBody({ markdown }: { markdown: string }) {
 // Source images are external (and best-effort handpicked by the model). On any
 // load error — paywall, hotlink block, 404, blocked URL — drop the image so the
 // card/detail degrade to clean text rather than showing a broken-image icon.
-function FeedImage({ src, className }: { src: string; className: string }) {
+export function FeedImage({ src, className }: { src: string; className: string }) {
   const [failed, setFailed] = React.useState(false);
   if (failed) return null;
   // Remote, unknown-host source images — next/image needs preconfigured domains
@@ -386,24 +415,14 @@ function hostname(url: string): string {
   }
 }
 
-function faviconFor(host: string): string {
+export function faviconFor(host: string): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`;
 }
 
-function canonicalUrl(u: string): string {
-  try {
-    const url = new URL(u);
-    url.hash = "";
-    url.search = "";
-    let s = url.toString();
-    if (s.endsWith("/")) s = s.slice(0, -1);
-    return s;
-  } catch {
-    return u;
-  }
-}
+// canonicalUrl now lives in `@/lib/likes` (the like key and the feed dedupe must
+// use the SAME canonicalisation), and is imported above.
 
-function formatDate(iso: string): string {
+export function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, {
