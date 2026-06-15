@@ -264,7 +264,7 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
 // and quotes are styled too so future bodies degrade gracefully.
 const BODY_MD = {
   p: ({ children }: { children?: React.ReactNode }) => (
-    <p className="font-reading text-body leading-relaxed text-secondary">
+    <p className="font-reading text-body leading-relaxed text-muted">
       {children}
     </p>
   ),
@@ -317,7 +317,7 @@ const BODY_MD = {
 
 function FeedBody({ markdown }: { markdown: string }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 [&>p:first-child]:font-semibold [&>p:first-child]:text-primary">
       <ReactMarkdown rehypePlugins={[rehypeSanitize]} components={BODY_MD}>
         {markdown}
       </ReactMarkdown>

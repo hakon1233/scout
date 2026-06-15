@@ -40,6 +40,7 @@ async function blockNonLoopback(page: import("@playwright/test").Page) {
 test("zero-prompt first run: no paste, brief renders with citations, no preamble leak", async ({
   page,
 }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await blockNonLoopback(page);
 
   // Seed the interest set before the app boots. The in-page keyword setup form
@@ -55,6 +56,7 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
         interests: [{ id: "int_0_aisafety", topic: "AI safety" }],
       }),
     );
+    window.localStorage.setItem("scout.theme", "light");
   });
 
   // Loaded straight from the companion's own origin.
@@ -117,6 +119,28 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
     "need replication on larger models",
   );
 
+  // PER-256: the click-through body leads with a short bold summary paragraph,
+  // followed by normal-weight deeper paragraphs.
+  const leadParagraph = page.locator("article p", {
+    hasText: "The lab reported a measurable drop",
+  });
+  await expect(leadParagraph).toHaveCSS("font-weight", /^(600|700)$/);
+  const deeperParagraph = page.locator("article p", {
+    hasText: "The useful signal is not only the score change",
+  });
+  await expect(deeperParagraph).toBeVisible();
+  await expect(deeperParagraph).toHaveCSS("font-weight", "400");
+  await expect(deeperParagraph).toHaveCSS("color", "rgb(111, 104, 93)");
+  await expect(page.locator("body")).not.toContainText("#8a7f6e");
+
+  // PER-256 layout guard: the richer detail body must not introduce horizontal
+  // overflow on the requested desktop and mobile widths, in light or dark mode.
+  await expectNoHorizontalOverflow(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  await expectNoHorizontalOverflow(page);
+
   // PER-236 fix 1: the body's inline markdown renders as REAL elements — the
   // stub's `**measurable drop**` becomes a <strong>, its backticked
   // `eval-harness` becomes a <code> chip — and no literal asterisks/backticks
@@ -143,6 +167,13 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
     contentType: "image/png",
   });
 });
+
+async function expectNoHorizontalOverflow(page: import("@playwright/test").Page) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+}
 
 test("/v0/config is same-origin guarded: 200 same-origin, 403 cross-origin", async ({
   request,
