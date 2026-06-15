@@ -150,7 +150,7 @@ function FeedFilter({
         className={[
           ICON_CLASSES,
           isFiltered
-            ? "border-[#9a3b2e] bg-[#efe9dd] text-[#9a3b2e] hover:bg-[#efe9dd] hover:text-[#9a3b2e]"
+            ? "border-signal bg-surface-muted text-signal hover:bg-surface-muted hover:text-signal"
             : "",
         ]
           .filter(Boolean)
@@ -163,9 +163,9 @@ function FeedFilter({
         <div
           role="menu"
           aria-label="Filter feed by topic"
-          className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-[#d8d0c1] bg-[#f6f2ea] p-2 shadow-lg"
+          className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-border-default bg-page p-2 shadow-lg"
         >
-          <p className="mb-2 px-2 font-mono text-caption uppercase tracking-[0.06em] text-[#6f685d]">
+          <p className="mb-2 px-2 font-mono text-caption uppercase tracking-[0.06em] text-muted">
             Filter by topic
           </p>
           <button
@@ -173,10 +173,10 @@ function FeedFilter({
             role="menuitem"
             onClick={() => select(null)}
             className={[
-              "mb-1 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9a3b2e] focus-visible:ring-offset-1 focus-visible:ring-offset-[#f6f2ea]",
+              "mb-1 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page",
               activeFilter === null
-                ? "bg-[#9a3b2e] text-[#f6f2ea]"
-                : "text-[#1c1a17] hover:bg-[#efe9dd]",
+                ? "bg-signal text-page dark:bg-accent dark:text-accent-fg"
+                : "text-primary hover:bg-surface-muted",
             ].join(" ")}
           >
             <span>All topics</span>
@@ -189,10 +189,10 @@ function FeedFilter({
               role="menuitem"
               onClick={() => select(interest.topic)}
               className={[
-                "mb-1 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9a3b2e] focus-visible:ring-offset-1 focus-visible:ring-offset-[#f6f2ea] last:mb-0",
+                "mb-1 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page last:mb-0",
                 activeFilter === interest.topic
-                  ? "bg-[#9a3b2e] text-[#f6f2ea]"
-                  : "text-[#1c1a17] hover:bg-[#efe9dd]",
+                  ? "bg-signal text-page dark:bg-accent dark:text-accent-fg"
+                  : "text-primary hover:bg-surface-muted",
               ].join(" ")}
             >
               <span className="truncate">{interest.topic}</span>
