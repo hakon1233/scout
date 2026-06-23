@@ -23,11 +23,26 @@ import {
 
 test("normalizeTopic collapses casing, punctuation and whitespace", () => {
   assert.equal(normalizeTopic("OpenAI"), "openai");
-  assert.equal(normalizeTopic("Open-AI"), "open ai");
-  assert.equal(normalizeTopic("  Claude   Code "), "claude code");
+  assert.equal(normalizeTopic("Open AI"), "openai");
+  assert.equal(normalizeTopic("Open-AI"), "openai");
+  assert.equal(normalizeTopic("  Claude   Code "), "claudecode");
   assert.equal(normalizeTopic("AI!!!"), "ai");
   // The exact strings from the bug report normalize to stable keys.
-  assert.equal(normalizeTopic("startup news"), "startup news");
+  assert.equal(normalizeTopic("startup news"), "startupnews");
+});
+
+test("computeCoverage matches compact and spaced topic variants", () => {
+  const md = [
+    "# Your brief",
+    "",
+    "## Open AI",
+    "- A release shipped.",
+    "  [example.com — Release](https://example.com/release)",
+  ].join("\n");
+
+  assert.deepEqual(computeCoverage(["OpenAI"], md), [
+    { topic: "OpenAI", status: "covered" },
+  ]);
 });
 
 test("computeCoverage matches title-cased headings to lowercase interests (the bug)", () => {

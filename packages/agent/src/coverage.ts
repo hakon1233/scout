@@ -28,16 +28,12 @@
 export type TopicStatus = "covered" | "empty" | "missing";
 export type TopicCoverage = { topic: string; status: TopicStatus };
 
-// Normalize a topic or heading for comparison: lowercase, strip everything that
-// isn't a letter/digit down to single spaces, trim. So "OpenAI", "open ai",
-// "Open-AI" and "openai" all collapse to the same key, and "Claude Code" matches
-// "claude code". Intentionally aggressive — headings drift in casing and
-// punctuation far more than in actual wording.
+// Normalize a topic or heading for comparison: lowercase, then remove every
+// non-letter/digit. So "OpenAI", "open ai", "Open-AI" and "openai" all
+// collapse to the same key. This is deliberately aggressive: model headings
+// drift in casing, punctuation, and word spacing more often than in meaning.
 export function normalizeTopic(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 type SectionBlock = { key: string; raw: string };
