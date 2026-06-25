@@ -306,27 +306,38 @@ export async function loadState(file = STATE_FILE): Promise<State> {
   }
 }
 
-export async function saveState(
-  state: State,
-  file = STATE_FILE,
+// Atomic write: serialize to a sibling temp file, then rename over the target.
+// rename(2) is atomic on POSIX, so a crash/power-loss mid-write can never leave
+// a torn or truncated file — a reader that catches the parse error and returns
+// a default would otherwise silently wipe whatever the file held. The temp file
+// is uniquely named so concurrent savers can't clobber each other's in-flight
+// temp; last rename wins, matching the existing last-writer contract. Shared so
+// every JSON persistence path (state.json, chat transcript) gets the same
+// crash-safety instead of re-deriving it per call site.
+export async function atomicWriteFile(
+  file: string,
+  data: string,
+  mode = 0o600,
 ): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  // Atomic write: serialize to a sibling temp file, then rename over the target.
-  // rename(2) is atomic on POSIX, so a crash/power-loss mid-write can never leave
-  // a torn or truncated state.json — loadState would otherwise catch the parse
-  // error and return {}, silently wiping the founder's interests, briefs, and
-  // pairing token. The temp file is uniquely named so concurrent savers (the
-  // synthesis reload-then-save and the scheduler) can't clobber each other's
-  // in-flight temp; last rename wins, matching the existing last-writer contract.
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
   try {
-    await fs.writeFile(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
+    await fs.writeFile(tmp, data, { mode });
     await fs.rename(tmp, file);
   } catch (err) {
     // Best-effort cleanup so a failed write doesn't leave an orphan temp behind.
     await fs.rm(tmp, { force: true }).catch(() => {});
     throw err;
   }
+}
+
+export async function saveState(
+  state: State,
+  file = STATE_FILE,
+): Promise<void> {
+  // loadState catches a torn parse and returns {}, which would silently wipe the
+  // founder's interests, briefs, and pairing token — so this write must be atomic.
+  await atomicWriteFile(file, JSON.stringify(state, null, 2));
 }
 
 export function newPairingToken(): string {
