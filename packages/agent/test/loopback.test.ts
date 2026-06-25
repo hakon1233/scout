@@ -372,7 +372,13 @@ test("POST /v0/interests de-duplicates before the max-6 budget check (PER-126)",
   await saveState({ pairing_token: token }, stateFile);
 
   const claudeBin = await makeStubClaude();
-  const { server, port } = await startServer(0, { stateFile, claudeBin });
+  let synthesisDone: (b: Brief) => void;
+  const doneP = new Promise<Brief>((r) => (synthesisDone = r));
+  const { server, port } = await startServer(0, {
+    stateFile,
+    claudeBin,
+    onSynthesisDone: (b) => synthesisDone(b),
+  });
 
   try {
     // 7 raw items but only 6 unique after case-insensitive de-dup ("AI safety"
@@ -389,6 +395,8 @@ test("POST /v0/interests de-duplicates before the max-6 budget check (PER-126)",
       }),
     });
     assert.equal(res.status, 202);
+    const brief = await doneP;
+    assert.equal(brief.status, "ready");
   } finally {
     server.close();
     await fs.rm(tmpStateDir, { recursive: true, force: true });

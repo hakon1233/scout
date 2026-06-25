@@ -68,6 +68,26 @@ test("buildWeeklyBrief pools the last 7 days, dedupes by URL, and caps top stori
   assert.doesNotMatch(weekly.summary_md ?? "", /Old funding news/);
 });
 
+test("buildWeeklyBrief drops stale stories inside otherwise eligible daily briefs", () => {
+  const now = new Date("2026-06-15T12:00:00.000Z");
+  const staleStoryInRecentBrief = [
+    "- `2026-05-01` — A stale item got through a recent daily brief.",
+    "  [old.example — Stale](https://example.com/stale-in-recent)",
+  ].join("\n");
+  const history: Brief[] = [
+    dailyBrief("latest", "2026-06-15T07:00:00.000Z", "AI", [
+      storyA,
+      staleStoryInRecentBrief,
+    ]),
+  ];
+
+  const weekly = buildWeeklyBrief(history, now);
+
+  assert.match(weekly.summary_md ?? "", /OpenAI shipped a new agent release/);
+  assert.doesNotMatch(weekly.summary_md ?? "", /stale item got through/);
+  assert.doesNotMatch(weekly.summary_md ?? "", /stale-in-recent/);
+});
+
 test("POST /v0/weekly-brief persists a weekly brief into history without mutating interests", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-weekly-"));
   const stateFile = path.join(tmp, "state.json");
