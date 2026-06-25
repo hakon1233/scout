@@ -9,6 +9,7 @@ import {
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const WEEKLY_STORY_LIMIT = 10;
 const STORY_BULLET_RE = /^\s*[-*]\s+/;
+const STORY_DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`/;
 const HEADING_RE = /^##\s+(.+?)\s*$/;
 const LINK_RE = /\[[^\]]+\]\((https?:\/\/(?:[^()\s]|\([^()\s]*\))+)\)/g;
 
@@ -16,6 +17,7 @@ type WeeklyStory = {
   topic: string;
   block: string;
   url: string;
+  publishedAt: string | null;
   sourceGeneratedAt: string;
   sourceRank: number;
 };
@@ -24,6 +26,12 @@ function storyUrl(block: string): string | null {
   LINK_RE.lastIndex = 0;
   const match = LINK_RE.exec(block);
   return match?.[1] ?? null;
+}
+
+function storyDate(block: string): string | null {
+  const match = STORY_DATE_RE.exec(block);
+  if (!match || match[1] === "undated") return null;
+  return match[1];
 }
 
 function extractStories(brief: Brief): WeeklyStory[] {
@@ -42,6 +50,7 @@ function extractStories(brief: Brief): WeeklyStory[] {
         topic,
         block,
         url,
+        publishedAt: storyDate(block),
         sourceGeneratedAt: brief.generated_at,
         sourceRank: rank++,
       });
@@ -72,6 +81,8 @@ export function createWeeklyBriefFromHistory(
   now = new Date(),
 ): Brief {
   const cutoff = now.getTime() - WEEK_MS;
+  const cutoffDate = new Date(cutoff).toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
   const eligible = history.filter((b) => {
     if (b.kind === "weekly") return false;
     if (b.status !== "ready" || !b.summary_md) return false;
@@ -82,6 +93,10 @@ export function createWeeklyBriefFromHistory(
   const seen = new Set<string>();
   const stories = eligible
     .flatMap(extractStories)
+    .filter((story) => {
+      if (!story.publishedAt) return true;
+      return story.publishedAt >= cutoffDate && story.publishedAt <= today;
+    })
     .sort((a, b) => {
       const byRun =
         Date.parse(b.sourceGeneratedAt) - Date.parse(a.sourceGeneratedAt);

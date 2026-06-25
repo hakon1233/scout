@@ -15,6 +15,7 @@
 // the FE renders for them are real controls, not dead ones.
 
 import { discoverCompanion } from "./companion";
+import { readErrorBody } from "./errors";
 
 // One change a turn applied to the interest collection. `interestId` is always
 // the concrete (server-assigned, for create) id, so the FE can match it to a
@@ -110,9 +111,7 @@ export async function kickChatTurn(
     );
   }
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(err.error ?? `Couldn't send that message (${res.status}).`);
   }
   const body = (await res.json()) as { turn_id?: string };
@@ -214,9 +213,7 @@ export async function confirmDeleteInterest(
     throw new Error("That interest was already removed.");
   }
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(
       err.error ?? `Couldn't remove that interest (${res.status}).`,
     );
@@ -255,10 +252,10 @@ export async function confirmRewriteInterest(
     throw new Error("That proposal expired — ask Scout for the rewrite again.");
   }
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-    };
-    throw new Error(err.error ?? `Couldn't apply that rewrite (${res.status}).`);
+    const err = await readErrorBody(res);
+    throw new Error(
+      err.error ?? `Couldn't apply that rewrite (${res.status}).`,
+    );
   }
   const body = (await res.json()) as { turn?: ChatTurn };
   if (!body.turn) throw new Error("Scout didn't confirm the rewrite.");

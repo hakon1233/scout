@@ -57,7 +57,14 @@ Deno.serve(async (req) => {
     p_day: today,
     p_cap: DAILY_CAP,
   });
-  if (rateErr) return json({ error: "rate_check_failed", detail: rateErr.message }, 500);
+  if (rateErr) {
+    // Log the raw DB/RPC error server-side for debugging, but never echo it to
+    // the client: rateErr.message can carry Postgres/PostgREST internals (table
+    // and column names, SQL fragments) — needless information disclosure on a
+    // 500. The caller only needs to know the rate check failed. (AIR-182)
+    console.error("bump_exa_usage failed:", rateErr.message);
+    return json({ error: "rate_check_failed" }, 500);
+  }
   if (row === null || row === false) return json({ error: "rate_limited", cap: DAILY_CAP }, 429);
 
   // Forward to Exa.
