@@ -284,16 +284,23 @@ const STORY_BODY_RE = /^\s*>\s?(.*)$/;
 const STORY_DATE_RE =
   /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`\s*(?:—|–|-)?\s*/;
 
+// Balanced-paren tolerance (PER-216) so a `(13)` in a CDN filename doesn't leave
+// a stray `).png)` tail in the card blurb. Kept scheme-agnostic (unlike
+// LINK_RE/IMAGE_RE) to match the original strip breadth. The `inner` pattern is
+// invariant, so these are compiled once at module load instead of on every
+// stripInlineMarkdown call — which runs per story bullet, per brief, and per
+// poll tick. Reuse with String#replace is safe: replace resets a global regex's
+// lastIndex on each call.
+const STRIP_INNER = "(?:[^()]|\\([^()]*\\))*";
+const STRIP_IMAGE_RE = new RegExp(`!\\[[^\\]]*\\]\\(${STRIP_INNER}\\)`, "g");
+const STRIP_LINK_RE = new RegExp(`\\[([^\\]]+)\\]\\(${STRIP_INNER}\\)`, "g");
+
 // Reduce inline markdown to plain text for the card blurb: drop images entirely,
 // unwrap links to their label, collapse leftover emphasis markers.
 function stripInlineMarkdown(s: string): string {
-  // Balanced-paren tolerance (PER-216) so a `(13)` in a CDN filename doesn't
-  // leave a stray `).png)` tail in the card blurb. Kept scheme-agnostic (unlike
-  // LINK_RE/IMAGE_RE) to match the original strip breadth.
-  const inner = "(?:[^()]|\\([^()]*\\))*";
   return s
-    .replace(new RegExp(`!\\[[^\\]]*\\]\\(${inner}\\)`, "g"), "")
-    .replace(new RegExp(`\\[([^\\]]+)\\]\\(${inner}\\)`, "g"), "$1")
+    .replace(STRIP_IMAGE_RE, "")
+    .replace(STRIP_LINK_RE, "$1")
     .replace(/[*_`]+/g, "")
     .replace(/\s+/g, " ")
     .trim();

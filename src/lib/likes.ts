@@ -196,8 +196,11 @@ export function useLikedStories(): LikedStory[] {
   const store = useStore();
   return React.useMemo(
     () =>
+      // likedAt is ISO-8601, so lexicographic order == chronological order.
+      // Plain string compare avoids the per-comparison Intl cost of localeCompare
+      // on every like toggle (this re-sorts the whole collection each change).
       Object.values(store.likes).sort((a, b) =>
-        b.likedAt.localeCompare(a.likedAt),
+        a.likedAt < b.likedAt ? 1 : a.likedAt > b.likedAt ? -1 : 0,
       ),
     [store],
   );
