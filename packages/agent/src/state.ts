@@ -311,7 +311,22 @@ export async function saveState(
   file = STATE_FILE,
 ): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  await fs.writeFile(file, JSON.stringify(state, null, 2), { mode: 0o600 });
+  // Atomic write: serialize to a sibling temp file, then rename over the target.
+  // rename(2) is atomic on POSIX, so a crash/power-loss mid-write can never leave
+  // a torn or truncated state.json — loadState would otherwise catch the parse
+  // error and return {}, silently wiping the founder's interests, briefs, and
+  // pairing token. The temp file is uniquely named so concurrent savers (the
+  // synthesis reload-then-save and the scheduler) can't clobber each other's
+  // in-flight temp; last rename wins, matching the existing last-writer contract.
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  try {
+    await fs.writeFile(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
+    await fs.rename(tmp, file);
+  } catch (err) {
+    // Best-effort cleanup so a failed write doesn't leave an orphan temp behind.
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw err;
+  }
 }
 
 export function newPairingToken(): string {
