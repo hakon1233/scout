@@ -248,11 +248,18 @@ export async function startRun(
     runDeps = { ...deps, interestsDir: ephemeralDir, ephemeralDir };
   }
 
+  // Fire-and-forget: runSynthesis lands a `failed` brief for research errors via
+  // its own try/catch, but a throw in the persist/history tail (disk error, etc.)
+  // would otherwise escape as an unhandled rejection — invisible to ops and a
+  // process-crash risk under Node's default rejection handling. Log it so a
+  // "my brief silently never appeared" report is diagnosable from stderr.
   void runSynthesis(briefId, runDeps, source, {
     researchInterests,
     coverageInterests,
     baseMarkdown: isRetry ? baseMarkdown : undefined,
     retryTopics: isRetry ? retryTopics : undefined,
+  }).catch((err) => {
+    console.error(`[runner] runSynthesis ${briefId} failed to persist:`, err);
   });
   return { started: true, briefId };
 }

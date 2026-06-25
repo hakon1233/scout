@@ -653,7 +653,14 @@ export async function startChatTurn(
   };
   await saveState({ ...state, last_chat: pending }, deps.stateFile);
 
-  void runChatTurn(trimmed, turnId, deps);
+  // Fire-and-forget: runChatTurn lands a `failed` turn for model errors via its
+  // own try/catch, but a throw in the persist/transcript tail (disk error, etc.)
+  // would otherwise escape as an unhandled rejection — invisible to ops and a
+  // process-crash risk under Node's default rejection handling. Log it so a
+  // "my chat silently did nothing" report is diagnosable from stderr.
+  void runChatTurn(trimmed, turnId, deps).catch((err) => {
+    console.error(`[chat] runChatTurn ${turnId} failed to persist:`, err);
+  });
   return { started: true, turnId };
 }
 
