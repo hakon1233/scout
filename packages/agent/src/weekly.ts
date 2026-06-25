@@ -11,7 +11,10 @@ const WEEKLY_STORY_LIMIT = 10;
 const STORY_BULLET_RE = /^\s*[-*]\s+/;
 const STORY_DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`/;
 const HEADING_RE = /^##\s+(.+?)\s*$/;
-const LINK_RE = /\[[^\]]+\]\((https?:\/\/(?:[^()\s]|\([^()\s]*\))+)\)/g;
+// Non-global: storyUrl only needs the first match, and a `/g` regex carries
+// `lastIndex` state across calls — a footgun that previously required a manual
+// `lastIndex = 0` reset before every `.exec`. Stateless is safer here.
+const LINK_RE = /\[[^\]]+\]\((https?:\/\/(?:[^()\s]|\([^()\s]*\))+)\)/;
 
 type WeeklyStory = {
   topic: string;
@@ -23,7 +26,6 @@ type WeeklyStory = {
 };
 
 function storyUrl(block: string): string | null {
-  LINK_RE.lastIndex = 0;
   const match = LINK_RE.exec(block);
   return match?.[1] ?? null;
 }

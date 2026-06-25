@@ -18,7 +18,11 @@ const MAX_TIMER_MS = 2_147_483_647;
 // Compute the next fire time strictly AFTER `from` for a local "HH:MM". Returns
 // null if timeOfDay is malformed. Exported for unit testing the rollover logic.
 export function nextFireAt(timeOfDay: string, from: Date): Date | null {
-  const m = /^(\d{2}):(\d{2})$/.exec(timeOfDay);
+  // Accept 1- or 2-digit hour to match state.ts `normalizeTimeOfDay`, which
+  // canonicalizes "7:00" → "07:00". Keeping these in lockstep prevents a
+  // single-digit-hour value (written by any path that skips normalization)
+  // from silently disabling the schedule here.
+  const m = /^(\d{1,2}):(\d{2})$/.exec(timeOfDay);
   if (!m) return null;
   const hh = Number(m[1]);
   const mm = Number(m[2]);
