@@ -86,7 +86,11 @@ function parse(raw: string | null): LikesStore {
   if (!raw) return EMPTY;
   try {
     const obj = JSON.parse(raw) as Partial<LikesStore>;
-    if (!obj || typeof obj !== "object" || typeof obj.likes !== "object") {
+    // `typeof null === "object"`, so a stored `{ "likes": null }` would slip
+    // past a bare typeof check and later crash `Object.values(store.likes)` /
+    // `key in store.likes`. Reject null explicitly so a corrupted value
+    // degrades to EMPTY instead of throwing during render.
+    if (!obj || typeof obj !== "object" || !obj.likes || typeof obj.likes !== "object") {
       return EMPTY;
     }
     return { version: 1, likes: obj.likes as Record<string, LikedStory> };
@@ -192,8 +196,11 @@ export function useLikedStories(): LikedStory[] {
   const store = useStore();
   return React.useMemo(
     () =>
+      // likedAt is ISO-8601, so lexicographic order == chronological order.
+      // Plain string compare avoids the per-comparison Intl cost of localeCompare
+      // on every like toggle (this re-sorts the whole collection each change).
       Object.values(store.likes).sort((a, b) =>
-        b.likedAt.localeCompare(a.likedAt),
+        a.likedAt < b.likedAt ? 1 : a.likedAt > b.likedAt ? -1 : 0,
       ),
     [store],
   );

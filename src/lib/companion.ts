@@ -4,6 +4,7 @@
 // agent on a different port can still pair.
 
 import type { Brief as AppBrief, TopicBasis, TopicCoverage } from "./types";
+import { readErrorBody } from "./errors";
 
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
@@ -193,10 +194,7 @@ export async function postInterests(
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error: string;
-      hint?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(err.hint ?? err.error);
   }
   return res.json() as Promise<{ brief_id: string; status: string }>;
@@ -232,10 +230,7 @@ export async function saveInterests(
     signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-      hint?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(
       err.hint ?? err.error ?? `Couldn't save interests (${res.status}).`,
     );
@@ -289,16 +284,23 @@ const STORY_BODY_RE = /^\s*>\s?(.*)$/;
 const STORY_DATE_RE =
   /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`\s*(?:—|–|-)?\s*/;
 
+// Balanced-paren tolerance (PER-216) so a `(13)` in a CDN filename doesn't leave
+// a stray `).png)` tail in the card blurb. Kept scheme-agnostic (unlike
+// LINK_RE/IMAGE_RE) to match the original strip breadth. The `inner` pattern is
+// invariant, so these are compiled once at module load instead of on every
+// stripInlineMarkdown call — which runs per story bullet, per brief, and per
+// poll tick. Reuse with String#replace is safe: replace resets a global regex's
+// lastIndex on each call.
+const STRIP_INNER = "(?:[^()]|\\([^()]*\\))*";
+const STRIP_IMAGE_RE = new RegExp(`!\\[[^\\]]*\\]\\(${STRIP_INNER}\\)`, "g");
+const STRIP_LINK_RE = new RegExp(`\\[([^\\]]+)\\]\\(${STRIP_INNER}\\)`, "g");
+
 // Reduce inline markdown to plain text for the card blurb: drop images entirely,
 // unwrap links to their label, collapse leftover emphasis markers.
 function stripInlineMarkdown(s: string): string {
-  // Balanced-paren tolerance (PER-216) so a `(13)` in a CDN filename doesn't
-  // leave a stray `).png)` tail in the card blurb. Kept scheme-agnostic (unlike
-  // LINK_RE/IMAGE_RE) to match the original strip breadth.
-  const inner = "(?:[^()]|\\([^()]*\\))*";
   return s
-    .replace(new RegExp(`!\\[[^\\]]*\\]\\(${inner}\\)`, "g"), "")
-    .replace(new RegExp(`\\[([^\\]]+)\\]\\(${inner}\\)`, "g"), "$1")
+    .replace(STRIP_IMAGE_RE, "")
+    .replace(STRIP_LINK_RE, "$1")
     .replace(/[*_`]+/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -494,9 +496,7 @@ export async function fetchSchedule(token: string): Promise<CompanionSchedule> {
     signal: AbortSignal.timeout(5_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(err.error ?? `Couldn't read the schedule (${res.status}).`);
   }
   return res.json() as Promise<CompanionSchedule>;
@@ -521,9 +521,7 @@ export async function updateSchedule(
     signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(err.error ?? `Couldn't save the schedule (${res.status}).`);
   }
   return res.json() as Promise<CompanionSchedule>;
@@ -631,9 +629,7 @@ export async function generateWeeklyBrief(token: string): Promise<AppBrief> {
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(
       err.error ?? `Couldn't generate weekly brief (${res.status}).`,
     );
