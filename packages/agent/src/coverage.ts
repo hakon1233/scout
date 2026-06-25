@@ -221,12 +221,12 @@ function filterStaleStoriesFromBlock(
     }
   }
   if (stories.length === 0) return raw; // no dated bullets to validate
-  const cutoffMs = nowMs - cutoffDays * 24 * 60 * 60 * 1000;
+  const cutoffDate = new Date(nowMs - cutoffDays * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const kept = stories.filter((s) => {
     if (s.date === null) return true; // undated kept as-is
-    const t = Date.parse(s.date); // ISO date → UTC midnight
-    if (!Number.isFinite(t)) return true; // unparseable → keep, don't lose content
-    return t >= cutoffMs; // within the window survives; strictly older drops
+    return s.date >= cutoffDate; // YYYY-MM-DD: lexical == chronological, inclusive
   });
   if (kept.length === stories.length) return raw; // nothing stale ⇒ byte-identical
 
