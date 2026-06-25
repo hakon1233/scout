@@ -8,7 +8,7 @@
 // exposes `reboot_durable: false` so the Settings UI (PER-152) can warn. A
 // launchd login item / durable `serve` is an optional follow-up, not built here.
 
-import { loadState, saveState } from "./state.js";
+import { loadState, normalizeTimeOfDay, saveState } from "./state.js";
 import { recordScheduledSkip, startRun, type RunDeps, type RunSource } from "./runner.js";
 
 // setTimeout overflows past ~24.8 days (2^31-1 ms) and fires immediately. Daily
@@ -18,15 +18,15 @@ const MAX_TIMER_MS = 2_147_483_647;
 // Compute the next fire time strictly AFTER `from` for a local "HH:MM". Returns
 // null if timeOfDay is malformed. Exported for unit testing the rollover logic.
 export function nextFireAt(timeOfDay: string, from: Date): Date | null {
-  // Accept 1- or 2-digit hour to match state.ts `normalizeTimeOfDay`, which
-  // canonicalizes "7:00" → "07:00". Keeping these in lockstep prevents a
-  // single-digit-hour value (written by any path that skips normalization)
-  // from silently disabling the schedule here.
-  const m = /^(\d{1,2}):(\d{2})$/.exec(timeOfDay);
-  if (!m) return null;
-  const hh = Number(m[1]);
-  const mm = Number(m[2]);
-  if (hh > 23 || mm > 59) return null;
+  // Canonicalize through the single source-of-truth validator (state.ts) instead
+  // of a second, stricter regex. Previously this required exactly `HH:MM` while
+  // normalizeTimeOfDay accepts `H:MM` and zero-pads — so a `"7:00"` reaching the
+  // scheduler by any path that skipped normalization (a hand-edited/legacy
+  // state.json) parsed as null here and silently disabled the schedule (AIR-188
+  // L1). One validator → no drift.
+  const normalized = normalizeTimeOfDay(timeOfDay);
+  if (!normalized) return null;
+  const [hh, mm] = normalized.split(":").map(Number);
   const next = new Date(from);
   next.setHours(hh, mm, 0, 0);
   // If today's time already passed (or is exactly now), roll to tomorrow.
