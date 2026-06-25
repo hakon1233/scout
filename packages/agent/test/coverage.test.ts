@@ -333,6 +333,21 @@ test("legitimate 7–30 day 'older items' note path is preserved (acceptance #3)
   assert.ok(out.includes(note), "older-items note preserved");
 });
 
+test("freshness cutoff keeps items exactly 30 calendar days old", () => {
+  const brief = [
+    "# Your brief",
+    "",
+    "## ai",
+    "- `2026-05-16` — exactly 30 calendar days before NOW.",
+    "  [example.com — Boundary](https://example.com/boundary)",
+    "",
+  ].join("\n");
+
+  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+
+  assert.equal(out, brief);
+});
+
 test("per-topic no-news state recorded when everything drops (acceptance #4)", () => {
   // Every item is stale AND the model had wrongly emitted the older-items note.
   const brief = [
