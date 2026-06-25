@@ -4,6 +4,7 @@
 // agent on a different port can still pair.
 
 import type { Brief as AppBrief, TopicBasis, TopicCoverage } from "./types";
+import { readErrorBody } from "./errors";
 
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
@@ -193,10 +194,7 @@ export async function postInterests(
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error: string;
-      hint?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(err.hint ?? err.error);
   }
   return res.json() as Promise<{ brief_id: string; status: string }>;
@@ -232,10 +230,7 @@ export async function saveInterests(
     signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-      hint?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(
       err.hint ?? err.error ?? `Couldn't save interests (${res.status}).`,
     );
@@ -494,9 +489,7 @@ export async function fetchSchedule(token: string): Promise<CompanionSchedule> {
     signal: AbortSignal.timeout(5_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(err.error ?? `Couldn't read the schedule (${res.status}).`);
   }
   return res.json() as Promise<CompanionSchedule>;
@@ -521,9 +514,7 @@ export async function updateSchedule(
     signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(err.error ?? `Couldn't save the schedule (${res.status}).`);
   }
   return res.json() as Promise<CompanionSchedule>;
@@ -631,9 +622,7 @@ export async function generateWeeklyBrief(token: string): Promise<AppBrief> {
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: res.statusText }))) as {
-      error?: string;
-    };
+    const err = await readErrorBody(res);
     throw new Error(
       err.error ?? `Couldn't generate weekly brief (${res.status}).`,
     );
