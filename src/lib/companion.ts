@@ -33,6 +33,14 @@ export function saveCompanionToken(token: string): void {
 // should be retried on the next call rather than latched off.
 let servedFromCompanionConfirmed = false;
 
+// In-flight coalescing for the same-origin probe (AIR-204). The /app mount
+// fires several effects in the same tick that each call this (directly or via
+// bootstrapCompanionToken / fetchCompanionInterests / discoverCompanion). Before
+// the first /healthz resolves none of them is yet `confirmed`, so each would
+// issue its own probe. Sharing the in-flight promise collapses that fan-out to a
+// single request without changing the result.
+let servedProbeInFlight: Promise<boolean> | null = null;
+
 // True when the companion (or its TLS reverse proxy) is serving THIS page —
 // i.e. a same-origin GET /healthz succeeds. This is host-agnostic on purpose:
 // it is true for the loopback origin (http://127.0.0.1:47821/) AND for a
@@ -49,15 +57,63 @@ let servedFromCompanionConfirmed = false;
 export async function isServedFromCompanion(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (servedFromCompanionConfirmed) return true;
-  try {
-    const res = await fetch(`${window.location.origin}/healthz`, {
-      signal: AbortSignal.timeout(1500),
-    });
-    servedFromCompanionConfirmed = res.ok;
-    return servedFromCompanionConfirmed;
-  } catch {
-    return false;
+  if (servedProbeInFlight) return servedProbeInFlight;
+  servedProbeInFlight = (async () => {
+    try {
+      const res = await fetch(`${window.location.origin}/healthz`, {
+        signal: AbortSignal.timeout(1500),
+      });
+      servedFromCompanionConfirmed = res.ok;
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      servedProbeInFlight = null;
+    }
+  })();
+  return servedProbeInFlight;
+}
+
+// Companion config payload (GET /v0/config). Both the token bootstrap and the
+// interests recovery read from the same endpoint.
+type CompanionConfig = { token?: string | null; interests?: unknown };
+
+// Coalesced read of GET /v0/config (AIR-204). The /app mount fires multiple
+// effects that each need the companion config — bootstrapCompanionToken twice
+// (poll + brief-adoption) and fetchCompanionInterests once or twice (adopt +
+// reconcile). Each previously issued its own identical same-origin request on
+// the primary paint path. A shared in-flight promise plus a short TTL collapses
+// that burst to a single request, while the TTL is small enough that a config
+// change (rare, user-driven) is still picked up on the next 10s poll tick.
+let configInFlight: Promise<CompanionConfig | null> | null = null;
+let configCache: CompanionConfig | null = null;
+let configCachedAt = 0;
+const CONFIG_TTL_MS = 3000;
+
+async function fetchCompanionConfig(): Promise<CompanionConfig | null> {
+  if (typeof window === "undefined") return null;
+  if (configCache && Date.now() - configCachedAt < CONFIG_TTL_MS) {
+    return configCache;
   }
+  if (configInFlight) return configInFlight;
+  configInFlight = (async () => {
+    if (!(await isServedFromCompanion())) return null;
+    try {
+      const res = await fetch(`${window.location.origin}/v0/config`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (!res.ok) return null;
+      const cfg = (await res.json()) as CompanionConfig;
+      configCache = cfg;
+      configCachedAt = Date.now();
+      return cfg;
+    } catch {
+      return null;
+    } finally {
+      configInFlight = null;
+    }
+  })();
+  return configInFlight;
 }
 
 // When served same-origin from the companion, fetch the pairing token from
@@ -66,19 +122,10 @@ export async function isServedFromCompanion(): Promise<boolean> {
 // unreachable. Returns the active token, or "" if none.
 export async function bootstrapCompanionToken(): Promise<string> {
   const existing = loadCompanionToken();
-  if (!(await isServedFromCompanion())) return existing;
-  try {
-    const res = await fetch(`${window.location.origin}/v0/config`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    if (!res.ok) return existing;
-    const cfg = (await res.json()) as { token?: string | null };
-    if (cfg.token && cfg.token !== existing) {
-      saveCompanionToken(cfg.token);
-      return cfg.token;
-    }
-  } catch {
-    // not reachable / not same-origin — fall back to the stored token
+  const cfg = await fetchCompanionConfig();
+  if (cfg?.token && cfg.token !== existing) {
+    saveCompanionToken(cfg.token);
+    return cfg.token;
   }
   return existing;
 }
@@ -91,21 +138,11 @@ export async function bootstrapCompanionToken(): Promise<string> {
 // user's interests and render a usable brief instead of the setup form (PER-157).
 // Returns [] when not served same-origin or /v0/config is unreachable/empty.
 export async function fetchCompanionInterests(): Promise<string[]> {
-  if (typeof window === "undefined") return [];
-  if (!(await isServedFromCompanion())) return [];
-  try {
-    const res = await fetch(`${window.location.origin}/v0/config`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    if (!res.ok) return [];
-    const cfg = (await res.json()) as { interests?: unknown };
-    if (!Array.isArray(cfg.interests)) return [];
-    return cfg.interests.filter(
-      (t): t is string => typeof t === "string" && t.trim().length > 0,
-    );
-  } catch {
-    return [];
-  }
+  const cfg = await fetchCompanionConfig();
+  if (!cfg || !Array.isArray(cfg.interests)) return [];
+  return cfg.interests.filter(
+    (t): t is string => typeof t === "string" && t.trim().length > 0,
+  );
 }
 
 async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
