@@ -362,7 +362,16 @@ export function faviconFor(host: string): string {
 // use the SAME canonicalisation), and is imported above.
 
 export function formatDate(iso: string): string {
-  const d = new Date(iso);
+  // Per-story publish dates are date-only `YYYY-MM-DD` (companion.ts STORY_DATE_RE).
+  // `new Date("2026-06-20")` parses as UTC midnight, which toLocaleDateString then
+  // renders as the DAY BEFORE for any reader west of UTC (all of the Americas) —
+  // the date shown wouldn't match the source's publish date. Build the date from
+  // its parts in LOCAL time so the calendar day is stable regardless of timezone.
+  // Full ISO timestamps (with a time component) keep the plain Date parse.
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, {
     month: "short",
