@@ -90,9 +90,7 @@ export default function AppPage() {
     // at build time with no window; this is the canonical sync point.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSettings(loadSettings());
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBrief(loadLastBrief());
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
 
@@ -179,7 +177,6 @@ export default function AppPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
   useEffect(() => {
@@ -222,7 +219,6 @@ export default function AppPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
   // Single brief path: the local Scout companion. The browser→Exa path was

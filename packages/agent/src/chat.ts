@@ -28,6 +28,7 @@ import path from "node:path";
 import {
   loadState,
   saveState,
+  atomicWriteFile,
   newChatTurnId,
   newInterestId,
   CONFIG_DIR,
@@ -124,8 +125,11 @@ async function writeChatTranscript(
   turns: ChatTurn[],
   file = defaultChatTranscriptFile(),
 ): Promise<void> {
-  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  await fs.writeFile(file, JSON.stringify(turns, null, 2), { mode: 0o600 });
+  // Atomic temp+rename (shared with state.json): a plain writeFile that tears
+  // mid-write leaves corrupt JSON, which readChatTranscript catches and reads as
+  // [] — and the next append then overwrites the file, permanently wiping the
+  // user's chat history. The rename can never expose a half-written transcript.
+  await atomicWriteFile(file, JSON.stringify(turns, null, 2));
 }
 
 async function appendChatTranscript(
