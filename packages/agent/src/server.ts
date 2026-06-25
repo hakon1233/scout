@@ -723,6 +723,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
           const offsetRaw = url.searchParams.get("offset");
           if (limitRaw !== null || offsetRaw !== null) {
             const clamp = (raw: string | null, def: number, max: number) => {
+              if (raw === null) return def;
               const n = Number(raw);
               if (!Number.isFinite(n)) return def;
               return Math.min(max, Math.max(0, Math.floor(n)));

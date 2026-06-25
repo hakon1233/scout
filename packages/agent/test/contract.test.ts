@@ -202,6 +202,19 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (
     assert.equal(p2.briefs.length, 1, "last page is short");
     assert.equal(p2.briefs[0].id, first.id, "oldest is last");
 
+    // Supplying only offset still uses the default page size (3). A missing
+    // limit must not become Number(null) === 0 and collapse the page to 1 item.
+    const offsetOnly = await fetch(
+      `http://127.0.0.1:${port}/v0/briefs?offset=1`,
+      { headers: auth },
+    );
+    const offsetBody = (await offsetOnly.json()) as { briefs: Brief[]; total: number };
+    assert.equal(offsetOnly.status, 200);
+    assert.equal(offsetBody.total, 3);
+    assert.equal(offsetBody.briefs.length, 2, "offset-only request uses default limit");
+    assert.equal(offsetBody.briefs[0].id, second.id);
+    assert.equal(offsetBody.briefs[1].id, first.id);
+
     // No params → the legacy single-slot poller contract is untouched.
     const legacy = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
       headers: auth,
