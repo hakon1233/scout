@@ -322,6 +322,42 @@ async function readBody(
   return Buffer.concat(chunks).toString("utf8");
 }
 
+// Read, size-guard, and JSON-parse a request body in one step. Consolidates the
+// content-length pre-reject + readBody + BodyTooLargeError + JSON.parse(body ||
+// "{}") dance that every mutating /v0 route had copy-pasted verbatim (7 copies
+// across PER-160…PER-235, a classic drift hazard). On any failure it writes the
+// matching response (413 oversized / 400 invalid json) and returns { ok: false }
+// so callers just `if (!parsed.ok) return;`. The content-length fast-reject is
+// now applied uniformly — readBody already enforces the cap, so adding it to the
+// routes that lacked it only rejects an oversized declared body a little sooner.
+async function readJsonBody<T>(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  cors: Record<string, string>,
+): Promise<{ ok: true; value: T } | { ok: false }> {
+  const declaredLen = Number(req.headers["content-length"]);
+  if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
+    json(res, 413, { error: "request body too large" }, cors);
+    return { ok: false };
+  }
+  let body: string;
+  try {
+    body = await readBody(req);
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) {
+      json(res, 413, { error: "request body too large" }, cors);
+      return { ok: false };
+    }
+    throw err;
+  }
+  try {
+    return { ok: true, value: JSON.parse(body || "{}") as T };
+  } catch {
+    json(res, 400, { error: "invalid json" }, cors);
+    return { ok: false };
+  }
+}
+
 function bearer(req: http.IncomingMessage): string | null {
   const h = req.headers["authorization"];
   if (!h || Array.isArray(h)) return null;
@@ -510,25 +546,12 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "PUT" && url.pathname === "/v0/interests") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const declaredLen = Number(req.headers["content-length"]);
-          if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
-            return json(res, 413, { error: "request body too large" }, cors);
-          }
-          let body: string;
-          try {
-            body = await readBody(req);
-          } catch (err) {
-            if (err instanceof BodyTooLargeError) {
-              return json(res, 413, { error: "request body too large" }, cors);
-            }
-            throw err;
-          }
-          let parsed: { interests?: unknown; confirm_replace?: unknown };
-          try {
-            parsed = JSON.parse(body || "{}");
-          } catch {
-            return json(res, 400, { error: "invalid json" }, cors);
-          }
+          const parsedBody = await readJsonBody<{
+            interests?: unknown;
+            confirm_replace?: unknown;
+          }>(req, res, cors);
+          if (!parsedBody.ok) return;
+          const parsed = parsedBody.value;
           const validated = parseInterestsPayload(parsed.interests);
           if (!validated.ok)
             return json(
@@ -565,32 +588,15 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "POST" && url.pathname === "/v0/interests") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          // Fast reject on a declared oversized body before reading it at all.
-          const declaredLen = Number(req.headers["content-length"]);
-          if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
-            return json(res, 413, { error: "request body too large" }, cors);
-          }
-          let body: string;
-          try {
-            body = await readBody(req);
-          } catch (err) {
-            if (err instanceof BodyTooLargeError) {
-              return json(res, 413, { error: "request body too large" }, cors);
-            }
-            throw err;
-          }
-          let parsed: {
+          const parsedBody = await readJsonBody<{
             interests?: unknown;
             retry_topics?: unknown;
             selected_topics?: unknown;
             ephemeral?: unknown;
             confirm_replace?: unknown;
-          };
-          try {
-            parsed = JSON.parse(body || "{}");
-          } catch {
-            return json(res, 400, { error: "invalid json" }, cors);
-          }
+          }>(req, res, cors);
+          if (!parsedBody.ok) return;
+          const parsed = parsedBody.value;
           const validated = parseInterestsPayload(parsed.interests);
           if (!validated.ok)
             return json(
@@ -754,25 +760,13 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "POST" && url.pathname === "/v0/chat") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const declaredLen = Number(req.headers["content-length"]);
-          if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
-            return json(res, 413, { error: "request body too large" }, cors);
-          }
-          let body: string;
-          try {
-            body = await readBody(req);
-          } catch (err) {
-            if (err instanceof BodyTooLargeError) {
-              return json(res, 413, { error: "request body too large" }, cors);
-            }
-            throw err;
-          }
-          let parsed: { message?: unknown };
-          try {
-            parsed = JSON.parse(body || "{}");
-          } catch {
-            return json(res, 400, { error: "invalid json" }, cors);
-          }
+          const parsedBody = await readJsonBody<{ message?: unknown }>(
+            req,
+            res,
+            cors,
+          );
+          if (!parsedBody.ok) return;
+          const parsed = parsedBody.value;
           const message =
             typeof parsed.message === "string" ? parsed.message.trim() : "";
           if (!message)
@@ -820,21 +814,13 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "POST" && url.pathname === "/v0/chat/stop") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          let body: string;
-          try {
-            body = await readBody(req);
-          } catch (err) {
-            if (err instanceof BodyTooLargeError) {
-              return json(res, 413, { error: "request body too large" }, cors);
-            }
-            throw err;
-          }
-          let parsed: { turn_id?: unknown };
-          try {
-            parsed = JSON.parse(body || "{}");
-          } catch {
-            return json(res, 400, { error: "invalid json" }, cors);
-          }
+          const parsedBody = await readJsonBody<{ turn_id?: unknown }>(
+            req,
+            res,
+            cors,
+          );
+          if (!parsedBody.ok) return;
+          const parsed = parsedBody.value;
           const turnId =
             typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
           const stopped = stopChatTurn(turnId);
@@ -854,21 +840,13 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         ) {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          let body: string;
-          try {
-            body = await readBody(req);
-          } catch (err) {
-            if (err instanceof BodyTooLargeError) {
-              return json(res, 413, { error: "request body too large" }, cors);
-            }
-            throw err;
-          }
-          let parsed: { interestId?: unknown };
-          try {
-            parsed = JSON.parse(body || "{}");
-          } catch {
-            return json(res, 400, { error: "invalid json" }, cors);
-          }
+          const parsedBody = await readJsonBody<{ interestId?: unknown }>(
+            req,
+            res,
+            cors,
+          );
+          if (!parsedBody.ok) return;
+          const parsed = parsedBody.value;
           const interestId =
             typeof parsed.interestId === "string" ? parsed.interestId : "";
           if (!interestId)
@@ -904,21 +882,13 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         ) {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          let body: string;
-          try {
-            body = await readBody(req);
-          } catch (err) {
-            if (err instanceof BodyTooLargeError) {
-              return json(res, 413, { error: "request body too large" }, cors);
-            }
-            throw err;
-          }
-          let parsed: { interestId?: unknown };
-          try {
-            parsed = JSON.parse(body || "{}");
-          } catch {
-            return json(res, 400, { error: "invalid json" }, cors);
-          }
+          const parsedBody = await readJsonBody<{ interestId?: unknown }>(
+            req,
+            res,
+            cors,
+          );
+          if (!parsedBody.ok) return;
+          const parsed = parsedBody.value;
           const interestId =
             typeof parsed.interestId === "string" ? parsed.interestId : "";
           if (!interestId)
@@ -979,21 +949,12 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "PUT" && url.pathname === "/v0/schedule") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          let body: string;
-          try {
-            body = await readBody(req);
-          } catch (err) {
-            if (err instanceof BodyTooLargeError) {
-              return json(res, 413, { error: "request body too large" }, cors);
-            }
-            throw err;
-          }
-          let parsed: { enabled?: unknown; time_of_day?: unknown };
-          try {
-            parsed = JSON.parse(body || "{}");
-          } catch {
-            return json(res, 400, { error: "invalid json" }, cors);
-          }
+          const parsedBody = await readJsonBody<{
+            enabled?: unknown;
+            time_of_day?: unknown;
+          }>(req, res, cors);
+          if (!parsedBody.ok) return;
+          const parsed = parsedBody.value;
 
           const current = state.schedule ?? defaultSchedule();
           let enabled = current.enabled;
