@@ -103,18 +103,18 @@ export function InterestDocCard({
   const [showRaw, setShowRaw] = useState(false);
   const { topic, hasDoc, updatedAt, body, beat, href } = model;
 
-  const open = () => {
-    if (onOpen) {
-      onOpen();
-      return;
-    }
-    window.location.assign(href);
-  };
-
   return (
+    // CAR-246: this is a non-interactive wrapper, not a control. The single
+    // primary action is the title anchor below (in-page `onOpen` on plain
+    // left-click, native `href` for middle-click/new-tab); the `Refine`
+    // button is the separate secondary action. The card is deliberately NOT
+    // a `role="link"` with `tabIndex` — that nested a link role around real
+    // anchor/button descendants, giving keyboard and screen-reader users
+    // duplicated, ambiguous targets. The border/flash below are decorative
+    // hover/state styling only.
     <article
       className={[
-        "cursor-pointer rounded-lg border bg-surface p-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+        "rounded-lg border bg-surface p-4 transition-colors",
         focused
           ? "border-signal"
           : "border-border-default hover:border-border-strong",
@@ -124,17 +124,6 @@ export function InterestDocCard({
         beat ? "scout-doc-flash" : "",
       ].join(" ")}
       aria-label={`Interest: ${topic}`}
-      role="link"
-      tabIndex={0}
-      onClick={(event) => {
-        if ((event.target as HTMLElement).closest("a,button")) return;
-        open();
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        open();
-      }}
     >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
