@@ -326,7 +326,14 @@ export async function atomicWriteFile(
     await fs.rename(tmp, file);
   } catch (err) {
     // Best-effort cleanup so a failed write doesn't leave an orphan temp behind.
-    await fs.rm(tmp, { force: true }).catch(() => {});
+    // A failed cleanup must not mask the original write error, but a silent
+    // swallow lets uniquely-named `.tmp` orphans accumulate in the config dir
+    // (every failed save adds one) with zero signal. Log at warn so the leak is
+    // observable; still re-throw the original write error below. Mirrors the
+    // ephemeral-dir cleanup treatment in runner.ts (CAR-225).
+    await fs.rm(tmp, { force: true }).catch((rmErr) => {
+      console.warn(`[state] temp cleanup failed for ${tmp}:`, rmErr);
+    });
     throw err;
   }
 }
