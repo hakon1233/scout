@@ -312,7 +312,7 @@ export async function loadState(file = STATE_FILE): Promise<State> {
 // a default would otherwise silently wipe whatever the file held. The temp file
 // is uniquely named so concurrent savers can't clobber each other's in-flight
 // temp; last rename wins, matching the existing last-writer contract. Shared so
-// every JSON persistence path (state.json, chat transcript) gets the same
+// every persistence path (state.json, chat transcript, intent docs) gets the same
 // crash-safety instead of re-deriving it per call site.
 export async function atomicWriteFile(
   file: string,
