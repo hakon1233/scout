@@ -23,7 +23,7 @@ import {
   type State,
 } from "../src/state.js";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
-import { buildChatPrompt } from "../src/chat.js";
+import { buildChatPrompt, readChatTranscript } from "../src/chat.js";
 import { startServer } from "../src/server.js";
 
 // A spawn() stand-in that returns a fixed text payload (the model's JSON) and
@@ -1121,6 +1121,43 @@ test("POST /v0/chat/stop is a no-op for a stale turn id or no in-flight turn (PE
     );
   } finally {
     server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// CAR-195: a corrupt-but-present transcript must be preserved, not silently
+// overwritten. Before, readChatTranscript mapped a parse error to [] and the very
+// next append wiped the file — permanent chat-history loss on one bad read.
+test("CAR-195: a corrupt transcript is backed up to .corrupt-*.bak, not wiped", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-corrupt-"));
+  try {
+    const file = path.join(tmp, "transcript.json");
+    const corruptBytes = '[{"id":"chat_1","created_at":"2026-01-01T00:00:00Z" CORRUPT';
+    await fs.writeFile(file, corruptBytes);
+
+    // Corrupt JSON reads as an empty transcript (callers degrade gracefully)...
+    const turns = await readChatTranscript(file);
+    assert.deepEqual(turns, []);
+
+    // ...but the original bytes survive under a .corrupt-*.bak sibling, and the
+    // original path is freed so the next write starts clean instead of clobbering.
+    const siblings = await fs.readdir(tmp);
+    const backup = siblings.find((f) => f.includes(".corrupt-") && f.endsWith(".bak"));
+    assert.ok(backup, "expected a .corrupt-*.bak backup of the unparseable transcript");
+    assert.equal(await fs.readFile(path.join(tmp, backup!), "utf8"), corruptBytes);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// CAR-195: the common no-file case stays quiet (no spurious backup, returns []).
+test("CAR-195: a missing transcript returns [] without creating a backup", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-missing-"));
+  try {
+    const file = path.join(tmp, "transcript.json");
+    assert.deepEqual(await readChatTranscript(file), []);
+    assert.deepEqual(await fs.readdir(tmp), []);
+  } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
