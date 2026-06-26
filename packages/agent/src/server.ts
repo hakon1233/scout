@@ -190,6 +190,7 @@ function isOriginDenied(origin: string | undefined): boolean {
 // so a client can tell "this route exists, wrong method" from "no such route".
 // (PER-136)
 const V0_ROUTE_METHODS: Record<string, readonly string[]> = {
+  "/v0/version": ["GET", "OPTIONS"],
   "/v0/config": ["GET", "OPTIONS"],
   "/v0/interests": ["GET", "POST", "PUT", "OPTIONS"],
   "/v0/briefs": ["GET", "OPTIONS"],

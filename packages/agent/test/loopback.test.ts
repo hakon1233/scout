@@ -666,6 +666,15 @@ test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404 
     assert.equal(briefsPut.status, 405);
     assert.equal(briefsPut.headers.get("allow"), "GET, OPTIONS");
 
+    // POST on the unauthenticated build-provenance route is also a known-path
+    // wrong method, so it must not look like an unknown /v0/* route.
+    const versionPost = await fetch(`http://127.0.0.1:${port}/v0/version`, {
+      method: "POST",
+      headers: auth,
+    });
+    assert.equal(versionPost.status, 405);
+    assert.equal(versionPost.headers.get("allow"), "GET, OPTIONS");
+
     // A genuinely unknown /v0/* path still 404s (no Allow header) — the 405
     // path must not swallow real not-found cases.
     const unknown = await fetch(`http://127.0.0.1:${port}/v0/nonsense`, {
