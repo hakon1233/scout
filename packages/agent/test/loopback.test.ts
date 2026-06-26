@@ -14,7 +14,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { saveState, loadState, newPairingToken, type Brief, type State } from "../src/state.js";
-import { startServer } from "../src/server.js";
+import { isSameOriginCaller, startServer } from "../src/server.js";
 
 async function makeStubClaude(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-stub-"));
@@ -421,12 +421,29 @@ test("GET /v0/config hands the token to a same-origin caller, refuses cross-orig
     assert.equal(noOrigin.status, 200);
     assert.equal((await noOrigin.json()).token, token);
 
-    // Explicit loopback origin (the served UI) also gets the token.
+    // Explicit same-origin loopback (the served UI) also gets the token.
     const loopback = await fetch(`http://127.0.0.1:${port}/v0/config`, {
       headers: { origin: `http://127.0.0.1:${port}` },
     });
     assert.equal(loopback.status, 200);
     assert.equal((await loopback.json()).token, token);
+
+    // Allowed loopback does NOT mean any localhost page gets the token. The
+    // Origin must match this server's actual host+port.
+    const wrongPort = await fetch(`http://127.0.0.1:${port}/v0/config`, {
+      headers: { origin: "http://127.0.0.1:3000" },
+    });
+    assert.equal(wrongPort.status, 403);
+
+    // A same-host HTTPS proxy origin (e.g. tailscale serve) is also same-origin
+    // for the browser, even though the companion may see the request over HTTP.
+    assert.equal(
+      isSameOriginCaller(
+        "https://mac-mini.tailnet.ts.net",
+        "mac-mini.tailnet.ts.net",
+      ),
+      true,
+    );
 
     // A public cross-origin caller is refused — the token must never leak to
     // github.io even if the browser's LNA gate somehow let the request through.
