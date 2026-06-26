@@ -408,6 +408,7 @@ export default function ConnectPage() {
                     <input
                       type="password"
                       autoComplete="off"
+                      aria-label="Pairing token"
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
                       placeholder="Paste pairing token here"
@@ -450,6 +451,7 @@ export default function ConnectPage() {
                 <input
                   type="password"
                   autoComplete="off"
+                  aria-label="Pairing token"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   placeholder="Paste pairing token here"
