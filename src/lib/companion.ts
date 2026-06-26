@@ -173,12 +173,9 @@ export async function discoverCompanion(): Promise<string | null> {
     return cachedBase;
   }
   if (cachedBase) {
+    const cachedPort = new URL(cachedBase).port;
     if (
-      await pingPort(
-        new URL(cachedBase).port
-          ? Number(new URL(cachedBase).port)
-          : COMPANION_PORT,
-      )
+      await pingPort(cachedPort ? Number(cachedPort) : COMPANION_PORT)
     ) {
       return cachedBase;
     }
