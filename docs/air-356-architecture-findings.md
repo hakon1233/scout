@@ -33,7 +33,7 @@ small and filed as reversible fix-issues, not done big-bang.
   backup itself fails, behavior is unchanged (`{}`).
 - **Tests:** new `packages/agent/test/state.test.ts` (2 tests, mirrors CAR-195):
   corrupt file is backed up & a clean save survives; a *missing* file is **not**
-  backed up. `pnpm test` green (143 tests), `tsc --noEmit` clean, lint clean.
+  backed up. `pnpm test` green (141 tests), `tsc --noEmit` clean, lint clean.
 
 ## Net-new items worth filing (small, reversible) — not fixed in-pass
 
