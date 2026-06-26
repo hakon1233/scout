@@ -157,3 +157,29 @@ test("PER-181: a RECENT persisted pending is still refused (live run)", async ()
   assert.equal(persisted.last_brief?.id, "live-run");
   assert.equal(persisted.last_brief?.status, "pending");
 });
+
+test("CAR-174: a failed startup save resets runInFlight so the slot stays reclaimable", async () => {
+  // `runInFlight` is claimed synchronously (before the first await) so a second
+  // startRun can't race in and double-start. But the persisting save that
+  // follows can throw (disk full, ENOTDIR). Before this fix that throw left
+  // runInFlight stuck true for the life of the process, wedging EVERY later run
+  // with `in_flight` and making isStalePending refuse to reclaim the slot.
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-runner-fail-"));
+  // A regular file where atomicWriteFile expects to mkdir a directory → the
+  // recursive mkdir of dirname fails with ENOTDIR and saveState rejects.
+  const blocker = path.join(dir, "blocker");
+  await fs.writeFile(blocker, "x");
+  const badStateFile = path.join(blocker, "state.json");
+
+  const { spawnFn } = makeFastSpawn();
+  await assert.rejects(
+    () => startRun(INTERESTS, { stateFile: badStateFile, spawnFn }),
+    "startRun should surface the save failure to the caller",
+  );
+
+  // The slot must NOT be wedged: a fresh run against a writable state file is
+  // accepted and completes, rather than being refused with `in_flight`.
+  const goodStateFile = path.join(dir, "state.json");
+  const landed = await runToCompletion(INTERESTS, goodStateFile, spawnFn);
+  assert.equal(landed.status, "ready", "the slot was reclaimable after the failure");
+});
