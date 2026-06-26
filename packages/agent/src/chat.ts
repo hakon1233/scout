@@ -770,7 +770,15 @@ export async function confirmDeleteTurn(
     };
 
     await saveState({ ...fresh, interests, last_chat: turn }, deps.stateFile);
-    await appendChatTranscript(turn, deps.chatTranscriptFile);
+    // The delete is already durable in state.last_chat above; the transcript is a
+    // secondary append-only record. A transient write failure here must NOT turn a
+    // committed delete into a route-level 500 — the client's retry would 404 (the
+    // pending_delete proposal is consumed), leaving the user with an error for an
+    // operation that actually succeeded. Best-effort + logged, matching the
+    // fire-and-forget transcript tail in runChatTurn / startChatTurn.
+    await appendChatTranscript(turn, deps.chatTranscriptFile).catch((err) => {
+      console.error(`[chat] confirm-delete transcript append failed:`, err);
+    });
     deps.onChatDone?.(turn);
     return { ok: true, turn };
   } finally {
@@ -836,7 +844,14 @@ export async function confirmRewriteTurn(
     // re-applied later from a stale card (a second confirm 404s).
     const fresh = await loadState(deps.stateFile);
     await saveState({ ...fresh, last_chat: turn }, deps.stateFile);
-    await appendChatTranscript(turn, deps.chatTranscriptFile);
+    // The rewrite is already durable: the doc was written above and the turn is in
+    // state.last_chat. The transcript is a secondary record — a transient write
+    // failure must NOT surface as a 500 for an operation that committed (the
+    // client's retry would 404, the pending_rewrite being consumed). Best-effort +
+    // logged, matching runChatTurn / startChatTurn's fire-and-forget tail.
+    await appendChatTranscript(turn, deps.chatTranscriptFile).catch((err) => {
+      console.error(`[chat] confirm-rewrite transcript append failed:`, err);
+    });
     deps.onChatDone?.(turn);
     return { ok: true, turn };
   } finally {
