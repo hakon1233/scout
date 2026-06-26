@@ -731,8 +731,17 @@ export async function confirmDeleteTurn(
   if (!pending || pending.interestId !== interestId) {
     return { ok: false, reason: "not_found" };
   }
+
+  // Reload before mutating + persisting so we don't clobber a concurrent writer
+  // (e.g. a PUT /v0/interests that added a topic, or the scheduler updating
+  // next_run_at), exactly as runChatTurn does. Splice the delete out of the
+  // FRESH interest list, NOT the gate-time snapshot above — persisting the stale
+  // post-delete list would silently revert any interest-set change that landed
+  // between the two loads. Applying against `fresh` also makes a double-confirm
+  // safe: the second call finds the interest already gone and 404s.
+  const fresh = await loadState(deps.stateFile);
   const { interests, applied } = await applyConfirmedDelete(
-    state.interests ?? [],
+    fresh.interests ?? [],
     interestId,
     deps.interestsDir,
   );
@@ -747,9 +756,6 @@ export async function confirmDeleteTurn(
     changes: [applied],
   };
 
-  // Reload before persisting so we don't clobber a concurrent writer (e.g. the
-  // scheduler updating next_run_at), exactly as runChatTurn does.
-  const fresh = await loadState(deps.stateFile);
   await saveState({ ...fresh, interests, last_chat: turn }, deps.stateFile);
   await appendChatTranscript(turn, deps.chatTranscriptFile);
   deps.onChatDone?.(turn);

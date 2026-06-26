@@ -72,6 +72,12 @@ export default function AppPage() {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [running, setRunning] = useState(false);
+  // Whether the in-flight run can actually be cancelled. A daily/retry/selected
+  // run threads an AbortController through refreshBriefViaCompanion, so Cancel
+  // aborts it; the weekly digest assembles synchronously via generateWeeklyBrief
+  // (no signal), so there is nothing to abort. Drives the progress panel's Cancel
+  // button so it never shows a dead control during a weekly run (PER-139).
+  const [cancelable, setCancelable] = useState(true);
   // PER-150: explicit success state for an on-demand "Run now". Holds the
   // generated_at of the most recent run that completed in THIS session, so we
   // can show a "fresh brief delivered" confirmation instead of silently
@@ -266,6 +272,7 @@ export default function AppPage() {
       const controller = new AbortController();
       abortRef.current = controller;
       setRunning(true);
+      setCancelable(true);
       setError(null);
       setCancelled(false);
       setRanAt(null);
@@ -347,6 +354,7 @@ export default function AppPage() {
       return;
     }
     setRunning(true);
+    setCancelable(false);
     setError(null);
     setCancelled(false);
     setRanAt(null);
@@ -472,7 +480,11 @@ export default function AppPage() {
           )}
 
           {progress && (
-            <AgentProgressPanel progress={progress} onCancel={cancel} />
+            <AgentProgressPanel
+              progress={progress}
+              onCancel={cancel}
+              canCancel={cancelable}
+            />
           )}
 
           {showSkeleton && <BriefSkeleton />}
