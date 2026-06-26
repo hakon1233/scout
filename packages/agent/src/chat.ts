@@ -713,6 +713,13 @@ export async function confirmDeleteTurn(
   if (chatInFlight) return { ok: false, reason: "in_flight" };
 
   const state = await loadState(deps.stateFile);
+  const pending = state.last_chat?.pending_delete;
+  // The delete route is the stored proposal consumer, not a generic delete-by-id
+  // API. This mirrors confirmRewriteTurn: stale cards or direct route calls must
+  // not bypass the server-side confirmation state.
+  if (!pending || pending.interestId !== interestId) {
+    return { ok: false, reason: "not_found" };
+  }
   const { interests, applied } = await applyConfirmedDelete(
     state.interests ?? [],
     interestId,
