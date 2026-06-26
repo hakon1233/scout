@@ -101,23 +101,54 @@ export function defaultChatTranscriptFile(stateFile?: string): string {
 export async function readChatTranscript(
   file = defaultChatTranscriptFile(),
 ): Promise<ChatTurn[]> {
+  let raw: string;
   try {
-    const parsed = JSON.parse(await fs.readFile(file, "utf8")) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is ChatTurn => {
-      if (!entry || typeof entry !== "object") return false;
-      const turn = entry as Partial<ChatTurn>;
-      return (
-        typeof turn.id === "string" &&
-        typeof turn.created_at === "string" &&
-        typeof turn.message === "string" &&
-        (turn.status === "pending" ||
-          turn.status === "ready" ||
-          turn.status === "failed")
-      );
-    });
+    raw = await fs.readFile(file, "utf8");
   } catch {
+    // No transcript yet (ENOENT) is the normal first-run state, and a transient
+    // read blip leaves the file untouched on disk. Either way: nothing to parse.
     return [];
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // The file exists and was readable but holds corrupt JSON. Returning [] here
+    // is the dangerous case: the very next appendChatTranscript would overwrite
+    // this file, permanently destroying whatever history it still held. Move the
+    // corrupt bytes aside first so the user's history stays recoverable, THEN
+    // start fresh. Best-effort — if the backup itself fails we still return [].
+    await preserveCorruptTranscript(file);
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((entry): entry is ChatTurn => {
+    if (!entry || typeof entry !== "object") return false;
+    const turn = entry as Partial<ChatTurn>;
+    return (
+      typeof turn.id === "string" &&
+      typeof turn.created_at === "string" &&
+      typeof turn.message === "string" &&
+      (turn.status === "pending" ||
+        turn.status === "ready" ||
+        turn.status === "failed")
+    );
+  });
+}
+
+// Rename a corrupt transcript to a timestamped `.corrupt-<ts>.bak` sibling so the
+// next write starts from a clean file without erasing the unparseable original.
+// Pure best-effort: any failure is swallowed (we log and fall back to truncation,
+// which is no worse than the pre-existing behavior).
+async function preserveCorruptTranscript(file: string): Promise<void> {
+  try {
+    const backup = `${file}.corrupt-${Date.now()}.bak`;
+    await fs.rename(file, backup);
+    console.error(
+      `[chat] transcript ${file} was corrupt; preserved at ${backup} and started fresh`,
+    );
+  } catch (err) {
+    console.error(`[chat] transcript ${file} was corrupt and could not be backed up:`, err);
   }
 }
 
@@ -126,9 +157,9 @@ async function writeChatTranscript(
   file = defaultChatTranscriptFile(),
 ): Promise<void> {
   // Atomic temp+rename (shared with state.json): a plain writeFile that tears
-  // mid-write leaves corrupt JSON, which readChatTranscript catches and reads as
-  // [] — and the next append then overwrites the file, permanently wiping the
-  // user's chat history. The rename can never expose a half-written transcript.
+  // mid-write leaves corrupt JSON. The rename can never expose a half-written
+  // transcript, and if a transcript is ever found corrupt anyway readChatTranscript
+  // moves it aside to a `.corrupt-*.bak` rather than letting this write wipe it.
   await atomicWriteFile(file, JSON.stringify(turns, null, 2));
 }
 
