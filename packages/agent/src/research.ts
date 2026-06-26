@@ -10,6 +10,7 @@
 
 import { spawn } from "node:child_process";
 import os from "node:os";
+import { StringDecoder } from "node:string_decoder";
 import { SEARCH_SKILLS } from "./search-skills.js";
 
 // Read and Write are intentionally excluded — a research subprocess has no
@@ -136,8 +137,14 @@ export async function researchAndSynthesize(
       );
     }, timeoutMs);
 
-    child.stdout!.on("data", (b: Buffer) => (stdout += b.toString()));
-    child.stderr!.on("data", (b: Buffer) => (stderr += b.toString()));
+    // Decode through a StringDecoder so a multi-byte UTF-8 char (em dash,
+    // accents, emoji — all common in real news markdown) split across two
+    // `data` chunks isn't mangled into replacement chars. Buffer.toString()
+    // per-chunk would corrupt any codepoint straddling a chunk boundary.
+    const outDecoder = new StringDecoder("utf8");
+    const errDecoder = new StringDecoder("utf8");
+    child.stdout!.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
+    child.stderr!.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
     child.on("error", (e) => {
       if (settled) return;
       settled = true;
@@ -152,6 +159,9 @@ export async function researchAndSynthesize(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      // Flush any bytes the decoder buffered for an incomplete trailing char.
+      stdout += outDecoder.end();
+      stderr += errDecoder.end();
       if (code !== 0)
         return reject(new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`));
       const text = stripBriefPreamble(stdout);
