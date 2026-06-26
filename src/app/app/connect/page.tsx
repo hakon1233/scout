@@ -26,7 +26,13 @@ const TARBALL_PATH = `${BASE_PATH}/agent/scout-agent-0.3.0.tgz`;
 // after mount so the copied command is correct on whatever host serves it.
 const DEFAULT_TARBALL_URL = `https://hakon1233.github.io${TARBALL_PATH}`;
 const POLL_INTERVAL_MS = 4000;
-const POLL_MAX_ATTEMPTS = 20; // ~80s
+// ~5 min. A real run researches every interest with live WebSearch + WebFetch,
+// so a full multi-topic pass routinely runs past two minutes (cold, or when
+// `claude` is rate-limited). The old ~80s budget gave up while the companion was
+// still working — Generate then showed a false "Timed out" and a retry hit the
+// single-flight 409 (the "it doesn't work" go-around). Match the main app path's
+// 300s client deadline (companion.ts refreshBriefViaCompanion, PER-157).
+const POLL_MAX_ATTEMPTS = 75; // ~5 min (75 × 4s), matching the app's run deadline
 
 export default function ConnectPage() {
   const router = useRouter();
@@ -130,7 +136,7 @@ export default function ConnectPage() {
 
     // Poll for the brief
     setGenState("polling");
-    setGenMsg("Waiting for brief… (~60s)");
+    setGenMsg("Waiting for brief… (up to ~5 min)");
     startedAtRef.current = new Date().toISOString();
     pollCountRef.current = 0;
     if (pollRef.current) clearInterval(pollRef.current);
