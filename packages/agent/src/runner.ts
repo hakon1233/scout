@@ -182,9 +182,9 @@ export async function startRun(
   // then map them back to the rich interests so each retried session still
   // carries its own intent doc.
   const baseMarkdown = state.last_brief?.summary_md;
-  const retryTopics = (opts.retryTopics ?? []).filter((t) =>
-    topics.includes(t),
-  );
+  const retryTopics = [
+    ...new Set((opts.retryTopics ?? []).filter((t) => topics.includes(t))),
+  ];
   const isRetry = retryTopics.length > 0;
   if (isRetry && !baseMarkdown) {
     return { started: false, reason: "no_base_brief" };
@@ -196,9 +196,13 @@ export async function startRun(
   // (or a superset of) the full list collapses to a normal full run. We narrow
   // to topics actually in the current list so a stale/foreign topic can't sneak
   // an empty section into the brief.
-  const selectedTopics = (opts.selectedTopics ?? []).filter((t) =>
-    topics.includes(t),
-  );
+  // Dedupe before the strict-subset test: a selection like ["A","A","A"]
+  // against interests ["A","B","C"] has raw length 3 == topics.length, which
+  // would wrongly collapse the intended single-topic run into a full run (wrong
+  // coverage + extra Claude spend). Distinct topics are what the subset check means.
+  const selectedTopics = [
+    ...new Set((opts.selectedTopics ?? []).filter((t) => topics.includes(t))),
+  ];
   const isSelected =
     !isRetry &&
     selectedTopics.length > 0 &&
@@ -410,7 +414,9 @@ async function runSynthesis(
       generated_at: new Date().toISOString(),
       status: "failed",
       kind: "daily",
-      error_msg: String(err),
+      // A non-Error throw (e.g. a rejected non-Error value) stringifies to a
+      // useless "[object Object]" in the UI's last-run note; prefer .message.
+      error_msg: err instanceof Error ? err.message : String(err),
     };
   }
 

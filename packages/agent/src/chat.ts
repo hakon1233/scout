@@ -25,6 +25,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import {
   loadState,
   saveState,
@@ -425,8 +426,15 @@ export async function chatComplete(
 
     let stdout = "";
     let stderr = "";
-    child.stdout!.on("data", (b: Buffer) => (stdout += b.toString()));
-    child.stderr!.on("data", (b: Buffer) => (stderr += b.toString()));
+    // Decode through a StringDecoder so a multi-byte UTF-8 char (em dash,
+    // accents, emoji) split across two `data` chunks isn't mangled into
+    // replacement chars — chat replies and persisted intent docs carry such
+    // characters routinely. Per-chunk Buffer.toString() corrupts any codepoint
+    // straddling a chunk boundary.
+    const outDecoder = new StringDecoder("utf8");
+    const errDecoder = new StringDecoder("utf8");
+    child.stdout!.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
+    child.stderr!.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
     child.on("error", (e) =>
       reject(
         new Error(
@@ -436,6 +444,9 @@ export async function chatComplete(
     );
     child.on("close", (code) => {
       opts.signal?.removeEventListener("abort", onAbort);
+      // Flush any bytes the decoder buffered for an incomplete trailing char.
+      stdout += outDecoder.end();
+      stderr += errDecoder.end();
       if (opts.signal?.aborted) return reject(new ChatStoppedError());
       if (code !== 0)
         return reject(
