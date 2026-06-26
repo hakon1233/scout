@@ -47,8 +47,9 @@ export function readBuildInfo(
 ): Promise<BuildInfo> {
   let p = cache.get(file);
   if (!p) {
-    p = fs.readFile(file, "utf8").then(
-      (raw) => {
+    p = fs
+      .readFile(file, "utf8")
+      .then((raw) => {
         const parsed = JSON.parse(raw) as Partial<BuildInfo>;
         return {
           git_sha: typeof parsed.git_sha === "string" ? parsed.git_sha : null,
@@ -63,9 +64,13 @@ export function readBuildInfo(
           built_at:
             typeof parsed.built_at === "string" ? parsed.built_at : null,
         };
-      },
-      () => EMPTY,
-    );
+      })
+      // .catch (not a then-reject handler) so a malformed/truncated
+      // build-info.json — JSON.parse throwing — degrades to EMPTY too, not just
+      // a missing-file read rejection. Keeps the "never fail the endpoint"
+      // contract above: /v0/version and /healthz answer 200 with null
+      // provenance instead of 500ing on a corrupt build artifact.
+      .catch(() => EMPTY);
     cache.set(file, p);
   }
   return p;

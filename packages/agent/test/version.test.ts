@@ -76,6 +76,36 @@ test("GET /v0/version degrades to null provenance when build-info.json is missin
   }
 });
 
+test("GET /v0/version degrades to null provenance when build-info.json is malformed (AIR-343)", async () => {
+  const { tmp, stateFile } = await seeded();
+  const buildInfoFile = path.join(tmp, "build-info.json");
+  // A truncated / corrupted artifact (e.g. interrupted build write): valid file,
+  // invalid JSON. Must degrade to null provenance, never 500 the endpoint.
+  await fs.writeFile(buildInfoFile, '{"git_sha": "96ddc35", ');
+
+  const { server, port } = await startServer(0, { stateFile, buildInfoFile });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/version`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual(body, {
+      ok: true,
+      version: PKG_VERSION,
+      git_sha: null,
+      git_sha_short: null,
+      next_build_id: null,
+      built_at: null,
+    });
+
+    const health = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(health.status, 200);
+    assert.equal((await health.json()).git_sha, null);
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("DEFAULT_PORT falls back when SCOUT_AGENT_PORT is malformed", async () => {
   const previous = process.env.SCOUT_AGENT_PORT;
   process.env.SCOUT_AGENT_PORT = "not-a-number";
