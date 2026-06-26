@@ -14,7 +14,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { CONFIG_DIR } from "./state.js";
+import { atomicWriteFile, CONFIG_DIR } from "./state.js";
 
 export const INTERESTS_DIR = path.join(CONFIG_DIR, "interests");
 
@@ -43,8 +43,7 @@ export async function writeInterestDoc(
   dir = INTERESTS_DIR,
 ): Promise<void> {
   const file = interestDocPath(id, dir);
-  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-  await fs.writeFile(file, content, { mode: 0o600 });
+  await atomicWriteFile(file, content);
 }
 
 // Load an interest's intent doc. Returns null when none exists (never throws on
