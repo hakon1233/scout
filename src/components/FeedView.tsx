@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { Article, Brief } from "@/lib/types";
 import { canonicalUrl, type LikeInput } from "@/lib/likes";
 import { LikeButton } from "@/components/LikeButton";
+import { formatDate } from "@/lib/format-date";
 
 // AIR-186: react-markdown + rehype-sanitize (~170KB) are only needed by the
 // single-story detail body, which never mounts until a reader opens a card.
@@ -48,7 +49,10 @@ export function FeedView({
   // surrounding page chrome is what made "the rest of the feed" show below it.
   onDetailOpenChange?: (open: boolean) => void;
 }) {
-  const items = React.useMemo(() => buildFeed(brief.articles), [brief.articles]);
+  const items = React.useMemo(
+    () => buildFeed(brief.articles),
+    [brief.articles],
+  );
 
   // PER-219: the per-topic filter chips were removed from the feed — the founder
   // wanted a clean read straight into headlines, no filter UI. The chip logic
@@ -73,7 +77,7 @@ export function FeedView({
   }, []);
 
   const selected = selectedId
-    ? items.find((it) => it.id === selectedId) ?? null
+    ? (items.find((it) => it.id === selectedId) ?? null)
     : null;
   const detailOpen = selected != null;
 
@@ -123,9 +127,7 @@ export function FeedView({
     // No parseable stories (e.g. every section reported `_no fresh news_`). The
     // page-level coverage banners already explain why; keep the feed area quiet.
     return (
-      <p className="text-body-sm text-muted">
-        No stories in this edition yet.
-      </p>
+      <p className="text-body-sm text-muted">No stories in this edition yet.</p>
     );
   }
 
@@ -195,7 +197,10 @@ function FeedCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
           </span>
         </div>
       </button>
-      <LikeButton story={likeInputFor(item)} className="absolute right-2 top-2" />
+      <LikeButton
+        story={likeInputFor(item)}
+        className="absolute right-2 top-2"
+      />
     </div>
   );
 }
@@ -218,7 +223,9 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption uppercase tracking-wide text-muted">
           <span className="font-medium text-signal">{item.topic}</span>
           {item.publishedAt && (
-            <span className="tabular-nums">· {formatDate(item.publishedAt)}</span>
+            <span className="tabular-nums">
+              · {formatDate(item.publishedAt)}
+            </span>
           )}
         </div>
         <h1 className="font-serif text-title-1 leading-tight text-primary">
@@ -242,7 +249,9 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
       {item.body && <FeedBody markdown={item.body} />}
 
       <div className="flex flex-col gap-2 rounded-md border border-border-default bg-surface-muted p-4">
-        <p className="text-caption uppercase tracking-wide text-muted">Source</p>
+        <p className="text-caption uppercase tracking-wide text-muted">
+          Source
+        </p>
         <a
           href={item.url}
           target="_blank"
@@ -267,7 +276,13 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
 // Source images are external (and best-effort handpicked by the model). On any
 // load error — paywall, hotlink block, 404, blocked URL — drop the image so the
 // card/detail degrade to clean text rather than showing a broken-image icon.
-export function FeedImage({ src, className }: { src: string; className: string }) {
+export function FeedImage({
+  src,
+  className,
+}: {
+  src: string;
+  className: string;
+}) {
   const [failed, setFailed] = React.useState(false);
   if (failed) return null;
   // Remote, unknown-host source images — next/image needs preconfigured domains
@@ -361,21 +376,8 @@ export function faviconFor(host: string): string {
 // canonicalUrl now lives in `@/lib/likes` (the like key and the feed dedupe must
 // use the SAME canonicalisation), and is imported above.
 
-export function formatDate(iso: string): string {
-  // Per-story publish dates are date-only `YYYY-MM-DD` (companion.ts STORY_DATE_RE).
-  // `new Date("2026-06-20")` parses as UTC midnight, which toLocaleDateString then
-  // renders as the DAY BEFORE for any reader west of UTC (all of the Americas) —
-  // the date shown wouldn't match the source's publish date. Build the date from
-  // its parts in LOCAL time so the calendar day is stable regardless of timezone.
-  // Full ISO timestamps (with a time component) keep the plain Date parse.
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  const d = dateOnly
-    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
-    : new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+// The canonical date formatter now lives in `@/lib/format-date` so the brief
+// surfaces share one timezone-safe implementation (imported above). Re-exported
+// here so existing `@/components/FeedView` importers (e.g. the liked-stories
+// page) are unchanged.
+export { formatDate };
