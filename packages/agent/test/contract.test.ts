@@ -440,6 +440,31 @@ test("PUT /v0/interests rejects an empty/oversized interest list (PER-160)", asy
   }
 });
 
+test("PUT /v0/interests rejects malformed interest entries without partial writes", async () => {
+  const { tmp, stateFile, token } = await seededServer();
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const malformed = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["ai safety", 42] }),
+    });
+    assert.equal(malformed.status, 400);
+    const body = (await malformed.json()) as { error: string };
+    assert.match(body.error, /interests must be strings/);
+
+    const state = await loadState(stateFile);
+    assert.equal(state.interests, undefined, "malformed payload must not partially persist");
+    assert.equal(recorder.calls.length, 0, "PUT must not spawn a synthesis");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Wipe guard (PER-240). Both interest writes are replace-all; on 2026-06-11 a
 // one-topic QA payload (`ephemeral:true` against a pre-PER-218 build) silently
