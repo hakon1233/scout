@@ -233,19 +233,33 @@ export async function startRun(
   // run's topic set — a test/QA payload can research arbitrary topics without
   // shrinking or replacing the saved list.
   const persistedInterests = ephemeral ? state.interests : interests;
-  await saveState(
-    { ...state, interests: persistedInterests, last_brief: pending },
-    deps.stateFile,
-  );
 
-  // Redirect the lazy intent-doc backfill to a throwaway dir for ephemeral runs so
-  // researching a test topic never creates/overwrites a real `interests/<id>.md`.
+  // We hold `runInFlight` from line 221 (claimed synchronously, before the first
+  // await, so a second startRun can't race in and double-start). But until
+  // runSynthesis takes ownership of clearing the flag in its finally, any throw
+  // in this setup (saveState disk-full, mkdtemp EACCES) would leave runInFlight
+  // stuck true for the life of the process — wedging every future run with
+  // `in_flight` and making isStalePending refuse to reclaim the slot. Reset on
+  // early failure so the slot stays reclaimable, then rethrow to the caller.
   let runDeps = deps;
-  if (ephemeral) {
-    const ephemeralDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), "scout-ephemeral-"),
+  try {
+    await saveState(
+      { ...state, interests: persistedInterests, last_brief: pending },
+      deps.stateFile,
     );
-    runDeps = { ...deps, interestsDir: ephemeralDir, ephemeralDir };
+
+    // Redirect the lazy intent-doc backfill to a throwaway dir for ephemeral runs
+    // so researching a test topic never creates/overwrites a real
+    // `interests/<id>.md`.
+    if (ephemeral) {
+      const ephemeralDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "scout-ephemeral-"),
+      );
+      runDeps = { ...deps, interestsDir: ephemeralDir, ephemeralDir };
+    }
+  } catch (err) {
+    runInFlight = false;
+    throw err;
   }
 
   // Fire-and-forget: runSynthesis lands a `failed` brief for research errors via
