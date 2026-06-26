@@ -239,11 +239,15 @@ type InterestParse =
 // PER-160) so both apply the exact same rules. (Dedupe rationale: PER-126;
 // length cap: PER-137.)
 function parseInterestsPayload(raw: unknown): InterestParse {
+  if (Array.isArray(raw) && raw.some((s) => typeof s !== "string")) {
+    return {
+      ok: false,
+      status: 400,
+      error: "interests must be strings",
+    };
+  }
   const cleaned = Array.isArray(raw)
-    ? (raw as unknown[])
-        .filter((s): s is string => typeof s === "string")
-        .map((s) => s.trim())
-        .filter(Boolean)
+    ? raw.map((s) => s.trim()).filter(Boolean)
     : [];
   const seen = new Set<string>();
   const interests = cleaned.filter((s) => {
