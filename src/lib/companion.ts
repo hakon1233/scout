@@ -24,7 +24,15 @@ export function loadCompanionToken(): string {
 }
 
 export function saveCompanionToken(token: string): void {
-  window.localStorage.setItem(TOKEN_KEY, token.trim());
+  // localStorage.setItem throws on quota-exceeded / private-mode. Swallow it
+  // like storage.ts `safeSet` and likes.ts `write` — a token write that throws
+  // would otherwise abort the pairing handler mid-flow. Pairing still works for
+  // this session; it just won't be remembered across a reload.
+  try {
+    window.localStorage.setItem(TOKEN_KEY, token.trim());
+  } catch {
+    // Best-effort persistence only.
+  }
 }
 
 // Memoized positive result of the same-origin probe below. Only `true` is

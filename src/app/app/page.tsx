@@ -33,6 +33,12 @@ import type { Brief, Settings } from "@/lib/types";
 
 const INTERESTS_PATH = "/app/interests";
 
+// The "not paired" guidance is the same whether the user hit Generate or the
+// weekly action — keep one copy so the two run paths never drift (PER-/FLI lanes
+// have re-touched both call sites independently before).
+const COMPANION_NOT_PAIRED_MSG =
+  "Scout companion isn't paired yet. Start `scout-agent run` and open the app it prints, or visit /app/connect to pair.";
+
 // Bucket a brief's topics into the two states the UI treats differently
 // (PER-154). `missing` = the model dropped the section → actionable, Retry can
 // recover it. `empty` = a section exists but had no fresh news today → honest,
@@ -254,13 +260,7 @@ export default function AppPage() {
       const runningTopics = isSelected ? selectedTopics : allTopics;
       const token = loadCompanionToken();
       if (!token) {
-        setError(
-          classifyError(
-            new Error(
-              "Scout companion isn't paired yet. Start `scout-agent run` and open the app it prints, or visit /app/connect to pair.",
-            ),
-          ),
-        );
+        setError(classifyError(new Error(COMPANION_NOT_PAIRED_MSG)));
         return;
       }
       const controller = new AbortController();
@@ -343,13 +343,7 @@ export default function AppPage() {
   const runWeekly = useCallback(async () => {
     const token = loadCompanionToken();
     if (!token) {
-      setError(
-        classifyError(
-          new Error(
-            "Scout companion isn't paired yet. Start `scout-agent run` and open the app it prints, or visit /app/connect to pair.",
-          ),
-        ),
-      );
+      setError(classifyError(new Error(COMPANION_NOT_PAIRED_MSG)));
       return;
     }
     setRunning(true);

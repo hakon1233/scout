@@ -18,6 +18,19 @@ function safeParse<T>(raw: string | null): T | null {
   }
 }
 
+// Mirror of likes.ts `write()`: localStorage.setItem throws on quota-exceeded
+// and in private-mode browsers. An unguarded throw here aborts the caller
+// *before* its in-memory setState, so the UI would neither persist nor update.
+// Swallow the failure — the caller's React state still reflects the change for
+// this session; it just won't survive a reload.
+function safeSet(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Quota / private-mode: best-effort persistence only.
+  }
+}
+
 export function loadSettings(): Settings | null {
   if (typeof window === "undefined") return null;
   const raw = safeParse<Settings & { anthropicKey?: string; exaKey?: string }>(
@@ -32,7 +45,7 @@ export function loadSettings(): Settings | null {
 }
 
 export function saveSettings(s: Settings): void {
-  window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  safeSet(SETTINGS_KEY, JSON.stringify(s));
 }
 
 export function loadLastBrief(): Brief | null {
@@ -41,7 +54,7 @@ export function loadLastBrief(): Brief | null {
 }
 
 export function saveLastBrief(b: Brief): void {
-  window.localStorage.setItem(BRIEF_KEY, JSON.stringify(b));
+  safeSet(BRIEF_KEY, JSON.stringify(b));
 }
 
 export function clearLastBrief(): void {
@@ -54,7 +67,7 @@ export function loadPrevBrief(): Brief | null {
 }
 
 export function savePrevBrief(b: Brief): void {
-  window.localStorage.setItem(PREV_BRIEF_KEY, JSON.stringify(b));
+  safeSet(PREV_BRIEF_KEY, JSON.stringify(b));
 }
 
 export function clearPrevBrief(): void {
