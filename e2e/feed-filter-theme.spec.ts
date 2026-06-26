@@ -143,3 +143,63 @@ test("feed filter topic labels use available dropdown space before ellipsis", as
   }));
   expect(metrics.clientWidth).toBeGreaterThanOrEqual(metrics.scrollWidth);
 });
+
+test("feed filter matches model topic headings case-insensitively", async ({
+  page,
+}) => {
+  await blockNonLoopback(page);
+
+  await page.addInitScript(() => {
+    window.localStorage.setItem("scout.theme", "light");
+    window.localStorage.setItem(
+      "scout.settings.v1",
+      JSON.stringify({
+        name: "Filter Tester",
+        interests: [
+          { id: "int_openai", topic: "openai" },
+          { id: "int_energy", topic: "Energy" },
+        ],
+      }),
+    );
+    window.localStorage.setItem(
+      "scout.lastBrief.v1",
+      JSON.stringify({
+        id: "case-brief",
+        generatedAt: "2026-06-20T08:00:00.000Z",
+        interests: ["openai", "Energy"],
+        markdown: "",
+        articles: [
+          {
+            id: "case-brief-0",
+            title: "example.com — OpenAI launches a research preview",
+            url: "https://example.com/openai-preview",
+            source: "example.com",
+            publishedAt: "2026-06-20",
+            interest: "OpenAI",
+            text: "The model heading used title case.",
+          },
+          {
+            id: "case-brief-1",
+            title: "example.com — Grid batteries scale up",
+            url: "https://example.com/grid-batteries",
+            source: "example.com",
+            publishedAt: "2026-06-19",
+            interest: "Energy",
+            text: "A separate topic should be hidden by the filter.",
+          },
+        ],
+      }),
+    );
+  });
+
+  await page.goto(`${ORIGIN}/app/`);
+  await page.getByRole("button", { name: "Filter feed" }).click();
+  await page.getByRole("menuitem", { name: "openai" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "OpenAI launches a research preview" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Grid batteries scale up" }),
+  ).toHaveCount(0);
+});
