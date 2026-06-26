@@ -38,12 +38,18 @@ its own keychain. No `ANTHROPIC_API_KEY` or web-search API key needed.
 
 ## Scripts
 
-- `pnpm dev` — Next.js dev server (Turbopack).
+- `pnpm dev` — Next.js dev server.
 - `pnpm build` — production build, emits a static site to `out/`.
 - `pnpm start` — serve production build (note: `next start` does not serve a static export; run `npx serve out` for local preview).
 - `pnpm lint` — ESLint.
 - `pnpm typecheck` — TypeScript no-emit check.
 - `pnpm format` / `pnpm format:check` — Prettier.
+- `pnpm test` — hermetic `@scout/agent` suite (unit + `/v0` API contract
+  tests). Mocks the `claude` shell-out, so it runs fully offline with no
+  Claude quota or network. CI runs it on every push/PR.
+- `pnpm test:e2e` — Playwright end-to-end suite (`e2e/`).
+- `pnpm build:agent` / `pnpm pack:agent` — build and pack the loopback
+  companion (`packages/agent`) for distribution.
 
 ## Environment variables
 
@@ -59,3 +65,9 @@ GitHub Actions builds the static export and deploys to GitHub Pages on every
 push to `main` (see `.github/workflows/deploy.yml`). The site is served at
 `https://<owner>.github.io/<repo>/`; `next.config.ts` derives the `basePath`
 from `GITHUB_REPOSITORY` at build time.
+
+## Contributing
+
+See [`AGENTS.md`](AGENTS.md) for the agent/contributor working guide —
+Next.js version caveats and the test conventions to follow before touching
+`packages/agent/src/*` or `/v0/*` behavior.
