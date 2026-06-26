@@ -337,9 +337,16 @@ async function runSynthesis(
         const section = extractTopicSection(sessionMd, interest.topic);
         if (section) anyOk = true;
         sections.push({ topic: interest.topic, section });
-      } catch {
+      } catch (err) {
         // One topic's session failing must not sink the whole brief — record it
-        // as a missing section and keep going.
+        // as a missing section and keep going. Log at warn so a silently-missing
+        // section is traceable to which topic failed and why; without this the
+        // brief just shows a gap and ops has zero signal (the token never
+        // reaches this err — spawn never forwards it — so it stays log-safe).
+        console.warn(
+          `[runner] research failed for topic "${interest.topic}":`,
+          err,
+        );
         sections.push({ topic: interest.topic, section: null });
       }
     }
