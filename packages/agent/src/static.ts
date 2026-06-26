@@ -77,6 +77,13 @@ function candidatesFor(pathname: string): string[] {
   return [p + "/index.html", p + ".html"];
 }
 
+// Path-traversal containment guard: a resolved candidate is safe only when it
+// is `root` itself or sits strictly beneath it. Shared by every file-system
+// resolver below so the security predicate can't drift between call sites.
+function isInsideRoot(filePath: string, root: string): boolean {
+  return filePath === root || filePath.startsWith(root + path.sep);
+}
+
 export type StaticHit = { filePath: string; contentType: string; body: Buffer };
 
 // Resolve and read the static file for a pathname, or null if none matches.
@@ -89,7 +96,7 @@ export async function resolveStatic(
   if (!(await hasWebroot(root))) return null;
   for (const rel of candidatesFor(pathname)) {
     const filePath = path.resolve(root, rel);
-    if (filePath !== root && !filePath.startsWith(root + path.sep)) continue;
+    if (!isInsideRoot(filePath, root)) continue;
     try {
       const body = await fs.readFile(filePath);
       return { filePath, contentType: contentTypeFor(filePath), body };
@@ -117,7 +124,7 @@ export async function trailingSlashRedirect(
   if (p === "/" || p.endsWith("/") || path.extname(p)) return null;
   const rel = p.replace(/^\/+/, "") + "/index.html";
   const filePath = path.resolve(root, rel);
-  if (filePath !== root && !filePath.startsWith(root + path.sep)) return null;
+  if (!isInsideRoot(filePath, root)) return null;
   try {
     await fs.access(filePath);
     return pathname + "/";
