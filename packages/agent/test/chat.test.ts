@@ -23,7 +23,12 @@ import {
   type State,
 } from "../src/state.js";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
-import { buildChatPrompt, readChatTranscript } from "../src/chat.js";
+import {
+  buildChatPrompt,
+  isChatInFlight,
+  readChatTranscript,
+  startChatTurn,
+} from "../src/chat.js";
 import { startServer } from "../src/server.js";
 
 // A spawn() stand-in that returns a fixed text payload (the model's JSON) and
@@ -889,6 +894,41 @@ test("POST /v0/chat accepts a new turn after a restart leaves only a persisted p
     assert.equal(landed.status, "ready");
   } finally {
     server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("startChatTurn clears the in-flight guard if persisting the pending turn fails", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-fail-"));
+  const stateFile = path.join(tmp, "state.json");
+  const unwritableStateFile = path.join(tmp, "as-directory");
+  const interestsDir = path.join(tmp, "interests");
+  await fs.mkdir(unwritableStateFile);
+  await saveState({ pairing_token: newPairingToken() }, stateFile);
+
+  try {
+    await assert.rejects(
+      startChatTurn("hello", { stateFile: unwritableStateFile, interestsDir }),
+    );
+    assert.equal(
+      isChatInFlight(),
+      false,
+      "failed setup must not wedge future chat turns as in-flight",
+    );
+
+    const model = JSON.stringify({ reply: "ok", changes: [] });
+    const { spawnFn } = makeChatSpawn({ output: model, autoClose: true });
+    const { onChatDone, done } = awaitTurn();
+    const outcome = await startChatTurn("hello again", {
+      stateFile,
+      interestsDir,
+      spawnFn,
+      onChatDone,
+    });
+    assert.equal(outcome.started, true);
+    const landed = await done;
+    assert.equal(landed.status, "ready");
+  } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
