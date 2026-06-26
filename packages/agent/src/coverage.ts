@@ -77,7 +77,12 @@ export function computeCoverage(
     if (raw === undefined) return { topic, status: "missing" as const };
     // Strip the heading line; judge the body.
     const body = raw.replace(/^##\s+.+$/m, "").trim();
-    const hasCitation = /\]\(https?:\/\//.test(body);
+    const hasCitation = body
+      .split("\n")
+      .some(
+        (line) =>
+          !line.trimStart().startsWith("!") && /\]\(https?:\/\//.test(line),
+      );
     const noNews = /_+\s*no fresh news\s*_+/i.test(body);
     if (noNews || !hasCitation) return { topic, status: "empty" as const };
     return { topic, status: "covered" as const };
