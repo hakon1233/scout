@@ -156,14 +156,17 @@ function extraAllowedOrigins(): RegExp[] {
     );
 }
 
-const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-
-// True when the request is same-origin with this loopback server: either no
-// Origin header (browsers omit it for same-origin GETs) or an explicit
-// loopback origin. Used to gate `/v0/config`, which hands the page its pairing
-// token — only the UI we serve (same-origin) should get it.
-function isSameOriginCaller(origin: string | undefined): boolean {
-  return !origin || LOOPBACK_ORIGIN.test(origin);
+// True when the request is same-origin with this server: either no Origin header
+// (browsers omit it for same-origin GETs) or an explicit Origin whose host
+// matches the request Host exactly. Used to gate `/v0/config`, which hands the
+// page its pairing token — only the UI we serve (same-origin) should get it.
+export function isSameOriginCaller(
+  origin: string | undefined,
+  host: string | undefined,
+): boolean {
+  if (!origin) return true;
+  if (!host) return false;
+  return origin === `http://${host}` || origin === `https://${host}`;
 }
 
 // True when a browser Origin is present but is NOT in our CORS allowlist. Such
@@ -493,7 +496,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         // local process can already read ~/.config/scout/state.json, so this
         // adds no on-machine exposure.
         if (req.method === "GET" && url.pathname === "/v0/config") {
-          if (!isSameOriginCaller(origin)) {
+          if (!isSameOriginCaller(origin, req.headers.host)) {
             return json(res, 403, { error: "forbidden" }, cors);
           }
           const state = await loadState(stateFile);
