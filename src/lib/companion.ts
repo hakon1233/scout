@@ -5,6 +5,7 @@
 
 import type { Brief as AppBrief, TopicBasis, TopicCoverage } from "./types";
 import { readErrorBody } from "./errors";
+import { safeSetItem } from "./safe-storage";
 
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
@@ -24,15 +25,11 @@ export function loadCompanionToken(): string {
 }
 
 export function saveCompanionToken(token: string): void {
-  // localStorage.setItem throws on quota-exceeded / private-mode. Swallow it
-  // like storage.ts `safeSet` and likes.ts `write` — a token write that throws
-  // would otherwise abort the pairing handler mid-flow. Pairing still works for
-  // this session; it just won't be remembered across a reload.
-  try {
-    window.localStorage.setItem(TOKEN_KEY, token.trim());
-  } catch {
-    // Best-effort persistence only.
-  }
+  // Via the shared write guard (safe-storage.ts): a token write that throws
+  // (quota / Safari private mode) would otherwise abort the pairing handler
+  // mid-flow. Pairing still works for this session; it just won't be remembered
+  // across a reload.
+  safeSetItem(TOKEN_KEY, token.trim());
 }
 
 // Memoized positive result of the same-origin probe below. Only `true` is

@@ -1,6 +1,7 @@
 "use client";
 
 import type { Brief, Settings } from "./types";
+import { safeSetItem } from "./safe-storage";
 
 const SETTINGS_KEY = "scout.settings.v1";
 const BRIEF_KEY = "scout.lastBrief.v1";
@@ -18,18 +19,12 @@ function safeParse<T>(raw: string | null): T | null {
   }
 }
 
-// Mirror of likes.ts `write()`: localStorage.setItem throws on quota-exceeded
-// and in private-mode browsers. An unguarded throw here aborts the caller
-// *before* its in-memory setState, so the UI would neither persist nor update.
-// Swallow the failure — the caller's React state still reflects the change for
-// this session; it just won't survive a reload.
-function safeSet(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Quota / private-mode: best-effort persistence only.
-  }
-}
+// Persist one key via the shared write guard (safe-storage.ts). The guard
+// matters most here because `saveLastBrief` runs inside a `setBrief` updater
+// (app/page.tsx): an unguarded throw would abort the caller *before* its
+// in-memory setState, so the UI would neither persist nor update. Degrading
+// keeps the React state authoritative for the session.
+const safeSet = safeSetItem;
 
 export function loadSettings(): Settings | null {
   if (typeof window === "undefined") return null;
