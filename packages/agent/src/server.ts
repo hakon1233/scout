@@ -1088,6 +1088,17 @@ export function createServer(deps: ServerDeps = {}): http.Server {
 
         json(res, 404, { error: "not found" }, cors);
       } catch (err) {
+        // Last-resort handler for any throw escaping a /v0 route. Without this
+        // log the 500 is the *only* signal and it goes to the client, never to
+        // stderr — so "my brief/chat failed with a 500" is undiagnosable from
+        // the companion logs. Mirror the [runner]/[chat]/[state] convention so
+        // ops/QA can correlate the failing request. The String(err) leak in the
+        // response body is a separate, riskier concern tracked elsewhere; this
+        // change is additive observability only and leaves the body unchanged.
+        console.error(
+          `[server] unhandled request error: ${req.method} ${url.pathname}:`,
+          err,
+        );
         json(res, 500, { error: String(err) }, cors);
       }
     })();
