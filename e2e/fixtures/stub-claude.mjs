@@ -44,10 +44,24 @@ const SOURCE_IMAGE = `http://127.0.0.1:${PORT}/icon-192.png`;
 // phrasing alone, mirroring how the real model picks the op (see chat.ts Rules).
 const CHAT_MARKER = "Scout's interest assistant";
 
+// PER-232 Stop/abort e2e hook. When the user's chat message carries this
+// sentinel, the chat branch HOLDS its response for SCOUT_STUB_STALL_MS instead
+// of answering immediately. That gives a spec a deterministic in-flight window
+// to press Stop. The companion kills this child (SIGTERM) when the turn is
+// aborted, so the held response never lands and no change persists — exactly
+// the PER-232 contract. Without an abort the stall elapses and the (default
+// create) op WOULD persist, so a spec that waits past the stall and still finds
+// nothing written has proven the server-side turn — not just the client poll —
+// was cancelled. Sentinel-gated so it never slows the other chat specs.
+const STALL_MARKER = "__STALL_FOR_STOP__";
+const STALL_MS = Number(process.env.SCOUT_STUB_STALL_MS ?? 4000);
+
 function parseUserMessage(prompt) {
   // buildChatPrompt emits: The user says: / """ / <message> / """
   const m = prompt.match(/"""\n([\s\S]*?)\n"""/);
-  return m ? m[1].trim() : "";
+  // Strip the stall sentinel before op/topic detection so it never leaks into a
+  // created topic — it only controls timing, not content.
+  return m ? m[1].replace(STALL_MARKER, "").trim() : "";
 }
 
 function parseFirstInterestId(prompt) {
@@ -128,8 +142,18 @@ function emitChat(prompt) {
     };
   }
 
-  process.stdout.write(JSON.stringify(out));
-  process.exit(0);
+  const writeOut = () => {
+    process.stdout.write(JSON.stringify(out));
+    process.exit(0);
+  };
+  // PER-232: hold the answer so a Stop can land mid-flight. The pending timer
+  // keeps this child alive; a SIGTERM from the companion's abort tears it down
+  // before writeOut fires, so nothing is ever emitted or persisted.
+  if (prompt.includes(STALL_MARKER)) {
+    setTimeout(writeOut, STALL_MS);
+    return;
+  }
+  writeOut();
 }
 
 function emit() {
