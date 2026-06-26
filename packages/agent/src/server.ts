@@ -52,7 +52,14 @@ import {
 } from "./static.js";
 
 export const PKG_VERSION = "0.3.0";
-export const DEFAULT_PORT = Number(process.env.SCOUT_AGENT_PORT ?? 47821);
+
+function defaultPort(raw: string | undefined): number {
+  if (raw === undefined) return 47821;
+  const port = Number(raw);
+  return Number.isInteger(port) && port >= 0 && port <= 65535 ? port : 47821;
+}
+
+export const DEFAULT_PORT = defaultPort(process.env.SCOUT_AGENT_PORT);
 
 export type ServerDeps = {
   stateFile?: string;

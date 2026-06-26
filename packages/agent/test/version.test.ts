@@ -75,3 +75,15 @@ test("GET /v0/version degrades to null provenance when build-info.json is missin
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
+
+test("DEFAULT_PORT falls back when SCOUT_AGENT_PORT is malformed", async () => {
+  const previous = process.env.SCOUT_AGENT_PORT;
+  process.env.SCOUT_AGENT_PORT = "not-a-number";
+  try {
+    const mod = await import(`../src/server.js?air322=${Date.now()}`);
+    assert.equal(mod.DEFAULT_PORT, 47821);
+  } finally {
+    if (previous === undefined) delete process.env.SCOUT_AGENT_PORT;
+    else process.env.SCOUT_AGENT_PORT = previous;
+  }
+});
