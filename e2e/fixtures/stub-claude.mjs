@@ -32,7 +32,108 @@ process.stdin.on("data", (chunk) => {
 const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const SOURCE_IMAGE = `http://127.0.0.1:${PORT}/icon-192.png`;
 
+// ── Chat branch (PER-172 / PER-228 / PER-230 / PER-235) ────────────────────
+// The companion's chat.ts shells out to `claude` the SAME way research.ts does
+// (prompt on stdin, JSON expected back). So this one stub serves BOTH paths; we
+// disambiguate on the chat prompt's stable lead line (buildChatPrompt) and, for
+// chat, emit the structured `{reply, changes}` JSON the applier validates. This
+// is what lets the E2E exercise the action-card state machine end-to-end —
+// create (auto-applied → "Applied"+Undo), delete (confirm-gated), and rewrite
+// (confirm-gated) — against the REAL /v0/chat + confirm routes, still offline
+// and deterministic. Keyed off the user's own words so a spec drives each op by
+// phrasing alone, mirroring how the real model picks the op (see chat.ts Rules).
+const CHAT_MARKER = "Scout's interest assistant";
+
+function parseUserMessage(prompt) {
+  // buildChatPrompt emits: The user says: / """ / <message> / """
+  const m = prompt.match(/"""\n([\s\S]*?)\n"""/);
+  return m ? m[1].trim() : "";
+}
+
+function parseFirstInterestId(prompt) {
+  // The snapshot JSON block carries each interest's opaque id; grab the first so
+  // a rewrite/delete can target a real, server-minted id (the model must never
+  // invent one — chat.ts drops unknown ids).
+  const m = prompt.match(/"id":\s*"([^"]+)"/);
+  return m ? m[1] : "";
+}
+
+function topicFromMessage(message) {
+  // Pull the topic out of a create phrasing ("…about X", "track X", "add X").
+  const about = message.match(/\babout\s+(.+)$/i);
+  if (about) return about[1].replace(/[.?!]+$/, "").trim();
+  const verb = message.match(
+    /\b(?:track|add|create(?:\s+an?\s+interest)?)\s+(.+)$/i,
+  );
+  if (verb) return verb[1].replace(/[.?!]+$/, "").trim();
+  return "New interest";
+}
+
+function emitChat(prompt) {
+  const message = parseUserMessage(prompt);
+  const firstId = parseFirstInterestId(prompt);
+  let out;
+
+  if (/\b(rewrite|start over|from scratch)\b/i.test(message) && firstId) {
+    // Confirm-gated full rewrite (PER-235): propose the WHOLE doc, do NOT claim
+    // it's done. chat.ts collects this into pending_rewrite.
+    out = {
+      reply:
+        "Here's a full rewrite — review the diff and Apply below. Nothing changes until you do.",
+      changes: [
+        {
+          op: "rewrite",
+          interestId: firstId,
+          doc: [
+            "# Rewritten intent",
+            "",
+            "A clean-slate replacement doc proposed for your review.",
+            "",
+            "- Fresh angle one",
+            "- Fresh angle two",
+          ].join("\n"),
+        },
+      ],
+    };
+  } else if (
+    /\b(delete|remove|drop|get rid of|stop tracking)\b/i.test(message) &&
+    firstId
+  ) {
+    // Confirm-gated delete (PER-230): propose, phrase as pending — the interest
+    // stays alive until the user presses [Delete].
+    out = {
+      reply: "Delete that interest? Confirm below — this can't be undone here.",
+      changes: [{ op: "delete", interestId: firstId }],
+    };
+  } else {
+    // Default: create a new interest. Auto-applied by chat.ts, so the FE renders
+    // an "Applied" card with a real Undo and the doc lands in the rail.
+    const topic = topicFromMessage(message);
+    out = {
+      reply: `Done — created “${topic}” and drafted an intent doc for it.`,
+      changes: [
+        {
+          op: "create",
+          topic,
+          doc: [
+            `# ${topic}`,
+            "",
+            `What you want from ${topic}:`,
+            "",
+            "- Surface concrete developments, not vibes.",
+            "- Prefer primary sources.",
+          ].join("\n"),
+        },
+      ],
+    };
+  }
+
+  process.stdout.write(JSON.stringify(out));
+  process.exit(0);
+}
+
 function emit() {
+  if (stdin.includes(CHAT_MARKER)) return emitChat(stdin);
   const brief = [
     // Preamble that MUST be stripped before render (PER-113 #1).
     "I have enough to write the brief now.",
