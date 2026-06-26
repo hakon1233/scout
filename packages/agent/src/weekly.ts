@@ -30,6 +30,27 @@ function storyUrl(block: string): string | null {
   return match?.[1] ?? null;
 }
 
+// Collapse cosmetic URL variants (hash, query, trailing slash) of the same story
+// to one key. The web app dedupes daily-feed stories and keys likes on exactly
+// this canonicalisation (src/lib/likes.ts canonicalUrl, used by FeedView), so the
+// weekly digest must agree — otherwise the same story cited across two days with
+// a tracking query param (`?utm_source=…`) or a trailing slash slips past the
+// raw-string dedupe and appears twice in one weekly edition. Mirror of that
+// function; kept local because @scout/agent is a zero-dependency package and
+// can't import the web app's client module.
+function canonicalUrl(u: string): string {
+  try {
+    const url = new URL(u);
+    url.hash = "";
+    url.search = "";
+    let s = url.toString();
+    if (s.endsWith("/")) s = s.slice(0, -1);
+    return s;
+  } catch {
+    return u;
+  }
+}
+
 function storyDate(block: string): string | null {
   const match = STORY_DATE_RE.exec(block);
   if (!match || match[1] === "undated") return null;
@@ -105,7 +126,7 @@ export function createWeeklyBriefFromHistory(
       return byRun || a.sourceRank - b.sourceRank;
     })
     .filter((story) => {
-      const key = story.url.toLowerCase();
+      const key = canonicalUrl(story.url);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
