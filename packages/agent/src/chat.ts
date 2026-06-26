@@ -693,7 +693,12 @@ export async function startChatTurn(
     status: "pending",
     message: trimmed,
   };
-  await saveState({ ...state, last_chat: pending }, deps.stateFile);
+  try {
+    await saveState({ ...state, last_chat: pending }, deps.stateFile);
+  } catch (err) {
+    chatInFlight = false;
+    throw err;
+  }
 
   // Fire-and-forget: runChatTurn lands a `failed` turn for model errors via its
   // own try/catch, but a throw in the persist/transcript tail (disk error, etc.)
