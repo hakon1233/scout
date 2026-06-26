@@ -40,7 +40,11 @@ const CANNED_BRIEF =
 function makeSpawnRecorder(opts: { autoClose: boolean }) {
   const calls: Array<{ stdin: string }> = [];
   const pending: Array<() => void> = [];
-  const spawnFn = ((_bin: string, _args: readonly string[], _options: unknown) => {
+  const spawnFn = ((
+    _bin: string,
+    _args: readonly string[],
+    _options: unknown,
+  ) => {
     const child = new EventEmitter() as EventEmitter & {
       stdin: Writable;
       stdout: EventEmitter;
@@ -79,7 +83,9 @@ function makeSpawnRecorder(opts: { autoClose: boolean }) {
   };
 }
 
-async function tmpState(seed: State): Promise<{ tmp: string; stateFile: string }> {
+async function tmpState(
+  seed: State,
+): Promise<{ tmp: string; stateFile: string }> {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-sched-"));
   const stateFile = path.join(tmp, "state.json");
   await saveState(seed, stateFile);
@@ -137,7 +143,11 @@ test("a scheduled fire produces a brief and records success + next_run_at (PER-1
     assert.equal(brief.status, "ready");
 
     const state = await loadState(stateFile);
-    assert.equal(state.last_brief?.status, "ready", "scheduled run produced a real brief");
+    assert.equal(
+      state.last_brief?.status,
+      "ready",
+      "scheduled run produced a real brief",
+    );
     assert.match(state.last_brief?.summary_md ?? "", /## ai safety/);
     assert.equal(state.schedule?.last_run_status, "success");
     assert.ok(state.schedule?.last_run_at, "last_run_at recorded");
@@ -157,16 +167,27 @@ test("a fire while a run is in flight is skipped, never overlapping (concurrency
     interests: [{ id: "int_aisafety", topic: "ai safety" }],
     schedule: { enabled: true, time_of_day: "07:00" },
     // A run is already pending (e.g. an on-demand "Run now" still synthesizing).
-    last_brief: { id: "in-flight-id", generated_at: new Date().toISOString(), status: "pending" },
+    last_brief: {
+      id: "in-flight-id",
+      generated_at: new Date().toISOString(),
+      status: "pending",
+    },
   });
   const recorder = makeSpawnRecorder({ autoClose: true });
   const now = () => new Date(2026, 5, 1, 7, 0, 0, 0);
-  const scheduler = new Scheduler({ stateFile, spawnFn: recorder.spawnFn }, now);
+  const scheduler = new Scheduler(
+    { stateFile, spawnFn: recorder.spawnFn },
+    now,
+  );
 
   try {
     await scheduler.fire();
     // No claude child spawned — the fire was skipped, not overlapped.
-    assert.equal(recorder.calls.length, 0, "no synthesis spawned while a run was in flight");
+    assert.equal(
+      recorder.calls.length,
+      0,
+      "no synthesis spawned while a run was in flight",
+    );
     const state = await loadState(stateFile);
     // The pending slot is untouched, and the skip is recorded (legible, not silent).
     assert.equal(state.last_brief?.id, "in-flight-id");
@@ -187,7 +208,10 @@ test("a fire with no stored interests is skipped, not a crash", async () => {
   });
   const recorder = makeSpawnRecorder({ autoClose: true });
   const now = () => new Date(2026, 5, 1, 7, 0, 0, 0);
-  const scheduler = new Scheduler({ stateFile, spawnFn: recorder.spawnFn }, now);
+  const scheduler = new Scheduler(
+    { stateFile, spawnFn: recorder.spawnFn },
+    now,
+  );
   try {
     await scheduler.fire();
     assert.equal(recorder.calls.length, 0);
@@ -203,13 +227,44 @@ test("a fire with no stored interests is skipped, not a crash", async () => {
 test("disabled schedule arms no timer and clears next_run_at", async () => {
   const { tmp, stateFile } = await tmpState({
     pairing_token: newPairingToken(),
-    schedule: { enabled: false, time_of_day: "07:00", next_run_at: "2026-06-02T07:00:00.000Z" },
+    schedule: {
+      enabled: false,
+      time_of_day: "07:00",
+      next_run_at: "2026-06-02T07:00:00.000Z",
+    },
   });
   const scheduler = new Scheduler({ stateFile });
   try {
     await scheduler.start();
     const state = await loadState(stateFile);
-    assert.equal(state.schedule?.next_run_at, undefined, "next_run_at cleared when disabled");
+    assert.equal(
+      state.schedule?.next_run_at,
+      undefined,
+      "next_run_at cleared when disabled",
+    );
+  } finally {
+    scheduler.stop();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("start materializes the default enabled schedule when no schedule is persisted", async () => {
+  const { tmp, stateFile } = await tmpState({
+    pairing_token: newPairingToken(),
+    interests: [{ id: "int_aisafety", topic: "ai safety" }],
+  });
+  const now = () => new Date(2026, 5, 1, 6, 0, 0, 0);
+  const scheduler = new Scheduler({ stateFile }, now);
+
+  try {
+    await scheduler.start();
+    const state = await loadState(stateFile);
+    assert.equal(state.schedule?.enabled, true);
+    assert.equal(state.schedule?.time_of_day, defaultSchedule().time_of_day);
+    assert.ok(state.schedule?.next_run_at, "default schedule should be armed");
+    const next = new Date(state.schedule!.next_run_at!);
+    assert.equal(next.getDate(), 1);
+    assert.equal(next.getHours(), 7);
   } finally {
     scheduler.stop();
     await fs.rm(tmp, { recursive: true, force: true });
@@ -229,7 +284,9 @@ test("GET /v0/schedule returns the Settings-UI contract incl. reboot_durable:fal
   const { server, port } = await startServer(0, { stateFile });
   const auth = { authorization: `Bearer ${token}` };
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/v0/schedule`, { headers: auth });
+    const res = await fetch(`http://127.0.0.1:${port}/v0/schedule`, {
+      headers: auth,
+    });
     assert.equal(res.status, 200);
     const body = (await res.json()) as Record<string, unknown>;
     assert.equal(body.enabled, true);
@@ -245,7 +302,9 @@ test("GET /v0/schedule returns the Settings-UI contract incl. reboot_durable:fal
     // Once a LaunchAgent plist is present, reboot_durable flips to true with no
     // restart or config write (PER-153) — the view reads the live filesystem.
     await fs.writeFile(process.env.SCOUT_LAUNCH_AGENT_PLIST!, "<plist/>");
-    const durable = await fetch(`http://127.0.0.1:${port}/v0/schedule`, { headers: auth });
+    const durable = await fetch(`http://127.0.0.1:${port}/v0/schedule`, {
+      headers: auth,
+    });
     const durableBody = (await durable.json()) as Record<string, unknown>;
     assert.equal(durableBody.reboot_durable, true);
   } finally {
@@ -262,12 +321,18 @@ test("PUT /v0/schedule validates, persists, and re-arms the scheduler", async ()
     schedule: defaultSchedule(),
   });
   const token = (await loadState(stateFile)).pairing_token!;
-  const scheduler = new Scheduler({ stateFile }, () => new Date(2026, 5, 1, 8, 0, 0, 0));
+  const scheduler = new Scheduler(
+    { stateFile },
+    () => new Date(2026, 5, 1, 8, 0, 0, 0),
+  );
   const { server, port } = await startServer(0, {
     stateFile,
     onScheduleChanged: () => scheduler.reschedule(),
   });
-  const auth = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  const auth = {
+    authorization: `Bearer ${token}`,
+    "content-type": "application/json",
+  };
   try {
     // Bad time → 400, nothing persisted.
     const bad = await fetch(`http://127.0.0.1:${port}/v0/schedule`, {

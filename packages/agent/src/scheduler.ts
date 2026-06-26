@@ -8,8 +8,18 @@
 // exposes `reboot_durable: false` so the Settings UI (PER-152) can warn. A
 // launchd login item / durable `serve` is an optional follow-up, not built here.
 
-import { loadState, normalizeTimeOfDay, saveState } from "./state.js";
-import { recordScheduledSkip, startRun, type RunDeps, type RunSource } from "./runner.js";
+import {
+  defaultSchedule,
+  loadState,
+  normalizeTimeOfDay,
+  saveState,
+} from "./state.js";
+import {
+  recordScheduledSkip,
+  startRun,
+  type RunDeps,
+  type RunSource,
+} from "./runner.js";
 
 // setTimeout overflows past ~24.8 days (2^31-1 ms) and fires immediately. Daily
 // schedules are always well under that, but clamp defensively.
@@ -64,7 +74,7 @@ export class Scheduler {
   async reschedule(): Promise<void> {
     this.stop();
     const state = await loadState(this.deps.stateFile);
-    const cfg = state.schedule;
+    const cfg = state.schedule ?? defaultSchedule();
 
     if (!cfg?.enabled) {
       if (cfg?.next_run_at) {
@@ -88,7 +98,10 @@ export class Scheduler {
       this.deps.stateFile,
     );
 
-    const delay = Math.max(0, Math.min(next.getTime() - from.getTime(), MAX_TIMER_MS));
+    const delay = Math.max(
+      0,
+      Math.min(next.getTime() - from.getTime(), MAX_TIMER_MS),
+    );
     this.timer = setTimeout(() => void this.fire(), delay);
     // Don't keep the event loop alive purely for the schedule — the HTTP server
     // is what keeps the process up. (No-op under test harnesses that lack unref.)
