@@ -51,6 +51,10 @@ function coverageBuckets(b: Brief): { missing: string[]; empty: string[] } {
   return { missing: b.failedTopics ?? [], empty: [] };
 }
 
+function topicFilterKey(topic: string): string {
+  return topic.trim().toLowerCase();
+}
+
 export default function AppPage() {
   const router = useRouter();
   const goToInterests = useCallback(
@@ -420,7 +424,9 @@ export default function AppPage() {
     brief && activeFilter
       ? {
           ...brief,
-          articles: brief.articles.filter((a) => a.interest === activeFilter),
+          articles: brief.articles.filter(
+            (a) => topicFilterKey(a.interest) === topicFilterKey(activeFilter),
+          ),
         }
       : brief;
 
