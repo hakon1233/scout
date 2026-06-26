@@ -102,7 +102,19 @@ export class Scheduler {
       0,
       Math.min(next.getTime() - from.getTime(), MAX_TIMER_MS),
     );
-    this.timer = setTimeout(() => void this.fire(), delay);
+    // fire() does disk I/O (reschedule/loadState/startRun); a throw on this
+    // timer path would be an unhandled rejection — a process-crash risk under
+    // Node's default handling, and totally silent (every test drives fire()
+    // directly/awaited, so only this automatic path is exposed). Log it so a
+    // "my scheduled brief silently never ran" report is diagnosable from stderr.
+    // Matches the runner.ts:279 / chat.ts:708 catch pattern.
+    this.timer = setTimeout(
+      () =>
+        void this.fire().catch((err) => {
+          console.error("[scheduler] scheduled fire failed:", err);
+        }),
+      delay,
+    );
     // Don't keep the event loop alive purely for the schedule — the HTTP server
     // is what keeps the process up. (No-op under test harnesses that lack unref.)
     this.timer.unref?.();
