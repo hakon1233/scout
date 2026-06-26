@@ -132,6 +132,20 @@ test("computeCoverage treats a section with prose but no citation as empty", () 
   ]);
 });
 
+test("computeCoverage does not count a source image as a citation", () => {
+  const md = [
+    "# Your brief",
+    "",
+    "## AI",
+    "- `2026-06-15` — The model emitted an image but no source link.",
+    "  ![source image](https://example.com/lead.png)",
+  ].join("\n");
+
+  assert.deepEqual(computeCoverage(["ai"], md), [
+    { topic: "ai", status: "empty" },
+  ]);
+});
+
 test("mergeBriefSections replaces only retried topics, preserves the rest", () => {
   const base = [
     "# Your brief",
