@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { safeSetItem } from "./safe-storage";
+
 // PER-249: device-local "liked stories" store. A brand-new localStorage store,
 // fully separate from the interests store and from every companion endpoint.
 //
@@ -113,12 +115,10 @@ function write(next: LikesStore): void {
   const raw = JSON.stringify(next);
   cacheRaw = raw;
   cache = next;
-  try {
-    window.localStorage.setItem(LIKES_KEY, raw);
-  } catch {
-    // Quota / private-mode failures: the in-memory cache still reflects the
-    // toggle for this session so the UI stays responsive; it just won't persist.
-  }
+  // Quota / private-mode failures are swallowed by safeSetItem: the in-memory
+  // cache above still reflects the toggle for this session so the UI stays
+  // responsive; it just won't persist.
+  safeSetItem(LIKES_KEY, raw);
   notify();
 }
 

@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { safeSetItem } from "@/lib/safe-storage";
+
 type Theme = "light" | "dark" | "system";
 
 const STORAGE_KEY = "scout.theme";
@@ -38,9 +40,7 @@ export function ThemeToggle({
   const setTheme = React.useCallback((next: Theme) => {
     setThemeState(next);
     applyTheme(next);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, next);
-    } catch {}
+    safeSetItem(STORAGE_KEY, next);
   }, []);
 
   React.useEffect(() => {
