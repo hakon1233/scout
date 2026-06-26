@@ -420,14 +420,30 @@ export default function AppPage() {
 
   const showSkeleton = progress?.stage === "synthesizing";
 
+  // PER-241 follow-up: an active filter can outlive its topic. Renaming or
+  // deleting an interest (via the profile chat) updates settings.interests but
+  // leaves activeFilter pointing at the old topic string. Honoring a stale value
+  // would wedge the feed into an empty "No stories in this edition yet." view
+  // filtering on a topic that no longer exists — while the funnel shows a
+  // "Filtering by <gone>" state the menu can't un-highlight. Treat a filter whose
+  // topic is no longer in the interest list as "all topics". Purely derived (no
+  // extra state/effect), so the moment the user picks any option it's overwritten.
+  const filterIsLive =
+    activeFilter !== null &&
+    settings.interests.some(
+      (i) => topicFilterKey(i.topic) === topicFilterKey(activeFilter),
+    );
+  const effectiveFilter = filterIsLive ? activeFilter : null;
+
   // PER-241: derive a filtered brief for BriefLayout; leaves the stored brief
   // untouched. When no filter is active we pass the brief as-is.
   const filteredBrief =
-    brief && activeFilter
+    brief && effectiveFilter
       ? {
           ...brief,
           articles: brief.articles.filter(
-            (a) => topicFilterKey(a.interest) === topicFilterKey(activeFilter),
+            (a) =>
+              topicFilterKey(a.interest) === topicFilterKey(effectiveFilter),
           ),
         }
       : brief;
@@ -438,7 +454,7 @@ export default function AppPage() {
       onWeeklyBrief={() => void runWeekly()}
       running={running}
       interests={settings.interests}
-      activeFilter={activeFilter}
+      activeFilter={effectiveFilter}
       onFilterChange={setActiveFilter}
     >
       {/* PER-222: every banner/skeleton here is page chrome that sits around the
