@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { FeedView } from "@/components/FeedView";
+import { formatDate } from "@/lib/format-date";
 import type { Brief } from "@/lib/types";
 
 type Props = {
@@ -31,12 +32,7 @@ export function BriefLayout({
     },
     [onDetailOpenChange],
   );
-  const generated = new Date(brief.generatedAt);
-  const dateLabel = generated.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const dateLabel = formatDate(brief.generatedAt);
 
   // No founder name set ⇒ fall back to "Your brief" rather than rendering the
   // empty-possessive "'s brief" (PER-186 defect 2). The possessive only reads
