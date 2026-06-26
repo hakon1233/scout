@@ -459,7 +459,15 @@ async function runSynthesis(
     if (deps.ephemeralDir) {
       await fs
         .rm(deps.ephemeralDir, { recursive: true, force: true })
-        .catch(() => {});
+        .catch((err) => {
+          // Best-effort: a failed cleanup must not wedge the run, but a silent
+          // swallow lets throwaway dirs leak (ENOSPC over many runs) with zero
+          // signal. Log at warn so the leak is at least observable.
+          console.warn(
+            `[runner] ephemeral dir cleanup failed for ${deps.ephemeralDir}:`,
+            err,
+          );
+        });
     }
     // Always clear the in-flight guard, even if persistence throws, so the
     // companion can't wedge into a permanent "in progress" state.
