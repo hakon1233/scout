@@ -723,43 +723,54 @@ export async function confirmDeleteTurn(
 ): Promise<ConfirmDeleteOutcome> {
   if (chatInFlight) return { ok: false, reason: "in_flight" };
 
-  const state = await loadState(deps.stateFile);
-  const pending = state.last_chat?.pending_delete;
-  // The delete route is the stored proposal consumer, not a generic delete-by-id
-  // API. This mirrors confirmRewriteTurn: stale cards or direct route calls must
-  // not bypass the server-side confirmation state.
-  if (!pending || pending.interestId !== interestId) {
-    return { ok: false, reason: "not_found" };
+  // Hold the single-flight guard for the whole critical section. The check above
+  // only refuses when a model turn is ALREADY running; without setting the flag
+  // here a startChatTurn fired mid-confirm would pass its own `chatInFlight`
+  // check and interleave its interest-set write with ours (last-writer-wins =
+  // a silently dropped delete or dropped model change). Reset in `finally` so a
+  // not_found early-return or a throw never wedges the flag on.
+  chatInFlight = true;
+  try {
+    const state = await loadState(deps.stateFile);
+    const pending = state.last_chat?.pending_delete;
+    // The delete route is the stored proposal consumer, not a generic delete-by-id
+    // API. This mirrors confirmRewriteTurn: stale cards or direct route calls must
+    // not bypass the server-side confirmation state.
+    if (!pending || pending.interestId !== interestId) {
+      return { ok: false, reason: "not_found" };
+    }
+
+    // Reload before mutating + persisting so we don't clobber a concurrent writer
+    // (e.g. a PUT /v0/interests that added a topic, or the scheduler updating
+    // next_run_at), exactly as runChatTurn does. Splice the delete out of the
+    // FRESH interest list, NOT the gate-time snapshot above — persisting the stale
+    // post-delete list would silently revert any interest-set change that landed
+    // between the two loads. Applying against `fresh` also makes a double-confirm
+    // safe: the second call finds the interest already gone and 404s.
+    const fresh = await loadState(deps.stateFile);
+    const { interests, applied } = await applyConfirmedDelete(
+      fresh.interests ?? [],
+      interestId,
+      deps.interestsDir,
+    );
+    if (!applied) return { ok: false, reason: "not_found" };
+
+    const turn: ChatTurn = {
+      id: newChatTurnId(),
+      created_at: new Date().toISOString(),
+      status: "ready",
+      message: `Delete "${applied.topic}"`,
+      reply: `Removed "${applied.topic}" from your interests.`,
+      changes: [applied],
+    };
+
+    await saveState({ ...fresh, interests, last_chat: turn }, deps.stateFile);
+    await appendChatTranscript(turn, deps.chatTranscriptFile);
+    deps.onChatDone?.(turn);
+    return { ok: true, turn };
+  } finally {
+    chatInFlight = false;
   }
-
-  // Reload before mutating + persisting so we don't clobber a concurrent writer
-  // (e.g. a PUT /v0/interests that added a topic, or the scheduler updating
-  // next_run_at), exactly as runChatTurn does. Splice the delete out of the
-  // FRESH interest list, NOT the gate-time snapshot above — persisting the stale
-  // post-delete list would silently revert any interest-set change that landed
-  // between the two loads. Applying against `fresh` also makes a double-confirm
-  // safe: the second call finds the interest already gone and 404s.
-  const fresh = await loadState(deps.stateFile);
-  const { interests, applied } = await applyConfirmedDelete(
-    fresh.interests ?? [],
-    interestId,
-    deps.interestsDir,
-  );
-  if (!applied) return { ok: false, reason: "not_found" };
-
-  const turn: ChatTurn = {
-    id: newChatTurnId(),
-    created_at: new Date().toISOString(),
-    status: "ready",
-    message: `Delete "${applied.topic}"`,
-    reply: `Removed "${applied.topic}" from your interests.`,
-    changes: [applied],
-  };
-
-  await saveState({ ...fresh, interests, last_chat: turn }, deps.stateFile);
-  await appendChatTranscript(turn, deps.chatTranscriptFile);
-  deps.onChatDone?.(turn);
-  return { ok: true, turn };
 }
 
 export type ConfirmRewriteOutcome =
@@ -781,42 +792,51 @@ export async function confirmRewriteTurn(
 ): Promise<ConfirmRewriteOutcome> {
   if (chatInFlight) return { ok: false, reason: "in_flight" };
 
-  const state = await loadState(deps.stateFile);
-  const pending = state.last_chat?.pending_rewrite;
-  // The proposal must still be the live one for THIS interest, and the interest
-  // must still exist (it could have been deleted since the proposal).
-  if (!pending || pending.interestId !== interestId) {
-    return { ok: false, reason: "not_found" };
+  // Hold the single-flight guard for the whole critical section — see the note in
+  // confirmDeleteTurn. Without it a startChatTurn fired between this gate and the
+  // saveState below would interleave its `last_chat` write with ours and could
+  // resurrect the consumed pending_rewrite. Reset in `finally`.
+  chatInFlight = true;
+  try {
+    const state = await loadState(deps.stateFile);
+    const pending = state.last_chat?.pending_rewrite;
+    // The proposal must still be the live one for THIS interest, and the interest
+    // must still exist (it could have been deleted since the proposal).
+    if (!pending || pending.interestId !== interestId) {
+      return { ok: false, reason: "not_found" };
+    }
+    const target = (state.interests ?? []).find((i) => i.id === interestId);
+    if (!target) return { ok: false, reason: "not_found" };
+
+    await writeInterestDoc(interestId, pending.doc, deps.interestsDir);
+    const applied: ChatChange = {
+      interestId,
+      op: "update",
+      topic: target.topic,
+      doc: pending.doc,
+    };
+
+    const turn: ChatTurn = {
+      id: newChatTurnId(),
+      created_at: new Date().toISOString(),
+      status: "ready",
+      message: `Apply rewrite of "${target.topic}"`,
+      reply: `Applied the rewrite of "${target.topic}".`,
+      changes: [applied],
+    };
+
+    // Reload before persisting so we don't clobber a concurrent writer (e.g. the
+    // scheduler updating next_run_at), exactly as runChatTurn does. The new turn
+    // replaces the proposal turn in the slot, so the pending_rewrite can't be
+    // re-applied later from a stale card (a second confirm 404s).
+    const fresh = await loadState(deps.stateFile);
+    await saveState({ ...fresh, last_chat: turn }, deps.stateFile);
+    await appendChatTranscript(turn, deps.chatTranscriptFile);
+    deps.onChatDone?.(turn);
+    return { ok: true, turn };
+  } finally {
+    chatInFlight = false;
   }
-  const target = (state.interests ?? []).find((i) => i.id === interestId);
-  if (!target) return { ok: false, reason: "not_found" };
-
-  await writeInterestDoc(interestId, pending.doc, deps.interestsDir);
-  const applied: ChatChange = {
-    interestId,
-    op: "update",
-    topic: target.topic,
-    doc: pending.doc,
-  };
-
-  const turn: ChatTurn = {
-    id: newChatTurnId(),
-    created_at: new Date().toISOString(),
-    status: "ready",
-    message: `Apply rewrite of "${target.topic}"`,
-    reply: `Applied the rewrite of "${target.topic}".`,
-    changes: [applied],
-  };
-
-  // Reload before persisting so we don't clobber a concurrent writer (e.g. the
-  // scheduler updating next_run_at), exactly as runChatTurn does. The new turn
-  // replaces the proposal turn in the slot, so the pending_rewrite can't be
-  // re-applied later from a stale card (a second confirm 404s).
-  const fresh = await loadState(deps.stateFile);
-  await saveState({ ...fresh, last_chat: turn }, deps.stateFile);
-  await appendChatTranscript(turn, deps.chatTranscriptFile);
-  deps.onChatDone?.(turn);
-  return { ok: true, turn };
 }
 
 async function runChatTurn(
