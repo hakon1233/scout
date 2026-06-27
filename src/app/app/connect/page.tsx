@@ -185,9 +185,18 @@ export default function ConnectPage() {
   // collapsing it (Doherty / perceived-performance — PER-140 spec §5).
   const resolving = status === "idle" || status === "checking";
 
+  // A companion that answers the ping is *reachable*, but it isn't *paired*
+  // until a token is saved (AIR-406). Reserve the green "Connected" success
+  // language for the paired state; until then show an amber "reachable but
+  // pairing still needed" line so the status doesn't contradict the install/
+  // pair walkthrough rendered below it.
+  const reachableUnpaired = status === "connected" && !hasSavedToken;
+
   const statusColor =
     status === "connected"
-      ? "text-success"
+      ? reachableUnpaired
+        ? "text-warning"
+        : "text-success"
       : status === "checking"
         ? "text-warning"
         : status === "disconnected"
@@ -196,7 +205,9 @@ export default function ConnectPage() {
 
   const statusLabel =
     status === "connected"
-      ? `✓ Connected · port ${COMPANION_PORT}`
+      ? reachableUnpaired
+        ? `Companion reachable · pairing needed · port ${COMPANION_PORT}`
+        : `✓ Connected · port ${COMPANION_PORT}`
       : status === "checking"
         ? "Checking…"
         : status === "disconnected"
@@ -276,7 +287,9 @@ export default function ConnectPage() {
           <span
             className={`inline-block h-2 w-2 rounded-full ${
               status === "connected"
-                ? "bg-success"
+                ? reachableUnpaired
+                  ? "bg-warning"
+                  : "bg-success"
                 : status === "checking"
                   ? "animate-pulse bg-warning"
                   : status === "disconnected"
