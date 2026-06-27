@@ -29,10 +29,8 @@ import { StringDecoder } from "node:string_decoder";
 import {
   loadState,
   saveState,
-  atomicWriteFile,
   newChatTurnId,
   newInterestId,
-  CONFIG_DIR,
   type ChatChange,
   type ChatTurn,
   type Interest,
@@ -40,6 +38,7 @@ import {
   type PendingRewrite,
   type State,
 } from "./state.js";
+import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
 import {
   readInterestDoc,
   writeInterestDoc,

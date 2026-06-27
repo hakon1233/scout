@@ -8,13 +8,13 @@
 // never bloats the hot state file.
 //
 // Storage: `~/.config/scout/interests/<id>.md`, reusing the exact fs hardening
-// state.ts applies to state.json — dir `mkdir {recursive, mode: 0o700}`, file
-// `writeFile {mode: 0o600}` — so docs are owner-only, same as everything else
-// under ~/.config/scout.
+// persistence.ts applies to state.json — dir `mkdir {recursive, mode: 0o700}`,
+// file `writeFile {mode: 0o600}` — so docs are owner-only, same as everything
+// else under ~/.config/scout.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { atomicWriteFile, CONFIG_DIR } from "./state.js";
+import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
 
 export const INTERESTS_DIR = path.join(CONFIG_DIR, "interests");
 
