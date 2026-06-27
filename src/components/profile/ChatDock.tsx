@@ -457,7 +457,7 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
         What should Scout track for you?
       </h2>
       <p className="mt-2 max-w-prose font-reading text-[17px] leading-[1.6] text-secondary">
-        Tell me a topic and I&apos;ll draft an intent doc that steers every
+        Tell me a topic and I&apos;ll draft an assignment that steers every
         research run. Refine or drop interests any time — just say so.
       </p>
       <div className="mt-5 flex flex-wrap gap-2">

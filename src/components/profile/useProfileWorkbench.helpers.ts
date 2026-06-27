@@ -40,7 +40,7 @@ export function greetingMessage(): ChatMessage {
   return {
     id: nextMsgId(),
     role: "scout",
-    text: "Hi — I'm Scout. Tell me what to track and I'll draft an intent doc for it, refine one you already have, or drop an interest. Pick “Refine” on any card to aim a message at it.",
+    text: "Hi — I'm Scout. Tell me what to track and I'll draft an assignment for it, refine one you already have, or drop an interest. Pick “Refine” on any card to aim a message at it.",
   };
 }
 
