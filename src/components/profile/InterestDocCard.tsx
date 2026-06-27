@@ -103,18 +103,10 @@ export function InterestDocCard({
   const [showRaw, setShowRaw] = useState(false);
   const { topic, hasDoc, updatedAt, body, beat, href } = model;
 
-  const open = () => {
-    if (onOpen) {
-      onOpen();
-      return;
-    }
-    window.location.assign(href);
-  };
-
   return (
     <article
       className={[
-        "cursor-pointer rounded-lg border bg-surface p-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+        "rounded-lg border bg-surface p-4 transition-colors",
         focused
           ? "border-signal"
           : "border-border-default hover:border-border-strong",
@@ -124,17 +116,6 @@ export function InterestDocCard({
         beat ? "scout-doc-flash" : "",
       ].join(" ")}
       aria-label={`Interest: ${topic}`}
-      role="link"
-      tabIndex={0}
-      onClick={(event) => {
-        if ((event.target as HTMLElement).closest("a,button")) return;
-        open();
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        open();
-      }}
     >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
