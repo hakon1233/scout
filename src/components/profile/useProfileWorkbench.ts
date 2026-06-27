@@ -12,7 +12,6 @@ import {
   runChatTurn,
   stopChatTurn,
   type ChatChange,
-  type ChatTurn,
   type PendingDelete,
   type PendingRewrite,
 } from "@/lib/chat";
@@ -27,96 +26,20 @@ import { loadSettings } from "@/lib/storage";
 import type { Interest } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
-
-function mergeInterests(
-  local: Interest[],
-  companionTopics: string[],
-): Interest[] {
-  if (companionTopics.length === 0) return local;
-  const byTopic = new Map(local.map((i) => [i.topic.trim().toLowerCase(), i]));
-  return companionTopics.map((topic) => {
-    const match = byTopic.get(topic.trim().toLowerCase());
-    return match ?? { id: "", topic };
-  });
-}
-
-let msgSeq = 0;
-function nextMsgId(): string {
-  msgSeq += 1;
-  return `m${msgSeq}`;
-}
-
-function greetingMessage(): ChatMessage {
-  return {
-    id: nextMsgId(),
-    role: "scout",
-    text: "Hi — I'm Scout. Tell me what to track and I'll draft an intent doc for it, refine one you already have, or drop an interest. Pick “Refine” on any card to aim a message at it.",
-  };
-}
-
-function markdownDemoMessages(): ChatMessage[] {
-  return [
-    {
-      id: nextMsgId(),
-      role: "you",
-      text: "Track **user emphasis** and keep `<script>xss()</script>` as inert text.",
-      ts: "2026-06-05T12:00:00.000Z",
-    },
-    {
-      id: nextMsgId(),
-      role: "scout",
-      text: [
-        "## Scout markdown reply",
-        "",
-        "**assistant emphasis** and a [source link](https://example.com/brief).",
-        "",
-        "> quoted context",
-        "",
-        "```ts",
-        'const topic = "markdown";',
-        "```",
-      ].join("\n"),
-      ts: "2026-06-05T12:01:00.000Z",
-    },
-  ];
-}
-
-function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
-  return turns.flatMap((turn) => {
-    const out: ChatMessage[] = [
-      {
-        id: nextMsgId(),
-        role: "you",
-        text: turn.message,
-        ts: turn.created_at,
-      },
-    ];
-    if (
-      turn.status === "ready" &&
-      (turn.reply || turn.pending_delete || turn.pending_rewrite)
-    ) {
-      out.push({
-        id: nextMsgId(),
-        role: "scout",
-        text: turn.reply ?? "",
-        ts: turn.created_at,
-        changes:
-          turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
-        pendingDelete: turn.pending_delete,
-        pendingRewrite: turn.pending_rewrite,
-      });
-    } else if (turn.status === "failed" && turn.error_msg) {
-      out.push({
-        id: nextMsgId(),
-        role: "scout",
-        text: `I couldn't finish that turn: ${turn.error_msg}`,
-        ts: turn.created_at,
-        failed: true,
-      });
-    }
-    return out;
-  });
-}
+import {
+  applyDocBodyChange,
+  applyDocMetaChange,
+  applyInterestChange,
+  buildDocCards,
+  dropInterest,
+  dropKey,
+  greetingMessage,
+  markdownDemoMessages,
+  mergeInterests,
+  nextMsgId,
+  resolveMessage,
+  transcriptMessages,
+} from "./useProfileWorkbench.helpers";
 
 function prefersReducedMotion(): boolean {
   return (
@@ -250,20 +173,12 @@ export function useProfileWorkbench() {
       for (const ch of changes) {
         const key = ch.interestId;
         if (!key) continue;
+        // Pure store transitions live in the helpers; the hook keeps the timer
+        // and focus side effects that can't be expressed as a reducer.
+        setInterests((prev) => applyInterestChange(prev, ch));
+        setDocBodies((prev) => applyDocBodyChange(prev, ch));
+        setDocMeta((prev) => applyDocMetaChange(prev, ch, at));
         if (ch.op === "delete") {
-          setInterests((prev) =>
-            prev.filter((i) => interestKey(i) !== key && i.id !== key),
-          );
-          setDocBodies((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
-          setDocMeta((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
           setFocusKey((cur) => (cur === key ? null : cur));
           if (beatTimers.current[key]) {
             clearTimeout(beatTimers.current[key]);
@@ -271,26 +186,6 @@ export function useProfileWorkbench() {
           }
           continue;
         }
-        const topic = ch.topic?.trim() ?? "";
-        setInterests((prev) => {
-          const idx = prev.findIndex(
-            (i) => interestKey(i) === key || i.id === key,
-          );
-          if (idx === -1) return [...prev, { id: key, topic }];
-          if (topic && prev[idx].topic !== topic) {
-            const next = [...prev];
-            next[idx] = { ...next[idx], id: prev[idx].id || key, topic };
-            return next;
-          }
-          return prev;
-        });
-        if (typeof ch.doc === "string") {
-          setDocBodies((prev) => ({ ...prev, [key]: ch.doc as string }));
-        }
-        setDocMeta((prev) => ({
-          ...prev,
-          [key]: { hasDoc: true, updatedAt: at },
-        }));
         flashBeat(key, ch.op === "create" ? "created" : "updated");
       }
     },
@@ -305,24 +200,10 @@ export function useProfileWorkbench() {
   const flashRemove = useCallback((key: string) => {
     setBeats((prev) => ({ ...prev, [key]: "removed" }));
     const drop = () => {
-      setInterests((prev) =>
-        prev.filter((i) => interestKey(i) !== key && i.id !== key),
-      );
-      setDocBodies((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      setDocMeta((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      setBeats((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
+      setInterests((prev) => dropInterest(prev, key));
+      setDocBodies((prev) => dropKey(prev, key));
+      setDocMeta((prev) => dropKey(prev, key));
+      setBeats((prev) => dropKey(prev, key));
       setFocusKey((cur) => (cur === key ? null : cur));
       delete beatTimers.current[key];
     };
@@ -348,9 +229,7 @@ export function useProfileWorkbench() {
           await confirmDeleteInterest(pd.interestId, token);
           flashRemove(pd.interestId);
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msgId ? { ...m, deleteResolved: "deleted" } : m,
-            ),
+            resolveMessage(prev, msgId, { deleteResolved: "deleted" }),
           );
         } catch (e) {
           setError(e instanceof Error ? e.message : "Couldn't remove that.");
@@ -366,9 +245,7 @@ export function useProfileWorkbench() {
   // "Kept" so the dead-control proof is visible.
   const cancelDelete = useCallback((msgId: string) => {
     setMessages((prev) =>
-      prev.map((m) =>
-        m.id === msgId ? { ...m, deleteResolved: "cancelled" } : m,
-      ),
+      resolveMessage(prev, msgId, { deleteResolved: "cancelled" }),
     );
   }, []);
 
@@ -390,9 +267,7 @@ export function useProfileWorkbench() {
             applyChanges(turn.changes, new Date().toISOString());
           }
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msgId ? { ...m, rewriteResolved: "applied" } : m,
-            ),
+            resolveMessage(prev, msgId, { rewriteResolved: "applied" }),
           );
         } catch (e) {
           setError(
@@ -411,9 +286,7 @@ export function useProfileWorkbench() {
   // locks to "Discarded".
   const discardRewrite = useCallback((msgId: string) => {
     setMessages((prev) =>
-      prev.map((m) =>
-        m.id === msgId ? { ...m, rewriteResolved: "discarded" } : m,
-      ),
+      resolveMessage(prev, msgId, { rewriteResolved: "discarded" }),
     );
   }, []);
 
@@ -618,23 +491,7 @@ export function useProfileWorkbench() {
 
   const cards: DocCardModel[] = useMemo(() => {
     const meta = mockSeed !== null ? mockDocMeta(interests, mockSeed) : docMeta;
-    return interests.map((i) => {
-      const key = interestKey(i);
-      const m = meta[key] ?? { hasDoc: false };
-      const body = docBodies[key];
-      return {
-        key,
-        topic: i.topic,
-        hasDoc: m.hasDoc || Boolean(body),
-        updatedAt: m.updatedAt,
-        body,
-        beat: beats[key] ?? null,
-        // Deep-links into the workbench itself (PER-236 fix 2) so a new-tab
-        // open lands on the scope view WITH the chat column, not the
-        // chat-less standalone page (which stays alive for old links).
-        href: `/app/interests/?id=${encodeURIComponent(key)}`,
-      };
-    });
+    return buildDocCards(interests, meta, docBodies, beats);
   }, [interests, docMeta, docBodies, beats, mockSeed]);
 
   const focusTopic = focusKey
