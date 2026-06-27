@@ -41,6 +41,7 @@ import {
   readChatTranscript,
   startChatTurn,
   stopChatTurn,
+  type ChatDeps,
 } from "./chat.js";
 import { isServiceInstalled } from "./service.js";
 import { createAndPersistWeeklyBrief } from "./weekly.js";
@@ -337,40 +338,47 @@ async function readBody(
   return Buffer.concat(chunks).toString("utf8");
 }
 
+type JsonBodyParse<T> =
+  | { ok: true; body: T }
+  | { ok: false; status: number; error: string };
+
 // Read, size-guard, and JSON-parse a request body in one step. Consolidates the
 // content-length pre-reject + readBody + BodyTooLargeError + JSON.parse(body ||
 // "{}") dance that every mutating /v0 route had copy-pasted verbatim (7 copies
-// across PER-160…PER-235, a classic drift hazard). On any failure it writes the
-// matching response (413 oversized / 400 invalid json) and returns { ok: false }
-// so callers just `if (!parsed.ok) return;`. The content-length fast-reject is
-// now applied uniformly — readBody already enforces the cap, so adding it to the
-// routes that lacked it only rejects an oversized declared body a little sooner.
-async function readJsonBody<T>(
+// across PER-160…PER-235, a classic drift hazard). The content-length
+// fast-reject is now applied uniformly — readBody already enforces the cap, so
+// adding it to the routes that lacked it only rejects an oversized declared body
+// a little sooner.
+async function parseJsonBody<T>(
   req: http.IncomingMessage,
-  res: http.ServerResponse,
-  cors: Record<string, string>,
-): Promise<{ ok: true; value: T } | { ok: false }> {
+  maxBytes = MAX_BODY_BYTES,
+): Promise<JsonBodyParse<T>> {
   const declaredLen = Number(req.headers["content-length"]);
-  if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
-    json(res, 413, { error: "request body too large" }, cors);
-    return { ok: false };
+  if (Number.isFinite(declaredLen) && declaredLen > maxBytes) {
+    return { ok: false, status: 413, error: "request body too large" };
   }
   let body: string;
   try {
-    body = await readBody(req);
+    body = await readBody(req, maxBytes);
   } catch (err) {
     if (err instanceof BodyTooLargeError) {
-      json(res, 413, { error: "request body too large" }, cors);
-      return { ok: false };
+      return { ok: false, status: 413, error: "request body too large" };
     }
     throw err;
   }
   try {
-    return { ok: true, value: JSON.parse(body || "{}") as T };
+    return { ok: true, body: JSON.parse(body || "{}") as T };
   } catch {
-    json(res, 400, { error: "invalid json" }, cors);
-    return { ok: false };
+    return { ok: false, status: 400, error: "invalid json" };
   }
+}
+
+function jsonBodyParseError(
+  res: http.ServerResponse,
+  parsed: Extract<JsonBodyParse<unknown>, { ok: false }>,
+  cors: Record<string, string>,
+): void {
+  json(res, parsed.status, { error: parsed.error }, cors);
 }
 
 function bearer(req: http.IncomingMessage): string | null {
@@ -394,6 +402,14 @@ export function createServer(deps: ServerDeps = {}): http.Server {
     deps.interestsDir ?? path.join(path.dirname(stateFile), "interests");
   const buildInfoFile = deps.buildInfoFile ?? DEFAULT_BUILD_INFO_FILE;
   const chatTranscriptFile = defaultChatTranscriptFile(stateFile);
+  const chatDeps: ChatDeps = {
+    stateFile,
+    interestsDir,
+    chatTranscriptFile,
+    claudeBin,
+    spawnFn,
+    onChatDone: deps.onChatDone,
+  };
 
   async function authed(req: http.IncomingMessage): Promise<State | null> {
     const token = bearer(req);
@@ -561,12 +577,12 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "PUT" && url.pathname === "/v0/interests") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const parsedBody = await readJsonBody<{
+          const parsedBody = await parseJsonBody<{
             interests?: unknown;
             confirm_replace?: unknown;
-          }>(req, res, cors);
-          if (!parsedBody.ok) return;
-          const parsed = parsedBody.value;
+          }>(req);
+          if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
+          const parsed = parsedBody.body;
           const validated = parseInterestsPayload(parsed.interests);
           if (!validated.ok)
             return json(
@@ -603,15 +619,15 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "POST" && url.pathname === "/v0/interests") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const parsedBody = await readJsonBody<{
+          const parsedBody = await parseJsonBody<{
             interests?: unknown;
             retry_topics?: unknown;
             selected_topics?: unknown;
             ephemeral?: unknown;
             confirm_replace?: unknown;
-          }>(req, res, cors);
-          if (!parsedBody.ok) return;
-          const parsed = parsedBody.value;
+          }>(req);
+          if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
+          const parsed = parsedBody.body;
           const validated = parseInterestsPayload(parsed.interests);
           if (!validated.ok)
             return json(
@@ -776,13 +792,9 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "POST" && url.pathname === "/v0/chat") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const parsedBody = await readJsonBody<{ message?: unknown }>(
-            req,
-            res,
-            cors,
-          );
-          if (!parsedBody.ok) return;
-          const parsed = parsedBody.value;
+          const parsedBody = await parseJsonBody<{ message?: unknown }>(req);
+          if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
+          const parsed = parsedBody.body;
           const message =
             typeof parsed.message === "string" ? parsed.message.trim() : "";
           if (!message)
@@ -795,14 +807,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
               cors,
             );
           }
-          const outcome = await startChatTurn(message, {
-            stateFile,
-            interestsDir,
-            chatTranscriptFile,
-            claudeBin,
-            spawnFn,
-            onChatDone: deps.onChatDone,
-          });
+          const outcome = await startChatTurn(message, chatDeps);
           if (!outcome.started) {
             // The only non-empty reason here is in_flight (message was validated
             // non-empty above) → 409, echoing the in-flight turn id.
@@ -830,13 +835,9 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "POST" && url.pathname === "/v0/chat/stop") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const parsedBody = await readJsonBody<{ turn_id?: unknown }>(
-            req,
-            res,
-            cors,
-          );
-          if (!parsedBody.ok) return;
-          const parsed = parsedBody.value;
+          const parsedBody = await parseJsonBody<{ turn_id?: unknown }>(req);
+          if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
+          const parsed = parsedBody.body;
           const turnId =
             typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
           const stopped = stopChatTurn(turnId);
@@ -856,25 +857,16 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         ) {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const parsedBody = await readJsonBody<{ interestId?: unknown }>(
+          const parsedBody = await parseJsonBody<{ interestId?: unknown }>(
             req,
-            res,
-            cors,
           );
-          if (!parsedBody.ok) return;
-          const parsed = parsedBody.value;
+          if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
+          const parsed = parsedBody.body;
           const interestId =
             typeof parsed.interestId === "string" ? parsed.interestId : "";
           if (!interestId)
             return json(res, 400, { error: "interestId required" }, cors);
-          const outcome = await confirmDeleteTurn(interestId, {
-            stateFile,
-            interestsDir,
-            chatTranscriptFile,
-            claudeBin,
-            spawnFn,
-            onChatDone: deps.onChatDone,
-          });
+          const outcome = await confirmDeleteTurn(interestId, chatDeps);
           if (!outcome.ok) {
             if (outcome.reason === "in_flight") {
               return json(res, 409, { error: "chat turn in progress" }, cors);
@@ -898,25 +890,16 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         ) {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const parsedBody = await readJsonBody<{ interestId?: unknown }>(
+          const parsedBody = await parseJsonBody<{ interestId?: unknown }>(
             req,
-            res,
-            cors,
           );
-          if (!parsedBody.ok) return;
-          const parsed = parsedBody.value;
+          if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
+          const parsed = parsedBody.body;
           const interestId =
             typeof parsed.interestId === "string" ? parsed.interestId : "";
           if (!interestId)
             return json(res, 400, { error: "interestId required" }, cors);
-          const outcome = await confirmRewriteTurn(interestId, {
-            stateFile,
-            interestsDir,
-            chatTranscriptFile,
-            claudeBin,
-            spawnFn,
-            onChatDone: deps.onChatDone,
-          });
+          const outcome = await confirmRewriteTurn(interestId, chatDeps);
           if (!outcome.ok) {
             if (outcome.reason === "in_flight") {
               return json(res, 409, { error: "chat turn in progress" }, cors);
@@ -965,12 +948,12 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (req.method === "PUT" && url.pathname === "/v0/schedule") {
           const state = await authed(req);
           if (!state) return json(res, 401, { error: "unauthorized" }, cors);
-          const parsedBody = await readJsonBody<{
+          const parsedBody = await parseJsonBody<{
             enabled?: unknown;
             time_of_day?: unknown;
-          }>(req, res, cors);
-          if (!parsedBody.ok) return;
-          const parsed = parsedBody.value;
+          }>(req);
+          if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
+          const parsed = parsedBody.body;
 
           const current = state.schedule ?? defaultSchedule();
           let enabled = current.enabled;
