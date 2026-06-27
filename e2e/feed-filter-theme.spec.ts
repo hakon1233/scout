@@ -45,7 +45,7 @@ test("feed filter uses dark theme tokens for its button and menu", async ({
   await expect(filter).toBeVisible();
   await filter.click();
 
-  const menu = page.getByRole("menu", { name: "Filter feed by topic" });
+  const menu = page.getByRole("group", { name: "Filter feed by topic" });
   await expect(menu).toBeVisible();
 
   await expect(menu).toHaveCSS("background-color", "rgb(22, 20, 15)");
@@ -55,7 +55,7 @@ test("feed filter uses dark theme tokens for its button and menu", async ({
     "rgb(154, 145, 127)",
   );
 
-  await menu.getByRole("menuitem", { name: "AI safety" }).click();
+  await menu.getByRole("button", { name: "AI safety" }).click();
 
   const activeFilter = page.getByRole("button", {
     name: "Filtering by AI safety",
@@ -89,15 +89,15 @@ test("feed filter keeps the established light theme colors", async ({
 
   await page.getByRole("button", { name: "Filter feed" }).click();
 
-  const menu = page.getByRole("menu", { name: "Filter feed by topic" });
+  const menu = page.getByRole("group", { name: "Filter feed by topic" });
   await expect(menu).toHaveCSS("background-color", "rgb(246, 242, 234)");
   await expect(menu).toHaveCSS("border-color", "rgb(216, 208, 193)");
 
-  const selectedAll = menu.getByRole("menuitem", { name: "All topics" });
+  const selectedAll = menu.getByRole("button", { name: "All topics" });
   await expect(selectedAll).toHaveCSS("background-color", "rgb(154, 59, 46)");
   await expect(selectedAll).toHaveCSS("color", "rgb(246, 242, 234)");
 
-  await menu.getByRole("menuitem", { name: "AI safety" }).click();
+  await menu.getByRole("button", { name: "AI safety" }).click();
 
   const activeFilter = page.getByRole("button", {
     name: "Filtering by AI safety",
@@ -132,8 +132,8 @@ test("feed filter topic labels use available dropdown space before ellipsis", as
   await page.goto(`${ORIGIN}/app/`);
   await page.getByRole("button", { name: "Filter feed" }).click();
 
-  const menu = page.getByRole("menu", { name: "Filter feed by topic" });
-  const label = menu.getByRole("menuitem", { name: topic }).locator("span");
+  const menu = page.getByRole("group", { name: "Filter feed by topic" });
+  const label = menu.getByRole("button", { name: topic }).locator("span");
 
   await expect(label).toBeVisible();
 
@@ -194,7 +194,13 @@ test("feed filter matches model topic headings case-insensitively", async ({
 
   await page.goto(`${ORIGIN}/app/`);
   await page.getByRole("button", { name: "Filter feed" }).click();
-  await page.getByRole("menuitem", { name: "openai" }).click();
+  // Scope to the filter group: a feed card button also exposes "OpenAI" in its
+  // accessible name, so an unscoped button query is ambiguous (CAR-245 moved the
+  // option off role="menuitem", which previously disambiguated it).
+  await page
+    .getByRole("group", { name: "Filter feed by topic" })
+    .getByRole("button", { name: "openai" })
+    .click();
 
   await expect(
     page.getByRole("heading", { name: "OpenAI launches a research preview" }),

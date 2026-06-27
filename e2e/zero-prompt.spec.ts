@@ -75,7 +75,7 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
 
   // Run-now lives in the profile menu now (PER-219 AC3). Open it and fire the run.
   await page.getByRole("button", { name: "Open settings" }).click();
-  const generate = page.getByRole("menuitem", { name: "Run now" });
+  const generate = page.getByRole("button", { name: "Run now" });
   await expect(generate).toBeEnabled({ timeout: 15_000 });
 
   // Generate and wait for the brief to render in-app.
