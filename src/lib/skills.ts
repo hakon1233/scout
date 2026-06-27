@@ -8,7 +8,7 @@
 //     research session (recency, mandatory dates, source quality, source image).
 //   - ASSEMBLY_SKILLS: the plain-language description of how findings are turned
 //     into the brief (one section per interest, newest-first, honest coverage,
-//     dedup/dates/source image), kept in sync with coverage.ts by hand.
+//     dates/source image), kept in sync with coverage.ts by hand.
 //
 // Both share one on-the-wire shape: a leading `## ` title line, an intro
 // paragraph, then ALL-CAPS group labels ending in `:` each followed by `- `
