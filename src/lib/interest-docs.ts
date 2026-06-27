@@ -2,6 +2,7 @@
 
 import type { Interest } from "./types";
 import { isServedFromCompanion } from "./companion";
+import { isClient } from "./safe-storage";
 
 // Per-interest "intent doc" metadata (PER-155 C1/C4). The intent doc is the
 // chat-managed markdown that steers an interest's research session; this module
@@ -55,13 +56,11 @@ export function interestEditorHref(i: Interest): string {
 // us same-origin (public host / offline) so the caller can fall back to local
 // settings. `/v0/interests` is authed, so the pairing token is required — an
 // unauthenticated read 401s and the doc indicators silently never light up.
-export async function fetchInterestsFull(
-  token: string,
-): Promise<{
+export async function fetchInterestsFull(token: string): Promise<{
   interests: Interest[];
   meta: Record<string, InterestDocMeta>;
 } | null> {
-  if (typeof window === "undefined") return null;
+  if (!isClient()) return null;
   if (!(await isServedFromCompanion())) return null;
   try {
     const res = await fetch(`${window.location.origin}/v0/interests`, {

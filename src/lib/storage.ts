@@ -1,7 +1,7 @@
 "use client";
 
 import type { Brief, Settings } from "./types";
-import { safeSetItem } from "./safe-storage";
+import { getLocalStorage, safeSetItem } from "./safe-storage";
 
 const SETTINGS_KEY = "scout.settings.v1";
 const BRIEF_KEY = "scout.lastBrief.v1";
@@ -27,9 +27,10 @@ function safeParse<T>(raw: string | null): T | null {
 const safeSet = safeSetItem;
 
 export function loadSettings(): Settings | null {
-  if (typeof window === "undefined") return null;
+  const storage = getLocalStorage();
+  if (!storage) return null;
   const raw = safeParse<Settings & { anthropicKey?: string; exaKey?: string }>(
-    window.localStorage.getItem(SETTINGS_KEY),
+    storage.getItem(SETTINGS_KEY),
   );
   if (!raw) return null;
   // Migration (PER-133): the BYO-key path was removed (PER-109), so old stored
@@ -44,8 +45,9 @@ export function saveSettings(s: Settings): void {
 }
 
 export function loadLastBrief(): Brief | null {
-  if (typeof window === "undefined") return null;
-  return safeParse<Brief>(window.localStorage.getItem(BRIEF_KEY));
+  const storage = getLocalStorage();
+  if (!storage) return null;
+  return safeParse<Brief>(storage.getItem(BRIEF_KEY));
 }
 
 export function saveLastBrief(b: Brief): void {
@@ -53,12 +55,13 @@ export function saveLastBrief(b: Brief): void {
 }
 
 export function clearLastBrief(): void {
-  window.localStorage.removeItem(BRIEF_KEY);
+  getLocalStorage()?.removeItem(BRIEF_KEY);
 }
 
 export function loadPrevBrief(): Brief | null {
-  if (typeof window === "undefined") return null;
-  return safeParse<Brief>(window.localStorage.getItem(PREV_BRIEF_KEY));
+  const storage = getLocalStorage();
+  if (!storage) return null;
+  return safeParse<Brief>(storage.getItem(PREV_BRIEF_KEY));
 }
 
 export function savePrevBrief(b: Brief): void {
@@ -66,13 +69,13 @@ export function savePrevBrief(b: Brief): void {
 }
 
 export function clearPrevBrief(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(PREV_BRIEF_KEY);
+  getLocalStorage()?.removeItem(PREV_BRIEF_KEY);
 }
 
 export function clearSettings(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(SETTINGS_KEY);
-  window.localStorage.removeItem(BRIEF_KEY);
-  window.localStorage.removeItem(PREV_BRIEF_KEY);
+  const storage = getLocalStorage();
+  if (!storage) return;
+  storage.removeItem(SETTINGS_KEY);
+  storage.removeItem(BRIEF_KEY);
+  storage.removeItem(PREV_BRIEF_KEY);
 }
