@@ -5,7 +5,7 @@
 
 import type { Brief as AppBrief, TopicBasis, TopicCoverage } from "./types";
 import { readErrorBody } from "./errors";
-import { safeSetItem } from "./safe-storage";
+import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
@@ -19,8 +19,7 @@ function baseFor(port: number): string {
 }
 
 export function loadCompanionToken(): string {
-  if (typeof window === "undefined") return "";
-  const current = window.localStorage.getItem(TOKEN_KEY);
+  const current = getLocalStorage()?.getItem(TOKEN_KEY);
   return current ?? "";
 }
 
@@ -60,7 +59,7 @@ let servedProbeInFlight: Promise<boolean> | null = null;
 // PER-124: previously a hardcoded localhost/127.0.0.1 regex, which excluded
 // *.ts.net and broke token bootstrap + same-origin API on the Tailscale origin.
 export async function isServedFromCompanion(): Promise<boolean> {
-  if (typeof window === "undefined") return false;
+  if (!isClient()) return false;
   if (servedFromCompanionConfirmed) return true;
   if (servedProbeInFlight) return servedProbeInFlight;
   servedProbeInFlight = (async () => {
@@ -96,7 +95,7 @@ let configCachedAt = 0;
 const CONFIG_TTL_MS = 3000;
 
 async function fetchCompanionConfig(): Promise<CompanionConfig | null> {
-  if (typeof window === "undefined") return null;
+  if (!isClient()) return null;
   if (configCache && Date.now() - configCachedAt < CONFIG_TTL_MS) {
     return configCache;
   }
@@ -174,9 +173,7 @@ export async function discoverCompanion(): Promise<string | null> {
   }
   if (cachedBase) {
     const cachedPort = new URL(cachedBase).port;
-    if (
-      await pingPort(cachedPort ? Number(cachedPort) : COMPANION_PORT)
-    ) {
+    if (await pingPort(cachedPort ? Number(cachedPort) : COMPANION_PORT)) {
       return cachedBase;
     }
     cachedBase = null;

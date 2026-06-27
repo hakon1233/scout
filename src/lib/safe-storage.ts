@@ -1,6 +1,7 @@
 "use client";
 
-// Single source of truth for the device-local-storage WRITE guard (AIR-326).
+// Single source of truth for browser storage availability and the
+// device-local-storage WRITE guard (AIR-326).
 //
 // localStorage writes throw *synchronously* in two situations every client
 // store has to survive:
@@ -18,10 +19,20 @@
 // catch — three of which carried comments explicitly telling the reader to keep
 // them in sync with the others by hand. Routing every write through one
 // primitive removes that drift risk.
+export function isClient(): boolean {
+  return typeof window !== "undefined";
+}
+
+export function getLocalStorage(): Storage | null {
+  if (!isClient()) return null;
+  return window.localStorage;
+}
+
 export function safeSetItem(key: string, value: string): void {
-  if (typeof window === "undefined") return;
+  const storage = getLocalStorage();
+  if (!storage) return;
   try {
-    window.localStorage.setItem(key, value);
+    storage.setItem(key, value);
   } catch {
     // Quota / private-mode / disabled-storage write failure: keep the session
     // usable by dropping only the persist. The caller's in-memory state still

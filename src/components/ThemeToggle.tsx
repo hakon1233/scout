@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { safeSetItem } from "@/lib/safe-storage";
+import { getLocalStorage, isClient, safeSetItem } from "@/lib/safe-storage";
 
 type Theme = "light" | "dark" | "system";
 
@@ -12,15 +12,13 @@ function applyTheme(theme: Theme) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
   const prefersDark =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
+    isClient() && window.matchMedia("(prefers-color-scheme: dark)").matches;
   const isDark = theme === "dark" || (theme === "system" && prefersDark);
   root.classList.toggle("dark", isDark);
 }
 
 function readStored(): Theme {
-  if (typeof window === "undefined") return "system";
-  const raw = window.localStorage.getItem(STORAGE_KEY);
+  const raw = getLocalStorage()?.getItem(STORAGE_KEY);
   return raw === "light" || raw === "dark" || raw === "system" ? raw : "system";
 }
 
@@ -28,7 +26,7 @@ export function ThemeToggle({
   showLabels = false,
 }: { showLabels?: boolean } = {}) {
   const [theme, setThemeState] = React.useState<Theme>(() =>
-    typeof window === "undefined" ? "system" : readStored(),
+    isClient() ? readStored() : "system",
   );
   const [mounted, setMounted] = React.useState(false);
 
