@@ -405,7 +405,11 @@ export default function ConnectPage() {
                     Auto-pairing didn&apos;t work? Paste a token manually:
                   </p>
                   <div className="flex gap-2">
+                    <label htmlFor="pairing-token-manual" className="sr-only">
+                      Pairing token
+                    </label>
                     <input
+                      id="pairing-token-manual"
                       type="password"
                       autoComplete="off"
                       value={token}
@@ -447,7 +451,11 @@ export default function ConnectPage() {
                 The command prints a token. Paste it below:
               </p>
               <div className="flex gap-2">
+                <label htmlFor="pairing-token" className="sr-only">
+                  Pairing token
+                </label>
                 <input
+                  id="pairing-token"
                   type="password"
                   autoComplete="off"
                   value={token}
