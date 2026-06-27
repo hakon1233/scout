@@ -99,6 +99,10 @@ export default function ConnectPage() {
   }, [check]);
 
   const handleSaveToken = useCallback(() => {
+    // Guard against an empty submit: the Save buttons are disabled when the
+    // field is blank, but keep a defensive check so we never persist an empty
+    // string (which would silently clear a previously saved token).
+    if (!token.trim()) return;
     saveCompanionToken(token);
     setHasSavedToken(Boolean(token.trim()));
   }, [token]);
@@ -413,10 +417,19 @@ export default function ConnectPage() {
                       placeholder="Paste pairing token here"
                       className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
                     />
-                    <Button variant="primary" onClick={handleSaveToken}>
+                    <Button
+                      variant="primary"
+                      onClick={handleSaveToken}
+                      disabled={!token.trim()}
+                    >
                       Save
                     </Button>
                   </div>
+                  {!token.trim() && (
+                    <p className="text-xs text-muted">
+                      Paste the token from your terminal first.
+                    </p>
+                  )}
                 </div>
               </div>
             </details>
@@ -455,10 +468,19 @@ export default function ConnectPage() {
                   placeholder="Paste pairing token here"
                   className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
                 />
-                <Button variant="primary" onClick={handleSaveToken}>
+                <Button
+                  variant="primary"
+                  onClick={handleSaveToken}
+                  disabled={!token.trim()}
+                >
                   Save
                 </Button>
               </div>
+              {!token.trim() && (
+                <p className="text-xs text-muted">
+                  Paste the token from your terminal first.
+                </p>
+              )}
             </section>
 
             {/* Step 2 */}
