@@ -63,7 +63,7 @@ export function ThemeToggle({
     // icon + text so the three choices read clearly inside the menu.
     return (
       <div
-        role="radiogroup"
+        role="group"
         aria-label="Theme"
         className="grid grid-cols-3 gap-1 rounded-md border border-border-default bg-surface p-1"
       >
@@ -73,8 +73,7 @@ export function ThemeToggle({
             <button
               key={opt.value}
               type="button"
-              role="radio"
-              aria-checked={active}
+              aria-pressed={active}
               suppressHydrationWarning
               onClick={() => setTheme(opt.value)}
               className={
@@ -95,7 +94,7 @@ export function ThemeToggle({
 
   return (
     <div
-      role="radiogroup"
+      role="group"
       aria-label="Theme"
       className="inline-flex items-center gap-1 rounded-pill border border-border-default bg-surface p-1"
     >
@@ -105,8 +104,7 @@ export function ThemeToggle({
           <button
             key={opt.value}
             type="button"
-            role="radio"
-            aria-checked={active}
+            aria-pressed={active}
             aria-label={opt.label}
             title={opt.label}
             suppressHydrationWarning
