@@ -25,7 +25,13 @@ export function isClient(): boolean {
 
 export function getLocalStorage(): Storage | null {
   if (!isClient()) return null;
-  return window.localStorage;
+  try {
+    return window.localStorage;
+  } catch {
+    // Disabled / partitioned storage can throw on the getter before setItem is
+    // even reached. Treat it like an unavailable store so callers keep working.
+    return null;
+  }
 }
 
 export function safeSetItem(key: string, value: string): void {
