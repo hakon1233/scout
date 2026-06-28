@@ -51,3 +51,32 @@ test("safeSetItem writes through browser localStorage when present", () => {
     }
   }
 });
+
+test("getLocalStorage degrades to null when the browser blocks storage access", () => {
+  const previousWindow = globalThis.window;
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {},
+  });
+  Object.defineProperty(globalThis.window, "localStorage", {
+    configurable: true,
+    get() {
+      throw new DOMException("blocked", "SecurityError");
+    },
+  });
+
+  try {
+    assert.equal(getLocalStorage(), null);
+    assert.doesNotThrow(() => safeSetItem("key", "value"));
+  } finally {
+    if (previousWindow) {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: previousWindow,
+      });
+    } else {
+      // @ts-expect-error Restoring the Node test environment.
+      delete globalThis.window;
+    }
+  }
+});
