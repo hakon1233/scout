@@ -36,7 +36,6 @@ import {
   type Interest,
   type PendingDelete,
   type PendingRewrite,
-  type State,
 } from "./state.js";
 import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
 import {
@@ -104,9 +103,12 @@ export async function readChatTranscript(
   let raw: string;
   try {
     raw = await fs.readFile(file, "utf8");
-  } catch {
-    // No transcript yet (ENOENT) is the normal first-run state, and a transient
-    // read blip leaves the file untouched on disk. Either way: nothing to parse.
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error(`[chat] transcript ${file} could not be read:`, err);
+    }
+    // No transcript yet (ENOENT) is the normal first-run state. Other read
+    // failures still degrade gracefully, but are logged so they are diagnosable.
     return [];
   }
   let parsed: unknown;
