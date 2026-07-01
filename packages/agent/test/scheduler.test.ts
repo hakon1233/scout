@@ -83,6 +83,56 @@ function makeSpawnRecorder(opts: { autoClose: boolean }) {
   };
 }
 
+// A spawn stub whose sessions FAIL (emit empty output → research.ts rejects
+// "claude returned empty output") for the first `failFirst` calls, then SUCCEED
+// with the canned brief. Models a transient morning usage-limit that clears: the
+// 07:00 fire fails, a later retry recovers (PER-259 item 3). One call === one
+// per-interest session, so with a single interest each attempt is one call.
+function makeFlakySpawn(opts: { failFirst: number }) {
+  const calls: Array<{ stdin: string }> = [];
+  let n = 0;
+  const spawnFn = ((
+    _bin: string,
+    _args: readonly string[],
+    _options: unknown,
+  ) => {
+    const child = new EventEmitter() as EventEmitter & {
+      stdin: Writable;
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      pid?: number;
+    };
+    child.pid = undefined;
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    let stdinData = "";
+    const record = { stdin: "" };
+    calls.push(record);
+    const finish = () => {
+      record.stdin = stdinData;
+      n += 1;
+      if (n <= opts.failFirst) {
+        // Empty stdout, clean exit → the session yields no content and rejects,
+        // so every topic fails and (no base brief) the run lands `failed`.
+        child.stdout.emit("data", Buffer.from(""));
+        child.emit("close", 0);
+      } else {
+        child.stdout.emit("data", Buffer.from(CANNED_BRIEF));
+        child.emit("close", 0);
+      }
+    };
+    child.stdin = new Writable({
+      write(chunk, _enc, cb) {
+        stdinData += chunk.toString();
+        cb();
+      },
+    });
+    child.stdin.on("finish", () => setImmediate(finish));
+    return child;
+  }) as unknown as typeof spawn;
+  return { calls, spawnFn };
+}
+
 async function tmpState(
   seed: State,
 ): Promise<{ tmp: string; stateFile: string }> {
@@ -363,6 +413,113 @@ test("PUT /v0/schedule validates, persists, and re-arms the scheduler", async ()
   } finally {
     scheduler.stop();
     server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a failed scheduled run auto-retries and recovers (PER-259 item 3)", async () => {
+  const { tmp, stateFile } = await tmpState({
+    pairing_token: newPairingToken(),
+    interests: [{ id: "int_aisafety", topic: "ai safety" }],
+    schedule: { enabled: true, time_of_day: "07:00" },
+  });
+  // First attempt's session fails (usage limit at 07:00); the retry succeeds.
+  const { calls, spawnFn } = makeFlakySpawn({ failFirst: 1 });
+
+  const seen: Brief[] = [];
+  let resolveReady: (b: Brief) => void;
+  const readyP = new Promise<Brief>((r) => (resolveReady = r));
+  const now = () => new Date(2026, 5, 1, 7, 0, 0, 0);
+  const scheduler = new Scheduler(
+    {
+      stateFile,
+      spawnFn,
+      onSynthesisDone: (b) => {
+        seen.push(b);
+        if (b.status === "ready") resolveReady(b);
+      },
+    },
+    now,
+    { retryDelayMs: 20 }, // tiny backoff so the test doesn't wait 45 min
+  );
+
+  // The retry timer is unref'd (production: the HTTP server keeps the loop
+  // alive, the schedule must not on its own). No server here, so hold the loop
+  // open across the backoff window ourselves.
+  const keepAlive = setInterval(() => {}, 1000);
+
+  try {
+    await scheduler.fire();
+    // The 07:00 fire failed; the armed retry produced a real brief with no
+    // founder intervention — the PER-258 self-heal.
+    const ready = await readyP;
+    assert.equal(ready.status, "ready");
+    assert.equal(seen[0].status, "failed", "the initial scheduled fire failed");
+    assert.equal(
+      seen[seen.length - 1].status,
+      "ready",
+      "the auto-retry recovered",
+    );
+    // Exactly two synthesis attempts: the failed fire + one retry (no over-spend).
+    assert.equal(calls.length, 2);
+
+    const state = await loadState(stateFile);
+    assert.equal(state.last_brief?.status, "ready");
+    assert.equal(state.schedule?.last_run_status, "success");
+  } finally {
+    clearInterval(keepAlive);
+    scheduler.stop();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a scheduled run that keeps failing gives up after the retry budget (PER-259 item 3)", async () => {
+  const { tmp, stateFile } = await tmpState({
+    pairing_token: newPairingToken(),
+    interests: [{ id: "int_aisafety", topic: "ai safety" }],
+    schedule: { enabled: true, time_of_day: "07:00" },
+  });
+  const { calls, spawnFn } = makeFlakySpawn({
+    failFirst: Number.POSITIVE_INFINITY,
+  });
+
+  const maxRetries = 2;
+  let failures = 0;
+  let resolveBudget: () => void;
+  const budgetHit = new Promise<void>((r) => (resolveBudget = r));
+  const now = () => new Date(2026, 5, 1, 7, 0, 0, 0);
+  const scheduler = new Scheduler(
+    {
+      stateFile,
+      spawnFn,
+      onSynthesisDone: (b) => {
+        if (b.status === "failed") failures += 1;
+        // 1 initial fire + maxRetries retries = the whole budget.
+        if (failures === 1 + maxRetries) setImmediate(resolveBudget);
+      },
+    },
+    now,
+    { retryDelayMs: 10, maxRetries },
+  );
+
+  const keepAlive = setInterval(() => {}, 1000);
+
+  try {
+    await scheduler.fire();
+    await budgetHit;
+    // Wait past another backoff window to prove NO further retry was armed.
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(
+      failures,
+      1 + maxRetries,
+      "1 initial fire + maxRetries retries, then it stops",
+    );
+    assert.equal(calls.length, 1 + maxRetries);
+    const state = await loadState(stateFile);
+    assert.equal(state.schedule?.last_run_status, "failed");
+  } finally {
+    clearInterval(keepAlive);
+    scheduler.stop();
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
