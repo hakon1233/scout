@@ -16,11 +16,14 @@ import {
   bootstrapCompanionToken,
   fetchCompanionInterests,
   fetchLatestBrief,
+  fetchRunFailure,
   generateWeeklyBrief,
   loadCompanionToken,
   pingCompanion,
   refreshBriefViaCompanion,
+  type RunFailure,
 } from "@/lib/companion";
+import { formatDate } from "@/lib/format-date";
 import { classifyError, type ClassifiedError } from "@/lib/errors";
 import {
   useAbortableController,
@@ -90,6 +93,9 @@ export default function AppPage() {
   const [error, setError] = useState<ClassifiedError | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [companionReady, setCompanionReady] = useState(false);
+  // PER-259 item 1: surfaced "your daily run failed / silently stopped" signal.
+  // Read-only telemetry from the companion; null when the run is healthy.
+  const [runFailure, setRunFailure] = useState<RunFailure | null>(null);
   // PER-222: a single story can be opened from EITHER the current edition or the
   // history pager. We track the origin separately (PER-223 fix) because the two
   // collapse in opposite directions: a current-edition story hides the history
@@ -124,6 +130,11 @@ export default function AppPage() {
         const token = await bootstrapCompanionToken();
         const ok = token ? await pingCompanion() : false;
         if (!scope.cancelled) setCompanionReady(ok);
+        // PER-259 item 1: poll run health alongside the reachability ping so a
+        // silently-failed daily run (or a stale feed with no run in >26h) is
+        // surfaced instead of the feed quietly showing yesterday's edition.
+        const failure = ok && token ? await fetchRunFailure(token) : null;
+        if (!scope.cancelled) setRunFailure(failure);
       };
       check();
       const id = setInterval(check, 10_000);
@@ -479,6 +490,67 @@ export default function AppPage() {
                 >
                   Pair companion →
                 </Link>
+              </span>
+            </Banner>
+          )}
+
+          {/* PER-259 item 1: honestly surface a silently-failed daily run. The
+          PER-258 outage overwrote last_brief with status:"failed" and the feed
+          kept quietly showing yesterday's edition — read as "no run since June
+          18". Now the founder sees a clear banner with the captured reason.
+          Suppressed while a run is in flight or a fresh brief just landed this
+          session (the failure is already resolved), and when an error banner is
+          already speaking for the current action. */}
+          {runFailure && !running && !ranAt && !error && (
+            <Banner tone="warning">
+              <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  {runFailure.kind === "failed" ? (
+                    <>
+                      Today&apos;s brief failed
+                      {runFailure.reason ? (
+                        <>
+                          {" — "}
+                          <span className="font-medium">
+                            {runFailure.reason}
+                          </span>
+                        </>
+                      ) : (
+                        "."
+                      )}{" "}
+                      Scout retries automatically; you can also run it now.
+                      {runFailure.lastSuccessAt && (
+                        <>
+                          {" "}
+                          <span className="text-muted">
+                            Showing your last good brief from{" "}
+                            {formatDate(runFailure.lastSuccessAt)}.
+                          </span>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      No fresh brief in over a day
+                      {runFailure.lastSuccessAt ? (
+                        <>
+                          {" "}
+                          — the last successful run was{" "}
+                          <span className="font-medium">
+                            {formatDate(runFailure.lastSuccessAt)}
+                          </span>
+                          .
+                        </>
+                      ) : (
+                        "."
+                      )}{" "}
+                      Scout may have stopped; try running it now.
+                    </>
+                  )}
+                </span>
+                <Button variant="secondary" size="sm" onClick={runNow}>
+                  Run now
+                </Button>
               </span>
             </Banner>
           )}

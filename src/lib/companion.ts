@@ -508,6 +508,120 @@ export async function fetchLatestBrief(
   }
 }
 
+// PER-259 item 1: a surfaced "your daily run failed / silently stopped" signal.
+// The PER-258 root cause was a failed run that overwrote `last_brief` with
+// status:"failed" and never entered the ready history — so the feed silently
+// kept showing the last success and the founder read it as "no new run since
+// June 18". This makes that state HONEST: the feed shows a clear banner with the
+// captured reason instead of pretending yesterday's brief is today's.
+export type RunFailure = {
+  // "failed": the most recent run errored. "stale": no successful brief in the
+  // staleness window even though nothing errored in the current slot (e.g. every
+  // scheduled fire was skipped) — a silent stop.
+  kind: "failed" | "stale";
+  // Human reason for a failed run (usage limit vs spawn error vs timeout),
+  // distilled by the companion into last_brief.error_msg / the schedule note.
+  reason?: string;
+  // ISO of the failed run (failed) — for display context.
+  at?: string;
+  // ISO of the newest successful brief we still have, if any.
+  lastSuccessAt?: string;
+};
+
+// Alert threshold (issue PER-259): flag a silent stop when the last SUCCESSFUL
+// brief is older than this, even if the current slot didn't explicitly error.
+export const STALE_SUCCESS_MS = 26 * 60 * 60 * 1000; // 26h
+
+// Strip the companion's internal "all research sessions failed — " prefix so the
+// banner's own "Today's brief failed —" lead-in doesn't read as a doubled clause.
+function cleanFailureReason(msg?: string | null): string | undefined {
+  if (!msg) return undefined;
+  const trimmed = msg
+    .replace(/^all research sessions failed\s*[—:-]\s*/i, "")
+    .trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+// Pure assessment (unit-friendly): given the raw last_brief slot, the schedule
+// telemetry, and the newest successful brief's timestamp, decide whether to
+// surface a failure/staleness banner. Returns null when the run is healthy.
+export function assessRunFailure(input: {
+  lastStatus?: string;
+  lastError?: string | null;
+  lastAt?: string | null;
+  scheduleStatus?: "success" | "failed" | "skipped" | null;
+  scheduleNote?: string | null;
+  scheduleAt?: string | null;
+  lastSuccessAt?: string | null;
+  now: number;
+}): RunFailure | null {
+  const {
+    lastStatus,
+    lastError,
+    lastAt,
+    scheduleStatus,
+    scheduleNote,
+    scheduleAt,
+    lastSuccessAt,
+    now,
+  } = input;
+
+  // 1. The most recent run errored — on-demand (last_brief) or scheduled
+  //    (schedule.last_run_status). Prefer the brief's captured error; fall back
+  //    to the schedule's note.
+  if (lastStatus === "failed" || scheduleStatus === "failed") {
+    const reason =
+      cleanFailureReason(lastError) ?? cleanFailureReason(scheduleNote);
+    return {
+      kind: "failed",
+      reason,
+      at:
+        lastStatus === "failed"
+          ? (lastAt ?? undefined)
+          : (scheduleAt ?? lastAt ?? undefined),
+      lastSuccessAt: lastSuccessAt ?? undefined,
+    };
+  }
+
+  // 2. No successful brief within the staleness window — a silent stop even when
+  //    nothing errored in THIS slot (e.g. every fire was skipped). Only meaningful
+  //    once we've ever had a success to measure against.
+  if (lastSuccessAt) {
+    const age = now - Date.parse(lastSuccessAt);
+    if (Number.isFinite(age) && age > STALE_SUCCESS_MS) {
+      return { kind: "stale", lastSuccessAt };
+    }
+  }
+  return null;
+}
+
+// Fetch the companion's run health and assess it. Read-only (GET only) — never
+// writes interests or kicks a run. Returns null when healthy or unreachable.
+export async function fetchRunFailure(
+  token: string,
+): Promise<RunFailure | null> {
+  try {
+    const [rawLast, schedule, latestReady] = await Promise.all([
+      pollBriefsRaw(new Date(0).toISOString(), token),
+      fetchSchedule(token).catch(() => null),
+      fetchLatestBrief(token),
+    ]);
+    const last = rawLast[0];
+    return assessRunFailure({
+      lastStatus: last?.status,
+      lastError: last?.error_msg,
+      lastAt: last?.generated_at,
+      scheduleStatus: schedule?.last_run_status ?? null,
+      scheduleNote: schedule?.last_run_note ?? null,
+      scheduleAt: schedule?.last_run_at ?? null,
+      lastSuccessAt: latestReady?.generatedAt ?? null,
+      now: Date.now(),
+    });
+  } catch {
+    return null;
+  }
+}
+
 // Recurring-schedule config + last/next-run telemetry the companion exposes at
 // GET|PUT /v0/schedule (PER-151). The Settings UI (PER-152) reads this to render
 // the schedule controls and the legibility row. `reboot_durable` is false for
