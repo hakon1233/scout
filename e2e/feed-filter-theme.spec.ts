@@ -144,6 +144,47 @@ test("feed filter topic labels use available dropdown space before ellipsis", as
   expect(metrics.clientWidth).toBeGreaterThanOrEqual(metrics.scrollWidth);
 });
 
+// PER-262 regression: PER-249 inserted the Liked icon between the filter
+// trigger and the profile menu, which pushed the trigger left of where the
+// old `absolute right-0` + viewport-width menu assumed it sat — the menu
+// then spilled off the left edge on mobile widths. Assert full containment
+// at a spread of common mobile widths so a future header change can't quietly
+// break this positioning math again.
+for (const width of [360, 390, 430]) {
+  test(`feed filter menu stays fully within the ${width}px viewport`, async ({
+    page,
+  }) => {
+    await blockNonLoopback(page);
+    await page.setViewportSize({ width, height: 800 });
+
+    await page.addInitScript(() => {
+      window.localStorage.setItem("scout.theme", "light");
+      window.localStorage.setItem(
+        "scout.settings.v1",
+        JSON.stringify({
+          name: "Viewport Tester",
+          interests: [
+            { id: "int_ai_safety", topic: "AI safety" },
+            { id: "int_energy", topic: "Energy" },
+          ],
+        }),
+      );
+    });
+
+    await page.goto(`${ORIGIN}/app/`);
+    await page.getByRole("button", { name: "Filter feed" }).click();
+
+    const menu = page.getByRole("menu", { name: "Filter feed by topic" });
+    await expect(menu).toBeVisible();
+
+    const box = await menu.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+  });
+}
+
 test("feed filter matches model topic headings case-insensitively", async ({
   page,
 }) => {
