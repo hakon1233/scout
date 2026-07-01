@@ -27,6 +27,12 @@
 // paragraphs carry deeper insight. It must be plain prose (no links/images) so
 // it never collides with the citation or source-image parse, and the feed
 // bullet's one-sentence summary stays the SHORT card blurb.
+//
+// PER-265: the founder found detail-view bodies shallow across EVERY topic, not
+// just broad ones — so the fix is a straight quality/length bump to this one
+// rule (3-5 substantive paragraphs, each required to add a concrete detail),
+// not a topic-breadth branch. Applies uniformly; there is deliberately no
+// "general vs specific topic" distinction anywhere in these rules.
 
 export const STORY_DATE_RE = /`(\d{4}-\d{2}-\d{2}|undated)`/;
 
@@ -79,7 +85,7 @@ SOURCE IMAGE (one per item, OPTIONAL, handpicked from the source — never inven
 - One image per story maximum. Prefer a wide/landscape editorial lead image; skip
   sprites, avatars, share-button icons, and sub-200px thumbnails.
 
-IN-DEPTH BODY (one per item, render contract for the click-through detail — PER-214/PER-256):
+IN-DEPTH BODY (one per item, render contract for the click-through detail — PER-214/PER-256/PER-265):
 - The one-sentence summary on the bullet line is the SHORT feed blurb. In ADDITION,
   give each story a multi-paragraph detail body that the reader sees only after
   clicking into that story.
@@ -88,9 +94,13 @@ IN-DEPTH BODY (one per item, render contract for the click-through detail — PE
   paragraph in bold, so write it as the crisp lead, not as background.
 - Follow-on paragraphs must be deeper insight/analysis: concrete specifics,
   implications, context, what changed, what remains uncertain, and why it matters
-  for this interest. Aim for 2-4 additional short paragraphs. Concise but
-  genuinely informative — not a wall of text, and not a rehash of the bullet.
-  If a story honestly has little to say, a shorter body (or none) is fine —
+  for this interest. Aim for 3-5 additional paragraphs — this applies to EVERY
+  topic equally, general/broad or narrow. EACH follow-on paragraph must earn its
+  place with at least one concrete, checkable detail not already in the lead — a
+  number, a name, a quote, a mechanism, a specific consequence — never a
+  paragraph that just restates the lead in different words or pads with generic
+  framing. Concise but genuinely informative — not a wall of text, but also not
+  thin. If a story honestly has little to say, a shorter body (or none) is fine —
   NEVER pad, invent, or speculate to hit a length. Stay grounded in the SAME
   sources you already read; add no new claims you can't back from them.
 - Emit it as an INDENTED markdown blockquote on the lines AFTER the citation (and
@@ -103,7 +113,9 @@ IN-DEPTH BODY (one per item, render contract for the click-through detail — PE
     >
     > Second paragraph: deeper insight, implications, and key specifics.
     >
-    > Third paragraph: useful context, tradeoffs, or what to watch next.
+    > Third paragraph: another concrete detail — a number, a name, a quote.
+    >
+    > Fourth paragraph: useful context, tradeoffs, or what to watch next.
 - The blockquote is the ONLY place depth goes — keep the bullet's summary to one
   sentence so the feed card stays short. Do not put links or images inside the
   blockquote; keep it plain prose.
