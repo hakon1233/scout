@@ -147,6 +147,44 @@ function FeedFilter({
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const isFiltered = activeFilter !== null;
+  // PER-262: the menu's horizontal offset from its trigger drifts every time a
+  // sibling icon is added/removed from the nav (see PER-249, which inserted the
+  // Liked icon between this button and the profile menu and pushed the trigger
+  // far enough left that the old `absolute right-0` + viewport-width menu spilled
+  // off the left edge). Measuring the trigger's real position and clamping to the
+  // viewport removes that coupling so future header changes can't regress it again.
+  const [menuStyle, setMenuStyle] = React.useState<React.CSSProperties | null>(
+    null,
+  );
+
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    function updatePosition() {
+      const trigger = containerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const margin = 16; // 1rem edge clearance
+      const maxWidth = 384; // 24rem
+      const width = Math.min(maxWidth, window.innerWidth - margin * 2);
+      const left = Math.min(
+        Math.max(rect.right - width, margin),
+        window.innerWidth - margin - width,
+      );
+      setMenuStyle({
+        position: "fixed",
+        top: rect.bottom + 8,
+        left,
+        width,
+      });
+    }
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -195,11 +233,12 @@ function FeedFilter({
         <FunnelIcon active={isFiltered} />
       </button>
 
-      {open && (
+      {open && menuStyle && (
         <div
           role="menu"
           aria-label="Filter feed by topic"
-          className="absolute right-0 z-50 mt-2 w-[min(calc(100vw-2rem),24rem)] max-w-[calc(100vw-2rem)] rounded-lg border border-border-default bg-page p-2 shadow-lg"
+          style={menuStyle}
+          className="z-50 rounded-lg border border-border-default bg-page p-2 shadow-lg"
         >
           <p className="mb-2 px-2 font-mono text-caption uppercase tracking-[0.06em] text-muted">
             Filter by topic
