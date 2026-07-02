@@ -43,9 +43,11 @@ import {
 import {
   bearer,
   corsHeaders,
+  isHostAllowed,
   isOriginDenied,
   isSameOriginCaller,
   json,
+  timingSafeTokenEqual,
 } from "./http-util.js";
 
 import { V0_ROUTES, V0_ROUTE_METHODS } from "./routes/index.js";
@@ -136,13 +138,17 @@ export function createServer(deps: ServerDeps = {}): http.Server {
     const token = bearer(req);
     if (!token) return null;
     const state = await loadState(stateFile);
-    if (!state.pairing_token || state.pairing_token !== token) return null;
+    if (!timingSafeTokenEqual(state.pairing_token, token)) return null;
     return state;
   }
 
   return http.createServer((req, res) => {
     const origin = req.headers.origin as string | undefined;
     const cors = corsHeaders(origin);
+
+    if (!isHostAllowed(req.headers.host)) {
+      return json(res, 403, { error: "forbidden" });
+    }
 
     if (req.method === "OPTIONS") {
       // Private Network Access (PNA) preflight. Classic-PNA browsers
