@@ -5,6 +5,7 @@
 
 import { PKG_VERSION, readBuildInfo } from "../build-info.js";
 import { json } from "../http-util.js";
+import { listCorruptStateBackups } from "../state.js";
 import type { RequestContext, ServerContext } from "./types.js";
 
 // git_sha folded in for QA convenience (PER-239); /v0/version is the
@@ -14,7 +15,31 @@ export async function handleHealthz(
   sc: ServerContext,
 ): Promise<void> {
   const build = await readBuildInfo(sc.buildInfoFile);
-  json(res, 200, { ok: true, version: PKG_VERSION, git_sha: build.git_sha }, cors);
+  // Corrupt-state recovery surfacing (PER-272): when loadState had to move a
+  // corrupt state.json aside, the companion boots freshly unpaired and the
+  // only signal was a console line nobody watches under launchd. Folding it
+  // in here makes the recovery visible to anything that already checks
+  // companion health (UI probe, QA, curl). Needs no auth: this endpoint is
+  // loopback-only and the field discloses only that backups exist and when —
+  // never their contents.
+  const corruptBackups = await listCorruptStateBackups(sc.stateFile);
+  json(
+    res,
+    200,
+    {
+      ok: true,
+      version: PKG_VERSION,
+      git_sha: build.git_sha,
+      state_recovery:
+        corruptBackups.length === 0
+          ? null
+          : {
+              corrupt_backups: corruptBackups.length,
+              latest: corruptBackups[corruptBackups.length - 1],
+            },
+    },
+    cors,
+  );
 }
 
 // Build provenance for exact-SHA QA gating (PER-239). Unauthenticated
