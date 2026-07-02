@@ -21,7 +21,12 @@ type GenerateState = "idle" | "posting" | "polling" | "done" | "error";
 // (GitHub Pages) and install from the URL directly — works on a clean machine
 // with no registry account.
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
-const TARBALL_PATH = `${BASE_PATH}/agent/scout-agent-0.3.0.tgz`;
+// Sourced from packages/agent/package.json via next.config.ts, not
+// hand-duplicated here — the deploy names the packed tarball after that same
+// version, so a stale hardcode used to silently 404 this URL on a bump
+// (PER-275).
+const AGENT_VERSION = process.env.NEXT_PUBLIC_AGENT_VERSION;
+const TARBALL_PATH = `${BASE_PATH}/agent/scout-agent-${AGENT_VERSION}.tgz`;
 // Sensible absolute default for SSR/export; overwritten with the real origin
 // after mount so the copied command is correct on whatever host serves it.
 const DEFAULT_TARBALL_URL = `https://hakon1233.github.io${TARBALL_PATH}`;
