@@ -28,7 +28,13 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { loadState, saveState, type State } from "../src/state.js";
+import {
+  listCorruptStateBackups,
+  loadState,
+  saveState,
+  type State,
+} from "../src/state.js";
+import { startServer } from "../src/server.js";
 
 const RICH_STATE: State = {
   pairing_token: "tok_survivor",
@@ -148,6 +154,59 @@ test("PER-270: concurrent saves never tear the file — one complete payload win
       "final state must be exactly one racer's complete payload, never a blend",
     );
   } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("PER-272: listCorruptStateBackups reports the recovery file a corrupt load leaves behind", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-recovery-"));
+  try {
+    const file = path.join(tmp, "state.json");
+
+    // Nothing to report on a healthy store — or before the dir even exists.
+    assert.deepEqual(
+      await listCorruptStateBackups(path.join(tmp, "no-such-dir", "state.json")),
+      [],
+    );
+    await saveState(RICH_STATE, file);
+    assert.deepEqual(await listCorruptStateBackups(file), []);
+
+    // Corrupt it; the recovering load must leave a discoverable backup.
+    await fs.writeFile(file, "{ torn");
+    await loadState(file);
+    const backups = await listCorruptStateBackups(file);
+    assert.equal(backups.length, 1);
+    assert.match(backups[0]!, /^state\.json\.corrupt-\d+\.bak$/);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("PER-272: /healthz surfaces corrupt-state recoveries instead of a silent fresh boot", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-health-recovery-"));
+  const stateFile = path.join(tmp, "state.json");
+  await saveState(RICH_STATE, stateFile);
+  const { server, port } = await startServer(0, { stateFile });
+  try {
+    // Healthy store: the field is present and explicitly null, so a consumer
+    // can distinguish "no recovery happened" from "companion predates PER-272".
+    const clean = await (await fetch(`http://127.0.0.1:${port}/healthz`)).json();
+    assert.equal(clean.state_recovery, null);
+
+    // Corrupt the file and trip the recovery path (any state read recovers it;
+    // /healthz itself only OBSERVES backups, it never parses the state file).
+    await fs.writeFile(stateFile, "{ torn");
+    await loadState(stateFile);
+
+    const after = await (await fetch(`http://127.0.0.1:${port}/healthz`)).json();
+    assert.equal(after.ok, true, "recovery is a warning, not unhealthiness");
+    assert.equal(after.state_recovery.corrupt_backups, 1);
+    assert.match(
+      after.state_recovery.latest,
+      /^state\.json\.corrupt-\d+\.bak$/,
+    );
+  } finally {
+    server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
