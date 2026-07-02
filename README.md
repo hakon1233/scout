@@ -40,7 +40,7 @@ its own keychain. No `ANTHROPIC_API_KEY` or web-search API key needed.
 
 - `pnpm dev` — Next.js dev server.
 - `pnpm build` — production build, emits a static site to `out/`.
-- `pnpm start` — serve production build (note: `next start` does not serve a static export; run `npx serve out` for local preview).
+- `pnpm start` — serve the static export from `out/` via `npx serve`.
 - `pnpm lint` — ESLint.
 - `pnpm typecheck` — TypeScript no-emit check.
 - `pnpm format` / `pnpm format:check` — Prettier.
