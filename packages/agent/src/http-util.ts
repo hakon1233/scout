@@ -5,6 +5,7 @@
 // Route handlers live in routes/*.ts; the router/dispatch is server.ts.
 
 import http from "node:http";
+import { timingSafeEqual } from "node:crypto";
 
 // CORS: loopback dev origins + the specific Scout production hostname(s) +
 // the founder's private Tailscale tailnet origin.
@@ -28,6 +29,15 @@ const CORS_ALLOWED_ORIGINS = [
   ...extraAllowedOrigins(),
 ];
 
+const HOST_ALLOWED_HOSTNAMES = [
+  /^localhost$/i,
+  /^127\.0\.0\.1$/,
+  /^::1$/,
+  /^scout\.notiva\.no$/i,
+  /^hakon1233\.github\.io$/i,
+  /^[a-z0-9-]+\.[a-z0-9-]+\.ts\.net$/i,
+];
+
 // Optional operator-configured serving origins, so a non-tailnet deployment can
 // be allowlisted without a code change (PER-157). Set SCOUT_ALLOWED_ORIGINS to a
 // comma-separated list of exact origins, e.g.
@@ -44,6 +54,53 @@ function extraAllowedOrigins(): RegExp[] {
       (origin) =>
         new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
     );
+}
+
+function normalizeHostname(hostname: string): string {
+  return hostname.toLowerCase().replace(/^\[|\]$/g, "");
+}
+
+function hostnameFromHostHeader(host: string | undefined): string | null {
+  if (!host || host.includes(",")) return null;
+  try {
+    return normalizeHostname(new URL(`http://${host}`).hostname);
+  } catch {
+    return null;
+  }
+}
+
+function extraAllowedOriginHostnames(): string[] {
+  const raw = process.env.SCOUT_ALLOWED_ORIGINS;
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .flatMap((origin) => {
+      try {
+        return [normalizeHostname(new URL(origin).hostname)];
+      } catch {
+        return [];
+      }
+    });
+}
+
+export function isHostAllowed(host: string | undefined): boolean {
+  const hostname = hostnameFromHostHeader(host);
+  if (!hostname) return false;
+  if (HOST_ALLOWED_HOSTNAMES.some((rx) => rx.test(hostname))) return true;
+  return extraAllowedOriginHostnames().includes(hostname);
+}
+
+export function timingSafeTokenEqual(
+  expected: string | undefined,
+  actual: string | undefined,
+): boolean {
+  if (!expected || !actual) return false;
+  const expectedBytes = Buffer.from(expected, "utf8");
+  const actualBytes = Buffer.from(actual, "utf8");
+  if (expectedBytes.length !== actualBytes.length) return false;
+  return timingSafeEqual(expectedBytes, actualBytes);
 }
 
 // True when the request is same-origin with this server: either no Origin header
