@@ -1,6 +1,13 @@
-# supabase/
+# future/supabase/
 
-Scout v4 (Path 1) database + edge functions. See [`docs`](../docs) and the
+> **NOT WIRED INTO THE LIVE PRODUCT.** This is a deferred multi-user roadmap
+> path (PER-2, PER-27) — no file under `src/` or `packages/` imports anything
+> here. The live product is the GitHub Pages static site + local loopback
+> companion described in the root [`README.md`](../../README.md). Quarantined
+> here per PER-273; do not wire this up without also fixing the exa-search
+> quota-before-fetch bug noted below (M2).
+
+Scout v4 (Path 1) database + edge functions. See [`docs`](../../docs) and the
 architecture doc on PER-2 for the full design.
 
 ## Layout
@@ -29,3 +36,6 @@ supabase secrets set EXA_API_KEY=…               # for shared-key mode (option
   reaching for `sk-ant-oat01-…` in this directory, stop.
 - `companion_pairings` codes are single-use, 10-minute TTL, 96-bit entropy. Don't
   loosen any of those without re-modelling the abuse case.
+- **M2 (open bug):** `functions/exa-search/index.ts` bumps the daily quota
+  counter (`bump_exa_usage`) *before* the upstream Exa fetch, so a 5xx from
+  Exa still burns the user's quota. Fix this before reviving the path.

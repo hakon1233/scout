@@ -8,20 +8,26 @@ Set your interests, agents fetch and synthesize a brief with only the news you
 care about.
 
 Stack (see PER-2 architecture doc, v2): Next.js 15 (App Router, static export)
-hosted on GitHub Pages, Supabase for Postgres + Auth, and a local loopback
-companion (`@scout/agent`) that shells out to the user's own Claude Code CLI
-for ranking (Haiku 4.5), synthesis (Opus 4.7), and web research (the CLI's
-built-in `WebSearch` + `WebFetch` tools). No server-side Anthropic key, no
-third-party search provider — the user's `claude` CLI handles auth from its
-own keychain.
+hosted on GitHub Pages, plus a local loopback companion (`@scout/agent`) that
+shells out to the user's own Claude Code CLI for ranking (Haiku 4.5),
+synthesis (Opus 4.7), and web research (the CLI's built-in `WebSearch` +
+`WebFetch` tools). No server-side Anthropic key, no third-party search
+provider — the user's `claude` CLI handles auth from its own keychain.
+
+A multi-user Supabase + Exa path exists as a deferred roadmap item, quarantined
+under [`future/supabase/`](future/supabase/README.md) and not wired into the
+live product described above.
 
 ## Local development
 
 ```bash
 pnpm install
-cp .env.example .env.local   # fill in Supabase keys
 pnpm dev
 ```
+
+No `.env.local` needed for the live product — the client and companion read
+zero environment secrets. `.env.example` documents variables for the
+quarantined [`future/supabase/`](future/supabase/README.md) path only.
 
 In a second terminal, build and run the loopback companion:
 
@@ -53,11 +59,12 @@ its own keychain. No `ANTHROPIC_API_KEY` or web-search API key needed.
 
 ## Environment variables
 
-See `.env.example`. The client only needs `NEXT_PUBLIC_SUPABASE_URL` and
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase Postgres + Auth, protected by RLS).
-Anthropic and web-search credentials are **not** required anywhere in this
-repo — the loopback companion (`packages/agent`) delegates to the user's
-local Claude Code CLI, which holds its own OAuth token.
+See `.env.example` — every variable there belongs to the quarantined
+[`future/supabase/`](future/supabase/README.md) path (companion-token minter +
+Exa search proxy) and is **not required** for local dev or the live product.
+The client and the loopback companion (`packages/agent`) read zero
+environment secrets; the companion delegates to the user's local Claude Code
+CLI, which holds its own OAuth token.
 
 ## Deployment
 
