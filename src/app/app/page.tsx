@@ -52,7 +52,11 @@ const COMPANION_NOT_PAIRED_MSG =
 // NOT an error, NOT retryable. Prefers the companion's authoritative `topics`;
 // falls back to the legacy client-side `failedTopics` for briefs cached before
 // PER-154 (treated as missing, since the old field meant "didn't come back").
-function coverageBuckets(b: Brief): { missing: string[]; empty: string[] } {
+// Exported (PER-271) so it can be unit-tested directly.
+export function coverageBuckets(b: Brief): {
+  missing: string[];
+  empty: string[];
+} {
   if (b.topics && b.topics.length > 0) {
     return {
       missing: b.topics

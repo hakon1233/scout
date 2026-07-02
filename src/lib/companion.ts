@@ -356,7 +356,10 @@ type PendingStory = {
   bodyLines: string[];
 };
 
-function parseArticlesFromMarkdown(markdown: string, briefId: string) {
+// Exported (PER-271) so it can be unit-tested directly instead of only via the
+// full fetch/adapt path — this is the ~100-line regex parser that renders the
+// entire feed, previously covered only indirectly by e2e specs.
+export function parseArticlesFromMarkdown(markdown: string, briefId: string) {
   const articles: AppBrief["articles"] = [];
   const interests = new Set<string>();
   let currentTopic = "general";
