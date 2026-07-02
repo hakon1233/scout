@@ -17,8 +17,9 @@
 
 import http from "node:http";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { URL } from "node:url";
+import { URL, fileURLToPath } from "node:url";
 import {
   loadState,
   normalizeTimeOfDay,
@@ -52,7 +53,15 @@ import {
   trailingSlashRedirect,
 } from "./static.js";
 
-export const PKG_VERSION = "0.3.0";
+// Derived from package.json (not hand-duplicated) so a version bump can't
+// drift from the served /v0/version response — the packed tarball is named
+// after this same field, and a stale hardcode here used to silently 404 the
+// onboarding tarball URL on the Connect page (PER-275).
+const pkgJsonPath = fileURLToPath(new URL("../package.json", import.meta.url));
+const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf8")) as {
+  version: string;
+};
+export const PKG_VERSION = pkgJson.version;
 
 function defaultPort(raw: string | undefined): number {
   if (raw === undefined) return 47821;
