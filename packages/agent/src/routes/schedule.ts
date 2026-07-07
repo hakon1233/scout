@@ -89,9 +89,17 @@ export async function handlePutSchedule(
     time_of_day: timeOfDay,
   };
   await saveState({ ...state, schedule: next }, sc.stateFile);
-  // Re-arm the live scheduler; it also persists the recomputed
-  // next_run_at, so re-read before returning the view.
-  await sc.onScheduleChanged?.();
+  // Re-arm the live scheduler; it also persists the recomputed next_run_at, so
+  // re-read before returning the view. Best-effort: the schedule change is
+  // already durably saved above, so a re-arm failure must not turn a committed
+  // write into a 500 the client can't retry (the config stuck; only the
+  // immediate re-arm/next_run_at refresh didn't). Log and continue, matching
+  // the fire-and-forget error convention in runChatTurn/scheduler.
+  try {
+    await sc.onScheduleChanged?.();
+  } catch (err) {
+    console.error("[schedule] scheduler re-arm after PUT failed:", err);
+  }
   const fresh = await loadState(sc.stateFile);
   json(res, 200, scheduleView(fresh.schedule ?? next), cors);
 }

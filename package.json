@@ -11,7 +11,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "pnpm --filter @scout/agent test && pnpm run test:web",
-    "test:web": "tsx --test src/lib/companion.test.ts src/app/app/page.test.ts",
+    "test:web": "tsx --test 'src/**/*.test.ts'",
     "build:agent-webroot": "node scripts/build-agent-webroot.mjs",
     "build:agent": "pnpm run build:agent-webroot && pnpm --filter @scout/agent build",
     "pack:agent": "pnpm run build:agent && mkdir -p public/agent && cd packages/agent && npm pack --pack-destination ../../public/agent",

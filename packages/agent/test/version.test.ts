@@ -31,7 +31,7 @@ async function requestWithHost(
   path: string,
   host: string,
   headers: Record<string, string> = {},
-): Promise<{ status: number; body: any }> {
+): Promise<{ status: number; body: { error?: string } | null }> {
   return await new Promise((resolve, reject) => {
     const req = http.request(
       {
@@ -149,17 +149,17 @@ test("rejects non-allowlisted Host headers across public and authed routes (PER-
   try {
     const health = await requestWithHost(port, "/healthz", "evil.example");
     assert.equal(health.status, 403);
-    assert.equal(health.body.error, "forbidden");
+    assert.equal(health.body?.error, "forbidden");
 
     const version = await requestWithHost(port, "/v0/version", "evil.example");
     assert.equal(version.status, 403);
-    assert.equal(version.body.error, "forbidden");
+    assert.equal(version.body?.error, "forbidden");
 
     const briefs = await requestWithHost(port, "/v0/briefs", "evil.example", {
       authorization: `Bearer ${token}`,
     });
     assert.equal(briefs.status, 403);
-    assert.equal(briefs.body.error, "forbidden");
+    assert.equal(briefs.body?.error, "forbidden");
 
     const loopback = await requestWithHost(
       port,
