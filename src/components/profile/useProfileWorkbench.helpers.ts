@@ -86,7 +86,10 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
     ];
     if (
       turn.status === "ready" &&
-      (turn.reply || turn.pending_delete || turn.pending_rewrite)
+      (turn.reply ||
+        (turn.changes && turn.changes.length > 0) ||
+        turn.pending_delete ||
+        turn.pending_rewrite)
     ) {
       out.push({
         id: nextMsgId(),
