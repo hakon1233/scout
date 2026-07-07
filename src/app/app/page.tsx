@@ -141,12 +141,18 @@ export default function AppPage() {
         if (!scope.cancelled) setRunFailure(failure);
       };
       check();
-      const id = setInterval(check, 10_000);
+      // Back off the poll once the companion is confirmed ready. While
+      // unpaired we poll fast (10s) so first pairing feels instant; once ready
+      // we widen to 30s — steady background /healthz traffic and main-thread
+      // wakeups drop 3x for no behaviour change. Drop-out is still detected
+      // within one slow tick: the next check flips companionReady=false,
+      // which re-runs this effect and restores the 10s cadence.
+      const id = setInterval(check, companionReady ? 30_000 : 10_000);
       return () => {
         clearInterval(id);
       };
     },
-    [hydrated],
+    [hydrated, companionReady],
   );
 
   useAbortableEffect(
