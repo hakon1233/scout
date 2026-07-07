@@ -152,6 +152,16 @@ export class Scheduler {
     // directly/awaited, so only this automatic path is exposed). Log it so a
     // "my scheduled brief silently never ran" report is diagnosable from stderr.
     // Matches the runner.ts:279 / chat.ts:708 catch pattern.
+    //
+    // Clear-before-arm (AIR-471): `stop()` at the top of reschedule() nulls the
+    // timer, but re-arming happens here AFTER two awaits (loadState/saveState).
+    // Two overlapping reschedule() calls (a fire()'s re-arm racing an
+    // onScheduleChanged PUT) each pass their stop() before either arms, then both
+    // arm — orphaning the first timer, which stays live and double-fires the
+    // daily run. Clearing whatever handle exists right before reassigning means
+    // whichever call arms last cancels the other's timer; a no-op on the common
+    // (non-raced) path where `this.timer` is already null.
+    if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(
       () =>
         void this.fire().catch((err) => {

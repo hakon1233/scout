@@ -855,6 +855,74 @@ test("POST /v0/chat returns 409 while a turn is in flight; the prior turn isn't 
   }
 });
 
+test("a no-change chat turn doesn't clobber an interest a concurrent PUT added mid-turn (AIR-471)", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  // A pure Q&A turn: the model replies but changes nothing.
+  const model = JSON.stringify({
+    reply: "AI safety tracks alignment and evals work.",
+    changes: [],
+  });
+  const { spawnFn, releaseAll, calls } = makeChatSpawn({
+    output: model,
+    autoClose: false,
+  });
+  const { onChatDone, done } = awaitTurn();
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "what does ai safety track?" }),
+    });
+    assert.equal(kick.status, 202);
+
+    // Wait until the turn is genuinely in flight — the child is spawned only
+    // AFTER runChatTurn has loaded its turn-start interest snapshot, so the
+    // concurrent write below cannot leak into that snapshot.
+    while (calls.length === 0) await new Promise((r) => setTimeout(r, 5));
+
+    // Simulate a concurrent PUT /v0/interests adding a second interest while the
+    // model round-trip is still outstanding.
+    const mid = await loadState(stateFile);
+    await saveState(
+      {
+        ...mid,
+        interests: [
+          ...(mid.interests ?? []),
+          { id: "int_def456", topic: "crypto policy" },
+        ],
+      },
+      stateFile,
+    );
+
+    // Let the no-change turn complete and persist.
+    releaseAll();
+    const landed = await done;
+    assert.equal(landed.status, "ready");
+
+    // The concurrently-added interest must survive: a turn that changed nothing
+    // writes no interest list, so the persist falls through to the reloaded set.
+    const after = await loadState(stateFile);
+    const topics = (after.interests ?? []).map((i) => i.topic).sort();
+    assert.deepEqual(topics, ["ai safety", "crypto policy"]);
+    // The turn still lands as last_chat.
+    assert.equal(after.last_chat?.id, landed.id);
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/chat accepts a new turn after a restart leaves only a persisted pending turn", async () => {
   const staleTurn: ChatTurn = {
     id: "chat_stale",

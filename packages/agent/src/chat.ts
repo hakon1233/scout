@@ -995,7 +995,16 @@ async function runChatTurn(
         output.changes,
         deps.interestsDir,
       );
-    nextInterests = interests;
+    // Only claim an interest-list write when this turn ACTUALLY changed the list.
+    // `applyChatChanges` mutates `interests` solely alongside an `applied` entry
+    // (create/update); gated deletes/rewrites and pure Q&A turns leave it a copy
+    // of the turn-start snapshot. Assigning `nextInterests` unconditionally made
+    // the persist below always overwrite `interests` with that STALE snapshot —
+    // silently reverting any interest a concurrent PUT /v0/interests added during
+    // the model round-trip. Leaving it null lets the persist fall through to the
+    // reloaded `fresh.interests`, honouring the "reload so we don't clobber a
+    // concurrent writer" invariant documented at that write. (AIR-471)
+    nextInterests = applied.length > 0 ? interests : null;
     turn = {
       id: turnId,
       created_at: new Date().toISOString(),
