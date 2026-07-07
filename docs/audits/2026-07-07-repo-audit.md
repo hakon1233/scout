@@ -78,6 +78,26 @@ Severity = concrete blast radius × likelihood. Each finding: what / where (`fil
 `b3cf4e5`) / why it matters / suggested fix + rough effort (S ≤ half-day, M ≈ 1–2 days,
 L ≈ 3+ days).
 
+### 2.0 Ship-blocking (live)
+
+**F23 — CRITICAL — `main` is red; GitHub Pages deploys have been blocked since
+2026-07-02.** Every push to `main` fails at the `pnpm lint` step:
+`packages/agent/test/version.test.ts:34` types a test helper's response as
+`{ status: number; body: any }`, and `@typescript-eslint/no-explicit-any` flags
+it as an **error** (rule level `error`, not a warning) — confirmed by running
+`eslint` at the current head (`✖ 1 error … 34:36 Unexpected any`). `deploy.yml`'s
+`build` job is `needs: test`, so a red `lint` blocks the Pages deploy outright.
+Verified via `gh run view 28601912018 --log-failed`
+(`##[error] 34:36 Unexpected any`) and **5 consecutive failed "Test & Deploy"
+runs** on `main` since 2026-07-02. The deploy gate is working exactly as
+designed — nothing broken ships — but the failure is *process*: a one-line error
+sat on `main` for 5 days because there is no local pre-commit gate (**F16**) and
+pushes go straight to `main`, so production has served a **5-day-stale** build.
+*Fix:* type the helper's `body` (`unknown` + a narrow cast, or the real response
+shape), land it, confirm the deploy goes green. Effort **S**. **Highest
+operational priority — recommend founder fast-track; unlike every other item
+here, this one degrades users' content freshness today.**
+
 ### 2.1 Reliability & correctness
 
 **F1 — HIGH — Chat turns have no hard timeout; a hung `claude` child wedges all chat.**
@@ -234,8 +254,9 @@ client-logic core. Effort **M**.
 **F16 — MED — `format:check` is never run in CI, and lint doesn't fail on warnings.**
 `.prettierrc.json` is committed and `format:check` exists (`package.json:11`) but neither
 `ci.yml` nor `deploy.yml` runs it, and there's no pre-commit hook — formatting drift lands
-freely. `"lint": "eslint"` (`package.json:9`) has no `--max-warnings 0`, so the lint job is
-green while warnings (unused vars, hook-deps, `no-explicit-any`) accumulate invisibly.
+freely. `"lint": "eslint"` (`package.json:9`) has no `--max-warnings 0`, so 29 warnings
+(unused vars, hook-deps, `<img>`) accumulate invisibly — and note the lint job is currently
+**failing outright** on a `no-explicit-any` *error*, which is blocking all deploys (**F23**).
 *Fix:* add `pnpm format:check` to both workflows; `eslint --max-warnings 0`. Effort **S**.
 
 **F17 — MED — Sparse server observability.** The only `console.*` in the server is the (new)
@@ -297,6 +318,11 @@ collapse per-ticket passes into dated summaries; refresh `AGENTS.md` refs. Effor
 
 ## 3. Prioritise (impact × effort)
 
+**Do now — production is broken (S):**
+0. **F23** — unblock deploys: fix the one-line `no-explicit-any` error in
+   `version.test.ts:34` so `main` goes green and Pages ships again. **Founder
+   fast-track** — the only item that hurts users *today*.
+
 **Do first — cheap, high-impact (S/M):**
 1. **F1+F2** — extract shared `claude` client + add chat timeout. One fix kills a
    chat-wedging reliability bug *and* the drift hazard. **Highest ROI.**
@@ -357,7 +383,11 @@ Verified fixed at `b3cf4e5` — **do not file these:**
 
 ## 6. Backlog issues filed
 
-Per CAR-297, one backlog issue was filed per actionable finding above (F1–F22, with small
-items bundled), assigned to the CEO at **status = backlog** (queued, not started), each
-referencing this doc + its `file:line`. **F10 is flagged as a founder/GPT-5.5 item** because
-it touches secrets. No fix work was started by this audit.
+Per CAR-297, one backlog issue was filed per actionable finding above (F1–F23, with small
+items bundled and F1+F2 filed together since one fix resolves both), assigned to the CEO at
+**status = backlog** (queued, not started), each referencing this doc + its `file:line`.
+**F23 (red main / deploys blocked) is the top-priority `critical` issue and flagged for
+founder fast-track. F10 is flagged as a founder/GPT-5.5 item** because it touches secrets
+(service-role key + JWT minting) — its remediation must NOT be routed to a Fable/Claude
+agent. No fix work was started by this audit; everything stays backlog until the founder
+chooses to start it.
