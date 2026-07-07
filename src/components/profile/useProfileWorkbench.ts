@@ -383,7 +383,11 @@ export function useProfileWorkbench() {
           }
           if (changes) applyChanges(changes, replyAt);
         } catch (e) {
-          if (abortedRef.current) return; // user stopped — not an error
+          // User stopped — not an error. Check THIS dispatch's own controller
+          // (not just the shared abortedRef, which a newly-started dispatch resets
+          // to false): a stop-then-immediately-send would otherwise let the just-
+          // aborted request's rejection surface a spurious error (AIR-527).
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
           clearAbortable(controller);
