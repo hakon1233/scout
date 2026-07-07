@@ -26,7 +26,7 @@ import {
   mockDocMeta,
   SAMPLE_INTERESTS,
 } from "@/lib/interest-docs";
-import { isClient } from "@/lib/safe-storage";
+import { prefersReducedMotion } from "@/lib/motion";
 import { loadSettings } from "@/lib/storage";
 import type { Interest } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
@@ -45,14 +45,6 @@ import {
   resolveMessage,
   transcriptMessages,
 } from "./useProfileWorkbench.helpers";
-
-function prefersReducedMotion(): boolean {
-  return (
-    isClient() &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
 
 export function useProfileWorkbench() {
   const [hydrated, setHydrated] = useState(false);

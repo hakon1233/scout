@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatChange, PendingDelete, PendingRewrite } from "@/lib/chat";
+import { prefersReducedMotion } from "@/lib/motion";
 import {
   ChatActionCard,
   ChatRewriteProposal,
@@ -331,7 +332,9 @@ export function ChatDock({
           type="button"
           onClick={() => {
             setAtBottom(true);
-            scrollToBottom("smooth");
+            // Smooth scroll is JS-driven, so the global reduced-motion CSS
+            // can't clamp it — honor the preference explicitly here.
+            scrollToBottom(prefersReducedMotion() ? "auto" : "smooth");
           }}
           className="absolute bottom-[120px] left-1/2 -translate-x-1/2 rounded-pill bg-accent px-3.5 py-1.5 font-mono text-[11px] text-accent-fg shadow-lg transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
         >
