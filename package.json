@@ -25,14 +25,6 @@
     "react-markdown": "^10.1.0",
     "rehype-sanitize": "^6.0.0"
   },
-  "pnpm": {
-    "overrides": {
-      "postcss": ">=8.5.10",
-      "@babel/core": "^7.29.6",
-      "js-yaml": "^4.2.0",
-      "esbuild": ">=0.28.1"
-    }
-  },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
     "@tailwindcss/postcss": "^4",

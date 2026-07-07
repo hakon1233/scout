@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
+import { LazyMarkdown } from "./LazyMarkdown";
 
 // Sanitized markdown for the chat transcript (PER-228 chunk 4). Raw HTML is
 // stripped by rehype-sanitize — assistant text is rendered as full-column
@@ -120,9 +119,7 @@ const COMPONENTS = {
 export function ChatMarkdown({ text }: { text: string }) {
   return (
     <div className="scout-md break-words text-[17px] leading-[1.6] text-primary [&_*]:max-w-full">
-      <ReactMarkdown rehypePlugins={[rehypeSanitize]} components={COMPONENTS}>
-        {text}
-      </ReactMarkdown>
+      <LazyMarkdown text={text} components={COMPONENTS} sanitize />
     </div>
   );
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { EmptyState } from "@/components/ui";
+import { LazyMarkdown } from "@/components/profile/LazyMarkdown";
 import {
   bootstrapCompanionToken,
   fetchCompanionInterests,
@@ -192,9 +192,7 @@ export default function InterestScopePage() {
             <section className="max-w-3xl">
               {model.meta.body ? (
                 <div className="scout-md">
-                  <ReactMarkdown components={MD}>
-                    {model.meta.body}
-                  </ReactMarkdown>
+                  <LazyMarkdown text={model.meta.body} components={MD} />
                 </div>
               ) : model.meta.hasDoc ? (
                 <p className="font-reading text-[16px] leading-relaxed text-secondary">

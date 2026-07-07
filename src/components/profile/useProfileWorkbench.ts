@@ -115,13 +115,17 @@ export function useProfileWorkbench() {
         const tok = await bootstrapCompanionToken();
         if (scope.cancelled) return;
         setToken(tok);
-        const transcript = tok ? await fetchChatTranscript(tok) : [];
+        // transcript + full-interests both depend only on `tok` and are
+        // independent of each other — fetch concurrently instead of in series
+        // to roughly halve first-paint latency.
+        const [transcript, full] = await Promise.all([
+          tok ? fetchChatTranscript(tok) : Promise.resolve([]),
+          fetchInterestsFull(tok),
+        ]);
         if (scope.cancelled) return;
         if (transcript.length > 0) {
           setMessages(transcriptMessages(transcript));
         }
-        const full = await fetchInterestsFull(tok);
-        if (scope.cancelled) return;
         if (full && full.interests.length > 0) {
           setInterests(full.interests);
           setDocMeta(full.meta);
