@@ -56,12 +56,33 @@ const CHAT_MARKER = "Scout's interest assistant";
 const STALL_MARKER = "__STALL_FOR_STOP__";
 const STALL_MS = Number(process.env.SCOUT_STUB_STALL_MS ?? 4000);
 
-function parseUserMessage(prompt) {
-  // buildChatPrompt emits: The user says: / """ / <message> / """
+// AIR-528 chat-retry e2e hook. When the user's chat message carries this
+// sentinel, the chat branch exits nonzero instead of writing JSON — the same
+// failure shape a real `claude` crash/timeout produces. chat.ts's chatComplete
+// rejects on a nonzero exit, so the companion lands the turn `status: "failed"`
+// with a real `error_msg` (packages/agent/src/chat.ts:808). Sentinel-gated so
+// it never affects the other chat specs.
+const FAIL_MARKER = "__FAIL_CHAT_TURN__";
+
+function rawUserMessage(prompt) {
+  // buildChatPrompt emits: The user says: / """ / <message> / """ — this is
+  // the CURRENT turn's message only. buildChatPrompt also embeds recent PRIOR
+  // turns (verbatim, including failed ones — packages/agent/src/chat.ts's
+  // `contextTurns`) elsewhere in the prompt for model context, so a sentinel
+  // check must scope to this capture group, never to the raw `prompt` string —
+  // otherwise a marker from an earlier failed turn leaks forward through that
+  // history block and poisons every later turn in the same chat session.
   const m = prompt.match(/"""\n([\s\S]*?)\n"""/);
-  // Strip the stall sentinel before op/topic detection so it never leaks into a
-  // created topic — it only controls timing, not content.
-  return m ? m[1].replace(STALL_MARKER, "").trim() : "";
+  return m ? m[1] : "";
+}
+
+function parseUserMessage(prompt) {
+  // Strip the sentinels before op/topic detection so neither leaks into a
+  // created topic — they only control timing/outcome, not content.
+  return rawUserMessage(prompt)
+    .replace(STALL_MARKER, "")
+    .replace(FAIL_MARKER, "")
+    .trim();
 }
 
 function parseFirstInterestId(prompt) {
@@ -84,6 +105,16 @@ function topicFromMessage(message) {
 }
 
 function emitChat(prompt) {
+  // AIR-528: simulate a real model/CLI failure — no stdout JSON, nonzero exit —
+  // before any op detection, so a spec can drive a deterministic `failed` turn.
+  // Scoped to THIS turn's message (see rawUserMessage) — checking the raw
+  // `prompt` would also match the marker echoed back in later turns' "Recent
+  // conversation" history, failing every turn for the rest of the session.
+  if (rawUserMessage(prompt).includes(FAIL_MARKER)) {
+    process.stderr.write("stub: simulated chat model failure\n");
+    process.exit(1);
+  }
+
   const message = parseUserMessage(prompt);
   const firstId = parseFirstInterestId(prompt);
   let out;

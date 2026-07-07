@@ -45,7 +45,16 @@ test("chat Undo on a created interest is a live control: reverses through the co
   // ── CREATE — auto-applied, with a real Undo ───────────────────────────────
   await sendMessage(page, `Create an interest about ${TOPIC}`);
 
-  const undo = page.getByRole("button", { name: "Undo", exact: true });
+  // Scoped to THIS spec's own create-reply: the chat transcript is shared
+  // across the whole suite (single companion instance, no per-spec reset), so
+  // an unscoped `getByRole("button", {name:"Undo"})` becomes ambiguous once
+  // enough other specs have left their own un-reversed "Applied"+Undo cards in
+  // history — exactly the AIR-528 finding, just one un-scoped locator short of
+  // tripping over it here too.
+  const createReply = page
+    .locator(".group\\/msg", { hasText: `Created · ${TOPIC}` })
+    .first();
+  const undo = createReply.getByRole("button", { name: "Undo", exact: true });
   await expect(undo).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(`Created · ${TOPIC}`)).toBeVisible();
   // The doc actually landed in the interest rail (confirmed write, PER-139).
