@@ -83,6 +83,24 @@ test("today's date is injected as a recency anchor", () => {
   assert.match(prompt, /Today's date is 2026-06-02/);
 });
 
+test("today's date uses the local calendar day, not UTC", () => {
+  const previousTz = process.env.TZ;
+  process.env.TZ = "Europe/Oslo";
+  try {
+    const prompt = buildResearchPrompt(
+      { topic: "ai", doc: "track ai" },
+      new Date(2026, 5, 2, 0, 30, 0, 0),
+    );
+    assert.match(prompt, /Today's date is 2026-06-02/);
+  } finally {
+    if (previousTz === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = previousTz;
+    }
+  }
+});
+
 test("the prompt scopes the session to the single topic and its output section", () => {
   const prompt = buildResearchPrompt({ topic: "claude code", doc: "track claude code" });
   // Single-interest session: the topic appears as the session scope and as the
