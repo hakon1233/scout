@@ -14,6 +14,27 @@ const TOKEN_KEY = "scout.companion.token";
 
 let cachedBase: string | null = null;
 
+// In-flight coalescing for the cached-base re-ping (AIR-617), mirroring
+// isServedFromCompanion's pattern below. fetchRunFailure's poll tick runs
+// `Promise.all([pollBriefsRaw, fetchSchedule])`, and both independently call
+// requireBase() → discoverCompanion() in the same tick — without this, each
+// fired its own /healthz ping against the identical cached port, doubling
+// requests on every poll (10-30s, page.tsx). Sharing the in-flight promise
+// collapses that pair to one ping without changing what gets verified.
+let cachedBasePingInFlight: Promise<boolean> | null = null;
+
+async function pingCachedBase(port: number): Promise<boolean> {
+  if (cachedBasePingInFlight) return cachedBasePingInFlight;
+  cachedBasePingInFlight = (async () => {
+    try {
+      return await pingPort(port);
+    } finally {
+      cachedBasePingInFlight = null;
+    }
+  })();
+  return cachedBasePingInFlight;
+}
+
 function baseFor(port: number): string {
   return `http://127.0.0.1:${port}`;
 }
@@ -173,7 +194,7 @@ export async function discoverCompanion(): Promise<string | null> {
   }
   if (cachedBase) {
     const cachedPort = new URL(cachedBase).port;
-    if (await pingPort(cachedPort ? Number(cachedPort) : COMPANION_PORT)) {
+    if (await pingCachedBase(cachedPort ? Number(cachedPort) : COMPANION_PORT)) {
       return cachedBase;
     }
     cachedBase = null;
@@ -485,14 +506,18 @@ function adaptBrief(b: AgentBrief): AppBrief {
 // Shared by fetchLatestBrief and fetchRunFailure so both can derive the
 // newest ready brief from a single already-fetched raw list instead of each
 // issuing their own /v0/briefs request (AIR-605).
+// Both callers fetch `since = epoch` (the entire ready-brief history), which
+// only grows over a companion's lifetime — so this ran adaptBrief (a full
+// regex parse of the brief's markdown body) over every ready brief just to
+// keep the single newest one, on every poll tick (AIR-617). Find the winner
+// on the cheap raw `generated_at` field first, then parse only that one.
 function newestReadyBrief(raw: AgentBrief[]): AppBrief | null {
-  const ready = raw
-    .filter((b) => b.status === "ready" && b.summary_md)
-    .map(adaptBrief);
+  const ready = raw.filter((b) => b.status === "ready" && b.summary_md);
   if (ready.length === 0) return null;
-  return ready.reduce((newest, b) =>
-    b.generatedAt > newest.generatedAt ? b : newest,
+  const newest = ready.reduce((newest, b) =>
+    b.generated_at > newest.generated_at ? b : newest,
   );
+  return adaptBrief(newest);
 }
 
 // Returns ready briefs strictly newer than `sinceTs`. Pending/failed are surfaced

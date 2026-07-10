@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { LazyMarkdown } from "./LazyMarkdown";
 
 // Sanitized markdown for the chat transcript (PER-228 chunk 4). Raw HTML is
@@ -116,10 +116,21 @@ const COMPONENTS = {
 // Assistant prose: full-column editorial Newsreader, NO bubble. Uses the shared
 // `.scout-md` type rules (same surface BriefView uses) so headings/lists/quotes
 // match the rest of the editorial UI.
-export function ChatMarkdown({ text }: { text: string }) {
+//
+// Memoized (AIR-617): ChatDock re-renders on every typewriter tick while a
+// reply streams in (`streamLen` ticks every 24ms — see useProfileWorkbench's
+// `startStream`), which re-executes `messages.map(...)` for the whole
+// transcript. Without this boundary every already-rendered message re-parsed
+// its markdown on every tick, not just the one actually streaming. `text` is
+// the only prop and is a primitive string, so a shallow-compare memo is exact.
+export const ChatMarkdown = memo(function ChatMarkdown({
+  text,
+}: {
+  text: string;
+}) {
   return (
     <div className="scout-md break-words text-[17px] leading-[1.6] text-primary [&_*]:max-w-full">
       <LazyMarkdown text={text} components={COMPONENTS} sanitize />
     </div>
   );
-}
+});
