@@ -18,10 +18,7 @@
 // It also carries a `## topic` heading and a `[domain — Title](url)` citation
 // so the app's parser produces articles + a Sources panel (PER-106).
 
-let stdin = "";
-process.stdin.on("data", (chunk) => {
-  stdin += chunk.toString();
-});
+process.stdin.on("data", () => {});
 
 // Point the canned source image at the companion's OWN loopback origin so it
 // actually loads under the E2E offline guard (which aborts every non-loopback
