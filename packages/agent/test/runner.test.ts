@@ -19,9 +19,50 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
-import { loadState, saveState, type Brief, type Interest } from "../src/state.js";
-import { startRun } from "../src/runner.js";
+import {
+  loadState,
+  saveState,
+  type Brief,
+  type Interest,
+} from "../src/state.js";
+import { startRun, summarizeSessionFailures } from "../src/runner.js";
 import { writeInterestDoc, defaultInterestDoc } from "../src/docs.js";
+
+// PER-259 item 1: a wholesale-failed run must report an HONEST reason so the
+// founder learns WHY (a usage limit reads very differently from a crashed CLI).
+// The classifier is pure — pin the mapping from research.ts's reject messages.
+test("summarizeSessionFailures distils per-session errors into an honest reason (PER-259)", () => {
+  assert.match(
+    summarizeSessionFailures([
+      "claude exited 1: Claude usage limit reached|resets at 3pm",
+    ]),
+    /usage\/session limit/i,
+  );
+  assert.match(
+    summarizeSessionFailures([
+      'claude session for "ai" timed out after 240000ms',
+    ]),
+    /timed out/i,
+  );
+  assert.match(
+    summarizeSessionFailures([
+      "failed to spawn 'claude' — is the Claude Code CLI installed and on PATH? (ENOENT)",
+    ]),
+    /Claude CLI/i,
+  );
+  assert.match(
+    summarizeSessionFailures(["claude returned empty output"]),
+    /no usable content/i,
+  );
+  // Unknown shape → surface the first real message rather than a vague blank.
+  assert.equal(summarizeSessionFailures(["boom"]), "boom");
+  assert.equal(summarizeSessionFailures([]), "unknown error");
+  // A usage-limit anywhere in the set wins over a generic sibling failure.
+  assert.match(
+    summarizeSessionFailures(["boom", "claude exited 1: usage limit reached"]),
+    /usage\/session limit/i,
+  );
+});
 
 const INTERESTS: Interest[] = [{ id: "int_x", topic: "ai" }];
 
@@ -49,7 +90,9 @@ function makeFastSpawn() {
         const topic = /single topic: "([^"]+)"/.exec(stdin)?.[1] ?? "ai";
         child.stdout.emit(
           "data",
-          Buffer.from(`## ${topic}\n- a thing.\n  [src](https://example.com/a)\n`),
+          Buffer.from(
+            `## ${topic}\n- a thing.\n  [src](https://example.com/a)\n`,
+          ),
         );
         child.emit("close", 0);
       }),
@@ -113,7 +156,8 @@ test("PER-187: the brief snapshots each topic's intent doc into `bases`", async 
     { id: "int_seeded", topic: "ai" },
     { id: "int_bare", topic: "climate" },
   ];
-  const customDoc = "# ai\n\nOnly frontier-model releases. Ignore funding rounds.\n";
+  const customDoc =
+    "# ai\n\nOnly frontier-model releases. Ignore funding rounds.\n";
   await writeInterestDoc("int_seeded", customDoc, interestsDir);
 
   const { spawnFn } = makeFastSpawn();
@@ -156,4 +200,34 @@ test("PER-181: a RECENT persisted pending is still refused (live run)", async ()
   const persisted = await loadState(stateFile);
   assert.equal(persisted.last_brief?.id, "live-run");
   assert.equal(persisted.last_brief?.status, "pending");
+});
+
+test("CAR-174: a failed startup save resets runInFlight so the slot stays reclaimable", async () => {
+  // `runInFlight` is claimed synchronously (before the first await) so a second
+  // startRun can't race in and double-start. But the persisting save that
+  // follows can throw (disk full, ENOTDIR). Before this fix that throw left
+  // runInFlight stuck true for the life of the process, wedging EVERY later run
+  // with `in_flight` and making isStalePending refuse to reclaim the slot.
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-runner-fail-"));
+  // A regular file where atomicWriteFile expects to mkdir a directory → the
+  // recursive mkdir of dirname fails with ENOTDIR and saveState rejects.
+  const blocker = path.join(dir, "blocker");
+  await fs.writeFile(blocker, "x");
+  const badStateFile = path.join(blocker, "state.json");
+
+  const { spawnFn } = makeFastSpawn();
+  await assert.rejects(
+    () => startRun(INTERESTS, { stateFile: badStateFile, spawnFn }),
+    "startRun should surface the save failure to the caller",
+  );
+
+  // The slot must NOT be wedged: a fresh run against a writable state file is
+  // accepted and completes, rather than being refused with `in_flight`.
+  const goodStateFile = path.join(dir, "state.json");
+  const landed = await runToCompletion(INTERESTS, goodStateFile, spawnFn);
+  assert.equal(
+    landed.status,
+    "ready",
+    "the slot was reclaimable after the failure",
+  );
 });

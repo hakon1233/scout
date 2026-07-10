@@ -4,6 +4,7 @@ import * as React from "react";
 import { BriefLayout } from "@/components/BriefLayout";
 import { Button } from "@/components/ui";
 import { fetchBriefHistory } from "@/lib/companion";
+import { formatDate } from "@/lib/format-date";
 import type { Brief } from "@/lib/types";
 
 // PER-219 (AC6): the "previous briefs" pager that lives below the current brief.
@@ -181,12 +182,9 @@ function briefHeading(b: Brief): string {
   return b.kind === "weekly" ? "Weekly brief" : "Daily brief";
 }
 
-// Mirrors BriefLayout's header date format so each historical section's aria
-// label reads identically to its rendered "Daily brief — <date>" heading.
+// Shares BriefLayout's header date format (both call the canonical
+// `formatDate`) so each historical section's aria label reads identically to its
+// rendered "Daily brief — <date>" heading.
 function formatBriefDate(b: Brief): string {
-  return new Date(b.generatedAt).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDate(b.generatedAt);
 }

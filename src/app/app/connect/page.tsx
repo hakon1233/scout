@@ -21,12 +21,31 @@ type GenerateState = "idle" | "posting" | "polling" | "done" | "error";
 // (GitHub Pages) and install from the URL directly — works on a clean machine
 // with no registry account.
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
-const TARBALL_PATH = `${BASE_PATH}/agent/scout-agent-0.3.0.tgz`;
+// Sourced from packages/agent/package.json via next.config.ts, not
+// hand-duplicated here — the deploy names the packed tarball after that same
+// version, so a stale hardcode used to silently 404 this URL on a bump
+// (PER-275).
+const AGENT_VERSION = process.env.NEXT_PUBLIC_AGENT_VERSION;
+const TARBALL_PATH = `${BASE_PATH}/agent/scout-agent-${AGENT_VERSION}.tgz`;
 // Sensible absolute default for SSR/export; overwritten with the real origin
 // after mount so the copied command is correct on whatever host serves it.
 const DEFAULT_TARBALL_URL = `https://hakon1233.github.io${TARBALL_PATH}`;
 const POLL_INTERVAL_MS = 4000;
-const POLL_MAX_ATTEMPTS = 20; // ~80s
+// The companion researches interests ONE AT A TIME (its own `claude` session
+// per topic) — so the poll budget must scale with the interest count, not
+// stay flat. A flat ~5 min budget (matching the main app path's old flat 300s
+// deadline, PER-157) gave up on a still-healthy multi-topic run once PER-265's
+// deeper per-paragraph detail bar lengthened real per-topic session time
+// (PER-267): Generate showed a false "Timed out" and a retry hit the
+// single-flight 409 — the "it doesn't work" go-around. Live measurement during
+// the PER-267 investigation showed a real 6-topic run taking 32m40s wall-clock
+// (research.ts's own hard per-session cap is 4 min, but this shared box runs
+// several concurrent agent processes, so real scheduling jitter pushes well
+// past the nominal per-session cap) — budget 6 min/topic for headroom over
+// that observed number. See companion.ts refreshBriefViaCompanion for the
+// mirrored calculation; keep both in sync.
+const PER_TOPIC_SESSION_BUDGET_MS = 6 * 60 * 1000;
+const MIN_POLL_ATTEMPTS = 75; // floor: ~5 min (75 × 4s), same headroom as before for a 1-2 topic run
 
 export default function ConnectPage() {
   const router = useRouter();
@@ -52,6 +71,7 @@ export default function ConnectPage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
+  const pollMaxAttemptsRef = useRef(MIN_POLL_ATTEMPTS);
   const startedAtRef = useRef("");
 
   useEffect(() => {
@@ -123,20 +143,35 @@ export default function ConnectPage() {
     try {
       await postInterests(interests, tok);
     } catch (err) {
-      setGenMsg(`Could not reach companion: ${String(err)}`);
+      console.error("Failed to post interests to companion", err);
+      setGenMsg(
+        "Could not reach the companion. Make sure `scout-agent run` is running on this machine.",
+      );
       setGenState("error");
       return;
     }
 
-    // Poll for the brief
+    // Poll for the brief. Scale the attempt budget to how many topics this
+    // run actually researches (sequential, one `claude` session each) so a
+    // longer interest list gets real room instead of a flat 5-minute cap.
+    const maxAttempts = Math.max(
+      MIN_POLL_ATTEMPTS,
+      Math.ceil(
+        ((interests.length + 1) * PER_TOPIC_SESSION_BUDGET_MS) /
+          POLL_INTERVAL_MS,
+      ),
+    );
+    pollMaxAttemptsRef.current = maxAttempts;
     setGenState("polling");
-    setGenMsg("Waiting for brief… (~60s)");
+    setGenMsg(
+      `Waiting for brief… (up to ~${Math.round((maxAttempts * POLL_INTERVAL_MS) / 60_000)} min)`,
+    );
     startedAtRef.current = new Date().toISOString();
     pollCountRef.current = 0;
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       pollCountRef.current++;
-      if (pollCountRef.current > POLL_MAX_ATTEMPTS) {
+      if (pollCountRef.current > pollMaxAttemptsRef.current) {
         clearInterval(pollRef.current!);
         setGenState("error");
         setGenMsg(
@@ -401,6 +436,7 @@ export default function ConnectPage() {
                   <div className="flex gap-2">
                     <input
                       type="password"
+                      aria-label="Pairing token"
                       autoComplete="off"
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
@@ -443,6 +479,7 @@ export default function ConnectPage() {
               <div className="flex gap-2">
                 <input
                   type="password"
+                  aria-label="Pairing token"
                   autoComplete="off"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}

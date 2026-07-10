@@ -9,21 +9,52 @@ import {
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const WEEKLY_STORY_LIMIT = 10;
 const STORY_BULLET_RE = /^\s*[-*]\s+/;
+const STORY_DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`/;
 const HEADING_RE = /^##\s+(.+?)\s*$/;
-const LINK_RE = /\[[^\]]+\]\((https?:\/\/(?:[^()\s]|\([^()\s]*\))+)\)/g;
+// Non-global: storyUrl only needs the first match, and a `/g` regex carries
+// `lastIndex` state across calls — a footgun that previously required a manual
+// `lastIndex = 0` reset before every `.exec`. Stateless is safer here.
+const LINK_RE = /\[[^\]]+\]\((https?:\/\/(?:[^()\s]|\([^()\s]*\))+)\)/;
 
 type WeeklyStory = {
   topic: string;
   block: string;
   url: string;
+  publishedAt: string | null;
   sourceGeneratedAt: string;
   sourceRank: number;
 };
 
 function storyUrl(block: string): string | null {
-  LINK_RE.lastIndex = 0;
   const match = LINK_RE.exec(block);
   return match?.[1] ?? null;
+}
+
+// Collapse cosmetic URL variants (hash, query, trailing slash) of the same story
+// to one key. The web app dedupes daily-feed stories and keys likes on exactly
+// this canonicalisation (src/lib/likes.ts canonicalUrl, used by FeedView), so the
+// weekly digest must agree — otherwise the same story cited across two days with
+// a tracking query param (`?utm_source=…`) or a trailing slash slips past the
+// raw-string dedupe and appears twice in one weekly edition. Mirror of that
+// function; kept local because @scout/agent is a zero-dependency package and
+// can't import the web app's client module.
+function canonicalUrl(u: string): string {
+  try {
+    const url = new URL(u);
+    url.hash = "";
+    url.search = "";
+    let s = url.toString();
+    if (s.endsWith("/")) s = s.slice(0, -1);
+    return s;
+  } catch {
+    return u;
+  }
+}
+
+function storyDate(block: string): string | null {
+  const match = STORY_DATE_RE.exec(block);
+  if (!match || match[1] === "undated") return null;
+  return match[1];
 }
 
 function extractStories(brief: Brief): WeeklyStory[] {
@@ -42,6 +73,7 @@ function extractStories(brief: Brief): WeeklyStory[] {
         topic,
         block,
         url,
+        publishedAt: storyDate(block),
         sourceGeneratedAt: brief.generated_at,
         sourceRank: rank++,
       });
@@ -72,6 +104,8 @@ export function createWeeklyBriefFromHistory(
   now = new Date(),
 ): Brief {
   const cutoff = now.getTime() - WEEK_MS;
+  const cutoffDate = new Date(cutoff).toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
   const eligible = history.filter((b) => {
     if (b.kind === "weekly") return false;
     if (b.status !== "ready" || !b.summary_md) return false;
@@ -82,13 +116,17 @@ export function createWeeklyBriefFromHistory(
   const seen = new Set<string>();
   const stories = eligible
     .flatMap(extractStories)
+    .filter((story) => {
+      if (!story.publishedAt) return true;
+      return story.publishedAt >= cutoffDate && story.publishedAt <= today;
+    })
     .sort((a, b) => {
       const byRun =
         Date.parse(b.sourceGeneratedAt) - Date.parse(a.sourceGeneratedAt);
       return byRun || a.sourceRank - b.sourceRank;
     })
     .filter((story) => {
-      const key = story.url.toLowerCase();
+      const key = canonicalUrl(story.url);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

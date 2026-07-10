@@ -83,6 +83,21 @@ function makeSpawnRecorder(opts: { autoClose: boolean }) {
     releaseAll() {
       while (pending.length) pending.shift()!();
     },
+    // releaseAll() only drains children ALREADY gated on stdin-finish. The
+    // kick's 202 returns before the runner has written its state/doc files and
+    // spawned the child, so a test that releases "right after" the kick is
+    // racing that async setup — and since the PER-272 fsyncs it reliably
+    // loses, leaving the child gated forever until the 4-minute session
+    // timeout fails the run. Tests must await this before releaseAll().
+    async waitForGatedChild(count = 1) {
+      const deadline = Date.now() + 30_000;
+      while (pending.length < count) {
+        if (Date.now() > deadline) {
+          throw new Error(`no gated child after 30s (have ${pending.length}, want ${count})`);
+        }
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    },
   };
 }
 
@@ -202,6 +217,19 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (
     assert.equal(p2.briefs.length, 1, "last page is short");
     assert.equal(p2.briefs[0].id, first.id, "oldest is last");
 
+    // Supplying only offset still uses the default page size (3). A missing
+    // limit must not become Number(null) === 0 and collapse the page to 1 item.
+    const offsetOnly = await fetch(
+      `http://127.0.0.1:${port}/v0/briefs?offset=1`,
+      { headers: auth },
+    );
+    const offsetBody = (await offsetOnly.json()) as { briefs: Brief[]; total: number };
+    assert.equal(offsetOnly.status, 200);
+    assert.equal(offsetBody.total, 3);
+    assert.equal(offsetBody.briefs.length, 2, "offset-only request uses default limit");
+    assert.equal(offsetBody.briefs[0].id, second.id);
+    assert.equal(offsetBody.briefs[1].id, first.id);
+
     // No params → the legacy single-slot poller contract is untouched.
     const legacy = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
       headers: auth,
@@ -219,7 +247,9 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (
 test("a second kick while a brief is in flight is rejected without clobbering the slot (PER-92)", async () => {
   const { tmp, stateFile, token } = await seededServer();
   // autoClose:false → the first synthesis hangs, holding last_brief = pending.
-  const { spawnFn, releaseAll } = makeSpawnRecorder({ autoClose: false });
+  const { spawnFn, releaseAll, waitForGatedChild } = makeSpawnRecorder({
+    autoClose: false,
+  });
 
   let synthesisDone: (b: Brief) => void;
   const doneP = new Promise<Brief>((r) => (synthesisDone = r));
@@ -244,6 +274,11 @@ test("a second kick while a brief is in flight is rejected without clobbering th
     const midBriefs = ((await mid.json()) as { briefs: Brief[] }).briefs;
     assert.equal(midBriefs[0]?.status, "pending");
     assert.equal(midBriefs[0]?.id, firstId);
+
+    // Wait for the first run's child to actually be spawned and gated, so
+    // "in flight" is literal when the second kick lands — and so the
+    // releaseAll() below is guaranteed to have a child to release.
+    await waitForGatedChild();
 
     // A second kick lands before the first finishes → 409, echoing the
     // in-flight id. Crucially it does NOT overwrite the pending slot.
@@ -421,6 +456,31 @@ test("PUT /v0/interests rejects an empty/oversized interest list (PER-160)", asy
 
     const state = await loadState(stateFile);
     assert.equal(state.interests, undefined, "no rejected write should land");
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("PUT /v0/interests rejects malformed interest entries without partial writes", async () => {
+  const { tmp, stateFile, token } = await seededServer();
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const malformed = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interests: ["ai safety", 42] }),
+    });
+    assert.equal(malformed.status, 400);
+    const body = (await malformed.json()) as { error: string };
+    assert.match(body.error, /interests must be strings/);
+
+    const state = await loadState(stateFile);
+    assert.equal(state.interests, undefined, "malformed payload must not partially persist");
+    assert.equal(recorder.calls.length, 0, "PUT must not spawn a synthesis");
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });

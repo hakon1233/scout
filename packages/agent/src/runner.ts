@@ -62,6 +62,41 @@ export type RunDeps = {
 
 export type RunSource = "on_demand" | "scheduled";
 
+// Distil the per-session error messages from a wholesale-failed run into ONE
+// short, honest, user-facing reason (PER-259 item 1). When EVERY topic's session
+// fails and there's no base brief, the founder needs to know WHY — a Claude
+// usage/session-limit exhaustion at 07:00 (the PER-258 root cause) reads very
+// differently from a crashed CLI or a network timeout, and drives whether a
+// retry (item 3) can even help. Pure so runner.test.ts pins the mapping without
+// spawning anything. The inputs come from research.ts's reject messages:
+//   - usage/rate limit   → "claude exited N: …limit…"
+//   - per-session timeout → 'claude session for "X" timed out after Nms'
+//   - spawn failure       → "failed to spawn 'claude' — …"
+//   - empty output        → "claude returned empty output"
+// These messages are log-safe: research.ts slices stderr, which the OAuth token
+// never reaches, so nothing secret rides into the persisted reason.
+export function summarizeSessionFailures(errors: string[]): string {
+  const joined = errors.join("\n").toLowerCase();
+  if (
+    /usage limit|rate limit|limit reached|too many requests|\b429\b|resets? at/.test(
+      joined,
+    )
+  ) {
+    return "Claude usage/session limit reached — try again later";
+  }
+  if (/timed out|timeout/.test(joined)) {
+    return "the research sessions timed out";
+  }
+  if (/failed to spawn|enoent|on path|not found/.test(joined)) {
+    return "couldn't launch the Claude CLI (is it installed and on PATH?)";
+  }
+  if (/empty output|no content|no usable content/.test(joined)) {
+    return "the research sessions returned no usable content";
+  }
+  const first = errors.find((e) => e.trim().length > 0);
+  return first ? first.trim() : "unknown error";
+}
+
 export type RunOptions = {
   // Focused-retry path (PER-154): research ONLY this subset of `interests`
   // instead of the whole list, then merge the fresh sections into the prior
@@ -182,9 +217,9 @@ export async function startRun(
   // then map them back to the rich interests so each retried session still
   // carries its own intent doc.
   const baseMarkdown = state.last_brief?.summary_md;
-  const retryTopics = (opts.retryTopics ?? []).filter((t) =>
-    topics.includes(t),
-  );
+  const retryTopics = [
+    ...new Set((opts.retryTopics ?? []).filter((t) => topics.includes(t))),
+  ];
   const isRetry = retryTopics.length > 0;
   if (isRetry && !baseMarkdown) {
     return { started: false, reason: "no_base_brief" };
@@ -196,9 +231,13 @@ export async function startRun(
   // (or a superset of) the full list collapses to a normal full run. We narrow
   // to topics actually in the current list so a stale/foreign topic can't sneak
   // an empty section into the brief.
-  const selectedTopics = (opts.selectedTopics ?? []).filter((t) =>
-    topics.includes(t),
-  );
+  // Dedupe before the strict-subset test: a selection like ["A","A","A"]
+  // against interests ["A","B","C"] has raw length 3 == topics.length, which
+  // would wrongly collapse the intended single-topic run into a full run (wrong
+  // coverage + extra Claude spend). Distinct topics are what the subset check means.
+  const selectedTopics = [
+    ...new Set((opts.selectedTopics ?? []).filter((t) => topics.includes(t))),
+  ];
   const isSelected =
     !isRetry &&
     selectedTopics.length > 0 &&
@@ -233,26 +272,47 @@ export async function startRun(
   // run's topic set — a test/QA payload can research arbitrary topics without
   // shrinking or replacing the saved list.
   const persistedInterests = ephemeral ? state.interests : interests;
-  await saveState(
-    { ...state, interests: persistedInterests, last_brief: pending },
-    deps.stateFile,
-  );
 
-  // Redirect the lazy intent-doc backfill to a throwaway dir for ephemeral runs so
-  // researching a test topic never creates/overwrites a real `interests/<id>.md`.
+  // We hold `runInFlight` from line 221 (claimed synchronously, before the first
+  // await, so a second startRun can't race in and double-start). But until
+  // runSynthesis takes ownership of clearing the flag in its finally, any throw
+  // in this setup (saveState disk-full, mkdtemp EACCES) would leave runInFlight
+  // stuck true for the life of the process — wedging every future run with
+  // `in_flight` and making isStalePending refuse to reclaim the slot. Reset on
+  // early failure so the slot stays reclaimable, then rethrow to the caller.
   let runDeps = deps;
-  if (ephemeral) {
-    const ephemeralDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), "scout-ephemeral-"),
+  try {
+    await saveState(
+      { ...state, interests: persistedInterests, last_brief: pending },
+      deps.stateFile,
     );
-    runDeps = { ...deps, interestsDir: ephemeralDir, ephemeralDir };
+
+    // Redirect the lazy intent-doc backfill to a throwaway dir for ephemeral runs
+    // so researching a test topic never creates/overwrites a real
+    // `interests/<id>.md`.
+    if (ephemeral) {
+      const ephemeralDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "scout-ephemeral-"),
+      );
+      runDeps = { ...deps, interestsDir: ephemeralDir, ephemeralDir };
+    }
+  } catch (err) {
+    runInFlight = false;
+    throw err;
   }
 
+  // Fire-and-forget: runSynthesis lands a `failed` brief for research errors via
+  // its own try/catch, but a throw in the persist/history tail (disk error, etc.)
+  // would otherwise escape as an unhandled rejection — invisible to ops and a
+  // process-crash risk under Node's default rejection handling. Log it so a
+  // "my brief silently never appeared" report is diagnosable from stderr.
   void runSynthesis(briefId, runDeps, source, {
     researchInterests,
     coverageInterests,
     baseMarkdown: isRetry ? baseMarkdown : undefined,
     retryTopics: isRetry ? retryTopics : undefined,
+  }).catch((err) => {
+    console.error(`[runner] runSynthesis ${briefId} failed to persist:`, err);
   });
   return { started: true, briefId };
 }
@@ -296,6 +356,13 @@ async function runSynthesis(
     // if they edit the doc afterwards. Keyed by topic so a backfilled default and
     // a real doc are treated identically.
     const basisByTopic = new Map<string, string>();
+    // Per-session failure messages, collected so a wholesale failure can report
+    // an honest REASON to the founder (PER-259 item 1) — "Claude usage limit
+    // reached" reads very differently from "the CLI isn't installed". Kept
+    // in-memory only; never persisted per-topic (the aggregate reason is what the
+    // UI shows). Safe to hold: research.ts never forwards the OAuth token into
+    // these messages (it slices stderr, which the token never reaches).
+    const sessionErrors: string[] = [];
     let anyOk = false;
     for (const interest of plan.researchInterests) {
       try {
@@ -312,9 +379,17 @@ async function runSynthesis(
         const section = extractTopicSection(sessionMd, interest.topic);
         if (section) anyOk = true;
         sections.push({ topic: interest.topic, section });
-      } catch {
+      } catch (err) {
         // One topic's session failing must not sink the whole brief — record it
-        // as a missing section and keep going.
+        // as a missing section and keep going. Log at warn so a silently-missing
+        // section is traceable to which topic failed and why; without this the
+        // brief just shows a gap and ops has zero signal (the token never
+        // reaches this err — spawn never forwards it — so it stays log-safe).
+        console.warn(
+          `[runner] research failed for topic "${interest.topic}":`,
+          err,
+        );
+        sessionErrors.push(err instanceof Error ? err.message : String(err));
         sections.push({ topic: interest.topic, section: null });
       }
     }
@@ -349,7 +424,9 @@ async function runSynthesis(
     // state rather than an empty "# Your brief"). With a base brief, we still
     // merge (preserving the topics that previously worked).
     if (!anyOk && !plan.baseMarkdown) {
-      throw new Error("all research sessions failed or returned no content");
+      throw new Error(
+        `all research sessions failed — ${summarizeSessionFailures(sessionErrors)}`,
+      );
     }
 
     const patch = assembleBrief(sections);
@@ -389,7 +466,9 @@ async function runSynthesis(
       generated_at: new Date().toISOString(),
       status: "failed",
       kind: "daily",
-      error_msg: String(err),
+      // A non-Error throw (e.g. a rejected non-Error value) stringifies to a
+      // useless "[object Object]" in the UI's last-run note; prefer .message.
+      error_msg: err instanceof Error ? err.message : String(err),
     };
   }
 
@@ -438,7 +517,15 @@ async function runSynthesis(
     if (deps.ephemeralDir) {
       await fs
         .rm(deps.ephemeralDir, { recursive: true, force: true })
-        .catch(() => {});
+        .catch((err) => {
+          // Best-effort: a failed cleanup must not wedge the run, but a silent
+          // swallow lets throwaway dirs leak (ENOSPC over many runs) with zero
+          // signal. Log at warn so the leak is at least observable.
+          console.warn(
+            `[runner] ephemeral dir cleanup failed for ${deps.ephemeralDir}:`,
+            err,
+          );
+        });
     }
     // Always clear the in-flight guard, even if persistence throws, so the
     // companion can't wedge into a permanent "in progress" state.

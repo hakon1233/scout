@@ -6,13 +6,16 @@ import {
   fetchCompanionInterests,
 } from "@/lib/companion";
 import {
+  useAbortableController,
+  useAbortableEffect,
+} from "@/hooks/useAbortableEffect";
+import {
   confirmDeleteInterest,
   confirmRewriteInterest,
   fetchChatTranscript,
   runChatTurn,
   stopChatTurn,
   type ChatChange,
-  type ChatTurn,
   type PendingDelete,
   type PendingRewrite,
 } from "@/lib/chat";
@@ -23,108 +26,25 @@ import {
   mockDocMeta,
   SAMPLE_INTERESTS,
 } from "@/lib/interest-docs";
+import { prefersReducedMotion } from "@/lib/motion";
 import { loadSettings } from "@/lib/storage";
 import type { Interest } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
-
-function mergeInterests(
-  local: Interest[],
-  companionTopics: string[],
-): Interest[] {
-  if (companionTopics.length === 0) return local;
-  const byTopic = new Map(local.map((i) => [i.topic.trim().toLowerCase(), i]));
-  return companionTopics.map((topic) => {
-    const match = byTopic.get(topic.trim().toLowerCase());
-    return match ?? { id: "", topic };
-  });
-}
-
-let msgSeq = 0;
-function nextMsgId(): string {
-  msgSeq += 1;
-  return `m${msgSeq}`;
-}
-
-function greetingMessage(): ChatMessage {
-  return {
-    id: nextMsgId(),
-    role: "scout",
-    text: "Hi — I'm Scout. Tell me what to track and I'll draft an intent doc for it, refine one you already have, or drop an interest. Pick “Refine” on any card to aim a message at it.",
-  };
-}
-
-function markdownDemoMessages(): ChatMessage[] {
-  return [
-    {
-      id: nextMsgId(),
-      role: "you",
-      text: "Track **user emphasis** and keep `<script>xss()</script>` as inert text.",
-      ts: "2026-06-05T12:00:00.000Z",
-    },
-    {
-      id: nextMsgId(),
-      role: "scout",
-      text: [
-        "## Scout markdown reply",
-        "",
-        "**assistant emphasis** and a [source link](https://example.com/brief).",
-        "",
-        "> quoted context",
-        "",
-        "```ts",
-        'const topic = "markdown";',
-        "```",
-      ].join("\n"),
-      ts: "2026-06-05T12:01:00.000Z",
-    },
-  ];
-}
-
-function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
-  return turns.flatMap((turn) => {
-    const out: ChatMessage[] = [
-      {
-        id: nextMsgId(),
-        role: "you",
-        text: turn.message,
-        ts: turn.created_at,
-      },
-    ];
-    if (
-      turn.status === "ready" &&
-      (turn.reply || turn.pending_delete || turn.pending_rewrite)
-    ) {
-      out.push({
-        id: nextMsgId(),
-        role: "scout",
-        text: turn.reply ?? "",
-        ts: turn.created_at,
-        changes:
-          turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
-        pendingDelete: turn.pending_delete,
-        pendingRewrite: turn.pending_rewrite,
-      });
-    } else if (turn.status === "failed" && turn.error_msg) {
-      out.push({
-        id: nextMsgId(),
-        role: "scout",
-        text: `I couldn't finish that turn: ${turn.error_msg}`,
-        ts: turn.created_at,
-        failed: true,
-      });
-    }
-    return out;
-  });
-}
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
+import {
+  applyDocBodyChange,
+  applyDocMetaChange,
+  applyInterestChange,
+  buildDocCards,
+  dropInterest,
+  dropKey,
+  greetingMessage,
+  markdownDemoMessages,
+  mergeInterests,
+  nextMsgId,
+  resolveMessage,
+  transcriptMessages,
+} from "./useProfileWorkbench.helpers";
 
 export function useProfileWorkbench() {
   const [hydrated, setHydrated] = useState(false);
@@ -149,7 +69,8 @@ export function useProfileWorkbench() {
 
   const beatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const streamTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const { startAbortable, clearAbortable, abortCurrent } =
+    useAbortableController();
   const abortedRef = useRef(false);
   // PER-232: the in-flight turn's server id (set once the kick lands) and
   // whether the user pressed Stop before we even had it — so the server-side
@@ -186,49 +107,51 @@ export function useProfileWorkbench() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    if (mockSeed !== null) return;
-    let cancelled = false;
-    (async () => {
-      const tok = await bootstrapCompanionToken();
-      if (cancelled) return;
-      setToken(tok);
-      const transcript = tok ? await fetchChatTranscript(tok) : [];
-      if (cancelled) return;
-      if (transcript.length > 0) {
-        setMessages(transcriptMessages(transcript));
-      }
-      const full = await fetchInterestsFull(tok);
-      if (cancelled) return;
-      if (full && full.interests.length > 0) {
-        setInterests(full.interests);
-        setDocMeta(full.meta);
-        setDocBodies(
-          Object.fromEntries(
-            Object.entries(full.meta)
-              .filter(([, meta]) => typeof meta.body === "string")
-              .map(([key, meta]) => [key, meta.body as string]),
-          ),
-        );
-        return;
-      }
-      const topics = await fetchCompanionInterests();
-      if (cancelled) return;
-      if (topics.length > 0)
-        setInterests((prev) => mergeInterests(prev, topics));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hydrated, mockSeed]);
+  useAbortableEffect(
+    (scope) => {
+      if (!hydrated) return;
+      if (mockSeed !== null) return;
+      (async () => {
+        const tok = await bootstrapCompanionToken();
+        if (scope.cancelled) return;
+        setToken(tok);
+        // transcript + full-interests both depend only on `tok` and are
+        // independent of each other — fetch concurrently instead of in series
+        // to roughly halve first-paint latency.
+        const [transcript, full] = await Promise.all([
+          tok ? fetchChatTranscript(tok) : Promise.resolve([]),
+          fetchInterestsFull(tok),
+        ]);
+        if (scope.cancelled) return;
+        if (transcript.length > 0) {
+          setMessages(transcriptMessages(transcript));
+        }
+        if (full && full.interests.length > 0) {
+          setInterests(full.interests);
+          setDocMeta(full.meta);
+          setDocBodies(
+            Object.fromEntries(
+              Object.entries(full.meta)
+                .filter(([, meta]) => typeof meta.body === "string")
+                .map(([key, meta]) => [key, meta.body as string]),
+            ),
+          );
+          return;
+        }
+        const topics = await fetchCompanionInterests();
+        if (scope.cancelled) return;
+        if (topics.length > 0)
+          setInterests((prev) => mergeInterests(prev, topics));
+      })();
+    },
+    [hydrated, mockSeed],
+  );
 
   useEffect(() => {
     const timers = beatTimers.current;
     return () => {
       Object.values(timers).forEach(clearTimeout);
       if (streamTimer.current) clearInterval(streamTimer.current);
-      abortRef.current?.abort();
     };
   }, []);
 
@@ -250,20 +173,12 @@ export function useProfileWorkbench() {
       for (const ch of changes) {
         const key = ch.interestId;
         if (!key) continue;
+        // Pure store transitions live in the helpers; the hook keeps the timer
+        // and focus side effects that can't be expressed as a reducer.
+        setInterests((prev) => applyInterestChange(prev, ch));
+        setDocBodies((prev) => applyDocBodyChange(prev, ch));
+        setDocMeta((prev) => applyDocMetaChange(prev, ch, at));
         if (ch.op === "delete") {
-          setInterests((prev) =>
-            prev.filter((i) => interestKey(i) !== key && i.id !== key),
-          );
-          setDocBodies((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
-          setDocMeta((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
           setFocusKey((cur) => (cur === key ? null : cur));
           if (beatTimers.current[key]) {
             clearTimeout(beatTimers.current[key]);
@@ -271,26 +186,6 @@ export function useProfileWorkbench() {
           }
           continue;
         }
-        const topic = ch.topic?.trim() ?? "";
-        setInterests((prev) => {
-          const idx = prev.findIndex(
-            (i) => interestKey(i) === key || i.id === key,
-          );
-          if (idx === -1) return [...prev, { id: key, topic }];
-          if (topic && prev[idx].topic !== topic) {
-            const next = [...prev];
-            next[idx] = { ...next[idx], id: prev[idx].id || key, topic };
-            return next;
-          }
-          return prev;
-        });
-        if (typeof ch.doc === "string") {
-          setDocBodies((prev) => ({ ...prev, [key]: ch.doc as string }));
-        }
-        setDocMeta((prev) => ({
-          ...prev,
-          [key]: { hasDoc: true, updatedAt: at },
-        }));
         flashBeat(key, ch.op === "create" ? "created" : "updated");
       }
     },
@@ -305,24 +200,10 @@ export function useProfileWorkbench() {
   const flashRemove = useCallback((key: string) => {
     setBeats((prev) => ({ ...prev, [key]: "removed" }));
     const drop = () => {
-      setInterests((prev) =>
-        prev.filter((i) => interestKey(i) !== key && i.id !== key),
-      );
-      setDocBodies((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      setDocMeta((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      setBeats((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
+      setInterests((prev) => dropInterest(prev, key));
+      setDocBodies((prev) => dropKey(prev, key));
+      setDocMeta((prev) => dropKey(prev, key));
+      setBeats((prev) => dropKey(prev, key));
       setFocusKey((cur) => (cur === key ? null : cur));
       delete beatTimers.current[key];
     };
@@ -348,9 +229,7 @@ export function useProfileWorkbench() {
           await confirmDeleteInterest(pd.interestId, token);
           flashRemove(pd.interestId);
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msgId ? { ...m, deleteResolved: "deleted" } : m,
-            ),
+            resolveMessage(prev, msgId, { deleteResolved: "deleted" }),
           );
         } catch (e) {
           setError(e instanceof Error ? e.message : "Couldn't remove that.");
@@ -366,9 +245,7 @@ export function useProfileWorkbench() {
   // "Kept" so the dead-control proof is visible.
   const cancelDelete = useCallback((msgId: string) => {
     setMessages((prev) =>
-      prev.map((m) =>
-        m.id === msgId ? { ...m, deleteResolved: "cancelled" } : m,
-      ),
+      resolveMessage(prev, msgId, { deleteResolved: "cancelled" }),
     );
   }, []);
 
@@ -390,9 +267,7 @@ export function useProfileWorkbench() {
             applyChanges(turn.changes, new Date().toISOString());
           }
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msgId ? { ...m, rewriteResolved: "applied" } : m,
-            ),
+            resolveMessage(prev, msgId, { rewriteResolved: "applied" }),
           );
         } catch (e) {
           setError(
@@ -411,9 +286,7 @@ export function useProfileWorkbench() {
   // locks to "Discarded".
   const discardRewrite = useCallback((msgId: string) => {
     setMessages((prev) =>
-      prev.map((m) =>
-        m.id === msgId ? { ...m, rewriteResolved: "discarded" } : m,
-      ),
+      resolveMessage(prev, msgId, { rewriteResolved: "discarded" }),
     );
   }, []);
 
@@ -452,8 +325,7 @@ export function useProfileWorkbench() {
       abortedRef.current = false;
       turnIdRef.current = null;
       stopRequestedRef.current = false;
-      const controller = new AbortController();
-      abortRef.current = controller;
+      const controller = startAbortable();
 
       (async () => {
         try {
@@ -511,15 +383,19 @@ export function useProfileWorkbench() {
           }
           if (changes) applyChanges(changes, replyAt);
         } catch (e) {
-          if (abortedRef.current) return; // user stopped — not an error
+          // User stopped — not an error. Check THIS dispatch's own controller
+          // (not just the shared abortedRef, which a newly-started dispatch resets
+          // to false): a stop-then-immediately-send would otherwise let the just-
+          // aborted request's rejection surface a spurious error (AIR-527).
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
-          if (abortRef.current === controller) abortRef.current = null;
+          clearAbortable(controller);
           setSending(false);
         }
       })();
     },
-    [token, applyChanges, startStream],
+    [token, applyChanges, startStream, startAbortable, clearAbortable],
   );
 
   const send = useCallback(
@@ -554,7 +430,7 @@ export function useProfileWorkbench() {
   const stop = useCallback(() => {
     abortedRef.current = true;
     stopRequestedRef.current = true;
-    abortRef.current?.abort();
+    abortCurrent();
     // Best-effort server abort: with the turn id when the kick already landed,
     // otherwise stop whatever is in flight (single-flight slot); onKick retries
     // with the concrete id if it arrives after this click.
@@ -565,7 +441,7 @@ export function useProfileWorkbench() {
     }
     setStreamId(null);
     setSending(false);
-  }, [token]);
+  }, [token, abortCurrent]);
 
   // Retry a scout turn: re-run the preceding `you` message without adding a new
   // bubble. We drop the old scout reply (and anything after it) first so the log
@@ -618,23 +494,7 @@ export function useProfileWorkbench() {
 
   const cards: DocCardModel[] = useMemo(() => {
     const meta = mockSeed !== null ? mockDocMeta(interests, mockSeed) : docMeta;
-    return interests.map((i) => {
-      const key = interestKey(i);
-      const m = meta[key] ?? { hasDoc: false };
-      const body = docBodies[key];
-      return {
-        key,
-        topic: i.topic,
-        hasDoc: m.hasDoc || Boolean(body),
-        updatedAt: m.updatedAt,
-        body,
-        beat: beats[key] ?? null,
-        // Deep-links into the workbench itself (PER-236 fix 2) so a new-tab
-        // open lands on the scope view WITH the chat column, not the
-        // chat-less standalone page (which stays alive for old links).
-        href: `/app/interests/?id=${encodeURIComponent(key)}`,
-      };
-    });
+    return buildDocCards(interests, meta, docBodies, beats);
   }, [interests, docMeta, docBodies, beats, mockSeed]);
 
   const focusTopic = focusKey

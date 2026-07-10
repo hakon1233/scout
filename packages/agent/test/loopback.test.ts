@@ -14,7 +14,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { saveState, loadState, newPairingToken, type Brief, type State } from "../src/state.js";
-import { startServer } from "../src/server.js";
+import { isSameOriginCaller, startServer } from "../src/server.js";
 
 async function makeStubClaude(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-stub-"));
@@ -372,7 +372,13 @@ test("POST /v0/interests de-duplicates before the max-6 budget check (PER-126)",
   await saveState({ pairing_token: token }, stateFile);
 
   const claudeBin = await makeStubClaude();
-  const { server, port } = await startServer(0, { stateFile, claudeBin });
+  let synthesisDone: (b: Brief) => void;
+  const doneP = new Promise<Brief>((r) => (synthesisDone = r));
+  const { server, port } = await startServer(0, {
+    stateFile,
+    claudeBin,
+    onSynthesisDone: (b) => synthesisDone(b),
+  });
 
   try {
     // 7 raw items but only 6 unique after case-insensitive de-dup ("AI safety"
@@ -389,6 +395,8 @@ test("POST /v0/interests de-duplicates before the max-6 budget check (PER-126)",
       }),
     });
     assert.equal(res.status, 202);
+    const brief = await doneP;
+    assert.equal(brief.status, "ready");
   } finally {
     server.close();
     await fs.rm(tmpStateDir, { recursive: true, force: true });
@@ -413,12 +421,29 @@ test("GET /v0/config hands the token to a same-origin caller, refuses cross-orig
     assert.equal(noOrigin.status, 200);
     assert.equal((await noOrigin.json()).token, token);
 
-    // Explicit loopback origin (the served UI) also gets the token.
+    // Explicit same-origin loopback (the served UI) also gets the token.
     const loopback = await fetch(`http://127.0.0.1:${port}/v0/config`, {
       headers: { origin: `http://127.0.0.1:${port}` },
     });
     assert.equal(loopback.status, 200);
     assert.equal((await loopback.json()).token, token);
+
+    // Allowed loopback does NOT mean any localhost page gets the token. The
+    // Origin must match this server's actual host+port.
+    const wrongPort = await fetch(`http://127.0.0.1:${port}/v0/config`, {
+      headers: { origin: "http://127.0.0.1:3000" },
+    });
+    assert.equal(wrongPort.status, 403);
+
+    // A same-host HTTPS proxy origin (e.g. tailscale serve) is also same-origin
+    // for the browser, even though the companion may see the request over HTTP.
+    assert.equal(
+      isSameOriginCaller(
+        "https://mac-mini.tailnet.ts.net",
+        "mac-mini.tailnet.ts.net",
+      ),
+      true,
+    );
 
     // A public cross-origin caller is refused — the token must never leak to
     // github.io even if the browser's LNA gate somehow let the request through.
@@ -657,6 +682,15 @@ test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404 
     });
     assert.equal(briefsPut.status, 405);
     assert.equal(briefsPut.headers.get("allow"), "GET, OPTIONS");
+
+    // POST on the unauthenticated build-provenance route is also a known-path
+    // wrong method, so it must not look like an unknown /v0/* route.
+    const versionPost = await fetch(`http://127.0.0.1:${port}/v0/version`, {
+      method: "POST",
+      headers: auth,
+    });
+    assert.equal(versionPost.status, 405);
+    assert.equal(versionPost.headers.get("allow"), "GET, OPTIONS");
 
     // A genuinely unknown /v0/* path still 404s (no Allow header) — the 405
     // path must not swallow real not-found cases.

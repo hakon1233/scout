@@ -1,11 +1,21 @@
 "use client";
 
 import * as React from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
+import dynamic from "next/dynamic";
 import type { Article, Brief } from "@/lib/types";
 import { canonicalUrl, type LikeInput } from "@/lib/likes";
 import { LikeButton } from "@/components/LikeButton";
+import { EmptyState } from "@/components/ui";
+import { formatDate } from "@/lib/format-date";
+
+// AIR-186: react-markdown + rehype-sanitize (~170KB) are only needed by the
+// single-story detail body, which never mounts until a reader opens a card.
+// Lazy-load it so the markdown pipeline is split out of the /app feed's initial
+// JS and fetched on first detail open. A short text placeholder holds the spot
+// while the chunk loads (sub-second on a normal connection).
+const FeedBody = dynamic(() => import("@/components/FeedBody"), {
+  loading: () => <p className="font-reading text-body text-muted">…</p>,
+});
 
 // News-feed presentation of a brief (PER-211). Replaces the sectioned-markdown
 // BriefView as the default home view: each story is a card with a headline, one
@@ -40,7 +50,10 @@ export function FeedView({
   // surrounding page chrome is what made "the rest of the feed" show below it.
   onDetailOpenChange?: (open: boolean) => void;
 }) {
-  const items = React.useMemo(() => buildFeed(brief.articles), [brief.articles]);
+  const items = React.useMemo(
+    () => buildFeed(brief.articles),
+    [brief.articles],
+  );
 
   // PER-219: the per-topic filter chips were removed from the feed — the founder
   // wanted a clean read straight into headlines, no filter UI. The chip logic
@@ -65,7 +78,7 @@ export function FeedView({
   }, []);
 
   const selected = selectedId
-    ? items.find((it) => it.id === selectedId) ?? null
+    ? (items.find((it) => it.id === selectedId) ?? null)
     : null;
   const detailOpen = selected != null;
 
@@ -113,11 +126,11 @@ export function FeedView({
 
   if (items.length === 0) {
     // No parseable stories (e.g. every section reported `_no fresh news_`). The
-    // page-level coverage banners already explain why; keep the feed area quiet.
+    // page-level coverage banners already explain why; use the shared empty-state
+    // primitive so this reads consistently with every other "nothing here yet"
+    // surface in the app (Liked feed, interest docs, etc.) instead of a bare line.
     return (
-      <p className="text-body-sm text-muted">
-        No stories in this edition yet.
-      </p>
+      <EmptyState title="No stories in this edition yet" />
     );
   }
 
@@ -187,7 +200,10 @@ function FeedCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
           </span>
         </div>
       </button>
-      <LikeButton story={likeInputFor(item)} className="absolute right-2 top-2" />
+      <LikeButton
+        story={likeInputFor(item)}
+        className="absolute right-2 top-2"
+      />
     </div>
   );
 }
@@ -210,7 +226,9 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption uppercase tracking-wide text-muted">
           <span className="font-medium text-signal">{item.topic}</span>
           {item.publishedAt && (
-            <span className="tabular-nums">· {formatDate(item.publishedAt)}</span>
+            <span className="tabular-nums">
+              · {formatDate(item.publishedAt)}
+            </span>
           )}
         </div>
         <h1 className="font-serif text-title-1 leading-tight text-primary">
@@ -234,7 +252,9 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
       {item.body && <FeedBody markdown={item.body} />}
 
       <div className="flex flex-col gap-2 rounded-md border border-border-default bg-surface-muted p-4">
-        <p className="text-caption uppercase tracking-wide text-muted">Source</p>
+        <p className="text-caption uppercase tracking-wide text-muted">
+          Source
+        </p>
         <a
           href={item.url}
           target="_blank"
@@ -256,79 +276,16 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
   );
 }
 
-// The in-depth body arrives as RAW markdown from the brief's `> ` blockquote
-// lines (companion.ts keeps it unstripped on purpose — only card blurbs are
-// plain-stripped). Render it as sanitized markdown styled to the editorial
-// type, instead of dumping literal `**bold**`/backticks into <p> tags
-// (PER-236 fix 1). Live briefs use bold + inline code heavily; links, lists,
-// and quotes are styled too so future bodies degrade gracefully.
-const BODY_MD = {
-  p: ({ children }: { children?: React.ReactNode }) => (
-    <p className="font-reading text-body leading-relaxed text-muted">
-      {children}
-    </p>
-  ),
-  strong: ({ children }: { children?: React.ReactNode }) => (
-    <strong className="font-semibold text-primary">{children}</strong>
-  ),
-  em: ({ children }: { children?: React.ReactNode }) => (
-    <em className="italic">{children}</em>
-  ),
-  // The default <pre> wraps a <code>; pass through so the code chip styling
-  // applies once (same trick as ChatMarkdown).
-  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-  code: ({ children }: React.HTMLAttributes<HTMLElement>) => (
-    <code className="rounded bg-surface-muted px-1 py-0.5 font-mono text-[0.85em] text-primary">
-      {children}
-    </code>
-  ),
-  a: ({ href, children }: React.AnchorHTMLAttributes<HTMLAnchorElement>) =>
-    href ? (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-signal underline underline-offset-2"
-      >
-        {children}
-      </a>
-    ) : (
-      <>{children}</>
-    ),
-  ul: ({ children }: { children?: React.ReactNode }) => (
-    <ul className="list-disc pl-5 font-reading text-body leading-relaxed text-secondary">
-      {children}
-    </ul>
-  ),
-  ol: ({ children }: { children?: React.ReactNode }) => (
-    <ol className="list-decimal pl-5 font-reading text-body leading-relaxed text-secondary">
-      {children}
-    </ol>
-  ),
-  li: ({ children }: { children?: React.ReactNode }) => (
-    <li className="my-1">{children}</li>
-  ),
-  blockquote: ({ children }: { children?: React.ReactNode }) => (
-    <blockquote className="border-l-2 border-border-strong pl-4 text-secondary">
-      {children}
-    </blockquote>
-  ),
-};
-
-function FeedBody({ markdown }: { markdown: string }) {
-  return (
-    <div className="flex flex-col gap-4 [&>p:first-child]:font-semibold [&>p:first-child]:text-primary">
-      <ReactMarkdown rehypePlugins={[rehypeSanitize]} components={BODY_MD}>
-        {markdown}
-      </ReactMarkdown>
-    </div>
-  );
-}
-
 // Source images are external (and best-effort handpicked by the model). On any
 // load error — paywall, hotlink block, 404, blocked URL — drop the image so the
 // card/detail degrade to clean text rather than showing a broken-image icon.
-export function FeedImage({ src, className }: { src: string; className: string }) {
+export function FeedImage({
+  src,
+  className,
+}: {
+  src: string;
+  className: string;
+}) {
   const [failed, setFailed] = React.useState(false);
   if (failed) return null;
   // Remote, unknown-host source images — next/image needs preconfigured domains
@@ -422,12 +379,8 @@ export function faviconFor(host: string): string {
 // canonicalUrl now lives in `@/lib/likes` (the like key and the feed dedupe must
 // use the SAME canonicalisation), and is imported above.
 
-export function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+// The canonical date formatter now lives in `@/lib/format-date` so the brief
+// surfaces share one timezone-safe implementation (imported above). Re-exported
+// here so existing `@/components/FeedView` importers (e.g. the liked-stories
+// page) are unchanged.
+export { formatDate };

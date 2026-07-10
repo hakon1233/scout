@@ -68,6 +68,55 @@ test("buildWeeklyBrief pools the last 7 days, dedupes by URL, and caps top stori
   assert.doesNotMatch(weekly.summary_md ?? "", /Old funding news/);
 });
 
+test("buildWeeklyBrief dedupes URLs that differ only by query/hash/trailing slash", () => {
+  // Same story cited across two days: once clean, once with a tracking query
+  // param and a trailing slash. The web app keys likes + feed dedupe on the
+  // canonical URL (src/lib/likes.ts), so the weekly digest must collapse these
+  // to one item rather than showing the story twice.
+  const now = new Date("2026-06-15T12:00:00.000Z");
+  const clean = [
+    "- `2026-06-14` — OpenAI shipped a new agent release.",
+    "  [openai.com — Agent release](https://example.com/agent)",
+  ].join("\n");
+  const tracked = [
+    "- `2026-06-13` — Same agent release, re-cited with tracking params.",
+    "  [blog.example — Agent rewrite](https://example.com/agent/?utm_source=newsletter#top)",
+  ].join("\n");
+  const history: Brief[] = [
+    dailyBrief("latest", "2026-06-15T07:00:00.000Z", "AI", [clean]),
+    dailyBrief("older", "2026-06-14T07:00:00.000Z", "AI", [tracked]),
+  ];
+
+  const weekly = buildWeeklyBrief(history, now);
+
+  const occurrences =
+    (weekly.summary_md ?? "").match(/example\.com\/agent/g) ?? [];
+  assert.equal(occurrences.length, 1);
+  // The newest run's citation wins the dedupe.
+  assert.match(weekly.summary_md ?? "", /OpenAI shipped a new agent release/);
+  assert.doesNotMatch(weekly.summary_md ?? "", /re-cited with tracking params/);
+});
+
+test("buildWeeklyBrief drops stale stories inside otherwise eligible daily briefs", () => {
+  const now = new Date("2026-06-15T12:00:00.000Z");
+  const staleStoryInRecentBrief = [
+    "- `2026-05-01` — A stale item got through a recent daily brief.",
+    "  [old.example — Stale](https://example.com/stale-in-recent)",
+  ].join("\n");
+  const history: Brief[] = [
+    dailyBrief("latest", "2026-06-15T07:00:00.000Z", "AI", [
+      storyA,
+      staleStoryInRecentBrief,
+    ]),
+  ];
+
+  const weekly = buildWeeklyBrief(history, now);
+
+  assert.match(weekly.summary_md ?? "", /OpenAI shipped a new agent release/);
+  assert.doesNotMatch(weekly.summary_md ?? "", /stale item got through/);
+  assert.doesNotMatch(weekly.summary_md ?? "", /stale-in-recent/);
+});
+
 test("POST /v0/weekly-brief persists a weekly brief into history without mutating interests", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-weekly-"));
   const stateFile = path.join(tmp, "state.json");

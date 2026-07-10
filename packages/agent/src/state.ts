@@ -5,13 +5,17 @@
 // `~/.config/scout/state.json` with chmod 0600.
 
 import { promises as fs } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { TopicCoverage } from "./coverage.js";
+import { CONFIG_DIR, atomicWriteFile } from "./persistence.js";
 
-export const CONFIG_DIR = path.join(os.homedir(), ".config", "scout");
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
+
+// Re-exported from persistence.ts (CAR-244) so existing `from "./state.js"`
+// imports of these generic primitives keep working after the move; new call
+// sites should import them from persistence.ts directly.
+export { CONFIG_DIR, atomicWriteFile };
 
 // A snapshot of the intent doc that drove ONE topic's research, captured at
 // synthesis time (PER-187). The whole point of the per-interest doc is that it
@@ -289,8 +293,16 @@ export function normalizeTimeOfDay(raw: unknown): string | null {
 }
 
 export async function loadState(file = STATE_FILE): Promise<State> {
+  let raw: string;
   try {
-    const raw = await fs.readFile(file, "utf8");
+    raw = await fs.readFile(file, "utf8");
+  } catch {
+    // No state yet (ENOENT) is the normal first-run case, and a transient read
+    // blip leaves the file untouched on disk. Either way there is nothing to
+    // parse and nothing worth preserving — start fresh.
+    return {};
+  }
+  try {
     const parsed = JSON.parse(raw) as State;
     // Normalize interests to the rich {id, topic} shape on every load so the
     // rest of the system never sees the legacy `string[]`. Migration is pure and
@@ -302,7 +314,53 @@ export async function loadState(file = STATE_FILE): Promise<State> {
     }
     return parsed;
   } catch {
+    // The file exists and was readable but holds corrupt/unusable JSON. Returning
+    // {} here is the dangerous case: the very next saveState would overwrite this
+    // file, permanently destroying the founder's interests, briefs, and pairing
+    // token. Move the corrupt bytes aside first so the state stays recoverable,
+    // THEN start fresh. Symmetric with readChatTranscript's corrupt-transcript
+    // handling — state.json is the more valuable file and deserves at least the
+    // same protection. Atomic saveState (below) prevents self-inflicted torn
+    // writes, but external corruption (manual edit, disk fault, a restore that
+    // truncates, a pre-atomic version) can still leave a present-but-corrupt file.
+    await preserveCorruptState(file);
     return {};
+  }
+}
+
+async function preserveCorruptState(file: string): Promise<void> {
+  try {
+    const backup = `${file}.corrupt-${Date.now()}.bak`;
+    await fs.rename(file, backup);
+    console.error(
+      `[state] ${file} was corrupt; preserved at ${backup} and started fresh`,
+    );
+  } catch (err) {
+    // Best-effort — if the backup itself fails we still start fresh, matching the
+    // pre-existing contract. Log so the (now unrecoverable) corruption is visible.
+    console.error(
+      `[state] ${file} was corrupt and could not be backed up:`,
+      err,
+    );
+  }
+}
+
+// List the .corrupt-*.bak recovery files preserveCorruptState left beside the
+// state file, oldest first (names embed a ms timestamp, so lexical sort is
+// chronological). preserveCorruptState is only console-loud, which no one
+// watches for a launchd-managed companion — after a recovery the app just
+// looks freshly unpaired with no explanation. /healthz folds this in (PER-272)
+// so the recovery is visible wherever the companion's health already is.
+export async function listCorruptStateBackups(
+  file = STATE_FILE,
+): Promise<string[]> {
+  const prefix = `${path.basename(file)}.corrupt-`;
+  try {
+    const entries = await fs.readdir(path.dirname(file));
+    return entries.filter((f) => f.startsWith(prefix) && f.endsWith(".bak")).sort();
+  } catch {
+    // Config dir absent — normal first run, nothing was ever recovered.
+    return [];
   }
 }
 
@@ -310,8 +368,10 @@ export async function saveState(
   state: State,
   file = STATE_FILE,
 ): Promise<void> {
-  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  await fs.writeFile(file, JSON.stringify(state, null, 2), { mode: 0o600 });
+  // loadState falls back to {} on a torn parse, which would silently wipe the
+  // founder's interests, briefs, and pairing token — so this write must be atomic
+  // (and loadState backs the corrupt file up before falling back, as a last net).
+  await atomicWriteFile(file, JSON.stringify(state, null, 2));
 }
 
 export function newPairingToken(): string {
