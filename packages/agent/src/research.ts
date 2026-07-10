@@ -214,7 +214,11 @@ export function buildResearchPrompt(
   interest: ResearchInterest,
   now: Date = new Date(),
 ): string {
-  const today = now.toISOString().slice(0, 10); // YYYY-MM-DD, anchors "last 7 days".
+  const today = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-"); // Local YYYY-MM-DD, anchors "last 7 days".
   const { topic, doc } = interest;
   const lines: string[] = [];
   lines.push(
