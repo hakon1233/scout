@@ -482,6 +482,19 @@ function adaptBrief(b: AgentBrief): AppBrief {
   };
 }
 
+// Shared by fetchLatestBrief and fetchRunFailure so both can derive the
+// newest ready brief from a single already-fetched raw list instead of each
+// issuing their own /v0/briefs request (AIR-605).
+function newestReadyBrief(raw: AgentBrief[]): AppBrief | null {
+  const ready = raw
+    .filter((b) => b.status === "ready" && b.summary_md)
+    .map(adaptBrief);
+  if (ready.length === 0) return null;
+  return ready.reduce((newest, b) =>
+    b.generatedAt > newest.generatedAt ? b : newest,
+  );
+}
+
 // Returns ready briefs strictly newer than `sinceTs`. Pending/failed are surfaced
 // via `pollBriefsRaw` for the polling loop.
 export async function pollBriefs(
@@ -501,11 +514,8 @@ export async function fetchLatestBrief(
   token: string,
 ): Promise<AppBrief | null> {
   try {
-    const briefs = await pollBriefs(new Date(0).toISOString(), token);
-    if (briefs.length === 0) return null;
-    return briefs.reduce((newest, b) =>
-      b.generatedAt > newest.generatedAt ? b : newest,
-    );
+    const raw = await pollBriefsRaw(new Date(0).toISOString(), token);
+    return newestReadyBrief(raw);
   } catch {
     return null;
   }
@@ -604,12 +614,12 @@ export async function fetchRunFailure(
   token: string,
 ): Promise<RunFailure | null> {
   try {
-    const [rawLast, schedule, latestReady] = await Promise.all([
+    const [rawLast, schedule] = await Promise.all([
       pollBriefsRaw(new Date(0).toISOString(), token),
       fetchSchedule(token).catch(() => null),
-      fetchLatestBrief(token),
     ]);
     const last = rawLast[0];
+    const latestReady = newestReadyBrief(rawLast);
     return assessRunFailure({
       lastStatus: last?.status,
       lastError: last?.error_msg,
