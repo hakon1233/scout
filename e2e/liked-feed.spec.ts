@@ -70,10 +70,11 @@ test("liked feed renders saved stories with dark theme tokens", async ({
     page.getByRole("heading", { name: "A quantum leap in battery density" }),
   ).toBeVisible();
 
-  // The topic chip uses the dark editorial signal red.
+  // The topic chip uses the dark editorial signal red — #d2694c
+  // (rgb(210,105,76)) after PER-264 lightened it from #c4553f for WCAG AA.
   await expect(page.getByText("Energy", { exact: true })).toHaveCSS(
     "color",
-    "rgb(196, 85, 63)",
+    "rgb(210, 105, 76)",
   );
 
   // The filled heart (this is the unlike control) carries the dark signal token
@@ -82,8 +83,8 @@ test("liked feed renders saved stories with dark theme tokens", async ({
     name: "Remove from liked stories",
   });
   await expect(unlike).toHaveAttribute("aria-pressed", "true");
-  await expect(unlike).toHaveCSS("color", "rgb(196, 85, 63)");
-  await expect(unlike).toHaveCSS("border-color", "rgb(196, 85, 63)");
+  await expect(unlike).toHaveCSS("color", "rgb(210, 105, 76)");
+  await expect(unlike).toHaveCSS("border-color", "rgb(210, 105, 76)");
 });
 
 test("light mode keeps the established Scout tokens", async ({ page }) => {

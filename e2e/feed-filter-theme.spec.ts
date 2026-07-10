@@ -64,8 +64,10 @@ test("feed filter uses dark theme tokens for its button and menu", async ({
     "background-color",
     "rgb(36, 32, 26)",
   );
-  await expect(activeFilter).toHaveCSS("border-color", "rgb(196, 85, 63)");
-  await expect(activeFilter).toHaveCSS("color", "rgb(196, 85, 63)");
+  // Dark-mode --accent-signal is #d2694c (rgb(210,105,76)); PER-264 lightened
+  // it from #c4553f to reach WCAG AA contrast (see src/app/globals.css).
+  await expect(activeFilter).toHaveCSS("border-color", "rgb(210, 105, 76)");
+  await expect(activeFilter).toHaveCSS("color", "rgb(210, 105, 76)");
 });
 
 test("feed filter keeps the established light theme colors", async ({
