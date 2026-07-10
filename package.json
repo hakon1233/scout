@@ -10,7 +10,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm --filter @scout/agent test && pnpm run test:web",
+    "test": "node --test test/*.test.mjs && pnpm --filter @scout/agent test && pnpm run test:web",
     "test:web": "tsx --test src/lib/companion.test.ts src/lib/run-history.test.ts src/app/app/page.test.ts",
     "build:agent-webroot": "node scripts/build-agent-webroot.mjs",
     "build:agent": "pnpm run build:agent-webroot && pnpm --filter @scout/agent build",
