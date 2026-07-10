@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { Article, Brief } from "@/lib/types";
 import { canonicalUrl, type LikeInput } from "@/lib/likes";
 import { LikeButton } from "@/components/LikeButton";
+import { EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
 
 // AIR-186: react-markdown + rehype-sanitize (~170KB) are only needed by the
@@ -125,9 +126,11 @@ export function FeedView({
 
   if (items.length === 0) {
     // No parseable stories (e.g. every section reported `_no fresh news_`). The
-    // page-level coverage banners already explain why; keep the feed area quiet.
+    // page-level coverage banners already explain why; use the shared empty-state
+    // primitive so this reads consistently with every other "nothing here yet"
+    // surface in the app (Liked feed, interest docs, etc.) instead of a bare line.
     return (
-      <p className="text-body-sm text-muted">No stories in this edition yet.</p>
+      <EmptyState title="No stories in this edition yet" />
     );
   }
 
