@@ -12,21 +12,10 @@ import type { Interest } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 
-// Reconcile the locally-stored interests against the topic list the companion
-// reports. With no companion topics we trust local state verbatim; otherwise the
-// companion list is authoritative for membership/order, reusing the local record
-// (for its id) when a topic matches case-insensitively.
-export function mergeInterests(
-  local: Interest[],
-  companionTopics: string[],
-): Interest[] {
-  if (companionTopics.length === 0) return local;
-  const byTopic = new Map(local.map((i) => [i.topic.trim().toLowerCase(), i]));
-  return companionTopics.map((topic) => {
-    const match = byTopic.get(topic.trim().toLowerCase());
-    return match ?? { id: "", topic };
-  });
-}
+// mergeInterests now lives in @/lib/interest-docs (single home; it was copied
+// verbatim here and in the interest-scope page). Re-exported so existing
+// importers of this helpers module keep working.
+export { mergeInterests } from "@/lib/interest-docs";
 
 // Monotonic chat-message id source. Module-scoped so ids stay unique across the
 // seed messages and every live turn the hook appends.
