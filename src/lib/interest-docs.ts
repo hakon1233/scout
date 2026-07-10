@@ -50,6 +50,24 @@ export function interestEditorHref(i: Interest): string {
   return `/app/interest?id=${encodeURIComponent(interestKey(i))}`;
 }
 
+// Reconcile the locally-stored interests against the topic list the companion
+// reports. With no companion topics we trust local state verbatim; otherwise the
+// companion list is authoritative for membership/order, reusing the local record
+// (for its id) when a topic matches case-insensitively. Pure — shared by the
+// profile workbench hook and the interest-scope page (previously copied verbatim
+// in both).
+export function mergeInterests(
+  local: Interest[],
+  companionTopics: string[],
+): Interest[] {
+  if (companionTopics.length === 0) return local;
+  const byTopic = new Map(local.map((i) => [i.topic.trim().toLowerCase(), i]));
+  return companionTopics.map((topic) => {
+    const match = byTopic.get(topic.trim().toLowerCase());
+    return match ?? { id: "", topic };
+  });
+}
+
 // Fetch the FULL interest set from the authed GET /v0/interests — real stable
 // ids (so a chat change's `interestId` matches the rendered card), topics, and
 // doc metadata in one round-trip. Returns null when the companion isn't serving
