@@ -106,9 +106,9 @@ function LikedCard({ story }: { story: LikedStory }) {
               </span>
             )}
           </div>
-          <h3 className="font-serif text-title-3 leading-snug text-primary line-clamp-3">
+          <h2 className="font-serif text-title-3 leading-snug text-primary line-clamp-3">
             {story.headline}
-          </h3>
+          </h2>
           {story.blurb && (
             <p className="font-reading text-body-sm text-secondary line-clamp-2">
               {story.blurb}
