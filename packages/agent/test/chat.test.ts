@@ -23,7 +23,12 @@ import {
   type State,
 } from "../src/state.js";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
-import { buildChatPrompt } from "../src/chat.js";
+import {
+  buildChatPrompt,
+  isChatInFlight,
+  readChatTranscript,
+  startChatTurn,
+} from "../src/chat.js";
 import { startServer } from "../src/server.js";
 
 // A spawn() stand-in that returns a fixed text payload (the model's JSON) and
@@ -461,6 +466,18 @@ test("POST /v0/chat/confirm-delete removes the interest + doc and returns a read
       { id: "int_keep01", topic: "ai safety" },
       { id: "int_drop02", topic: "crypto" },
     ],
+    last_chat: {
+      id: "chat_delete_proposal1",
+      created_at: new Date().toISOString(),
+      status: "ready",
+      message: "Drop crypto.",
+      reply: "Want me to remove crypto?",
+      changes: [],
+      pending_delete: {
+        interestId: "int_drop02",
+        topic: "crypto",
+      },
+    },
   });
   await writeInterestDoc("int_drop02", "crypto doc", interestsDir);
 
@@ -509,6 +526,18 @@ test("POST /v0/chat/confirm-delete removes the interest + doc and returns a read
 test("POST /v0/chat/confirm-delete returns 404 for an unknown id (nothing removed)", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_keep01", topic: "ai safety" }],
+    last_chat: {
+      id: "chat_delete_proposal1",
+      created_at: new Date().toISOString(),
+      status: "ready",
+      message: "Drop ai safety.",
+      reply: "Want me to remove ai safety?",
+      changes: [],
+      pending_delete: {
+        interestId: "int_keep01",
+        topic: "ai safety",
+      },
+    },
   });
   const { spawnFn } = makeChatSpawn({ output: "{}", autoClose: true });
 
@@ -532,6 +561,37 @@ test("POST /v0/chat/confirm-delete returns 404 for an unknown id (nothing remove
       (state.interests ?? []).map((i) => i.id),
       ["int_keep01"],
     );
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/chat/confirm-delete returns 404 without a matching pending delete", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_keep01", topic: "ai safety" }],
+  });
+  await writeInterestDoc("int_keep01", "keep doc", interestsDir);
+  const { spawnFn } = makeChatSpawn({ output: "{}", autoClose: true });
+
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/chat/confirm-delete`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interestId: "int_keep01" }),
+    });
+    assert.equal(res.status, 404);
+
+    const state = await loadState(stateFile);
+    assert.deepEqual(state.interests, [{ id: "int_keep01", topic: "ai safety" }]);
+    assert.equal(await readInterestDoc("int_keep01", interestsDir), "keep doc");
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
@@ -838,6 +898,41 @@ test("POST /v0/chat accepts a new turn after a restart leaves only a persisted p
   }
 });
 
+test("startChatTurn clears the in-flight guard if persisting the pending turn fails", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-fail-"));
+  const stateFile = path.join(tmp, "state.json");
+  const unwritableStateFile = path.join(tmp, "as-directory");
+  const interestsDir = path.join(tmp, "interests");
+  await fs.mkdir(unwritableStateFile);
+  await saveState({ pairing_token: newPairingToken() }, stateFile);
+
+  try {
+    await assert.rejects(
+      startChatTurn("hello", { stateFile: unwritableStateFile, interestsDir }),
+    );
+    assert.equal(
+      isChatInFlight(),
+      false,
+      "failed setup must not wedge future chat turns as in-flight",
+    );
+
+    const model = JSON.stringify({ reply: "ok", changes: [] });
+    const { spawnFn } = makeChatSpawn({ output: model, autoClose: true });
+    const { onChatDone, done } = awaitTurn();
+    const outcome = await startChatTurn("hello again", {
+      stateFile,
+      interestsDir,
+      spawnFn,
+      onChatDone,
+    });
+    assert.equal(outcome.started, true);
+    const landed = await done;
+    assert.equal(landed.status, "ready");
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/chat rejects an empty message with 400 and never spawns claude", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded();
   const recorder = makeChatSpawn({ output: "{}", autoClose: true });
@@ -1123,4 +1218,62 @@ test("POST /v0/chat/stop is a no-op for a stale turn id or no in-flight turn (PE
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
+});
+
+// CAR-195: a corrupt-but-present transcript must be preserved, not silently
+// overwritten. Before, readChatTranscript mapped a parse error to [] and the very
+// next append wiped the file — permanent chat-history loss on one bad read.
+test("CAR-195: a corrupt transcript is backed up to .corrupt-*.bak, not wiped", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-corrupt-"));
+  try {
+    const file = path.join(tmp, "transcript.json");
+    const corruptBytes = '[{"id":"chat_1","created_at":"2026-01-01T00:00:00Z" CORRUPT';
+    await fs.writeFile(file, corruptBytes);
+
+    // Corrupt JSON reads as an empty transcript (callers degrade gracefully)...
+    const turns = await readChatTranscript(file);
+    assert.deepEqual(turns, []);
+
+    // ...but the original bytes survive under a .corrupt-*.bak sibling, and the
+    // original path is freed so the next write starts clean instead of clobbering.
+    const siblings = await fs.readdir(tmp);
+    const backup = siblings.find((f) => f.includes(".corrupt-") && f.endsWith(".bak"));
+    assert.ok(backup, "expected a .corrupt-*.bak backup of the unparseable transcript");
+    assert.equal(await fs.readFile(path.join(tmp, backup!), "utf8"), corruptBytes);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// CAR-195: the common no-file case stays quiet (no spurious backup, returns []).
+test("CAR-195: a missing transcript returns [] without creating a backup", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-missing-"));
+  try {
+    const file = path.join(tmp, "transcript.json");
+    assert.deepEqual(await readChatTranscript(file), []);
+    assert.deepEqual(await fs.readdir(tmp), []);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("CAR-146: a non-ENOENT transcript read failure logs and returns []", async () => {
+  const originalError = console.error;
+  const calls: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  try {
+    const file = path.join("/dev/null", "transcript.json");
+    assert.deepEqual(await readChatTranscript(file), []);
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(calls.length, 1);
+  assert.match(
+    String(calls[0][0]),
+    /^\[chat\] transcript .* could not be read:/,
+  );
+  assert.equal((calls[0][1] as NodeJS.ErrnoException).code, "ENOTDIR");
 });

@@ -24,13 +24,23 @@ function slugify(s: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-// Exact-then-fuzzy slug equality, matching BriefView's join so an article whose
-// `interest` the model capitalized/pluralized slightly differently still lands
-// under the right card.
+function singularizeSlug(slug: string): string {
+  return slug
+    .split("-")
+    .map((part) =>
+      part.length > 3 && part.endsWith("s") ? part.slice(0, -1) : part,
+    )
+    .join("-");
+}
+
+// Exact-then-conservative slug equality, matching BriefView's join so an article
+// whose `interest` the model capitalized/pluralized slightly differently still
+// lands under the right card without treating `AI` as a substring match for
+// `OpenAI`.
 function slugMatches(a: string, b: string): boolean {
   if (!a || !b) return false;
   if (a === b) return true;
-  return a.includes(b) || b.includes(a);
+  return singularizeSlug(a) === singularizeSlug(b);
 }
 
 // Dedupe the available briefs by id and order them newest-run-first. Nullish

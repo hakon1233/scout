@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatChange, PendingDelete, PendingRewrite } from "@/lib/chat";
+import { prefersReducedMotion } from "@/lib/motion";
 import {
   ChatActionCard,
   ChatRewriteProposal,
@@ -124,11 +125,8 @@ export function ChatDock({
   onConfirmRewrite: (pr: PendingRewrite, msgId: string) => void;
   onDiscardRewrite: (msgId: string) => void;
 }) {
-  const [draft, setDraft] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
-  const taRef = useRef<HTMLTextAreaElement>(null);
   const [atBottom, setAtBottom] = useState(true);
-  const coarse = useCoarsePointer();
 
   // Only the seeded greeting present → empty-state hero with prompt chips.
   const isEmpty = messages.length <= 1 && messages.every((m) => !m.ts);
@@ -164,29 +162,6 @@ export function ChatDock({
   const onScroll = useCallback(() => {
     setAtBottom(nearBottom());
   }, [nearBottom]);
-
-  // Auto-grow the composer (min ~44px → ~200px, then scroll).
-  const grow = useCallback(() => {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
-  }, []);
-  useEffect(() => {
-    grow();
-  }, [draft, grow]);
-
-  function submit() {
-    const text = draft.trim();
-    if (!text || sending) return;
-    onSend(text);
-    setDraft("");
-    requestAnimationFrame(() => {
-      grow();
-      setAtBottom(true);
-      scrollToBottom("auto");
-    });
-  }
 
   return (
     <section
@@ -331,7 +306,9 @@ export function ChatDock({
           type="button"
           onClick={() => {
             setAtBottom(true);
-            scrollToBottom("smooth");
+            // Smooth scroll is JS-driven, so the global reduced-motion CSS
+            // can't clamp it — honor the preference explicitly here.
+            scrollToBottom(prefersReducedMotion() ? "auto" : "smooth");
           }}
           className="absolute bottom-[120px] left-1/2 -translate-x-1/2 rounded-pill bg-accent px-3.5 py-1.5 font-mono text-[11px] text-accent-fg shadow-lg transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
         >
@@ -339,113 +316,174 @@ export function ChatDock({
         </button>
       )}
 
-      {/* Sticky composer. */}
-      <div
-        className="border-t border-border-default bg-page"
-        style={{
-          paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+      <Composer
+        sending={sending}
+        focusTopic={focusTopic}
+        error={error}
+        onClearFocus={onClearFocus}
+        onSend={onSend}
+        onStop={onStop}
+        onAfterSend={() => {
+          setAtBottom(true);
+          scrollToBottom("auto");
         }}
-      >
-        <div className="mx-auto w-full max-w-[720px] px-4 pt-3 sm:px-6">
-          {(focusTopic || error) && (
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              {focusTopic && (
-                <button
-                  type="button"
-                  onClick={onClearFocus}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-pill border border-signal/40 bg-surface-muted px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.05em] text-signal transition-colors hover:border-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
-                  aria-label={`Editing ${focusTopic} — clear focus to talk about all interests`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="inline-block size-1.5 rounded-full bg-signal"
-                  />
-                  <span className="truncate normal-case tracking-normal">
-                    Editing: {focusTopic}
-                  </span>
-                  <span aria-hidden="true">✕</span>
-                </button>
-              )}
-              {error && (
-                <p role="alert" className="font-mono text-[11px] text-danger">
-                  {error}
-                </p>
-              )}
-            </div>
-          )}
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit();
-            }}
-          >
-            <div className="flex items-end gap-2 rounded-lg border border-border-default bg-surface px-3 py-2 focus-within:border-border-strong">
-              <label htmlFor="scout-composer" className="sr-only">
-                Message Scout
-              </label>
-              <textarea
-                id="scout-composer"
-                ref={taRef}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onInput={grow}
-                onKeyDown={(e) => {
-                  // ⌘/Ctrl+Enter always sends (works on every device).
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault();
-                    submit();
-                    return;
-                  }
-                  // Fine pointers: bare Enter sends, Shift+Enter = newline.
-                  // Coarse pointers (touch): Enter is a newline — send via button.
-                  if (e.key === "Enter" && !e.shiftKey && !coarse) {
-                    e.preventDefault();
-                    submit();
-                  }
-                }}
-                rows={1}
-                placeholder={
-                  focusTopic
-                    ? `Refine “${focusTopic}”…`
-                    : "Message Scout — add, refine, or remove an interest…"
-                }
-                className="max-h-[200px] min-h-[28px] flex-1 resize-none self-center bg-transparent font-reading text-[16px] leading-[1.5] text-primary placeholder:text-muted focus:outline-none"
-              />
-              {sending ? (
-                <button
-                  type="button"
-                  onClick={onStop}
-                  aria-label="Stop"
-                  className="grid size-9 shrink-0 place-items-center rounded-md bg-signal text-[color:var(--accent-fg)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="block size-2.5 rounded-[2px] bg-current"
-                  />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  aria-label="Send"
-                  disabled={!draft.trim()}
-                  className="grid size-9 shrink-0 place-items-center rounded-md bg-accent text-accent-fg transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-40"
-                >
-                  <span aria-hidden="true" className="text-[15px] leading-none">
-                    ↑
-                  </span>
-                </button>
-              )}
-            </div>
-            <p className="mt-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
-              {coarse
-                ? "Tap ↑ to send · Enter for a new line"
-                : "Enter to send · Shift+Enter for a new line"}
-            </p>
-          </form>
-        </div>
-      </div>
+      />
     </section>
+  );
+}
+
+// Owns the composer's own `draft` keystroke state (PER-228/AIR-605): kept out
+// of ChatDock itself so typing doesn't re-render (and re-parse markdown for)
+// the whole message transcript above it.
+function Composer({
+  sending,
+  focusTopic,
+  error,
+  onClearFocus,
+  onSend,
+  onStop,
+  onAfterSend,
+}: {
+  sending: boolean;
+  focusTopic: string | null;
+  error: string | null;
+  onClearFocus: () => void;
+  onSend: (text: string) => void;
+  onStop: () => void;
+  onAfterSend: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const coarse = useCoarsePointer();
+
+  // Auto-grow the composer (min ~44px → ~200px, then scroll).
+  const grow = useCallback(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  }, []);
+  useEffect(() => {
+    grow();
+  }, [draft, grow]);
+
+  function submit() {
+    const text = draft.trim();
+    if (!text || sending) return;
+    onSend(text);
+    setDraft("");
+    requestAnimationFrame(() => {
+      grow();
+      onAfterSend();
+    });
+  }
+
+  return (
+    <div
+      className="border-t border-border-default bg-page"
+      style={{
+        paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+      }}
+    >
+      <div className="mx-auto w-full max-w-[720px] px-4 pt-3 sm:px-6">
+        {(focusTopic || error) && (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {focusTopic && (
+              <button
+                type="button"
+                onClick={onClearFocus}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-pill border border-signal/40 bg-surface-muted px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.05em] text-signal transition-colors hover:border-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                aria-label={`Editing ${focusTopic} — clear focus to talk about all interests`}
+              >
+                <span
+                  aria-hidden="true"
+                  className="inline-block size-1.5 rounded-full bg-signal"
+                />
+                <span className="truncate normal-case tracking-normal">
+                  Editing: {focusTopic}
+                </span>
+                <span aria-hidden="true">✕</span>
+              </button>
+            )}
+            {error && (
+              <p role="alert" className="font-mono text-[11px] text-danger">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <div className="flex items-end gap-2 rounded-lg border border-border-default bg-surface px-3 py-2 focus-within:border-border-strong">
+            <label htmlFor="scout-composer" className="sr-only">
+              Message Scout
+            </label>
+            <textarea
+              id="scout-composer"
+              ref={taRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onInput={grow}
+              onKeyDown={(e) => {
+                // ⌘/Ctrl+Enter always sends (works on every device).
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  submit();
+                  return;
+                }
+                // Fine pointers: bare Enter sends, Shift+Enter = newline.
+                // Coarse pointers (touch): Enter is a newline — send via button.
+                if (e.key === "Enter" && !e.shiftKey && !coarse) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              rows={1}
+              placeholder={
+                focusTopic
+                  ? `Refine “${focusTopic}”…`
+                  : "Message Scout — add, refine, or remove an interest…"
+              }
+              className="max-h-[200px] min-h-[28px] flex-1 resize-none self-center bg-transparent font-reading text-[16px] leading-[1.5] text-primary placeholder:text-muted focus:outline-none"
+            />
+            {sending ? (
+              <button
+                type="button"
+                onClick={onStop}
+                aria-label="Stop"
+                className="grid size-9 shrink-0 place-items-center rounded-md bg-signal text-[color:var(--accent-fg)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+              >
+                <span
+                  aria-hidden="true"
+                  className="block size-2.5 rounded-[2px] bg-current"
+                />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                aria-label="Send"
+                disabled={!draft.trim()}
+                className="grid size-9 shrink-0 place-items-center rounded-md bg-accent text-accent-fg transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-40"
+              >
+                <span aria-hidden="true" className="text-[15px] leading-none">
+                  ↑
+                </span>
+              </button>
+            )}
+          </div>
+          <p className="mt-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
+            {coarse
+              ? "Tap ↑ to send · Enter for a new line"
+              : "Enter to send · Shift+Enter for a new line"}
+          </p>
+        </form>
+      </div>
+    </div>
   );
 }
 

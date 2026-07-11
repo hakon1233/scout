@@ -11,7 +11,10 @@ const WEEKLY_STORY_LIMIT = 10;
 const STORY_BULLET_RE = /^\s*[-*]\s+/;
 const STORY_DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`/;
 const HEADING_RE = /^##\s+(.+?)\s*$/;
-const LINK_RE = /\[[^\]]+\]\((https?:\/\/(?:[^()\s]|\([^()\s]*\))+)\)/g;
+// Non-global: storyUrl only needs the first match, and a `/g` regex carries
+// `lastIndex` state across calls — a footgun that previously required a manual
+// `lastIndex = 0` reset before every `.exec`. Stateless is safer here.
+const LINK_RE = /\[[^\]]+\]\((https?:\/\/(?:[^()\s]|\([^()\s]*\))+)\)/;
 
 type WeeklyStory = {
   topic: string;
@@ -23,9 +26,29 @@ type WeeklyStory = {
 };
 
 function storyUrl(block: string): string | null {
-  LINK_RE.lastIndex = 0;
   const match = LINK_RE.exec(block);
   return match?.[1] ?? null;
+}
+
+// Collapse cosmetic URL variants (hash, query, trailing slash) of the same story
+// to one key. The web app dedupes daily-feed stories and keys likes on exactly
+// this canonicalisation (src/lib/likes.ts canonicalUrl, used by FeedView), so the
+// weekly digest must agree — otherwise the same story cited across two days with
+// a tracking query param (`?utm_source=…`) or a trailing slash slips past the
+// raw-string dedupe and appears twice in one weekly edition. Mirror of that
+// function; kept local because @scout/agent is a zero-dependency package and
+// can't import the web app's client module.
+function canonicalUrl(u: string): string {
+  try {
+    const url = new URL(u);
+    url.hash = "";
+    url.search = "";
+    let s = url.toString();
+    if (s.endsWith("/")) s = s.slice(0, -1);
+    return s;
+  } catch {
+    return u;
+  }
 }
 
 function storyDate(block: string): string | null {
@@ -103,7 +126,7 @@ export function createWeeklyBriefFromHistory(
       return byRun || a.sourceRank - b.sourceRank;
     })
     .filter((story) => {
-      const key = story.url.toLowerCase();
+      const key = canonicalUrl(story.url);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

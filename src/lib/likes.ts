@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
+
 // PER-249: device-local "liked stories" store. A brand-new localStorage store,
 // fully separate from the interests store and from every companion endpoint.
 //
@@ -90,7 +92,12 @@ function parse(raw: string | null): LikesStore {
     // past a bare typeof check and later crash `Object.values(store.likes)` /
     // `key in store.likes`. Reject null explicitly so a corrupted value
     // degrades to EMPTY instead of throwing during render.
-    if (!obj || typeof obj !== "object" || !obj.likes || typeof obj.likes !== "object") {
+    if (
+      !obj ||
+      typeof obj !== "object" ||
+      !obj.likes ||
+      typeof obj.likes !== "object"
+    ) {
       return EMPTY;
     }
     return { version: 1, likes: obj.likes as Record<string, LikedStory> };
@@ -100,8 +107,8 @@ function parse(raw: string | null): LikesStore {
 }
 
 function read(): LikesStore {
-  if (typeof window === "undefined") return EMPTY;
-  const raw = window.localStorage.getItem(LIKES_KEY);
+  const raw = getLocalStorage()?.getItem(LIKES_KEY) ?? null;
+  if (!isClient()) return EMPTY;
   if (raw === cacheRaw) return cache;
   cacheRaw = raw;
   cache = parse(raw);
@@ -109,16 +116,14 @@ function read(): LikesStore {
 }
 
 function write(next: LikesStore): void {
-  if (typeof window === "undefined") return;
+  if (!isClient()) return;
   const raw = JSON.stringify(next);
   cacheRaw = raw;
   cache = next;
-  try {
-    window.localStorage.setItem(LIKES_KEY, raw);
-  } catch {
-    // Quota / private-mode failures: the in-memory cache still reflects the
-    // toggle for this session so the UI stays responsive; it just won't persist.
-  }
+  // Quota / private-mode failures are swallowed by safeSetItem: the in-memory
+  // cache above still reflects the toggle for this session so the UI stays
+  // responsive; it just won't persist.
+  safeSetItem(LIKES_KEY, raw);
   notify();
 }
 
@@ -128,7 +133,7 @@ function notify(): void {
 
 function subscribe(fn: () => void): () => void {
   listeners.add(fn);
-  if (!storageListenerInstalled && typeof window !== "undefined") {
+  if (!storageListenerInstalled && isClient()) {
     storageListenerInstalled = true;
     // Cross-tab consistency: another tab wrote likes → drop our cache so the
     // next read() re-parses, then re-render subscribers.

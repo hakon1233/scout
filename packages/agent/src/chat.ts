@@ -25,19 +25,19 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import {
   loadState,
   saveState,
   newChatTurnId,
   newInterestId,
-  CONFIG_DIR,
   type ChatChange,
   type ChatTurn,
   type Interest,
   type PendingDelete,
   type PendingRewrite,
-  type State,
 } from "./state.js";
+import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
 import {
   readInterestDoc,
   writeInterestDoc,
@@ -100,23 +100,57 @@ export function defaultChatTranscriptFile(stateFile?: string): string {
 export async function readChatTranscript(
   file = defaultChatTranscriptFile(),
 ): Promise<ChatTurn[]> {
+  let raw: string;
   try {
-    const parsed = JSON.parse(await fs.readFile(file, "utf8")) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is ChatTurn => {
-      if (!entry || typeof entry !== "object") return false;
-      const turn = entry as Partial<ChatTurn>;
-      return (
-        typeof turn.id === "string" &&
-        typeof turn.created_at === "string" &&
-        typeof turn.message === "string" &&
-        (turn.status === "pending" ||
-          turn.status === "ready" ||
-          turn.status === "failed")
-      );
-    });
-  } catch {
+    raw = await fs.readFile(file, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error(`[chat] transcript ${file} could not be read:`, err);
+    }
+    // No transcript yet (ENOENT) is the normal first-run state. Other read
+    // failures still degrade gracefully, but are logged so they are diagnosable.
     return [];
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // The file exists and was readable but holds corrupt JSON. Returning [] here
+    // is the dangerous case: the very next appendChatTranscript would overwrite
+    // this file, permanently destroying whatever history it still held. Move the
+    // corrupt bytes aside first so the user's history stays recoverable, THEN
+    // start fresh. Best-effort — if the backup itself fails we still return [].
+    await preserveCorruptTranscript(file);
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((entry): entry is ChatTurn => {
+    if (!entry || typeof entry !== "object") return false;
+    const turn = entry as Partial<ChatTurn>;
+    return (
+      typeof turn.id === "string" &&
+      typeof turn.created_at === "string" &&
+      typeof turn.message === "string" &&
+      (turn.status === "pending" ||
+        turn.status === "ready" ||
+        turn.status === "failed")
+    );
+  });
+}
+
+// Rename a corrupt transcript to a timestamped `.corrupt-<ts>.bak` sibling so the
+// next write starts from a clean file without erasing the unparseable original.
+// Pure best-effort: any failure is swallowed (we log and fall back to truncation,
+// which is no worse than the pre-existing behavior).
+async function preserveCorruptTranscript(file: string): Promise<void> {
+  try {
+    const backup = `${file}.corrupt-${Date.now()}.bak`;
+    await fs.rename(file, backup);
+    console.error(
+      `[chat] transcript ${file} was corrupt; preserved at ${backup} and started fresh`,
+    );
+  } catch (err) {
+    console.error(`[chat] transcript ${file} was corrupt and could not be backed up:`, err);
   }
 }
 
@@ -124,20 +158,47 @@ async function writeChatTranscript(
   turns: ChatTurn[],
   file = defaultChatTranscriptFile(),
 ): Promise<void> {
-  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  await fs.writeFile(file, JSON.stringify(turns, null, 2), { mode: 0o600 });
+  // Atomic temp+rename (shared with state.json): a plain writeFile that tears
+  // mid-write leaves corrupt JSON. The rename can never expose a half-written
+  // transcript, and if a transcript is ever found corrupt anyway readChatTranscript
+  // moves it aside to a `.corrupt-*.bak` rather than letting this write wipe it.
+  await atomicWriteFile(file, JSON.stringify(turns, null, 2));
+}
+
+// In-memory mirror of the on-disk transcript, keyed by file path (there is one
+// live path per running companion process, but tests exercise many distinct
+// tmp paths within a single process). appendChatTranscript is the ONLY writer
+// of a live transcript file, so this cache can safely stand in for a fresh
+// read+parse everywhere except `readChatTranscript` itself, which stays a true
+// disk read for the corrupt-transcript recovery path and the tests exercising
+// it directly. Populated lazily, updated only after a write actually commits
+// (never optimistically) so a failed write can't leave the cache ahead of disk.
+let transcriptCache: { file: string; turns: ChatTurn[] } | undefined;
+
+// GET /v0/chat polls this every 1.2s while a turn is in flight (up to 120s,
+// `src/lib/chat.ts`'s pollChatTurn); without this cache every poll tick paid a
+// full disk read + JSON.parse + shape-validation of the whole, ever-growing
+// transcript just to check one turn's status.
+export async function readChatTranscriptCached(
+  file = defaultChatTranscriptFile(),
+): Promise<ChatTurn[]> {
+  if (transcriptCache?.file === file) return transcriptCache.turns;
+  const turns = await readChatTranscript(file);
+  transcriptCache = { file, turns };
+  return turns;
 }
 
 async function appendChatTranscript(
   turn: ChatTurn,
   file = defaultChatTranscriptFile(),
 ): Promise<void> {
-  const turns = await readChatTranscript(file);
+  const turns = [...(await readChatTranscriptCached(file))];
   const idx = turns.findIndex((t) => t.id === turn.id);
   if (idx === -1) turns.push(turn);
   else turns[idx] = turn;
   turns.sort((a, b) => a.created_at.localeCompare(b.created_at));
   await writeChatTranscript(turns, file);
+  transcriptCache = { file, turns };
 }
 
 export async function buildInterestSnapshots(
@@ -390,8 +451,15 @@ export async function chatComplete(
 
     let stdout = "";
     let stderr = "";
-    child.stdout!.on("data", (b: Buffer) => (stdout += b.toString()));
-    child.stderr!.on("data", (b: Buffer) => (stderr += b.toString()));
+    // Decode through a StringDecoder so a multi-byte UTF-8 char (em dash,
+    // accents, emoji) split across two `data` chunks isn't mangled into
+    // replacement chars — chat replies and persisted intent docs carry such
+    // characters routinely. Per-chunk Buffer.toString() corrupts any codepoint
+    // straddling a chunk boundary.
+    const outDecoder = new StringDecoder("utf8");
+    const errDecoder = new StringDecoder("utf8");
+    child.stdout!.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
+    child.stderr!.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
     child.on("error", (e) =>
       reject(
         new Error(
@@ -401,6 +469,9 @@ export async function chatComplete(
     );
     child.on("close", (code) => {
       opts.signal?.removeEventListener("abort", onAbort);
+      // Flush any bytes the decoder buffered for an incomplete trailing char.
+      stdout += outDecoder.end();
+      stderr += errDecoder.end();
       if (opts.signal?.aborted) return reject(new ChatStoppedError());
       if (code !== 0)
         return reject(
@@ -647,9 +718,21 @@ export async function startChatTurn(
     status: "pending",
     message: trimmed,
   };
-  await saveState({ ...state, last_chat: pending }, deps.stateFile);
+  try {
+    await saveState({ ...state, last_chat: pending }, deps.stateFile);
+  } catch (err) {
+    chatInFlight = false;
+    throw err;
+  }
 
-  void runChatTurn(trimmed, turnId, deps);
+  // Fire-and-forget: runChatTurn lands a `failed` turn for model errors via its
+  // own try/catch, but a throw in the persist/transcript tail (disk error, etc.)
+  // would otherwise escape as an unhandled rejection — invisible to ops and a
+  // process-crash risk under Node's default rejection handling. Log it so a
+  // "my chat silently did nothing" report is diagnosable from stderr.
+  void runChatTurn(trimmed, turnId, deps).catch((err) => {
+    console.error(`[chat] runChatTurn ${turnId} failed to persist:`, err);
+  });
   return { started: true, turnId };
 }
 
@@ -670,30 +753,62 @@ export async function confirmDeleteTurn(
 ): Promise<ConfirmDeleteOutcome> {
   if (chatInFlight) return { ok: false, reason: "in_flight" };
 
-  const state = await loadState(deps.stateFile);
-  const { interests, applied } = await applyConfirmedDelete(
-    state.interests ?? [],
-    interestId,
-    deps.interestsDir,
-  );
-  if (!applied) return { ok: false, reason: "not_found" };
+  // Hold the single-flight guard for the whole critical section. The check above
+  // only refuses when a model turn is ALREADY running; without setting the flag
+  // here a startChatTurn fired mid-confirm would pass its own `chatInFlight`
+  // check and interleave its interest-set write with ours (last-writer-wins =
+  // a silently dropped delete or dropped model change). Reset in `finally` so a
+  // not_found early-return or a throw never wedges the flag on.
+  chatInFlight = true;
+  try {
+    const state = await loadState(deps.stateFile);
+    const pending = state.last_chat?.pending_delete;
+    // The delete route is the stored proposal consumer, not a generic delete-by-id
+    // API. This mirrors confirmRewriteTurn: stale cards or direct route calls must
+    // not bypass the server-side confirmation state.
+    if (!pending || pending.interestId !== interestId) {
+      return { ok: false, reason: "not_found" };
+    }
 
-  const turn: ChatTurn = {
-    id: newChatTurnId(),
-    created_at: new Date().toISOString(),
-    status: "ready",
-    message: `Delete "${applied.topic}"`,
-    reply: `Removed "${applied.topic}" from your interests.`,
-    changes: [applied],
-  };
+    // Reload before mutating + persisting so we don't clobber a concurrent writer
+    // (e.g. a PUT /v0/interests that added a topic, or the scheduler updating
+    // next_run_at), exactly as runChatTurn does. Splice the delete out of the
+    // FRESH interest list, NOT the gate-time snapshot above — persisting the stale
+    // post-delete list would silently revert any interest-set change that landed
+    // between the two loads. Applying against `fresh` also makes a double-confirm
+    // safe: the second call finds the interest already gone and 404s.
+    const fresh = await loadState(deps.stateFile);
+    const { interests, applied } = await applyConfirmedDelete(
+      fresh.interests ?? [],
+      interestId,
+      deps.interestsDir,
+    );
+    if (!applied) return { ok: false, reason: "not_found" };
 
-  // Reload before persisting so we don't clobber a concurrent writer (e.g. the
-  // scheduler updating next_run_at), exactly as runChatTurn does.
-  const fresh = await loadState(deps.stateFile);
-  await saveState({ ...fresh, interests, last_chat: turn }, deps.stateFile);
-  await appendChatTranscript(turn, deps.chatTranscriptFile);
-  deps.onChatDone?.(turn);
-  return { ok: true, turn };
+    const turn: ChatTurn = {
+      id: newChatTurnId(),
+      created_at: new Date().toISOString(),
+      status: "ready",
+      message: `Delete "${applied.topic}"`,
+      reply: `Removed "${applied.topic}" from your interests.`,
+      changes: [applied],
+    };
+
+    await saveState({ ...fresh, interests, last_chat: turn }, deps.stateFile);
+    // The delete is already durable in state.last_chat above; the transcript is a
+    // secondary append-only record. A transient write failure here must NOT turn a
+    // committed delete into a route-level 500 — the client's retry would 404 (the
+    // pending_delete proposal is consumed), leaving the user with an error for an
+    // operation that actually succeeded. Best-effort + logged, matching the
+    // fire-and-forget transcript tail in runChatTurn / startChatTurn.
+    await appendChatTranscript(turn, deps.chatTranscriptFile).catch((err) => {
+      console.error(`[chat] confirm-delete transcript append failed:`, err);
+    });
+    deps.onChatDone?.(turn);
+    return { ok: true, turn };
+  } finally {
+    chatInFlight = false;
+  }
 }
 
 export type ConfirmRewriteOutcome =
@@ -715,42 +830,58 @@ export async function confirmRewriteTurn(
 ): Promise<ConfirmRewriteOutcome> {
   if (chatInFlight) return { ok: false, reason: "in_flight" };
 
-  const state = await loadState(deps.stateFile);
-  const pending = state.last_chat?.pending_rewrite;
-  // The proposal must still be the live one for THIS interest, and the interest
-  // must still exist (it could have been deleted since the proposal).
-  if (!pending || pending.interestId !== interestId) {
-    return { ok: false, reason: "not_found" };
+  // Hold the single-flight guard for the whole critical section — see the note in
+  // confirmDeleteTurn. Without it a startChatTurn fired between this gate and the
+  // saveState below would interleave its `last_chat` write with ours and could
+  // resurrect the consumed pending_rewrite. Reset in `finally`.
+  chatInFlight = true;
+  try {
+    const state = await loadState(deps.stateFile);
+    const pending = state.last_chat?.pending_rewrite;
+    // The proposal must still be the live one for THIS interest, and the interest
+    // must still exist (it could have been deleted since the proposal).
+    if (!pending || pending.interestId !== interestId) {
+      return { ok: false, reason: "not_found" };
+    }
+    const target = (state.interests ?? []).find((i) => i.id === interestId);
+    if (!target) return { ok: false, reason: "not_found" };
+
+    await writeInterestDoc(interestId, pending.doc, deps.interestsDir);
+    const applied: ChatChange = {
+      interestId,
+      op: "update",
+      topic: target.topic,
+      doc: pending.doc,
+    };
+
+    const turn: ChatTurn = {
+      id: newChatTurnId(),
+      created_at: new Date().toISOString(),
+      status: "ready",
+      message: `Apply rewrite of "${target.topic}"`,
+      reply: `Applied the rewrite of "${target.topic}".`,
+      changes: [applied],
+    };
+
+    // Reload before persisting so we don't clobber a concurrent writer (e.g. the
+    // scheduler updating next_run_at), exactly as runChatTurn does. The new turn
+    // replaces the proposal turn in the slot, so the pending_rewrite can't be
+    // re-applied later from a stale card (a second confirm 404s).
+    const fresh = await loadState(deps.stateFile);
+    await saveState({ ...fresh, last_chat: turn }, deps.stateFile);
+    // The rewrite is already durable: the doc was written above and the turn is in
+    // state.last_chat. The transcript is a secondary record — a transient write
+    // failure must NOT surface as a 500 for an operation that committed (the
+    // client's retry would 404, the pending_rewrite being consumed). Best-effort +
+    // logged, matching runChatTurn / startChatTurn's fire-and-forget tail.
+    await appendChatTranscript(turn, deps.chatTranscriptFile).catch((err) => {
+      console.error(`[chat] confirm-rewrite transcript append failed:`, err);
+    });
+    deps.onChatDone?.(turn);
+    return { ok: true, turn };
+  } finally {
+    chatInFlight = false;
   }
-  const target = (state.interests ?? []).find((i) => i.id === interestId);
-  if (!target) return { ok: false, reason: "not_found" };
-
-  await writeInterestDoc(interestId, pending.doc, deps.interestsDir);
-  const applied: ChatChange = {
-    interestId,
-    op: "update",
-    topic: target.topic,
-    doc: pending.doc,
-  };
-
-  const turn: ChatTurn = {
-    id: newChatTurnId(),
-    created_at: new Date().toISOString(),
-    status: "ready",
-    message: `Apply rewrite of "${target.topic}"`,
-    reply: `Applied the rewrite of "${target.topic}".`,
-    changes: [applied],
-  };
-
-  // Reload before persisting so we don't clobber a concurrent writer (e.g. the
-  // scheduler updating next_run_at), exactly as runChatTurn does. The new turn
-  // replaces the proposal turn in the slot, so the pending_rewrite can't be
-  // re-applied later from a stale card (a second confirm 404s).
-  const fresh = await loadState(deps.stateFile);
-  await saveState({ ...fresh, last_chat: turn }, deps.stateFile);
-  await appendChatTranscript(turn, deps.chatTranscriptFile);
-  deps.onChatDone?.(turn);
-  return { ok: true, turn };
 }
 
 async function runChatTurn(
@@ -768,7 +899,7 @@ async function runChatTurn(
       state.interests ?? [],
       deps.interestsDir,
     );
-    const transcript = await readChatTranscript(deps.chatTranscriptFile);
+    const transcript = await readChatTranscriptCached(deps.chatTranscriptFile);
     const output = await chatComplete(message, snapshots, transcript, {
       claudeBin: deps.claudeBin,
       spawnFn: deps.spawnFn,

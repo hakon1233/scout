@@ -46,12 +46,32 @@ export function contentTypeFor(file: string): string {
   return CONTENT_TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream";
 }
 
+// Whether `root` exists is a build-time fact fixed for the whole process
+// lifetime (bundled in prod, absent in dev — see the file-level comment), yet
+// every static request re-`stat`s it, sometimes twice (trailingSlashRedirect,
+// then resolveStatic on fallthrough). Memoized per root path (tests use their
+// own distinct tmp roots, so this can't leak across them).
+const webrootExistsCache = new Map<string, boolean>();
+
 export async function hasWebroot(root: string = WEBROOT): Promise<boolean> {
+  const cached = webrootExistsCache.get(root);
+  if (cached !== undefined) return cached;
+  let exists: boolean;
   try {
     const st = await fs.stat(root);
-    return st.isDirectory();
+    exists = st.isDirectory();
   } catch {
-    return false;
+    exists = false;
+  }
+  webrootExistsCache.set(root, exists);
+  return exists;
+}
+
+function decodePathname(pathname: string): string | null {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return null;
   }
 }
 
@@ -60,11 +80,20 @@ export async function hasWebroot(root: string = WEBROOT): Promise<boolean> {
 // extensionless path also tries `<path>.html`.
 function candidatesFor(pathname: string): string[] {
   // Strip leading slash; default root to index.html.
-  const p = decodeURIComponent(pathname).replace(/^\/+/, "");
+  const decoded = decodePathname(pathname);
+  if (decoded === null) return [];
+  const p = decoded.replace(/^\/+/, "");
   if (p === "") return ["index.html"];
   if (p.endsWith("/")) return [p + "index.html"];
   if (path.extname(p)) return [p];
   return [p + "/index.html", p + ".html"];
+}
+
+// Path-traversal containment guard: a resolved candidate is safe only when it
+// is `root` itself or sits strictly beneath it. Shared by every file-system
+// resolver below so the security predicate can't drift between call sites.
+function isInsideRoot(filePath: string, root: string): boolean {
+  return filePath === root || filePath.startsWith(root + path.sep);
 }
 
 export type StaticHit = { filePath: string; contentType: string; body: Buffer };
@@ -79,7 +108,7 @@ export async function resolveStatic(
   if (!(await hasWebroot(root))) return null;
   for (const rel of candidatesFor(pathname)) {
     const filePath = path.resolve(root, rel);
-    if (filePath !== root && !filePath.startsWith(root + path.sep)) continue;
+    if (!isInsideRoot(filePath, root)) continue;
     try {
       const body = await fs.readFile(filePath);
       return { filePath, contentType: contentTypeFor(filePath), body };
@@ -102,11 +131,12 @@ export async function trailingSlashRedirect(
   root: string = WEBROOT,
 ): Promise<string | null> {
   if (!(await hasWebroot(root))) return null;
-  const p = decodeURIComponent(pathname);
+  const p = decodePathname(pathname);
+  if (p === null) return null;
   if (p === "/" || p.endsWith("/") || path.extname(p)) return null;
   const rel = p.replace(/^\/+/, "") + "/index.html";
   const filePath = path.resolve(root, rel);
-  if (filePath !== root && !filePath.startsWith(root + path.sep)) return null;
+  if (!isInsideRoot(filePath, root)) return null;
   try {
     await fs.access(filePath);
     return pathname + "/";
@@ -126,7 +156,9 @@ export async function resolveAppShellFallback(
   pathname: string,
   root: string = WEBROOT,
 ): Promise<StaticHit | null> {
-  const p = decodeURIComponent(pathname).replace(/^\/+/, "");
+  const decoded = decodePathname(pathname);
+  if (decoded === null) return null;
+  const p = decoded.replace(/^\/+/, "");
   if (path.extname(p)) return null;
   if (p !== "app" && !p.startsWith("app/")) return null;
   return resolveStatic("/app/", root);

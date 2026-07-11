@@ -77,7 +77,12 @@ export function computeCoverage(
     if (raw === undefined) return { topic, status: "missing" as const };
     // Strip the heading line; judge the body.
     const body = raw.replace(/^##\s+.+$/m, "").trim();
-    const hasCitation = /\]\(https?:\/\//.test(body);
+    const hasCitation = body
+      .split("\n")
+      .some(
+        (line) =>
+          !line.trimStart().startsWith("!") && /\]\(https?:\/\//.test(line),
+      );
     const noNews = /_+\s*no fresh news\s*_+/i.test(body);
     if (noNews || !hasCitation) return { topic, status: "empty" as const };
     return { topic, status: "covered" as const };
@@ -221,12 +226,12 @@ function filterStaleStoriesFromBlock(
     }
   }
   if (stories.length === 0) return raw; // no dated bullets to validate
-  const cutoffMs = nowMs - cutoffDays * 24 * 60 * 60 * 1000;
+  const cutoffDate = new Date(nowMs - cutoffDays * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const kept = stories.filter((s) => {
     if (s.date === null) return true; // undated kept as-is
-    const t = Date.parse(s.date); // ISO date → UTC midnight
-    if (!Number.isFinite(t)) return true; // unparseable → keep, don't lose content
-    return t >= cutoffMs; // within the window survives; strictly older drops
+    return s.date >= cutoffDate; // YYYY-MM-DD: lexical == chronological, inclusive
   });
   if (kept.length === stories.length) return raw; // nothing stale ⇒ byte-identical
 

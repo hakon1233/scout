@@ -8,13 +8,13 @@
 // never bloats the hot state file.
 //
 // Storage: `~/.config/scout/interests/<id>.md`, reusing the exact fs hardening
-// state.ts applies to state.json — dir `mkdir {recursive, mode: 0o700}`, file
-// `writeFile {mode: 0o600}` — so docs are owner-only, same as everything else
-// under ~/.config/scout.
+// persistence.ts applies to state.json — dir `mkdir {recursive, mode: 0o700}`,
+// file `writeFile {mode: 0o600}` — so docs are owner-only, same as everything
+// else under ~/.config/scout.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { CONFIG_DIR } from "./state.js";
+import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
 
 export const INTERESTS_DIR = path.join(CONFIG_DIR, "interests");
 
@@ -43,8 +43,7 @@ export async function writeInterestDoc(
   dir = INTERESTS_DIR,
 ): Promise<void> {
   const file = interestDocPath(id, dir);
-  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-  await fs.writeFile(file, content, { mode: 0o600 });
+  await atomicWriteFile(file, content);
 }
 
 // Load an interest's intent doc. Returns null when none exists (never throws on
@@ -87,13 +86,21 @@ export async function deleteInterestDoc(
 // prompt (the PER-139 no-dead-control invariant the whole epic turns on).
 export function defaultInterestDoc(topic: string): string {
   const t = topic.trim();
+  // NB: this text is fed to interestWantsEvergreen (coverage.ts) as the interest's
+  // intent doc. That check is a naive keyword match with no negation awareness, so
+  // this default MUST NOT contain any EVERGREEN_RE trigger word (evergreen,
+  // background, historical/history, retrospective, timeline, explainer, primer,
+  // deep-dive, long-read) — a false positive there disables the >30-day freshness
+  // cutoff (PER-250) for every default-doc interest, exactly the founder's
+  // months-old-stories bug. Keep the "skip old context" intent, worded around
+  // those words. coverage.test.ts pins this invariant (AIR-527).
   return [
     `# ${t}`,
     "",
     `Track recent, notable developments about **${t}**. Surface concrete news —`,
     `announcements, releases, research, and reporting — favoring the last 7 days`,
-    `and primary sources. Skip evergreen background and explainers unless they're`,
-    `tied to something that just happened.`,
+    `and primary sources. Skip general context pieces and older reference material`,
+    `unless they're tied to something that just happened.`,
     "",
   ].join("\n");
 }

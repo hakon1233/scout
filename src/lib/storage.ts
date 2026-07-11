@@ -1,12 +1,13 @@
 "use client";
 
 import type { Brief, Settings } from "./types";
+import { getLocalStorage, safeSetItem } from "./safe-storage";
 
 const SETTINGS_KEY = "scout.settings.v1";
 const BRIEF_KEY = "scout.lastBrief.v1";
-// One-deep recoverable archive of the brief that a user-initiated regenerate
-// replaces (PER-146). Holds exactly the *previous* edition; latest lives in
-// BRIEF_KEY. A third regenerate drops the oldest — honest one-deep history.
+// Legacy one-deep brief archive key (PER-146). The client-side prevBrief
+// rotation was removed (PER-219); no code reads or writes this anymore. Retained
+// only so clearSettings() purges any value left over in older installs.
 const PREV_BRIEF_KEY = "scout.prevBrief.v1";
 
 function safeParse<T>(raw: string | null): T | null {
@@ -18,10 +19,18 @@ function safeParse<T>(raw: string | null): T | null {
   }
 }
 
+// Persist one key via the shared write guard (safe-storage.ts). The guard
+// matters most here because `saveLastBrief` runs inside a `setBrief` updater
+// (app/page.tsx): an unguarded throw would abort the caller *before* its
+// in-memory setState, so the UI would neither persist nor update. Degrading
+// keeps the React state authoritative for the session.
+const safeSet = safeSetItem;
+
 export function loadSettings(): Settings | null {
-  if (typeof window === "undefined") return null;
+  const storage = getLocalStorage();
+  if (!storage) return null;
   const raw = safeParse<Settings & { anthropicKey?: string; exaKey?: string }>(
-    window.localStorage.getItem(SETTINGS_KEY),
+    storage.getItem(SETTINGS_KEY),
   );
   if (!raw) return null;
   // Migration (PER-133): the BYO-key path was removed (PER-109), so old stored
@@ -32,39 +41,27 @@ export function loadSettings(): Settings | null {
 }
 
 export function saveSettings(s: Settings): void {
-  window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  safeSet(SETTINGS_KEY, JSON.stringify(s));
 }
 
 export function loadLastBrief(): Brief | null {
-  if (typeof window === "undefined") return null;
-  return safeParse<Brief>(window.localStorage.getItem(BRIEF_KEY));
+  const storage = getLocalStorage();
+  if (!storage) return null;
+  return safeParse<Brief>(storage.getItem(BRIEF_KEY));
 }
 
 export function saveLastBrief(b: Brief): void {
-  window.localStorage.setItem(BRIEF_KEY, JSON.stringify(b));
+  safeSet(BRIEF_KEY, JSON.stringify(b));
 }
 
 export function clearLastBrief(): void {
-  window.localStorage.removeItem(BRIEF_KEY);
-}
-
-export function loadPrevBrief(): Brief | null {
-  if (typeof window === "undefined") return null;
-  return safeParse<Brief>(window.localStorage.getItem(PREV_BRIEF_KEY));
-}
-
-export function savePrevBrief(b: Brief): void {
-  window.localStorage.setItem(PREV_BRIEF_KEY, JSON.stringify(b));
-}
-
-export function clearPrevBrief(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(PREV_BRIEF_KEY);
+  getLocalStorage()?.removeItem(BRIEF_KEY);
 }
 
 export function clearSettings(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(SETTINGS_KEY);
-  window.localStorage.removeItem(BRIEF_KEY);
-  window.localStorage.removeItem(PREV_BRIEF_KEY);
+  const storage = getLocalStorage();
+  if (!storage) return;
+  storage.removeItem(SETTINGS_KEY);
+  storage.removeItem(BRIEF_KEY);
+  storage.removeItem(PREV_BRIEF_KEY);
 }

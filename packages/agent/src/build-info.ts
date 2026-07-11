@@ -12,8 +12,22 @@
 // via tsx, or a tarball built before this existed — every field degrades to
 // null rather than failing the endpoint.
 
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+// The agent package version served by /healthz, /v0/version and /v0/config.
+// Lives beside the git provenance because it answers the same question ("what
+// exactly is running?"); moved here from server.ts in the PER-274 split so
+// route modules don't have to import the router for a constant.
+// Derived from package.json (not hand-duplicated) so a version bump can't
+// drift from the served /v0/version response — the packed tarball is named
+// after this same field, and a stale hardcode here used to silently 404 the
+// onboarding tarball URL on the Connect page (PER-275).
+const pkgJsonPath = fileURLToPath(new URL("../package.json", import.meta.url));
+const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf8")) as {
+  version: string;
+};
+export const PKG_VERSION = pkgJson.version;
 
 export type BuildInfo = {
   // Full 40-char git SHA of HEAD at build time; "-dirty" suffixed when the
@@ -47,8 +61,9 @@ export function readBuildInfo(
 ): Promise<BuildInfo> {
   let p = cache.get(file);
   if (!p) {
-    p = fs.readFile(file, "utf8").then(
-      (raw) => {
+    p = fs
+      .readFile(file, "utf8")
+      .then((raw) => {
         const parsed = JSON.parse(raw) as Partial<BuildInfo>;
         return {
           git_sha: typeof parsed.git_sha === "string" ? parsed.git_sha : null,
@@ -63,9 +78,13 @@ export function readBuildInfo(
           built_at:
             typeof parsed.built_at === "string" ? parsed.built_at : null,
         };
-      },
-      () => EMPTY,
-    );
+      })
+      // .catch (not a then-reject handler) so a malformed/truncated
+      // build-info.json — JSON.parse throwing — degrades to EMPTY too, not just
+      // a missing-file read rejection. Keeps the "never fail the endpoint"
+      // contract above: /v0/version and /healthz answer 200 with null
+      // provenance instead of 500ing on a corrupt build artifact.
+      .catch(() => EMPTY);
     cache.set(file, p);
   }
   return p;

@@ -2,23 +2,29 @@
 
 import * as React from "react";
 
+import { getLocalStorage, isClient, safeSetItem } from "@/lib/safe-storage";
+
 type Theme = "light" | "dark" | "system";
 
 const STORAGE_KEY = "scout.theme";
+// Same-tab broadcast so every mounted <ThemeToggle> stays in sync. The native
+// `storage` event only fires in OTHER tabs, so two toggles in the SAME document
+// (e.g. the settings page body control + the one in AppNav's profile menu, or the
+// landing page's desktop/mobile pair) would otherwise show a stale selection /
+// wrong `aria-checked` after one of them changes the theme (AIR-527).
+const THEME_EVENT = "scout:theme-change";
 
 function applyTheme(theme: Theme) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
   const prefersDark =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
+    isClient() && window.matchMedia("(prefers-color-scheme: dark)").matches;
   const isDark = theme === "dark" || (theme === "system" && prefersDark);
   root.classList.toggle("dark", isDark);
 }
 
 function readStored(): Theme {
-  if (typeof window === "undefined") return "system";
-  const raw = window.localStorage.getItem(STORAGE_KEY);
+  const raw = getLocalStorage()?.getItem(STORAGE_KEY);
   return raw === "light" || raw === "dark" || raw === "system" ? raw : "system";
 }
 
@@ -26,7 +32,7 @@ export function ThemeToggle({
   showLabels = false,
 }: { showLabels?: boolean } = {}) {
   const [theme, setThemeState] = React.useState<Theme>(() =>
-    typeof window === "undefined" ? "system" : readStored(),
+    isClient() ? readStored() : "system",
   );
   const [mounted, setMounted] = React.useState(false);
 
@@ -38,9 +44,31 @@ export function ThemeToggle({
   const setTheme = React.useCallback((next: Theme) => {
     setThemeState(next);
     applyTheme(next);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, next);
-    } catch {}
+    safeSetItem(STORAGE_KEY, next);
+    // Notify sibling toggles mounted in THIS document (the `storage` event won't).
+    if (isClient()) window.dispatchEvent(new Event(THEME_EVENT));
+  }, []);
+
+  // Keep every mounted toggle's highlight/aria-checked in sync when the theme is
+  // changed elsewhere — another toggle in this tab (THEME_EVENT) or another tab
+  // (native `storage`). Re-read the stored value AND re-apply it so the DOM class
+  // and the highlight never disagree (a same-tab dispatcher already applied it;
+  // a cross-tab change re-applies here, keeping this tab consistent).
+  React.useEffect(() => {
+    const sync = () => {
+      const next = readStored();
+      setThemeState(next);
+      applyTheme(next);
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY || e.key === null) sync();
+    };
+    window.addEventListener(THEME_EVENT, sync);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(THEME_EVENT, sync);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   React.useEffect(() => {

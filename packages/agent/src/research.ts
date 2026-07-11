@@ -10,6 +10,7 @@
 
 import { spawn } from "node:child_process";
 import os from "node:os";
+import { StringDecoder } from "node:string_decoder";
 import { SEARCH_SKILLS } from "./search-skills.js";
 
 // Read and Write are intentionally excluded — a research subprocess has no
@@ -136,8 +137,14 @@ export async function researchAndSynthesize(
       );
     }, timeoutMs);
 
-    child.stdout!.on("data", (b: Buffer) => (stdout += b.toString()));
-    child.stderr!.on("data", (b: Buffer) => (stderr += b.toString()));
+    // Decode through a StringDecoder so a multi-byte UTF-8 char (em dash,
+    // accents, emoji — all common in real news markdown) split across two
+    // `data` chunks isn't mangled into replacement chars. Buffer.toString()
+    // per-chunk would corrupt any codepoint straddling a chunk boundary.
+    const outDecoder = new StringDecoder("utf8");
+    const errDecoder = new StringDecoder("utf8");
+    child.stdout!.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
+    child.stderr!.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
     child.on("error", (e) => {
       if (settled) return;
       settled = true;
@@ -152,6 +159,9 @@ export async function researchAndSynthesize(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      // Flush any bytes the decoder buffered for an incomplete trailing char.
+      stdout += outDecoder.end();
+      stderr += errDecoder.end();
       if (code !== 0)
         return reject(new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`));
       const text = stripBriefPreamble(stdout);
@@ -204,7 +214,11 @@ export function buildResearchPrompt(
   interest: ResearchInterest,
   now: Date = new Date(),
 ): string {
-  const today = now.toISOString().slice(0, 10); // YYYY-MM-DD, anchors "last 7 days".
+  const today = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-"); // Local YYYY-MM-DD, anchors "last 7 days".
   const { topic, doc } = interest;
   const lines: string[] = [];
   lines.push(
@@ -243,15 +257,18 @@ export function buildResearchPrompt(
   lines.push("  SOURCE IMAGE rules above. Omit it when there isn't one — never invent it.");
   lines.push("- Under each story, add the IN-DEPTH BODY as an indented `> …` blockquote");
   lines.push("  per the rules above. The FIRST paragraph must be a short 1-2 sentence");
-  lines.push("  lead summary; the UI renders it in bold. The follow-on paragraphs must");
-  lines.push("  provide deeper insight/analysis, implications, and key specifics grounded");
-  lines.push("  in the same sources. This is what the reader sees only on click; keep the");
-  lines.push("  bullet summary itself to one sentence.");
+  lines.push("  lead summary; the UI renders it in bold. Follow it with 3-5 more");
+  lines.push("  paragraphs of deeper insight/analysis — EACH must add a concrete,");
+  lines.push("  checkable detail (a number, a name, a quote, a mechanism, a specific");
+  lines.push("  consequence) grounded in the same sources, not a restatement of the");
+  lines.push("  lead. This is what the reader sees only on click; keep the bullet");
+  lines.push("  summary itself to one sentence. This depth bar is the SAME for every");
+  lines.push("  topic — broad/general topics get no less depth than narrow ones.");
   lines.push("- If you genuinely can't find anything within the last 30 days, STILL emit");
   lines.push(`  the \`## ${topic}\` heading with a single line \`_no fresh news_\` underneath.`);
   lines.push("- Keep each story's one-line summary tight; the in-depth blockquote body may");
-  lines.push("  run a short bold lead plus deeper follow-on paragraphs. Keep the whole");
-  lines.push("  section under ~650 words.");
+  lines.push("  run a short bold lead plus 3-5 substantive follow-on paragraphs. Keep the");
+  lines.push("  whole section under ~950 words.");
   lines.push("");
   lines.push("Write the section now.");
   return lines.join("\n");
