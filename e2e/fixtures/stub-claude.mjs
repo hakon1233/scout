@@ -18,7 +18,15 @@
 // It also carries a `## topic` heading and a `[domain — Title](url)` citation
 // so the app's parser produces articles + a Sources panel (PER-106).
 
-process.stdin.on("data", () => {});
+// Read the whole prompt synchronously: research.ts/chat.ts always
+// `write(prompt); end()` immediately after spawning us, so blocking here can't
+// deadlock. This replaces an event-driven `.on("data"/"end")` + `setTimeout`
+// fallback that threw `ReferenceError: stdin is not defined` on CI (never
+// reproduced locally, even with an idempotency guard around the callback) —
+// rather than chase that race further, remove it: a single blocking read has
+// no listener/timing path left to race in the first place.
+import { readFileSync } from "node:fs";
+const stdin = readFileSync(0, "utf8");
 
 // Point the canned source image at the companion's OWN loopback origin so it
 // actually loads under the E2E offline guard (which aborts every non-loopback
@@ -184,17 +192,9 @@ function emitChat(prompt) {
   writeOut();
 }
 
-// Guards against a double-invocation: the real `.on("end", emit)` listener and
-// the `setTimeout(emit, 500)` fallback below can BOTH fire on a slow/loaded
-// machine (e.g. a CPU-starved CI runner) if stdin's 'end' event lands after the
-// 500ms fallback has already queued — without this, a second emit() re-parses
-// the same stdin and can double-write/double-exit mid-flight.
-let emitted = false;
-
-function emit() {
-  if (emitted) return;
-  emitted = true;
-  if (stdin.includes(CHAT_MARKER)) return emitChat(stdin);
+if (stdin.includes(CHAT_MARKER)) {
+  emitChat(stdin);
+} else {
   const brief = [
     // Preamble that MUST be stripped before render (PER-113 #1).
     "I have enough to write the brief now.",
@@ -228,9 +228,3 @@ function emit() {
   process.stdout.write(brief);
   process.exit(0);
 }
-
-// Emit once stdin closes (matches how research.ts ends the child's stdin), with
-// a fallback in case stdin is never piped.
-process.stdin.on("end", emit);
-process.stdin.resume();
-setTimeout(emit, 500);
