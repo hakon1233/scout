@@ -35,7 +35,7 @@ const RESEARCH = {
     "RECENCY (the whole point of this brief)",
     "PUBLISH DATES (one per item, mandatory, captured as a field — not buried in link text)",
     "SOURCE IMAGE (one per item, OPTIONAL, handpicked from the source — never invented)",
-    "IN-DEPTH BODY (one per item, render contract for the click-through detail — PER-214/PER-256)",
+    "IN-DEPTH BODY (one per item, render contract for the click-through detail — PER-214/PER-256/PER-265)",
     "SOURCES & QUALITY",
   ],
 };
@@ -46,7 +46,7 @@ const ASSEMBLY = {
     "NEWEST FIRST, ALWAYS",
     "HONEST COVERAGE (covered / nothing-new / didn't-come-back)",
     "FRESHNESS ENFORCED, NOT JUST REQUESTED",
-    "DATED, DEDUPED, SOURCED",
+    "DATED AND SOURCED",
   ],
 };
 
@@ -108,7 +108,7 @@ test("both engine skill sets render with every group, and no group card is empty
   ).toBeVisible();
   await expect(
     page.getByText(
-      "Near-identical stories about the same event are collapsed into a single item.",
+      "Every story carries its real publish date, a one-sentence summary of what",
     ),
   ).toBeVisible();
 
