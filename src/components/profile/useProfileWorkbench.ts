@@ -391,7 +391,18 @@ export function useProfileWorkbench() {
           setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
           clearAbortable(controller);
-          setSending(false);
+          // Only THIS dispatch may clear `sending` — and only if it wasn't
+          // aborted. A stop-then-immediately-send aborts turn A's controller and
+          // starts turn B (which sets sending=true, resets abortedRef). Turn A's
+          // poll doesn't observe the abort until its next loop tick (up to
+          // ~1.2s + a poll fetch later — pollChatTurn only checks signal.aborted
+          // at the top of the loop), so this finally runs AFTER turn B is live.
+          // An unconditional setSending(false) here clobbered turn B's in-flight
+          // state — Stop reverted to Send mid-turn and a resend 409'd. Guarding on
+          // the closure-captured controller.signal.aborted (immune to abortedRef's
+          // reset) mirrors the catch guard above; stop() already set sending=false
+          // for the aborted turn, so nothing is left stuck (AIR-107).
+          if (!controller.signal.aborted) setSending(false);
         }
       })();
     },
