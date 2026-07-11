@@ -540,6 +540,16 @@ export async function chatComplete(
       resolve(stdout);
     });
 
+    // A broken pipe — `claude` closing its stdin read-end before we finish
+    // writing the multi-KB prompt, most likely when it exits immediately during
+    // an outage or usage-limit hit — emits an 'error' on this stream. With no
+    // listener that is an unhandled stream error that crashes the whole loopback
+    // server, abandoning every in-flight brief/chat. Log and swallow: the child's
+    // 'error'/'close' handlers above already settle this promise with the real
+    // cause (the non-zero exit), so no control-flow change is needed here.
+    child.stdin!.on("error", (e: Error) =>
+      console.error(`[chat] claude stdin write failed:`, e.message),
+    );
     child.stdin!.write(prompt);
     child.stdin!.end();
   });
