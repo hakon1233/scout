@@ -214,7 +214,11 @@ export function buildResearchPrompt(
   interest: ResearchInterest,
   now: Date = new Date(),
 ): string {
-  const today = now.toISOString().slice(0, 10); // YYYY-MM-DD, anchors "last 7 days".
+  const today = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-"); // Local YYYY-MM-DD, anchors "last 7 days".
   const { topic, doc } = interest;
   const lines: string[] = [];
   lines.push(
@@ -253,15 +257,18 @@ export function buildResearchPrompt(
   lines.push("  SOURCE IMAGE rules above. Omit it when there isn't one — never invent it.");
   lines.push("- Under each story, add the IN-DEPTH BODY as an indented `> …` blockquote");
   lines.push("  per the rules above. The FIRST paragraph must be a short 1-2 sentence");
-  lines.push("  lead summary; the UI renders it in bold. The follow-on paragraphs must");
-  lines.push("  provide deeper insight/analysis, implications, and key specifics grounded");
-  lines.push("  in the same sources. This is what the reader sees only on click; keep the");
-  lines.push("  bullet summary itself to one sentence.");
+  lines.push("  lead summary; the UI renders it in bold. Follow it with 3-5 more");
+  lines.push("  paragraphs of deeper insight/analysis — EACH must add a concrete,");
+  lines.push("  checkable detail (a number, a name, a quote, a mechanism, a specific");
+  lines.push("  consequence) grounded in the same sources, not a restatement of the");
+  lines.push("  lead. This is what the reader sees only on click; keep the bullet");
+  lines.push("  summary itself to one sentence. This depth bar is the SAME for every");
+  lines.push("  topic — broad/general topics get no less depth than narrow ones.");
   lines.push("- If you genuinely can't find anything within the last 30 days, STILL emit");
   lines.push(`  the \`## ${topic}\` heading with a single line \`_no fresh news_\` underneath.`);
   lines.push("- Keep each story's one-line summary tight; the in-depth blockquote body may");
-  lines.push("  run a short bold lead plus deeper follow-on paragraphs. Keep the whole");
-  lines.push("  section under ~650 words.");
+  lines.push("  run a short bold lead plus 3-5 substantive follow-on paragraphs. Keep the");
+  lines.push("  whole section under ~950 words.");
   lines.push("");
   lines.push("Write the section now.");
   return lines.join("\n");

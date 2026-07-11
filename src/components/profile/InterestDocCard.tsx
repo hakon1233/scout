@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { LazyMarkdown } from "./LazyMarkdown";
 
 // The "just changed" beat fired the instant a chat turn confirms a durable
 // write to this interest's doc. It is the PER-139 no-dead-control proof: the
@@ -186,7 +186,7 @@ export function InterestDocCard({
             </pre>
           ) : (
             <div className="scout-md max-h-64 overflow-auto">
-              <ReactMarkdown components={MD}>{body}</ReactMarkdown>
+              <LazyMarkdown text={body} components={MD} />
             </div>
           )}
           <button

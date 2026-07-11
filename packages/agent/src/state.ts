@@ -345,6 +345,25 @@ async function preserveCorruptState(file: string): Promise<void> {
   }
 }
 
+// List the .corrupt-*.bak recovery files preserveCorruptState left beside the
+// state file, oldest first (names embed a ms timestamp, so lexical sort is
+// chronological). preserveCorruptState is only console-loud, which no one
+// watches for a launchd-managed companion — after a recovery the app just
+// looks freshly unpaired with no explanation. /healthz folds this in (PER-272)
+// so the recovery is visible wherever the companion's health already is.
+export async function listCorruptStateBackups(
+  file = STATE_FILE,
+): Promise<string[]> {
+  const prefix = `${path.basename(file)}.corrupt-`;
+  try {
+    const entries = await fs.readdir(path.dirname(file));
+    return entries.filter((f) => f.startsWith(prefix) && f.endsWith(".bak")).sort();
+  } catch {
+    // Config dir absent — normal first run, nothing was ever recovered.
+    return [];
+  }
+}
+
 export async function saveState(
   state: State,
   file = STATE_FILE,

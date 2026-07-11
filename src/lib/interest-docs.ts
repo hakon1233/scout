@@ -2,6 +2,7 @@
 
 import type { Interest } from "./types";
 import { isServedFromCompanion } from "./companion";
+import { isClient } from "./safe-storage";
 
 // Per-interest "intent doc" metadata (PER-155 C1/C4). The intent doc is the
 // chat-managed markdown that steers an interest's research session; this module
@@ -49,19 +50,35 @@ export function interestEditorHref(i: Interest): string {
   return `/app/interest?id=${encodeURIComponent(interestKey(i))}`;
 }
 
+// Reconcile the locally-stored interests against the topic list the companion
+// reports. With no companion topics we trust local state verbatim; otherwise the
+// companion list is authoritative for membership/order, reusing the local record
+// (for its id) when a topic matches case-insensitively. Pure — shared by the
+// profile workbench hook and the interest-scope page (previously copied verbatim
+// in both).
+export function mergeInterests(
+  local: Interest[],
+  companionTopics: string[],
+): Interest[] {
+  if (companionTopics.length === 0) return local;
+  const byTopic = new Map(local.map((i) => [i.topic.trim().toLowerCase(), i]));
+  return companionTopics.map((topic) => {
+    const match = byTopic.get(topic.trim().toLowerCase());
+    return match ?? { id: "", topic };
+  });
+}
+
 // Fetch the FULL interest set from the authed GET /v0/interests — real stable
 // ids (so a chat change's `interestId` matches the rendered card), topics, and
 // doc metadata in one round-trip. Returns null when the companion isn't serving
 // us same-origin (public host / offline) so the caller can fall back to local
 // settings. `/v0/interests` is authed, so the pairing token is required — an
 // unauthenticated read 401s and the doc indicators silently never light up.
-export async function fetchInterestsFull(
-  token: string,
-): Promise<{
+export async function fetchInterestsFull(token: string): Promise<{
   interests: Interest[];
   meta: Record<string, InterestDocMeta>;
 } | null> {
-  if (typeof window === "undefined") return null;
+  if (!isClient()) return null;
   if (!(await isServedFromCompanion())) return null;
   try {
     const res = await fetch(`${window.location.origin}/v0/interests`, {

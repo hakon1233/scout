@@ -6,6 +6,10 @@ import {
   fetchCompanionInterests,
 } from "@/lib/companion";
 import {
+  useAbortableController,
+  useAbortableEffect,
+} from "@/hooks/useAbortableEffect";
+import {
   confirmDeleteInterest,
   confirmRewriteInterest,
   fetchChatTranscript,
@@ -22,6 +26,7 @@ import {
   mockDocMeta,
   SAMPLE_INTERESTS,
 } from "@/lib/interest-docs";
+import { prefersReducedMotion } from "@/lib/motion";
 import { loadSettings } from "@/lib/storage";
 import type { Interest } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
@@ -40,14 +45,6 @@ import {
   resolveMessage,
   transcriptMessages,
 } from "./useProfileWorkbench.helpers";
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
 
 export function useProfileWorkbench() {
   const [hydrated, setHydrated] = useState(false);
@@ -72,7 +69,8 @@ export function useProfileWorkbench() {
 
   const beatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const streamTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const { startAbortable, clearAbortable, abortCurrent } =
+    useAbortableController();
   const abortedRef = useRef(false);
   // PER-232: the in-flight turn's server id (set once the kick lands) and
   // whether the user pressed Stop before we even had it — so the server-side
@@ -109,49 +107,51 @@ export function useProfileWorkbench() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    if (mockSeed !== null) return;
-    let cancelled = false;
-    (async () => {
-      const tok = await bootstrapCompanionToken();
-      if (cancelled) return;
-      setToken(tok);
-      const transcript = tok ? await fetchChatTranscript(tok) : [];
-      if (cancelled) return;
-      if (transcript.length > 0) {
-        setMessages(transcriptMessages(transcript));
-      }
-      const full = await fetchInterestsFull(tok);
-      if (cancelled) return;
-      if (full && full.interests.length > 0) {
-        setInterests(full.interests);
-        setDocMeta(full.meta);
-        setDocBodies(
-          Object.fromEntries(
-            Object.entries(full.meta)
-              .filter(([, meta]) => typeof meta.body === "string")
-              .map(([key, meta]) => [key, meta.body as string]),
-          ),
-        );
-        return;
-      }
-      const topics = await fetchCompanionInterests();
-      if (cancelled) return;
-      if (topics.length > 0)
-        setInterests((prev) => mergeInterests(prev, topics));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hydrated, mockSeed]);
+  useAbortableEffect(
+    (scope) => {
+      if (!hydrated) return;
+      if (mockSeed !== null) return;
+      (async () => {
+        const tok = await bootstrapCompanionToken();
+        if (scope.cancelled) return;
+        setToken(tok);
+        // transcript + full-interests both depend only on `tok` and are
+        // independent of each other — fetch concurrently instead of in series
+        // to roughly halve first-paint latency.
+        const [transcript, full] = await Promise.all([
+          tok ? fetchChatTranscript(tok) : Promise.resolve([]),
+          fetchInterestsFull(tok),
+        ]);
+        if (scope.cancelled) return;
+        if (transcript.length > 0) {
+          setMessages(transcriptMessages(transcript));
+        }
+        if (full && full.interests.length > 0) {
+          setInterests(full.interests);
+          setDocMeta(full.meta);
+          setDocBodies(
+            Object.fromEntries(
+              Object.entries(full.meta)
+                .filter(([, meta]) => typeof meta.body === "string")
+                .map(([key, meta]) => [key, meta.body as string]),
+            ),
+          );
+          return;
+        }
+        const topics = await fetchCompanionInterests();
+        if (scope.cancelled) return;
+        if (topics.length > 0)
+          setInterests((prev) => mergeInterests(prev, topics));
+      })();
+    },
+    [hydrated, mockSeed],
+  );
 
   useEffect(() => {
     const timers = beatTimers.current;
     return () => {
       Object.values(timers).forEach(clearTimeout);
       if (streamTimer.current) clearInterval(streamTimer.current);
-      abortRef.current?.abort();
     };
   }, []);
 
@@ -325,8 +325,7 @@ export function useProfileWorkbench() {
       abortedRef.current = false;
       turnIdRef.current = null;
       stopRequestedRef.current = false;
-      const controller = new AbortController();
-      abortRef.current = controller;
+      const controller = startAbortable();
 
       (async () => {
         try {
@@ -384,15 +383,19 @@ export function useProfileWorkbench() {
           }
           if (changes) applyChanges(changes, replyAt);
         } catch (e) {
-          if (abortedRef.current) return; // user stopped — not an error
+          // User stopped — not an error. Check THIS dispatch's own controller
+          // (not just the shared abortedRef, which a newly-started dispatch resets
+          // to false): a stop-then-immediately-send would otherwise let the just-
+          // aborted request's rejection surface a spurious error (AIR-527).
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
-          if (abortRef.current === controller) abortRef.current = null;
+          clearAbortable(controller);
           setSending(false);
         }
       })();
     },
-    [token, applyChanges, startStream],
+    [token, applyChanges, startStream, startAbortable, clearAbortable],
   );
 
   const send = useCallback(
@@ -427,7 +430,7 @@ export function useProfileWorkbench() {
   const stop = useCallback(() => {
     abortedRef.current = true;
     stopRequestedRef.current = true;
-    abortRef.current?.abort();
+    abortCurrent();
     // Best-effort server abort: with the turn id when the kick already landed,
     // otherwise stop whatever is in flight (single-flight slot); onKick retries
     // with the concrete id if it arrives after this click.
@@ -438,7 +441,7 @@ export function useProfileWorkbench() {
     }
     setStreamId(null);
     setSending(false);
-  }, [token]);
+  }, [token, abortCurrent]);
 
   // Retry a scout turn: re-run the preceding `you` message without adding a new
   // bubble. We drop the old scout reply (and anything after it) first so the log

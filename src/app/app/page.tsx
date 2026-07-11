@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AgentProgressPanel } from "@/components/AgentProgressPanel";
 import { AppNav } from "@/components/AppNav";
 import { AppSkeleton } from "@/components/AppSkeleton";
@@ -16,12 +16,19 @@ import {
   bootstrapCompanionToken,
   fetchCompanionInterests,
   fetchLatestBrief,
+  fetchRunFailure,
   generateWeeklyBrief,
   loadCompanionToken,
   pingCompanion,
   refreshBriefViaCompanion,
+  type RunFailure,
 } from "@/lib/companion";
+import { formatDate } from "@/lib/format-date";
 import { classifyError, type ClassifiedError } from "@/lib/errors";
+import {
+  useAbortableController,
+  useAbortableEffect,
+} from "@/hooks/useAbortableEffect";
 import { SAMPLE_BRIEF } from "@/lib/sample-brief";
 import {
   loadLastBrief,
@@ -45,7 +52,11 @@ const COMPANION_NOT_PAIRED_MSG =
 // NOT an error, NOT retryable. Prefers the companion's authoritative `topics`;
 // falls back to the legacy client-side `failedTopics` for briefs cached before
 // PER-154 (treated as missing, since the old field meant "didn't come back").
-function coverageBuckets(b: Brief): { missing: string[]; empty: string[] } {
+// Exported (PER-271) so it can be unit-tested directly.
+export function coverageBuckets(b: Brief): {
+  missing: string[];
+  empty: string[];
+} {
   if (b.topics && b.topics.length > 0) {
     return {
       missing: b.topics
@@ -86,6 +97,9 @@ export default function AppPage() {
   const [error, setError] = useState<ClassifiedError | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [companionReady, setCompanionReady] = useState(false);
+  // PER-259 item 1: surfaced "your daily run failed / silently stopped" signal.
+  // Read-only telemetry from the companion; null when the run is healthy.
+  const [runFailure, setRunFailure] = useState<RunFailure | null>(null);
   // PER-222: a single story can be opened from EITHER the current edition or the
   // history pager. We track the origin separately (PER-223 fix) because the two
   // collapse in opposite directions: a current-edition story hides the history
@@ -99,7 +113,8 @@ export default function AppPage() {
   // PER-241: client-side interest filter. null = show all; string = show only
   // articles whose `interest` field matches that topic. Never mutates settings.
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const { startAbortable, clearAbortable, abortCurrent } =
+    useAbortableController();
 
   useEffect(() => {
     // Hydrate from localStorage on mount. Static export means first render runs
@@ -110,132 +125,140 @@ export default function AppPage() {
     setHydrated(true);
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    let cancelled = false;
-    const check = async () => {
-      // When served from the companion, this also auto-adopts the pairing
-      // token from /v0/config so no manual paste is needed.
-      const token = await bootstrapCompanionToken();
-      const ok = token ? await pingCompanion() : false;
-      if (!cancelled) setCompanionReady(ok);
-    };
-    check();
-    const id = setInterval(check, 10_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [hydrated]);
+  useAbortableEffect(
+    (scope) => {
+      if (!hydrated) return;
+      const check = async () => {
+        // When served from the companion, this also auto-adopts the pairing
+        // token from /v0/config so no manual paste is needed.
+        const token = await bootstrapCompanionToken();
+        const ok = token ? await pingCompanion() : false;
+        if (!scope.cancelled) setCompanionReady(ok);
+        // PER-259 item 1: poll run health alongside the reachability ping so a
+        // silently-failed daily run (or a stale feed with no run in >26h) is
+        // surfaced instead of the feed quietly showing yesterday's edition.
+        const failure = ok && token ? await fetchRunFailure(token) : null;
+        if (!scope.cancelled) setRunFailure(failure);
+      };
+      check();
+      // Back off the poll once the companion is confirmed ready. While
+      // unpaired we poll fast (10s) so first pairing feels instant; once ready
+      // we widen to 30s — steady background /healthz traffic and main-thread
+      // wakeups drop 3x for no behaviour change. Drop-out is still detected
+      // within one slow tick: the next check flips companionReady=false,
+      // which re-runs this effect and restores the 10s cadence.
+      const id = setInterval(check, companionReady ? 30_000 : 10_000);
+      return () => {
+        clearInterval(id);
+      };
+    },
+    [hydrated, companionReady],
+  );
 
-  useEffect(() => {
-    // On load, pull the latest ready brief from the paired companion so a brief
-    // generated in a previous session shows immediately — not the hardcoded
-    // example. Only adopt it when it's newer than whatever we cached locally,
-    // and never while a generation is already in flight.
-    if (!hydrated) return;
-    let cancelled = false;
-    (async () => {
-      const token = await bootstrapCompanionToken();
-      if (!token || cancelled) return;
-      const latest = await fetchLatestBrief(token);
-      if (cancelled || !latest || running) return;
-      // Per-topic coverage now rides along on the brief (`latest.topics`),
-      // computed authoritatively by the companion. We no longer reverse-engineer
-      // "failed" topics here via a case-sensitive heading diff — that brittle
-      // match (e.g. "openai" vs the model's "## OpenAI") was the source of the
-      // false "topic didn't come back" reports and the dead Retry (PER-154).
-      setBrief((prev) => {
-        if (prev && prev.generatedAt >= latest.generatedAt) return prev;
-        // PER-146: do NOT rotate scout.prevBrief.v1 here. This adoption is a
-        // non-destructive "show the newest brief on load," not the audited
-        // user-initiated overwrite — only generate() archives the outgoing
-        // brief. Rotating here would clobber a real previous edition with a
-        // brief the user never replaced by hand.
-        saveLastBrief(latest);
-        return latest;
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
+  useAbortableEffect(
+    (scope) => {
+      // On load, pull the latest ready brief from the paired companion so a brief
+      // generated in a previous session shows immediately — not the hardcoded
+      // example. Only adopt it when it's newer than whatever we cached locally,
+      // and never while a generation is already in flight.
+      if (!hydrated) return;
+      (async () => {
+        const token = await bootstrapCompanionToken();
+        if (!token || scope.cancelled) return;
+        const latest = await fetchLatestBrief(token);
+        if (scope.cancelled || !latest || running) return;
+        // Per-topic coverage now rides along on the brief (`latest.topics`),
+        // computed authoritatively by the companion. We no longer reverse-engineer
+        // "failed" topics here via a case-sensitive heading diff — that brittle
+        // match (e.g. "openai" vs the model's "## OpenAI") was the source of the
+        // false "topic didn't come back" reports and the dead Retry (PER-154).
+        setBrief((prev) => {
+          if (prev && prev.generatedAt >= latest.generatedAt) return prev;
+          // PER-146: do NOT rotate scout.prevBrief.v1 here. This adoption is a
+          // non-destructive "show the newest brief on load," not the audited
+          // user-initiated overwrite — only generate() archives the outgoing
+          // brief. Rotating here would clobber a real previous edition with a
+          // brief the user never replaced by hand.
+          saveLastBrief(latest);
+          return latest;
+        });
+      })();
+    },
     // Runs once after hydration; `running` is intentionally read at fire time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated]);
+    [hydrated],
+  );
 
-  useEffect(() => {
-    // PER-157: when this browser has NO locally-saved settings but the companion
-    // (the source of truth) holds the user's interests, adopt them. Without this
-    // the app dead-ends on the setup form — and silently drops the ready brief it
-    // already fetched above — for any browser that didn't do first-run setup here
-    // (cleared storage, a different profile, or a different origin than the one
-    // the companion now serves). The result reads as "Run now doesn't work."
-    // Only fires when nothing is stored locally: a real saved config (with the
-    // user's name + curated interests) always wins and is never overwritten.
-    if (!hydrated) return;
-    if (loadSettings()) return;
-    let cancelled = false;
-    (async () => {
-      const topics = await fetchCompanionInterests();
-      if (cancelled || topics.length === 0) return;
-      // Re-check: the user may have completed setup while this was in flight.
+  useAbortableEffect(
+    (scope) => {
+      // PER-157: when this browser has NO locally-saved settings but the companion
+      // (the source of truth) holds the user's interests, adopt them. Without this
+      // the app dead-ends on the setup form — and silently drops the ready brief it
+      // already fetched above — for any browser that didn't do first-run setup here
+      // (cleared storage, a different profile, or a different origin than the one
+      // the companion now serves). The result reads as "Run now doesn't work."
+      // Only fires when nothing is stored locally: a real saved config (with the
+      // user's name + curated interests) always wins and is never overwritten.
+      if (!hydrated) return;
       if (loadSettings()) return;
-      const adopted: Settings = {
-        name: "",
-        interests: topics.map((topic, i) => ({
-          id: `int_${i}_${topic.slice(0, 12)}`,
-          topic,
-        })),
-      };
-      saveSettings(adopted);
-      setSettings(adopted);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hydrated]);
+      (async () => {
+        const topics = await fetchCompanionInterests();
+        if (scope.cancelled || topics.length === 0) return;
+        // Re-check: the user may have completed setup while this was in flight.
+        if (loadSettings()) return;
+        const adopted: Settings = {
+          name: "",
+          interests: topics.map((topic, i) => ({
+            id: `int_${i}_${topic.slice(0, 12)}`,
+            topic,
+          })),
+        };
+        saveSettings(adopted);
+        setSettings(adopted);
+      })();
+    },
+    [hydrated],
+  );
 
-  useEffect(() => {
-    // PER-191: keep the run-selector's interest list aligned with the companion's
-    // ACTUAL interests. The adoption effect above only seeds an EMPTY browser; a
-    // browser that set up earlier keeps its saved list verbatim, so when the user
-    // later adds/removes/renames interests via the profile chat, `settings.interests`
-    // drifts. The brief (built by the companion) then shows more `## topic` sections
-    // than the run-selector offers chips for — the founder's "way more topics than
-    // what we can filter by." Reconcile topics here (preserving the user's name and
-    // any existing stable ids) so run-selector, brief sections, and the brief filter
-    // all derive from one source of truth. No-op when nothing changed.
-    if (!hydrated) return;
-    const stored = loadSettings();
-    if (!stored || stored.interests.length === 0) return; // empty → adoption handles it
-    let cancelled = false;
-    (async () => {
-      const topics = await fetchCompanionInterests();
-      if (cancelled || topics.length === 0) return;
-      const idByTopic = new Map(
-        stored.interests.map((i) => [i.topic.trim().toLowerCase(), i.id]),
-      );
-      const current = stored.interests.map((i) => i.topic);
-      const sameOrder =
-        current.length === topics.length &&
-        current.every((t, idx) => t === topics[idx]);
-      if (sameOrder) return; // already aligned — nothing to write
-      const reconciled: Settings = {
-        name: stored.name,
-        interests: topics.map((topic, i) => ({
-          id:
-            idByTopic.get(topic.trim().toLowerCase()) ??
-            `int_${i}_${topic.slice(0, 12)}`,
-          topic,
-        })),
-      };
-      saveSettings(reconciled);
-      if (!cancelled) setSettings(reconciled);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hydrated]);
+  useAbortableEffect(
+    (scope) => {
+      // PER-191: keep the run-selector's interest list aligned with the companion's
+      // ACTUAL interests. The adoption effect above only seeds an EMPTY browser; a
+      // browser that set up earlier keeps its saved list verbatim, so when the user
+      // later adds/removes/renames interests via the profile chat, `settings.interests`
+      // drifts. The brief (built by the companion) then shows more `## topic` sections
+      // than the run-selector offers chips for — the founder's "way more topics than
+      // what we can filter by." Reconcile topics here (preserving the user's name and
+      // any existing stable ids) so run-selector, brief sections, and the brief filter
+      // all derive from one source of truth. No-op when nothing changed.
+      if (!hydrated) return;
+      const stored = loadSettings();
+      if (!stored || stored.interests.length === 0) return; // empty → adoption handles it
+      (async () => {
+        const topics = await fetchCompanionInterests();
+        if (scope.cancelled || topics.length === 0) return;
+        const idByTopic = new Map(
+          stored.interests.map((i) => [i.topic.trim().toLowerCase(), i.id]),
+        );
+        const current = stored.interests.map((i) => i.topic);
+        const sameOrder =
+          current.length === topics.length &&
+          current.every((t, idx) => t === topics[idx]);
+        if (sameOrder) return; // already aligned — nothing to write
+        const reconciled: Settings = {
+          name: stored.name,
+          interests: topics.map((topic, i) => ({
+            id:
+              idByTopic.get(topic.trim().toLowerCase()) ??
+              `int_${i}_${topic.slice(0, 12)}`,
+            topic,
+          })),
+        };
+        saveSettings(reconciled);
+        if (!scope.cancelled) setSettings(reconciled);
+      })();
+    },
+    [hydrated],
+  );
 
   // Single brief path: the local Scout companion. The browser→Exa path was
   // removed (PER-109) — it fetched api.exa.ai directly and was CORS-broken.
@@ -269,8 +292,7 @@ export default function AppPage() {
         setError(classifyError(new Error(COMPANION_NOT_PAIRED_MSG)));
         return;
       }
-      const controller = new AbortController();
-      abortRef.current = controller;
+      const controller = startAbortable();
       setRunning(true);
       setCancelable(true);
       setError(null);
@@ -323,10 +345,10 @@ export default function AppPage() {
         setProgress(null);
       } finally {
         setRunning(false);
-        if (abortRef.current === controller) abortRef.current = null;
+        clearAbortable(controller);
       }
     },
-    [settings, brief],
+    [settings, brief, startAbortable, clearAbortable],
   );
 
   // Retry ONLY the topics the model dropped (status "missing"), merging the
@@ -379,8 +401,8 @@ export default function AppPage() {
   }, []);
 
   const cancel = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
+    abortCurrent();
+  }, [abortCurrent]);
 
   if (!hydrated) {
     return (
@@ -478,6 +500,67 @@ export default function AppPage() {
                 >
                   Pair companion →
                 </Link>
+              </span>
+            </Banner>
+          )}
+
+          {/* PER-259 item 1: honestly surface a silently-failed daily run. The
+          PER-258 outage overwrote last_brief with status:"failed" and the feed
+          kept quietly showing yesterday's edition — read as "no run since June
+          18". Now the founder sees a clear banner with the captured reason.
+          Suppressed while a run is in flight or a fresh brief just landed this
+          session (the failure is already resolved), and when an error banner is
+          already speaking for the current action. */}
+          {runFailure && !running && !ranAt && !error && (
+            <Banner tone="warning">
+              <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  {runFailure.kind === "failed" ? (
+                    <>
+                      Today&apos;s brief failed
+                      {runFailure.reason ? (
+                        <>
+                          {" — "}
+                          <span className="font-medium">
+                            {runFailure.reason}
+                          </span>
+                        </>
+                      ) : (
+                        "."
+                      )}{" "}
+                      Scout retries automatically; you can also run it now.
+                      {runFailure.lastSuccessAt && (
+                        <>
+                          {" "}
+                          <span className="text-muted">
+                            Showing your last good brief from{" "}
+                            {formatDate(runFailure.lastSuccessAt)}.
+                          </span>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      No fresh brief in over a day
+                      {runFailure.lastSuccessAt ? (
+                        <>
+                          {" "}
+                          — the last successful run was{" "}
+                          <span className="font-medium">
+                            {formatDate(runFailure.lastSuccessAt)}
+                          </span>
+                          .
+                        </>
+                      ) : (
+                        "."
+                      )}{" "}
+                      Scout may have stopped; try running it now.
+                    </>
+                  )}
+                </span>
+                <Button variant="secondary" size="sm" onClick={runNow}>
+                  Run now
+                </Button>
               </span>
             </Banner>
           )}

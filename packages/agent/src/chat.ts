@@ -36,7 +36,6 @@ import {
   type Interest,
   type PendingDelete,
   type PendingRewrite,
-  type State,
 } from "./state.js";
 import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
 import {
@@ -104,9 +103,12 @@ export async function readChatTranscript(
   let raw: string;
   try {
     raw = await fs.readFile(file, "utf8");
-  } catch {
-    // No transcript yet (ENOENT) is the normal first-run state, and a transient
-    // read blip leaves the file untouched on disk. Either way: nothing to parse.
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error(`[chat] transcript ${file} could not be read:`, err);
+    }
+    // No transcript yet (ENOENT) is the normal first-run state. Other read
+    // failures still degrade gracefully, but are logged so they are diagnosable.
     return [];
   }
   let parsed: unknown;
@@ -163,16 +165,40 @@ async function writeChatTranscript(
   await atomicWriteFile(file, JSON.stringify(turns, null, 2));
 }
 
+// In-memory mirror of the on-disk transcript, keyed by file path (there is one
+// live path per running companion process, but tests exercise many distinct
+// tmp paths within a single process). appendChatTranscript is the ONLY writer
+// of a live transcript file, so this cache can safely stand in for a fresh
+// read+parse everywhere except `readChatTranscript` itself, which stays a true
+// disk read for the corrupt-transcript recovery path and the tests exercising
+// it directly. Populated lazily, updated only after a write actually commits
+// (never optimistically) so a failed write can't leave the cache ahead of disk.
+let transcriptCache: { file: string; turns: ChatTurn[] } | undefined;
+
+// GET /v0/chat polls this every 1.2s while a turn is in flight (up to 120s,
+// `src/lib/chat.ts`'s pollChatTurn); without this cache every poll tick paid a
+// full disk read + JSON.parse + shape-validation of the whole, ever-growing
+// transcript just to check one turn's status.
+export async function readChatTranscriptCached(
+  file = defaultChatTranscriptFile(),
+): Promise<ChatTurn[]> {
+  if (transcriptCache?.file === file) return transcriptCache.turns;
+  const turns = await readChatTranscript(file);
+  transcriptCache = { file, turns };
+  return turns;
+}
+
 async function appendChatTranscript(
   turn: ChatTurn,
   file = defaultChatTranscriptFile(),
 ): Promise<void> {
-  const turns = await readChatTranscript(file);
+  const turns = [...(await readChatTranscriptCached(file))];
   const idx = turns.findIndex((t) => t.id === turn.id);
   if (idx === -1) turns.push(turn);
   else turns[idx] = turn;
   turns.sort((a, b) => a.created_at.localeCompare(b.created_at));
   await writeChatTranscript(turns, file);
+  transcriptCache = { file, turns };
 }
 
 export async function buildInterestSnapshots(
@@ -873,7 +899,7 @@ async function runChatTurn(
       state.interests ?? [],
       deps.interestsDir,
     );
-    const transcript = await readChatTranscript(deps.chatTranscriptFile);
+    const transcript = await readChatTranscriptCached(deps.chatTranscriptFile);
     const output = await chatComplete(message, snapshots, transcript, {
       claudeBin: deps.claudeBin,
       spawnFn: deps.spawnFn,

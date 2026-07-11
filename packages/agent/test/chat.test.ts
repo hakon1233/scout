@@ -1256,3 +1256,24 @@ test("CAR-195: a missing transcript returns [] without creating a backup", async
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
+
+test("CAR-146: a non-ENOENT transcript read failure logs and returns []", async () => {
+  const originalError = console.error;
+  const calls: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  try {
+    const file = path.join("/dev/null", "transcript.json");
+    assert.deepEqual(await readChatTranscript(file), []);
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(calls.length, 1);
+  assert.match(
+    String(calls[0][0]),
+    /^\[chat\] transcript .* could not be read:/,
+  );
+  assert.equal((calls[0][1] as NodeJS.ErrnoException).code, "ENOTDIR");
+});

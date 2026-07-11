@@ -1,7 +1,7 @@
 "use client";
 
-import ReactMarkdown from "react-markdown";
 import { EmptyState } from "@/components/ui";
+import { LazyMarkdown } from "./LazyMarkdown";
 import type { DocCardModel } from "./InterestDocCard";
 
 // PER-236 fix 2: the single-interest "Research scope" detail rendered INSIDE
@@ -122,7 +122,7 @@ export function InterestScopeView({
           <section className="max-w-3xl">
             {model.body ? (
               <div className="scout-md">
-                <ReactMarkdown components={MD}>{model.body}</ReactMarkdown>
+                <LazyMarkdown text={model.body} components={MD} />
               </div>
             ) : model.hasDoc ? (
               <p className="font-reading text-[16px] leading-relaxed text-secondary">

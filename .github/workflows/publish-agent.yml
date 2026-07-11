@@ -13,9 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Version comes from the "packageManager" field in package.json
+      # (pnpm@11.x) — the same pnpm major the lockfile is frozen under. Pinning
+      # an older major here breaks --frozen-lockfile (AIR-624).
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 22
