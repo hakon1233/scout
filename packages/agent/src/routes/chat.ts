@@ -7,7 +7,7 @@
 import {
   confirmDeleteTurn,
   confirmRewriteTurn,
-  readChatTranscript,
+  readChatTranscriptCached,
   startChatTurn,
   stopChatTurn,
 } from "../chat.js";
@@ -143,7 +143,7 @@ export async function handleGetChat(
   sc: ServerContext,
 ): Promise<void> {
   const since = url.searchParams.get("since");
-  const transcript = await readChatTranscript(sc.chatDeps.chatTranscriptFile);
+  const transcript = await readChatTranscriptCached(sc.chatDeps.chatTranscriptFile);
   const last = state.last_chat;
   const byId = new Map(transcript.map((turn) => [turn.id, turn]));
   if (last && !byId.has(last.id)) byId.set(last.id, last);
