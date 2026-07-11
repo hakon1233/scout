@@ -933,6 +933,47 @@ test("startChatTurn clears the in-flight guard if persisting the pending turn fa
   }
 });
 
+test("AIR-540: a hung chat child times out, lands the turn failed, and clears the in-flight guard", async () => {
+  const { tmp, stateFile, interestsDir } = await seeded();
+
+  // A child that never emits `close` (autoClose:false queues `finish` but never
+  // releases it) — the exact hang the per-turn timeout guards against. Without
+  // the timeout, runChatTurn's `finally` never runs and `chatInFlight` stays true
+  // for the process lifetime, 409-ing every later chat request.
+  const { spawnFn, calls } = makeChatSpawn({ output: "", autoClose: false });
+  const { onChatDone, done } = awaitTurn();
+
+  try {
+    const outcome = await startChatTurn("please refine", {
+      stateFile,
+      interestsDir,
+      spawnFn,
+      timeoutMs: 50,
+      onChatDone,
+    });
+    assert.equal(outcome.started, true);
+
+    // `done` resolves only after runChatTurn's `finally` clears chatInFlight, so
+    // awaiting it both settles the turn and releases the module-global guard
+    // before the next test runs.
+    const turn = await done;
+    assert.equal(calls.length, 1, "the turn spawned exactly one claude child");
+    assert.equal(turn.status, "failed", "a hung turn must land failed, not hang forever");
+    assert.match(
+      turn.error_msg ?? "",
+      /timed out after 50ms/,
+      "the failure names the per-turn timeout",
+    );
+    assert.equal(
+      isChatInFlight(),
+      false,
+      "the timeout must release the in-flight guard so later turns aren't 409'd",
+    );
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/chat rejects an empty message with 400 and never spawns claude", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded();
   const recorder = makeChatSpawn({ output: "{}", autoClose: true });
