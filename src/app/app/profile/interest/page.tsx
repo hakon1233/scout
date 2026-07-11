@@ -11,6 +11,7 @@ import {
 import {
   fetchInterestsFull,
   interestKey,
+  mergeInterests,
   mockDocMeta,
   SAMPLE_INTERESTS,
   type InterestDocMeta,
@@ -68,18 +69,6 @@ const MD = {
     />
   ),
 };
-
-function mergeInterests(
-  local: Interest[],
-  companionTopics: string[],
-): Interest[] {
-  if (companionTopics.length === 0) return local;
-  const byTopic = new Map(local.map((i) => [i.topic.trim().toLowerCase(), i]));
-  return companionTopics.map((topic) => {
-    const match = byTopic.get(topic.trim().toLowerCase());
-    return match ?? { id: "", topic };
-  });
-}
 
 function formatDocDate(iso?: string): string {
   if (!iso) return "";

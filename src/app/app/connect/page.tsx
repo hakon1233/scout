@@ -143,7 +143,10 @@ export default function ConnectPage() {
     try {
       await postInterests(interests, tok);
     } catch (err) {
-      setGenMsg(`Could not reach companion: ${String(err)}`);
+      console.error("Failed to post interests to companion", err);
+      setGenMsg(
+        "Could not reach the companion. Make sure `scout-agent run` is running on this machine.",
+      );
       setGenState("error");
       return;
     }
@@ -433,6 +436,7 @@ export default function ConnectPage() {
                   <div className="flex gap-2">
                     <input
                       type="password"
+                      aria-label="Pairing token"
                       autoComplete="off"
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
@@ -475,6 +479,7 @@ export default function ConnectPage() {
               <div className="flex gap-2">
                 <input
                   type="password"
+                  aria-label="Pairing token"
                   autoComplete="off"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}

@@ -4,6 +4,7 @@ import * as React from "react";
 import { AppNav } from "@/components/AppNav";
 import { LikeButton } from "@/components/LikeButton";
 import { FeedImage, faviconFor, formatDate } from "@/components/FeedView";
+import { EmptyState } from "@/components/ui";
 import { useLikedStories, type LikedStory } from "@/lib/likes";
 
 // PER-249: the dedicated "Liked" feed — every story the reader saved, newest
@@ -40,7 +41,7 @@ export default function LikedPage() {
         </header>
 
         {stories.length === 0 ? (
-          <EmptyState />
+          <LikedEmptyState />
         ) : (
           <div className="grid grid-cols-1 gap-4 min-[680px]:grid-cols-2">
             {stories.map((s) => (
@@ -53,29 +54,28 @@ export default function LikedPage() {
   );
 }
 
-function EmptyState() {
+// Uses the shared EmptyState primitive (src/components/ui/EmptyState.tsx)
+// instead of a hand-rolled card, so this stays in sync with every other
+// "nothing here yet" surface in the app.
+function LikedEmptyState() {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-border-default bg-surface px-6 py-12 text-center">
-      <svg
-        viewBox="0 0 24 24"
-        className="size-8 text-muted"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M12 20.25l-7.1-7.02a4.5 4.5 0 0 1 6.36-6.36L12 7.6l.74-.73a4.5 4.5 0 1 1 6.36 6.36L12 20.25z" />
-      </svg>
-      <p className="font-serif text-title-3 text-primary">
-        No liked stories yet
-      </p>
-      <p className="max-w-sm font-reading text-body-sm text-secondary">
-        Tap the heart on any story to save it here. Your liked stories stay on
-        this device and survive new daily briefs.
-      </p>
-    </div>
+    <EmptyState
+      icon={
+        <svg
+          viewBox="0 0 24 24"
+          className="size-8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 20.25l-7.1-7.02a4.5 4.5 0 0 1 6.36-6.36L12 7.6l.74-.73a4.5 4.5 0 1 1 6.36 6.36L12 20.25z" />
+        </svg>
+      }
+      title="No liked stories yet"
+      body="Tap the heart on any story to save it here. Your liked stories stay on this device and survive new daily briefs."
+    />
   );
 }
 

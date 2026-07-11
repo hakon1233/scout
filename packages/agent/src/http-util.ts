@@ -69,20 +69,33 @@ function hostnameFromHostHeader(host: string | undefined): string | null {
   }
 }
 
+// isHostAllowed runs on every single request (server.ts's Host-header gate,
+// ahead of routing), so re-splitting/re-parsing SCOUT_ALLOWED_ORIGINS on every
+// call is wasted work at volume. Cache keyed by the raw env value rather than
+// memoized once at module load: PER-276's test flips SCOUT_ALLOWED_ORIGINS
+// AFTER the server has already started and expects the very next request to
+// see the new value, with no restart — a plain one-shot memo would break that.
+let cachedRawAllowedOrigins: string | undefined;
+let cachedAllowedOriginHostnames: string[] = [];
+
 function extraAllowedOriginHostnames(): string[] {
   const raw = process.env.SCOUT_ALLOWED_ORIGINS;
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .flatMap((origin) => {
-      try {
-        return [normalizeHostname(new URL(origin).hostname)];
-      } catch {
-        return [];
-      }
-    });
+  if (raw === cachedRawAllowedOrigins) return cachedAllowedOriginHostnames;
+  cachedRawAllowedOrigins = raw;
+  cachedAllowedOriginHostnames = !raw
+    ? []
+    : raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .flatMap((origin) => {
+          try {
+            return [normalizeHostname(new URL(origin).hostname)];
+          } catch {
+            return [];
+          }
+        });
+  return cachedAllowedOriginHostnames;
 }
 
 export function isHostAllowed(host: string | undefined): boolean {
