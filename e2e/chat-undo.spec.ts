@@ -39,10 +39,6 @@ async function sendMessage(page: Page, text: string) {
 test("chat Undo on a created interest is a live control: reverses through the confirm-delete route and persists", async ({
   page,
 }) => {
-  test.skip(
-    !!process.env.CI,
-    "AIR-642: stub-claude.mjs crashes deterministically in CI (ReferenceError: stdin is not defined) — test-infra bug, passes locally, tracked for root-cause",
-  );
   await page.goto(`${ORIGIN}/app/interests/`);
   await expect(page.getByLabel("Message Scout")).toBeVisible();
 
