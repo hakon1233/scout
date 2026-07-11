@@ -148,9 +148,15 @@ async function fetchCompanionConfig(): Promise<CompanionConfig | null> {
 export async function bootstrapCompanionToken(): Promise<string> {
   const existing = loadCompanionToken();
   const cfg = await fetchCompanionConfig();
-  if (cfg?.token && cfg.token !== existing) {
-    saveCompanionToken(cfg.token);
-    return cfg.token;
+  // Trim to match saveCompanionToken (which persists token.trim()). Comparing/
+  // returning the raw cfg.token instead would, for a padded token, return a value
+  // that differs from what's stored — a `Bearer abc ` header with trailing space
+  // that can fail server-side auth — and re-save it on every bootstrap because the
+  // trimmed store never equals the padded cfg value (AIR-107).
+  const fromCfg = cfg?.token?.trim();
+  if (fromCfg && fromCfg !== existing) {
+    saveCompanionToken(fromCfg);
+    return fromCfg;
   }
   return existing;
 }
