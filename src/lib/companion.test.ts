@@ -16,7 +16,11 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseArticlesFromMarkdown } from "./companion";
+import {
+  parseArticlesFromMarkdown,
+  resolveLastSuccessBrief,
+} from "./companion";
+import type { Brief } from "./types";
 
 test("empty markdown yields no articles and no interests", () => {
   const { articles, interests } = parseArticlesFromMarkdown("", "b1");
@@ -256,6 +260,46 @@ test("article ids are sequential per brief across topics and stories", () => {
     articles.map((a) => a.id),
     ["b2-0", "b2-1", "b2-2"],
   );
+});
+
+// AIR-644: fetchRunFailure sources the "last good brief from <date>" timestamp
+// via resolveLastSuccessBrief. The single last_brief slot carries no ready brief
+// on a failed/pending run, so it must fall back to the ready-brief history —
+// but only then, to keep the healthy poll tick a single request (AIR-605/617).
+function readyBrief(id: string, generatedAt: string): Brief {
+  return { id, generatedAt, interests: [], articles: [], markdown: "" };
+}
+
+test("AIR-644: a ready slot is returned as the last success WITHOUT fetching history", async () => {
+  const slot = readyBrief("today", "2026-07-11T09:00:00.000Z");
+  let historyCalls = 0;
+  const result = await resolveLastSuccessBrief(slot, async () => {
+    historyCalls += 1;
+    return readyBrief("older", "2026-07-01T09:00:00.000Z");
+  });
+  assert.equal(result, slot);
+  assert.equal(
+    historyCalls,
+    0,
+    "a healthy (ready) slot must not trigger the history round-trip (poll-dedup)",
+  );
+});
+
+test("AIR-644: a failed/pending slot falls back to the newest ready brief from history", async () => {
+  const historic = readyBrief("last-good", "2026-07-10T09:00:00.000Z");
+  let historyCalls = 0;
+  const result = await resolveLastSuccessBrief(null, async () => {
+    historyCalls += 1;
+    return historic;
+  });
+  assert.equal(historyCalls, 1, "an unready slot must consult history exactly once");
+  assert.equal(result, historic);
+  assert.equal(result?.generatedAt, "2026-07-10T09:00:00.000Z");
+});
+
+test("AIR-644: a failed slot with no ready history yields null (no last-success clause)", async () => {
+  const result = await resolveLastSuccessBrief(null, async () => null);
+  assert.equal(result, null);
 });
 
 test("inline markdown emphasis in the blurb is stripped to plain text", () => {
