@@ -509,14 +509,17 @@ function adaptBrief(b: AgentBrief): AppBrief {
   };
 }
 
-// Shared by fetchLatestBrief and fetchRunFailure so both can derive the
-// newest ready brief from a single already-fetched raw list instead of each
-// issuing their own /v0/briefs request (AIR-605).
-// Both callers fetch `since = epoch` (the entire ready-brief history), which
-// only grows over a companion's lifetime — so this ran adaptBrief (a full
-// regex parse of the brief's markdown body) over every ready brief just to
-// keep the single newest one, on every poll tick (AIR-617). Find the winner
-// on the cheap raw `generated_at` field first, then parse only that one.
+// Shared by fetchLatestBrief and fetchRunFailure so both can derive the newest
+// ready brief from an already-fetched raw list instead of each issuing their own
+// /v0/briefs request (AIR-605). Kept cheap: pick the winner on the raw
+// `generated_at` field first, then run adaptBrief (a full markdown regex parse)
+// only on that one, not on every ready brief every poll tick (AIR-617).
+//
+// NOTE (AIR-644): the `?since=` list both callers pass only ever holds the
+// single `last_brief` slot — briefs.ts filters `?since=` to that one slot, never
+// the ready-brief history — so `raw` here is ≤1 element. On a failed/pending slot
+// it therefore carries NO ready brief; fetchRunFailure falls back to
+// fetchBriefHistory (via resolveLastSuccessBrief) for the true last success.
 function newestReadyBrief(raw: AgentBrief[]): AppBrief | null {
   const ready = raw.filter((b) => b.status === "ready" && b.summary_md);
   if (ready.length === 0) return null;
@@ -639,6 +642,21 @@ export function assessRunFailure(input: {
   return null;
 }
 
+// AIR-644: resolve the "last successful brief" for the run-failure banner's
+// "Showing your last good brief from <date>" clause. `pollBriefsRaw(?since=)`
+// returns only the single `last_brief` slot, so on a failed/pending run
+// `slotReady` is null even though ready briefs still exist in history. In that
+// (uncommon, unhealthy) case only, fall back to one page of ready-brief history.
+// `fetchHistoryNewest` is invoked lazily so the healthy path — slot already
+// ready — stays a single request and doesn't undo the AIR-605/AIR-617 poll-dedup.
+export async function resolveLastSuccessBrief(
+  slotReady: AppBrief | null,
+  fetchHistoryNewest: () => Promise<AppBrief | null>,
+): Promise<AppBrief | null> {
+  if (slotReady) return slotReady;
+  return await fetchHistoryNewest();
+}
+
 // Fetch the companion's run health and assess it. Read-only (GET only) — never
 // writes interests or kicks a run. Returns null when healthy or unreachable.
 export async function fetchRunFailure(
@@ -650,7 +668,17 @@ export async function fetchRunFailure(
       fetchSchedule(token).catch(() => null),
     ]);
     const last = rawLast[0];
-    const latestReady = newestReadyBrief(rawLast);
+    // On a failed/pending slot the ?since= poll carries no ready brief, so fall
+    // back to the newest ready brief from history so the banner can honestly
+    // show "last good brief from <date>" (AIR-644). Lazy: the healthy path (slot
+    // ready) never issues the extra request.
+    const lastSuccess = await resolveLastSuccessBrief(
+      newestReadyBrief(rawLast),
+      () =>
+        fetchBriefHistory(token, { limit: 1, offset: 0 }).then(
+          (h) => h.briefs[0] ?? null,
+        ),
+    );
     return assessRunFailure({
       lastStatus: last?.status,
       lastError: last?.error_msg,
@@ -658,7 +686,7 @@ export async function fetchRunFailure(
       scheduleStatus: schedule?.last_run_status ?? null,
       scheduleNote: schedule?.last_run_note ?? null,
       scheduleAt: schedule?.last_run_at ?? null,
-      lastSuccessAt: latestReady?.generatedAt ?? null,
+      lastSuccessAt: lastSuccess?.generatedAt ?? null,
       now: Date.now(),
     });
   } catch {
