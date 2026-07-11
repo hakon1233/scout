@@ -5,6 +5,7 @@
 // only callers — both verbs must apply the exact same rules.
 
 import {
+  loadState,
   saveState,
   reconcileInterests,
   interestTopics,
@@ -122,7 +123,7 @@ export async function handleGetInterests(
 // distinct from POST below, which ALSO kicks a (~5-min) synthesis run.
 // The scheduler reuses whatever is persisted here on its next fire.
 export async function handlePutInterests(
-  { req, res, cors, state }: AuthedRequestContext,
+  { req, res, cors }: AuthedRequestContext,
   sc: ServerContext,
 ): Promise<void> {
   const parsedBody = await parseJsonBody<{
@@ -134,19 +135,28 @@ export async function handlePutInterests(
   const validated = parseInterestsPayload(parsed.interests);
   if (!validated.ok)
     return json(res, validated.status, { error: validated.error }, cors);
+  // Reload the state fresh AFTER the (network-bound) body read, and spread THIS
+  // snapshot — not the auth-time `state` the router loaded before parseJsonBody.
+  // A brief run, chat turn, or scheduler reschedule can complete during the body
+  // read and write last_brief/briefs/last_chat/schedule; spreading the stale
+  // auth-time snapshot would silently revert those concurrent writes (e.g. drop a
+  // brief that just finished). Mirrors the reload-before-persist the runner
+  // (runner.ts) and chat (chat.ts) paths already use. The remaining window (fresh
+  // load → save, both below with no await between) is effectively zero (AIR-107).
+  const fresh = await loadState(sc.stateFile);
   // Wipe guard (PER-240): PUT is replace-all, so a payload missing any
   // currently-saved topic is destructive. Refuse it unless the caller
   // explicitly confirms — additive edits (same set or supersets) pass
   // through untouched.
-  const dropped = droppedTopics(state.interests, validated.interests);
+  const dropped = droppedTopics(fresh.interests, validated.interests);
   if (dropped.length > 0 && parsed.confirm_replace !== true) {
     return json(res, 409, wipeGuardError(dropped), cors);
   }
   // Persist the rich {id, topic} model, preserving each existing topic's
   // id so its intent doc stays attached across an edit (PER-169). The
   // wire response stays a topic string[] for back-compat.
-  const interests = reconcileInterests(state.interests, validated.interests);
-  await saveState({ ...state, interests }, sc.stateFile);
+  const interests = reconcileInterests(fresh.interests, validated.interests);
+  await saveState({ ...fresh, interests }, sc.stateFile);
   json(res, 200, { interests: validated.interests, status: "saved" }, cors);
 }
 
