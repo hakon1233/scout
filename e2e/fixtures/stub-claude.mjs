@@ -187,7 +187,16 @@ function emitChat(prompt) {
   writeOut();
 }
 
+// Guards against a double-invocation: the real `.on("end", emit)` listener and
+// the `setTimeout(emit, 500)` fallback below can BOTH fire on a slow/loaded
+// machine (e.g. a CPU-starved CI runner) if stdin's 'end' event lands after the
+// 500ms fallback has already queued — without this, a second emit() re-parses
+// the same stdin and can double-write/double-exit mid-flight.
+let emitted = false;
+
 function emit() {
+  if (emitted) return;
+  emitted = true;
   if (stdin.includes(CHAT_MARKER)) return emitChat(stdin);
   const brief = [
     // Preamble that MUST be stripped before render (PER-113 #1).
