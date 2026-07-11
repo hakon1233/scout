@@ -169,6 +169,15 @@ export async function researchAndSynthesize(
       resolve(text);
     });
 
+    // A broken pipe — `claude` closing its stdin read-end before we finish
+    // writing the prompt, most likely on an immediate failure/usage-limit exit —
+    // emits an 'error' on this stream. With no listener that is an unhandled
+    // stream error that crashes the whole loopback server mid-run; the
+    // 'error'/'close'/timeout handlers above already settle this promise with the
+    // real cause, so log and swallow rather than change control flow.
+    child.stdin!.on("error", (e: Error) =>
+      console.error(`[research] claude stdin write failed:`, e.message),
+    );
     child.stdin!.write(prompt);
     child.stdin!.end();
   });
