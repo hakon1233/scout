@@ -89,6 +89,11 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
           turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
         pendingDelete: turn.pending_delete,
         pendingRewrite: turn.pending_rewrite,
+        // Persisted pending turns are history, not newly-arrived cards. Keep the
+        // proposal visible after reload, but lock it so the mount focus effect
+        // does not re-arm old confirm controls and steal focus from the composer.
+        deleteResolved: turn.pending_delete ? "cancelled" : undefined,
+        rewriteResolved: turn.pending_rewrite ? "discarded" : undefined,
       });
     } else if (turn.status === "failed" && turn.error_msg) {
       out.push({
