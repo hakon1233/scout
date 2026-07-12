@@ -29,11 +29,15 @@ export type ChatMessage = {
   pendingDelete?: PendingDelete;
   // Whether the founder resolved the pending delete (and how).
   deleteResolved?: DeleteResolution;
+  // Transcript-hydrated proposal cards are historical; they should not yank
+  // focus away from the restored conversation on page load.
+  deleteAutoFocus?: boolean;
   // A confirm-gated full rewrite this turn proposed (PER-235). Renders an
   // [Apply]/[Discard] diff card; the doc is written only on [Apply].
   pendingRewrite?: PendingRewrite;
   // Whether the founder resolved the pending rewrite (and how).
   rewriteResolved?: RewriteResolution;
+  rewriteAutoFocus?: boolean;
   // A turn that failed — offer retry, render quietly.
   failed?: boolean;
 };
@@ -251,6 +255,7 @@ export function ChatDock({
                     <ChatDeleteConfirm
                       pd={m.pendingDelete}
                       resolved={m.deleteResolved}
+                      autoFocus={m.deleteAutoFocus}
                       onConfirm={() => onConfirmDelete(m.pendingDelete!, m.id)}
                       onCancel={() => onCancelDelete(m.id)}
                       disabled={sending}
@@ -262,6 +267,7 @@ export function ChatDock({
                       pr={m.pendingRewrite}
                       prev={m.prev?.[m.pendingRewrite.interestId] ?? null}
                       resolved={m.rewriteResolved}
+                      autoFocus={m.rewriteAutoFocus}
                       onApply={() => onConfirmRewrite(m.pendingRewrite!, m.id)}
                       onDiscard={() => onDiscardRewrite(m.id)}
                       disabled={sending}

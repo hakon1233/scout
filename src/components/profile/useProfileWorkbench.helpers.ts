@@ -64,7 +64,19 @@ export function markdownDemoMessages(): ChatMessage[] {
 // renders: each turn yields a `you` bubble, plus a `scout` bubble when the turn
 // is ready with a reply/change/pending action, or a quiet failure bubble.
 export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
+  const consumedDeleteIds = new Set<string>();
+  const consumedRewriteIds = new Set<string>();
+  for (const turn of turns) {
+    if (turn.status !== "ready" || !turn.changes) continue;
+    for (const ch of turn.changes) {
+      if (ch.op === "delete") consumedDeleteIds.add(ch.interestId);
+      if (ch.op === "update") consumedRewriteIds.add(ch.interestId);
+    }
+  }
+
   return turns.flatMap((turn) => {
+    const pendingDelete = turn.pending_delete;
+    const pendingRewrite = turn.pending_rewrite;
     const out: ChatMessage[] = [
       {
         id: nextMsgId(),
@@ -77,8 +89,8 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
       turn.status === "ready" &&
       (turn.reply ||
         (turn.changes && turn.changes.length > 0) ||
-        turn.pending_delete ||
-        turn.pending_rewrite)
+        pendingDelete ||
+        pendingRewrite)
     ) {
       out.push({
         id: nextMsgId(),
@@ -87,13 +99,18 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
         ts: turn.created_at,
         changes:
           turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
-        pendingDelete: turn.pending_delete,
-        pendingRewrite: turn.pending_rewrite,
-        // Persisted pending turns are history, not newly-arrived cards. Keep the
-        // proposal visible after reload, but lock it so the mount focus effect
-        // does not re-arm old confirm controls and steal focus from the composer.
-        deleteResolved: turn.pending_delete ? "cancelled" : undefined,
-        rewriteResolved: turn.pending_rewrite ? "discarded" : undefined,
+        pendingDelete,
+        deleteResolved:
+          pendingDelete && consumedDeleteIds.has(pendingDelete.interestId)
+            ? "deleted"
+            : undefined,
+        deleteAutoFocus: pendingDelete ? false : undefined,
+        pendingRewrite,
+        rewriteResolved:
+          pendingRewrite && consumedRewriteIds.has(pendingRewrite.interestId)
+            ? "applied"
+            : undefined,
+        rewriteAutoFocus: pendingRewrite ? false : undefined,
       });
     } else if (turn.status === "failed" && turn.error_msg) {
       out.push({
