@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { ChatTurn } from "@/lib/chat";
+import type { ChatMessage } from "./ChatDock";
 import {
   appliedChangeMessage,
+  resolveRetryTarget,
   transcriptMessages,
 } from "./useProfileWorkbench.helpers";
 
@@ -195,4 +197,56 @@ test("appliedChangeMessage returns null when the confirm turn applied nothing", 
   };
 
   assert.equal(appliedChangeMessage(turn, "int_ai", null), null);
+});
+
+// resolveRetryTarget: the pure core of retry(). Previously this logic lived
+// INSIDE a setMessages updater that also scheduled the dispatch — impure, so
+// React's StrictMode double-invoke kicked the turn twice and the second 409'd.
+// Extracting it lets the hook compute the target once, outside any updater, and
+// dispatch exactly once.
+const chat = (id: string, role: ChatMessage["role"], text: string): ChatMessage => ({
+  id,
+  role,
+  text,
+});
+
+test("resolveRetryTarget re-runs the you-message before the scout reply, trimming everything after it", () => {
+  const messages = [
+    chat("m1", "you", "first question"),
+    chat("m2", "scout", "first answer"),
+    chat("m3", "you", "second question"),
+    chat("m4", "scout", "second answer"),
+  ];
+
+  const target = resolveRetryTarget(messages, "m4", null);
+  assert.deepEqual(target?.nextMessages.map((m) => m.id), ["m1", "m2", "m3"]);
+  assert.equal(target?.wire, "second question");
+
+  // Retrying an earlier reply trims back to just before that reply.
+  const earlier = resolveRetryTarget(messages, "m2", null);
+  assert.deepEqual(earlier?.nextMessages.map((m) => m.id), ["m1"]);
+  assert.equal(earlier?.wire, "first question");
+});
+
+test("resolveRetryTarget scope-prefixes the wire when an interest is focused", () => {
+  const messages = [
+    chat("m1", "you", "what changed?"),
+    chat("m2", "scout", "here you go"),
+  ];
+  const target = resolveRetryTarget(messages, "m2", "AI safety");
+  assert.equal(target?.wire, 'Regarding my interest "AI safety": what changed?');
+});
+
+test("resolveRetryTarget returns null when there is nothing safe to re-run", () => {
+  const messages = [
+    chat("m1", "you", "q"),
+    chat("m2", "scout", "a"),
+  ];
+  // Unknown id.
+  assert.equal(resolveRetryTarget(messages, "nope", null), null);
+  // First message (no preceding you-bubble to re-run).
+  assert.equal(resolveRetryTarget(messages, "m1", null), null);
+  // A scout reply with no preceding you-message anywhere above it.
+  const noYou = [chat("m1", "scout", "greeting"), chat("m2", "scout", "a")];
+  assert.equal(resolveRetryTarget(noYou, "m2", null), null);
 });
