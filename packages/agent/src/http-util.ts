@@ -238,7 +238,13 @@ export async function parseJsonBody<T>(
     throw err;
   }
   try {
-    return { ok: true, body: JSON.parse(body || "{}") as T };
+    // A literal JSON `null` body parses to `null` (the `|| "{}"` guard only
+    // catches the empty string — "null" is non-empty). Every caller derefs a
+    // field on `body`, so returning `null` here throws a TypeError in the
+    // handler → 500, instead of the clean 400 an unusable body should get.
+    // Coerce `null` → `{}` so a `null` body reads as "no fields present".
+    const parsed = JSON.parse(body || "{}") as T | null;
+    return { ok: true, body: (parsed ?? {}) as T };
   } catch {
     return { ok: false, status: 400, error: "invalid json" };
   }
