@@ -1,4 +1,5 @@
 import * as React from "react";
+import Image from "next/image";
 
 type ChipProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & {
   href?: string;
@@ -31,7 +32,7 @@ export function Chip({
         <span className="font-medium text-primary">[{index}]</span>
       )}
       {favicon && (
-        <img
+        <Image
           src={favicon}
           alt=""
           width={12}

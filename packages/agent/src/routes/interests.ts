@@ -70,7 +70,10 @@ function parseInterestsPayload(raw: unknown): InterestParse {
 // requires an explicit `confirm_replace: true` token, mirroring the PER-230
 // confirm-delete seam. Case-insensitive to match parseInterestsPayload's dedupe
 // and reconcileInterests' id-preserving match.
-function droppedTopics(saved: State["interests"], incoming: string[]): string[] {
+function droppedTopics(
+  saved: State["interests"],
+  incoming: string[],
+): string[] {
   const incomingKeys = new Set(incoming.map((s) => s.toLowerCase()));
   return interestTopics(saved).filter(
     (t) => !incomingKeys.has(t.toLowerCase()),
@@ -161,7 +164,7 @@ export async function handlePutInterests(
 }
 
 export async function handlePostInterests(
-  { req, res, cors, state }: AuthedRequestContext,
+  { req, res, cors }: AuthedRequestContext,
   sc: ServerContext,
 ): Promise<void> {
   const parsedBody = await parseJsonBody<{
@@ -177,6 +180,12 @@ export async function handlePostInterests(
   if (!validated.ok)
     return json(res, validated.status, { error: validated.error }, cors);
   const topics = validated.interests;
+  // Reload after the body read, matching PUT above. The router's auth-time
+  // `state` may be stale by now if a chat turn, settings save, or another
+  // companion write completed while the request body streamed in. The wipe
+  // guard and rich-id reconciliation must use the latest snapshot so a normal
+  // run never detaches intent docs from their current interest ids.
+  const fresh = await loadState(sc.stateFile);
 
   // Ephemeral / dry-run trigger (PER-218): research the supplied topics
   // and produce a brief WITHOUT persisting them as the founder's saved
@@ -191,7 +200,7 @@ export async function handlePostInterests(
   // the founder's 5 saved interests). Ephemeral runs skip the guard
   // because they persist nothing.
   if (!ephemeral) {
-    const dropped = droppedTopics(state.interests, topics);
+    const dropped = droppedTopics(fresh.interests, topics);
     if (dropped.length > 0 && parsed.confirm_replace !== true) {
       return json(res, 409, wipeGuardError(dropped), cors);
     }
@@ -199,7 +208,7 @@ export async function handlePostInterests(
 
   // Reconcile into the rich {id, topic} model (preserving ids) before the
   // run persists them, so the doc store stays anchored across runs.
-  const interests = reconcileInterests(state.interests, topics);
+  const interests = reconcileInterests(fresh.interests, topics);
 
   // Case-insensitively map a wire topic back to its canonical interest
   // casing, dropping anything not in the current list (no stale/foreign
@@ -259,8 +268,14 @@ export async function handlePostInterests(
     }
     // interests were validated non-empty above, so the only other reason
     // is a run already in flight → 409, echoing the in-flight id.
-    const briefId = outcome.reason === "in_flight" ? outcome.briefId : undefined;
-    return json(res, 409, { error: "brief in progress", brief_id: briefId }, cors);
+    const briefId =
+      outcome.reason === "in_flight" ? outcome.briefId : undefined;
+    return json(
+      res,
+      409,
+      { error: "brief in progress", brief_id: briefId },
+      cors,
+    );
   }
 
   json(res, 202, { brief_id: outcome.briefId, status: "pending" }, cors);

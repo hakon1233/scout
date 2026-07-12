@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { AppNav } from "@/components/AppNav";
 import { LikeButton } from "@/components/LikeButton";
 import { FeedImage, faviconFor, formatDate } from "@/components/FeedView";
@@ -115,7 +116,7 @@ function LikedCard({ story }: { story: LikedStory }) {
             </p>
           )}
           <span className="mt-auto flex items-center gap-2 pr-11 pt-1 text-caption text-muted">
-            <img
+            <Image
               src={faviconFor(story.source)}
               alt=""
               width={16}
