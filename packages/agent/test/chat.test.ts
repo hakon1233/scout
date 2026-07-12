@@ -1318,3 +1318,34 @@ test("CAR-146: a non-ENOENT transcript read failure logs and returns []", async 
   );
   assert.equal((calls[0][1] as NodeJS.ErrnoException).code, "ENOTDIR");
 });
+
+// Bug-hunt regression: a literal JSON `null` body (valid JSON, but not an
+// object) must yield a clean 400, not a 500. Before the parseJsonBody fix,
+// `JSON.parse("null")` returned `null`, which the handler then dereferenced
+// (`parsed.message`) → uncaught TypeError → 500 with a leaked error. Every
+// mutating /v0 route shares parseJsonBody, so exercising one proves the guard.
+test("POST /v0/chat with a literal `null` JSON body returns 400, not 500", async () => {
+  const { stateFile, interestsDir, token } = await seeded();
+  const { spawnFn } = makeChatSpawn({ output: "{}", autoClose: true });
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: "null",
+    });
+    // `null` body → treated as an empty object → "message required" (400).
+    assert.equal(res.status, 400);
+    const parsed = (await res.json()) as { error: string };
+    assert.equal(parsed.error, "message required");
+  } finally {
+    server.close();
+  }
+});
