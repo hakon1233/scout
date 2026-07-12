@@ -617,17 +617,33 @@ export function assessRunFailure(input: {
   //    (schedule.last_run_status). Prefer the brief's captured error; fall back
   //    to the schedule's note.
   if (lastStatus === "failed" || scheduleStatus === "failed") {
-    const reason =
-      cleanFailureReason(lastError) ?? cleanFailureReason(scheduleNote);
-    return {
-      kind: "failed",
-      reason,
-      at:
-        lastStatus === "failed"
-          ? (lastAt ?? undefined)
-          : (scheduleAt ?? lastAt ?? undefined),
-      lastSuccessAt: lastSuccessAt ?? undefined,
-    };
+    const failedAt =
+      lastStatus === "failed" ? (lastAt ?? null) : (scheduleAt ?? lastAt ?? null);
+    // A failure only reflects the CURRENT state if no successful brief is newer
+    // than it. `schedule.last_run_status` is written ONLY by scheduled runs
+    // (runner.ts), so a 07:00 scheduled fire that failed but was superseded by a
+    // successful on-demand "Run now" at 09:00 leaves a STALE "failed" flag —
+    // last_brief is a fresh 09:00 ready brief yet scheduleStatus stays "failed".
+    // Without this guard the feed shows a self-contradictory banner ("Today's
+    // brief failed … showing your last good brief from 09:00") over that fresh
+    // 09:00 brief, and it persists across every reload until the next scheduled
+    // fire overwrites the flag. The failed-last_brief path is unaffected: it IS
+    // the most recent run of any kind, so its lastSuccessAt (from ready history)
+    // is always older and never supersedes it.
+    const supersededByNewerSuccess =
+      lastSuccessAt != null &&
+      failedAt != null &&
+      Date.parse(lastSuccessAt) > Date.parse(failedAt);
+    if (!supersededByNewerSuccess) {
+      const reason =
+        cleanFailureReason(lastError) ?? cleanFailureReason(scheduleNote);
+      return {
+        kind: "failed",
+        reason,
+        at: failedAt ?? undefined,
+        lastSuccessAt: lastSuccessAt ?? undefined,
+      };
+    }
   }
 
   // 2. No successful brief within the staleness window — a silent stop even when
