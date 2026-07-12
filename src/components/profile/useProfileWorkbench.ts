@@ -32,6 +32,7 @@ import type { Interest } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 import {
+  appliedChangeMessage,
   applyDocBodyChange,
   applyDocMetaChange,
   applyInterestChange,
@@ -217,20 +218,29 @@ export function useProfileWorkbench() {
 
   // Confirm a gated delete (PER-230 #1): the deterministic [Delete] press. Hits
   // the no-model confirm-delete route, which actually removes the interest + doc
-  // and returns a ready turn. On success we flash-and-drop the card and mark the
-  // confirm message resolved so it locks to "Removed".
+  // and returns a ready turn. On success we flash-and-drop the card, mark the
+  // confirm message resolved so it locks to "Removed", and append the applied
+  // delete as its own action card so the founder gets a live Undo — same as a
+  // create, and matching what a reload already showed (AIR-611).
   const confirmDelete = useCallback(
     (pd: PendingDelete, msgId: string) => {
       if (sending) return;
       setSending(true);
       setError(null);
+      // Snapshot the doc as it is right now, before the delete drops it, so the
+      // action card diffs it out and undo re-creates it verbatim (AIR-611).
+      const prevBody = docBodiesRef.current[pd.interestId] ?? null;
       (async () => {
         try {
-          await confirmDeleteInterest(pd.interestId, token);
+          const turn = await confirmDeleteInterest(pd.interestId, token);
           flashRemove(pd.interestId);
-          setMessages((prev) =>
-            resolveMessage(prev, msgId, { deleteResolved: "deleted" }),
-          );
+          const card = appliedChangeMessage(turn, pd.interestId, prevBody);
+          setMessages((prev) => {
+            const resolved = resolveMessage(prev, msgId, {
+              deleteResolved: "deleted",
+            });
+            return card ? [...resolved, card] : resolved;
+          });
         } catch (e) {
           setError(e instanceof Error ? e.message : "Couldn't remove that.");
         } finally {
@@ -260,15 +270,26 @@ export function useProfileWorkbench() {
       if (sending) return;
       setSending(true);
       setError(null);
+      // Snapshot the pre-rewrite doc before applyChanges overwrites it, so the
+      // follow-up action card diffs old→new and undo reverts to it verbatim
+      // (AIR-611).
+      const prevBody = docBodiesRef.current[pr.interestId] ?? null;
       (async () => {
         try {
           const turn = await confirmRewriteInterest(pr.interestId, token);
           if (turn.changes && turn.changes.length > 0) {
             applyChanges(turn.changes, new Date().toISOString());
           }
-          setMessages((prev) =>
-            resolveMessage(prev, msgId, { rewriteResolved: "applied" }),
-          );
+          // Append the applied rewrite as its own action card so a confirmed
+          // rewrite gets the same live Undo a create does (AIR-611) — the proposal
+          // card itself just locks to "Applied".
+          const card = appliedChangeMessage(turn, pr.interestId, prevBody);
+          setMessages((prev) => {
+            const resolved = resolveMessage(prev, msgId, {
+              rewriteResolved: "applied",
+            });
+            return card ? [...resolved, card] : resolved;
+          });
         } catch (e) {
           setError(
             e instanceof Error ? e.message : "Couldn't apply that rewrite.",

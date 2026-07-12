@@ -125,6 +125,40 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
   });
 }
 
+// After a confirm-gated rewrite [Apply] or delete [Delete] lands, surface the
+// applied change as its own scout action card — the same shape `dispatch()` gives
+// a live turn and `transcriptMessages()` gives a reloaded one — so a confirmed
+// rewrite/delete gets the exact same live Undo affordance a create does (AIR-611).
+// Before this, confirmRewrite/confirmDelete only marked the proposal card resolved
+// and dropped the confirm turn's `changes` on the floor, so the founder had no
+// in-app way to reverse a confirmed change even though the create path did (and a
+// reload — which projects the same confirm turn through transcriptMessages —
+// already showed the Undo). `prevBody` is the doc as it was just before the
+// confirm, powering the diff and the verbatim undo. Returns null when the turn
+// carried no changes (defensive: a confirm turn always carries exactly one).
+export function appliedChangeMessage(
+  turn: ChatTurn,
+  interestId: string,
+  prevBody: string | null,
+): ChatMessage | null {
+  const changes =
+    turn.changes && turn.changes.length > 0 ? turn.changes : undefined;
+  if (!changes) return null;
+  const prev: Record<string, string | null> = {};
+  for (const ch of changes) {
+    if (ch.interestId)
+      prev[ch.interestId] = ch.interestId === interestId ? prevBody : null;
+  }
+  return {
+    id: nextMsgId(),
+    role: "scout",
+    text: turn.reply ?? "",
+    ts: turn.created_at,
+    changes,
+    prev,
+  };
+}
+
 // Drop a key from a string-keyed record without mutating the input. Returns the
 // same reference when the key is absent so React can bail out of a re-render.
 export function dropKey<T>(
