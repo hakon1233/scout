@@ -63,14 +63,31 @@ export function markdownDemoMessages(): ChatMessage[] {
 // Project a companion transcript into the flat you/scout message log the dock
 // renders: each turn yields a `you` bubble, plus a `scout` bubble when the turn
 // is ready with a reply/change/pending action, or a quiet failure bubble.
+// Signature for a confirmed-rewrite match: a rewrite proposal is "applied" only
+// when a confirm-rewrite turn wrote its EXACT proposed doc. confirmRewriteTurn
+// echoes the stored doc verbatim as the applied `update` change (op:"update",
+// `doc` === pending_rewrite.doc), so we key consumed rewrites on interestId+doc.
+// The NUL separator can't appear in an `int_…` id, so pairs never collide.
+function rewriteSig(interestId: string, doc: string | undefined): string {
+  return `${interestId}\u0000${doc ?? ""}`;
+}
+
 export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
   const consumedDeleteIds = new Set<string>();
-  const consumedRewriteIds = new Set<string>();
+  // Deletes may key on interestId alone: an `op:"delete"` change ONLY ever comes
+  // from confirmDeleteTurn (model turns gate deletes and never apply one), so a
+  // delete change for an id ⟺ that exact delete was confirmed. A rewrite can't
+  // use the same shortcut: `op:"update"` is overloaded — it's produced by both a
+  // confirm-rewrite AND an ordinary incremental refine — so keying rewrites on
+  // interestId alone wrongly locked a still-pending proposal to "applied" the
+  // moment the interest got any unrelated update, stripping the user's [Apply].
+  const consumedRewriteSigs = new Set<string>();
   for (const turn of turns) {
     if (turn.status !== "ready" || !turn.changes) continue;
     for (const ch of turn.changes) {
       if (ch.op === "delete") consumedDeleteIds.add(ch.interestId);
-      if (ch.op === "update") consumedRewriteIds.add(ch.interestId);
+      if (ch.op === "update")
+        consumedRewriteSigs.add(rewriteSig(ch.interestId, ch.doc));
     }
   }
 
@@ -107,7 +124,10 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
         deleteAutoFocus: pendingDelete ? false : undefined,
         pendingRewrite,
         rewriteResolved:
-          pendingRewrite && consumedRewriteIds.has(pendingRewrite.interestId)
+          pendingRewrite &&
+          consumedRewriteSigs.has(
+            rewriteSig(pendingRewrite.interestId, pendingRewrite.doc),
+          )
             ? "applied"
             : undefined,
         rewriteAutoFocus: pendingRewrite ? false : undefined,

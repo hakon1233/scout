@@ -100,6 +100,49 @@ test("transcriptMessages locks hydrated rewrite proposals consumed by a later ap
   assert.equal(scoutMessage?.rewriteAutoFocus, false);
 });
 
+test("transcriptMessages keeps an unconfirmed rewrite actionable after an unrelated incremental update to the same interest", () => {
+  // A rewrite proposal locks to "applied" only when its EXACT proposed doc was
+  // confirmed (confirmRewriteTurn echoes it as the applied update's `doc`). A
+  // NORMAL incremental `update` — different doc, never an apply of this rewrite —
+  // must NOT lock the still-pending proposal, or reload would strip the [Apply]
+  // button and dishonestly claim a rewrite the user never ran.
+  const turns: ChatTurn[] = [
+    {
+      id: "turn_1",
+      created_at: "2026-07-11T12:00:00.000Z",
+      status: "ready",
+      message: "Rewrite AI from scratch about policy",
+      reply: "Here's a full rewrite — review and Apply below.",
+      pending_rewrite: {
+        interestId: "int_ai",
+        topic: "AI",
+        doc: "# AI\n\nFull rewrite focused on policy.",
+      },
+    },
+    {
+      id: "turn_2",
+      created_at: "2026-07-11T12:05:00.000Z",
+      status: "ready",
+      message: "also add a note about chip export controls",
+      reply: "Added a note about chip export controls.",
+      // Incremental refine — a DIFFERENT doc than the pending rewrite above.
+      changes: [
+        {
+          interestId: "int_ai",
+          op: "update",
+          topic: "AI",
+          doc: "# AI\n\nExisting doc plus a chip export controls note.",
+        },
+      ],
+    },
+  ];
+
+  const rewriteCard = transcriptMessages(turns).find((m) => m.pendingRewrite);
+
+  assert.equal(rewriteCard?.pendingRewrite?.interestId, "int_ai");
+  assert.equal(rewriteCard?.rewriteResolved, undefined);
+});
+
 test("appliedChangeMessage surfaces a confirmed rewrite as an undoable action card (AIR-611)", () => {
   const turn: ChatTurn = {
     id: "turn_apply",
