@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import type { Article, Brief } from "@/lib/types";
 import { canonicalUrl, type LikeInput } from "@/lib/likes";
 import { LikeButton } from "@/components/LikeButton";
@@ -261,7 +262,7 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 text-body-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
         >
-          <img
+          <Image
             src={faviconFor(item.source)}
             alt=""
             width={16}
@@ -293,6 +294,7 @@ export function FeedImage({
   // referrerPolicy="no-referrer" so referer-checking CDNs (Crunchbase etc.) that
   // 403 a request carrying our ts.net origin still serve the image (PER-217).
   return (
+    // eslint-disable-next-line @next/next/no-img-element -- Arbitrary source images need no-referrer and graceful unknown-host fallback; next/image requires host policy we cannot predict.
     <img
       src={src}
       alt=""
