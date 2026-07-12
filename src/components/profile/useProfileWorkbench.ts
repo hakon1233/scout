@@ -44,6 +44,7 @@ import {
   mergeInterests,
   nextMsgId,
   resolveMessage,
+  resolveRetryTarget,
   transcriptMessages,
 } from "./useProfileWorkbench.helpers";
 
@@ -79,12 +80,20 @@ export function useProfileWorkbench() {
   const turnIdRef = useRef<string | null>(null);
   const stopRequestedRef = useRef(false);
   const docBodiesRef = useRef<Record<string, string>>({});
+  const messagesRef = useRef<ChatMessage[]>([]);
 
   // Mirror docBodies into a ref so `send` can read the pre-change body for the
   // diff/undo without re-binding on every keystroke-driven body update.
   useEffect(() => {
     docBodiesRef.current = docBodies;
   }, [docBodies]);
+
+  // Mirror messages into a ref so `retry` can read the current log to compute
+  // its target OUTSIDE a setMessages updater (see resolveRetryTarget) without
+  // re-binding the callback on every message append.
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -477,27 +486,23 @@ export function useProfileWorkbench() {
 
   // Retry a scout turn: re-run the preceding `you` message without adding a new
   // bubble. We drop the old scout reply (and anything after it) first so the log
-  // stays one-reply-per-turn.
+  // stays one-reply-per-turn. Compute the target from the ref and dispatch ONCE
+  // here — NOT from inside a setMessages updater. React may invoke an updater
+  // more than once (StrictMode double-invokes it in dev), so the old
+  // `queueMicrotask(() => dispatch(wire))` inside the updater kicked the turn
+  // twice; the second kick hit the companion's single-flight slot and 409'd,
+  // surfacing a spurious "still working on your last message" error after a
+  // single Retry click.
   const retry = useCallback(
     (scoutId: string) => {
       if (sending) return;
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === scoutId);
-        if (idx <= 0) return prev;
-        let youIdx = idx - 1;
-        while (youIdx >= 0 && prev[youIdx].role !== "you") youIdx--;
-        if (youIdx < 0) return prev;
-        const youText = prev[youIdx].text;
-        const focusTopic = focusKey
-          ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
-          : null;
-        const wire = focusTopic
-          ? `Regarding my interest "${focusTopic}": ${youText}`
-          : youText;
-        // Defer the dispatch out of the updater.
-        queueMicrotask(() => dispatch(wire));
-        return prev.slice(0, idx);
-      });
+      const focusTopic = focusKey
+        ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
+        : null;
+      const target = resolveRetryTarget(messagesRef.current, scoutId, focusTopic);
+      if (!target) return;
+      setMessages(target.nextMessages);
+      dispatch(target.wire);
     },
     [sending, focusKey, interests, dispatch],
   );

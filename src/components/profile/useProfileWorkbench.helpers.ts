@@ -179,6 +179,31 @@ export function appliedChangeMessage(
   };
 }
 
+// Pure core of retry(): given the current message log and the scout reply the
+// user asked to re-run, find the `you` message that produced it, and return the
+// trimmed log (everything up to but excluding that scout reply) plus the wire
+// text to re-dispatch. Returns null when there's nothing safe to re-run (the id
+// is unknown, it's the first message, or no `you` bubble precedes it). Kept pure
+// so the hook can compute it OUTSIDE a setMessages updater and dispatch exactly
+// once — scheduling the dispatch from inside the updater double-kicked the turn
+// under React's StrictMode double-invoke (the second kick 409'd).
+export function resolveRetryTarget(
+  messages: ChatMessage[],
+  scoutId: string,
+  focusTopic: string | null,
+): { nextMessages: ChatMessage[]; wire: string } | null {
+  const idx = messages.findIndex((m) => m.id === scoutId);
+  if (idx <= 0) return null;
+  let youIdx = idx - 1;
+  while (youIdx >= 0 && messages[youIdx].role !== "you") youIdx--;
+  if (youIdx < 0) return null;
+  const youText = messages[youIdx].text;
+  const wire = focusTopic
+    ? `Regarding my interest "${focusTopic}": ${youText}`
+    : youText;
+  return { nextMessages: messages.slice(0, idx), wire };
+}
+
 // Drop a key from a string-keyed record without mutating the input. Returns the
 // same reference when the key is absent so React can bail out of a re-render.
 export function dropKey<T>(
