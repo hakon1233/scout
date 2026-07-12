@@ -118,12 +118,17 @@ function read(): LikesStore {
 function write(next: LikesStore): void {
   if (!isClient()) return;
   const raw = JSON.stringify(next);
-  cacheRaw = raw;
   cache = next;
   // Quota / private-mode failures are swallowed by safeSetItem: the in-memory
   // cache above still reflects the toggle for this session so the UI stays
   // responsive; it just won't persist.
   safeSetItem(LIKES_KEY, raw);
+  // Point cacheRaw at what localStorage ACTUALLY holds now, not at what we tried
+  // to write. On a successful persist that's `raw`; on a swallowed persist it's
+  // the pre-toggle value. Either way read()'s `raw === cacheRaw` guard now keeps
+  // the optimistic `cache` above instead of re-parsing storage and silently
+  // reverting the toggle for the session (Safari private mode / quota exceeded).
+  cacheRaw = getLocalStorage()?.getItem(LIKES_KEY) ?? null;
   notify();
 }
 
