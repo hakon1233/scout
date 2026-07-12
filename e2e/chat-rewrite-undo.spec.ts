@@ -4,20 +4,20 @@ import { expect, test, type Page } from "@playwright/test";
 // (PER-139 no-dead-control)? chat-actions.spec proves the [Apply]/[Discard]
 // proposal card is a real control (Apply hits the deterministic confirm-rewrite
 // route and the card locks to "Applied"). chat-undo.spec proves the CREATE op's
-// Undo is live. Neither ever checks whether pressing Apply on a rewrite leaves
-// the founder with any way to reverse it — this spec presses that gap.
+// Undo is live. This spec presses the gap they leave: after pressing Apply, can
+// the founder still reverse the rewrite in-app?
 //
-// Root cause read from source (src/components/profile/useProfileWorkbench.ts):
-// `dispatch()` (the live-turn path) attaches BOTH `changes` and a `prev` doc
-// snapshot to the new scout message, which is what lets ChatDock render a
-// `ChatActionCard` with a real Undo button (ChatActionCard.tsx). `confirmRewrite()`
-// receives the exact same shape back from the server (confirmRewriteTurn emits
-// `changes: [{op:"update", ...}]`, packages/agent/src/chat.ts ~line 731) but only
-// feeds it through `applyChanges()` to update the rail — it never attaches
-// `changes`/`prev` to a message, so no `ChatActionCard` — and therefore no Undo —
-// ever renders for a rewrite. The founder is left with zero in-app way to revert
-// an applied rewrite; the only recourse is typing a manual "revert to exactly
-// this text" message and hoping the model complies.
+// AIR-611 fix (src/components/profile/useProfileWorkbench.ts): `dispatch()` (the
+// live-turn path) attaches BOTH `changes` and a `prev` doc snapshot to the new
+// scout message, which is what lets ChatDock render a `ChatActionCard` with a real
+// Undo button (ChatActionCard.tsx). `confirmRewrite()` receives the exact same
+// shape back from the server (confirmRewriteTurn emits `changes: [{op:"update",
+// ...}]`, packages/agent/src/chat.ts) and now, via `appliedChangeMessage()`,
+// appends it as its own action card — so a confirmed rewrite renders the same live
+// Undo a create does. Before the fix it only fed the change through
+// `applyChanges()` to update the rail and dropped the `changes`/`prev` on the
+// floor, so no Undo ever appeared until a page reload re-projected the same
+// confirm turn through transcriptMessages().
 //
 // Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
 
@@ -33,7 +33,7 @@ async function sendMessage(page: Page, text: string) {
   await page.getByRole("button", { name: "Send" }).click();
 }
 
-test("chat rewrite Apply leaves NO Undo affordance, unlike create", async ({
+test("chat rewrite Apply surfaces a live Undo, same as create (AIR-611)", async ({
   page,
 }) => {
   test.skip(
@@ -79,12 +79,27 @@ test("chat rewrite Apply leaves NO Undo affordance, unlike create", async ({
   await expect(rewriteReply.getByRole("button", { name: "Apply" })).toHaveCount(0);
   await expect(rewriteReply.getByRole("button", { name: "Discard" })).toHaveCount(0);
 
-  // ── THE GAP — the rewrite landed, but no new Undo control ever appeared ───
-  // The rewrite card itself carries no Undo button — the resolved-rewrite
-  // template (ChatRewriteProposal, resolved==="applied") has none.
+  // ── THE FIX (AIR-611) — Apply now surfaces the same live Undo a create gets ─
+  // The proposal card itself still just locks to "Applied" — it is the confirm
+  // gate, not the reversal affordance — so it carries no Undo of its own.
   await expect(
     rewriteReply.getByRole("button", { name: "Undo", exact: true }),
   ).toHaveCount(0);
+  // ...but confirmRewrite() now appends the applied update as its own scout
+  // action card (the exact shape dispatch() gives a live turn and a reload gives
+  // a hydrated one), so a real Undo button renders for the confirmed rewrite —
+  // the same ChatActionCard + undo channel chat-undo.spec proves is live for a
+  // create. Before AIR-611 the turn's `changes` were dropped on the floor and no
+  // Undo ever appeared without a page reload.
+  const appliedCard = page
+    .locator(".group\\/msg", { hasText: `Updated · ${TOPIC}` })
+    .first();
+  await expect(appliedCard.getByText(`Updated · ${TOPIC}`)).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(
+    appliedCard.getByRole("button", { name: "Undo", exact: true }),
+  ).toBeVisible();
 
   // ── CONFIRM THE DATA ACTUALLY CHANGED (this is not a no-op UI gap) ────────
   // Open the interest's own doc scope page and check the body now reflects the
