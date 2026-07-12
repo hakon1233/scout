@@ -1,56 +1,98 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 
 import type { ChatTurn } from "@/lib/chat";
 import { transcriptMessages } from "./useProfileWorkbench.helpers";
 
-function readyTurn(overrides: Partial<ChatTurn>): ChatTurn {
-  return {
-    id: "turn-1",
-    message: "change it",
-    status: "ready",
-    created_at: "2026-07-12T10:00:00.000Z",
-    reply: "",
-    ...overrides,
-  };
-}
+test("transcriptMessages locks hydrated delete proposals consumed by a later confirm turn", () => {
+  const turns: ChatTurn[] = [
+    {
+      id: "turn_1",
+      created_at: "2026-07-11T12:00:00.000Z",
+      status: "ready",
+      message: "Drop AI",
+      reply: "Delete AI? Confirm below.",
+      pending_delete: { interestId: "int_ai", topic: "AI" },
+    },
+    {
+      id: "turn_2",
+      created_at: "2026-07-11T12:01:00.000Z",
+      status: "ready",
+      message: 'Delete "AI"',
+      reply: 'Removed "AI" from your interests.',
+      changes: [{ interestId: "int_ai", op: "delete", topic: "AI" }],
+    },
+  ];
 
-test("AIR-645: reloaded pending delete turns render inert instead of re-armed", () => {
-  const messages = transcriptMessages([
-    readyTurn({
-      pending_delete: {
-        interestId: "rust-async",
-        topic: "Rust async",
-      },
-    }),
-  ]);
+  const scoutMessages = transcriptMessages(turns).filter(
+    (message) => message.role === "scout",
+  );
 
-  const scout = messages.find((m) => m.role === "scout");
-  assert.ok(scout, "expected a scout message for the persisted pending delete");
-  assert.deepEqual(scout.pendingDelete, {
-    interestId: "rust-async",
-    topic: "Rust async",
-  });
-  assert.equal(scout.deleteResolved, "cancelled");
+  assert.equal(scoutMessages[0].pendingDelete?.interestId, "int_ai");
+  assert.equal(scoutMessages[0].deleteResolved, "deleted");
+  assert.equal(scoutMessages[0].deleteAutoFocus, false);
 });
 
-test("AIR-645: reloaded pending rewrite turns render inert instead of re-armed", () => {
-  const messages = transcriptMessages([
-    readyTurn({
+test("transcriptMessages keeps unresolved hydrated proposals actionable without auto-focus", () => {
+  const turns: ChatTurn[] = [
+    {
+      id: "turn_1",
+      created_at: "2026-07-11T12:00:00.000Z",
+      status: "ready",
+      message: "Rewrite AI",
+      reply: "Review the rewrite below.",
       pending_rewrite: {
-        interestId: "chips",
-        topic: "Semiconductors",
-        doc: "# Semiconductors\n\nTrack export controls.",
+        interestId: "int_ai",
+        topic: "AI",
+        doc: "# AI\n\nTrack policy.",
       },
-    }),
-  ]);
+    },
+  ];
 
-  const scout = messages.find((m) => m.role === "scout");
-  assert.ok(scout, "expected a scout message for the persisted pending rewrite");
-  assert.deepEqual(scout.pendingRewrite, {
-    interestId: "chips",
-    topic: "Semiconductors",
-    doc: "# Semiconductors\n\nTrack export controls.",
-  });
-  assert.equal(scout.rewriteResolved, "discarded");
+  const scoutMessage = transcriptMessages(turns).find(
+    (message) => message.role === "scout",
+  );
+
+  assert.equal(scoutMessage?.pendingRewrite?.interestId, "int_ai");
+  assert.equal(scoutMessage?.rewriteResolved, undefined);
+  assert.equal(scoutMessage?.rewriteAutoFocus, false);
+});
+
+test("transcriptMessages locks hydrated rewrite proposals consumed by a later apply turn", () => {
+  const turns: ChatTurn[] = [
+    {
+      id: "turn_1",
+      created_at: "2026-07-11T12:00:00.000Z",
+      status: "ready",
+      message: "Rewrite AI",
+      reply: "Review the rewrite below.",
+      pending_rewrite: {
+        interestId: "int_ai",
+        topic: "AI",
+        doc: "# AI\n\nTrack policy.",
+      },
+    },
+    {
+      id: "turn_2",
+      created_at: "2026-07-11T12:01:00.000Z",
+      status: "ready",
+      message: 'Apply rewrite of "AI"',
+      reply: 'Applied the rewrite of "AI".',
+      changes: [
+        {
+          interestId: "int_ai",
+          op: "update",
+          topic: "AI",
+          doc: "# AI\n\nTrack policy.",
+        },
+      ],
+    },
+  ];
+
+  const scoutMessage = transcriptMessages(turns).find(
+    (message) => message.pendingRewrite,
+  );
+
+  assert.equal(scoutMessage?.rewriteResolved, "applied");
+  assert.equal(scoutMessage?.rewriteAutoFocus, false);
 });
