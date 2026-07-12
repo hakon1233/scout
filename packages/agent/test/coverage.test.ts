@@ -147,6 +147,25 @@ test("computeCoverage does not count a source image as a citation", () => {
   ]);
 });
 
+test("computeCoverage does not count an INLINE image as a citation", () => {
+  // Same intent as the standalone-image case above, but the image is embedded
+  // mid-line inside prose so the line does NOT start with `!`. The old guard
+  // only skipped lines beginning with `!`, so the `](https://…)` inside the
+  // inline `![…](…)` still matched and the section — which has no real source —
+  // falsely read as "covered", suppressing the focused retry that would recover
+  // a real citation.
+  const md = [
+    "# Your brief",
+    "",
+    "## AI",
+    "- `2026-06-15` — Prose with an inline ![chart](https://example.com/c.png) but no source link.",
+  ].join("\n");
+
+  assert.deepEqual(computeCoverage(["ai"], md), [
+    { topic: "ai", status: "empty" },
+  ]);
+});
+
 test("mergeBriefSections replaces only retried topics, preserves the rest", () => {
   const base = [
     "# Your brief",
