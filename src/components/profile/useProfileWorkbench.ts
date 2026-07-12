@@ -239,9 +239,13 @@ export function useProfileWorkbench() {
       // Snapshot the doc as it is right now, before the delete drops it, so the
       // action card diffs it out and undo re-creates it verbatim (AIR-611).
       const prevBody = docBodiesRef.current[pd.interestId] ?? null;
+      abortedRef.current = false;
+      const controller = startAbortable();
       (async () => {
         try {
-          const turn = await confirmDeleteInterest(pd.interestId, token);
+          const turn = await confirmDeleteInterest(pd.interestId, token, {
+            signal: controller.signal,
+          });
           flashRemove(pd.interestId);
           const card = appliedChangeMessage(turn, pd.interestId, prevBody);
           setMessages((prev) => {
@@ -251,13 +255,15 @@ export function useProfileWorkbench() {
             return card ? [...resolved, card] : resolved;
           });
         } catch (e) {
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(e instanceof Error ? e.message : "Couldn't remove that.");
         } finally {
-          setSending(false);
+          clearAbortable(controller);
+          if (!controller.signal.aborted) setSending(false);
         }
       })();
     },
-    [sending, token, flashRemove],
+    [sending, token, flashRemove, startAbortable, clearAbortable],
   );
 
   // Cancel a gated delete: nothing touches the store — just lock the card to
@@ -283,9 +289,13 @@ export function useProfileWorkbench() {
       // follow-up action card diffs old→new and undo reverts to it verbatim
       // (AIR-611).
       const prevBody = docBodiesRef.current[pr.interestId] ?? null;
+      abortedRef.current = false;
+      const controller = startAbortable();
       (async () => {
         try {
-          const turn = await confirmRewriteInterest(pr.interestId, token);
+          const turn = await confirmRewriteInterest(pr.interestId, token, {
+            signal: controller.signal,
+          });
           if (turn.changes && turn.changes.length > 0) {
             applyChanges(turn.changes, new Date().toISOString());
           }
@@ -300,15 +310,17 @@ export function useProfileWorkbench() {
             return card ? [...resolved, card] : resolved;
           });
         } catch (e) {
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(
             e instanceof Error ? e.message : "Couldn't apply that rewrite.",
           );
         } finally {
-          setSending(false);
+          clearAbortable(controller);
+          if (!controller.signal.aborted) setSending(false);
         }
       })();
     },
-    [sending, token, applyChanges],
+    [sending, token, applyChanges, startAbortable, clearAbortable],
   );
 
   // Discard a gated rewrite: FE-local, nothing touches the store — the doc on
