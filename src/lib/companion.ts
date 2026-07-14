@@ -910,6 +910,15 @@ export async function generateWeeklyBrief(token: string): Promise<AppBrief> {
       err.error ?? `Couldn't generate weekly brief (${res.status}).`,
     );
   }
-  const json = (await res.json()) as { brief: AgentBrief };
+  const json = (await res.json()) as { brief?: AgentBrief };
+  // Trust-boundary guard (mirrors the pollBriefsRaw fix, AIR-670): a 2xx with a
+  // malformed/empty `{}` body (no `brief`) must not reach adaptBrief, which
+  // immediately dereferences `.summary_md`/`.id` and would throw a raw
+  // "Cannot read properties of undefined" TypeError — surfaced to the user as a
+  // confusing generic error. Surface the same clean failure as the `!res.ok`
+  // path above instead.
+  if (!json.brief) {
+    throw new Error("Couldn't generate weekly brief (malformed response).");
+  }
   return adaptBrief(json.brief);
 }
