@@ -84,14 +84,29 @@ let cacheRaw: string | null = null;
 const listeners = new Set<() => void>();
 let storageListenerInstalled = false;
 
+function isLikedStory(raw: unknown): raw is LikedStory {
+  if (!raw || typeof raw !== "object") return false;
+  const story = raw as Partial<LikedStory>;
+  return (
+    typeof story.key === "string" &&
+    typeof story.url === "string" &&
+    typeof story.headline === "string" &&
+    typeof story.source === "string" &&
+    typeof story.topic === "string" &&
+    typeof story.likedAt === "string" &&
+    (story.blurb === undefined || typeof story.blurb === "string") &&
+    (story.imageUrl === undefined || typeof story.imageUrl === "string") &&
+    (story.publishedAt === undefined || typeof story.publishedAt === "string")
+  );
+}
+
 function parse(raw: string | null): LikesStore {
   if (!raw) return EMPTY;
   try {
     const obj = JSON.parse(raw) as Partial<LikesStore>;
-    // `typeof null === "object"`, so a stored `{ "likes": null }` would slip
-    // past a bare typeof check and later crash `Object.values(store.likes)` /
-    // `key in store.likes`. Reject null explicitly so a corrupted value
-    // degrades to EMPTY instead of throwing during render.
+    // `typeof null === "object"`, so both a stored `{ "likes": null }` and
+    // object-shaped stores with null/malformed entries must be rejected before
+    // render paths call `Object.values(store.likes)` or `key in store.likes`.
     if (
       !obj ||
       typeof obj !== "object" ||
@@ -100,7 +115,11 @@ function parse(raw: string | null): LikesStore {
     ) {
       return EMPTY;
     }
-    return { version: 1, likes: obj.likes as Record<string, LikedStory> };
+    const likes: Record<string, LikedStory> = {};
+    for (const [key, story] of Object.entries(obj.likes)) {
+      if (isLikedStory(story)) likes[key] = story;
+    }
+    return Object.keys(likes).length > 0 ? { version: 1, likes } : EMPTY;
   } catch {
     return EMPTY;
   }

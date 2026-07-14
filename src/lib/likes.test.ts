@@ -117,3 +117,23 @@ test("toggling twice under a failing store un-likes within the session", () => {
     restore();
   }
 });
+
+test("malformed liked-story entries are ignored instead of reading as liked", () => {
+  const { backing, restore } = installStorage({ failWrites: false });
+  const url = "https://example.com/malformed-entry";
+  try {
+    backing.set(
+      LIKES_KEY,
+      JSON.stringify({
+        version: 1,
+        likes: {
+          [likeKey(url)]: null,
+        },
+      }),
+    );
+
+    assert.equal(isLiked(likeKey(url)), false);
+  } finally {
+    restore();
+  }
+});
