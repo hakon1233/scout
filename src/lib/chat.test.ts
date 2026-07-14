@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   confirmDeleteInterest,
   confirmRewriteInterest,
+  pollChatTurn,
   type ChatTurn,
 } from "./chat";
 
@@ -65,4 +66,29 @@ test("confirmRewriteInterest passes through a caller abort signal", async () => 
   });
 
   assert.equal(confirmSignal, controller.signal);
+});
+
+test("pollChatTurn passes a since= filter so the poll doesn't re-fetch the whole transcript (AIR-639)", async () => {
+  installWindow();
+  const pollUrls: string[] = [];
+
+  globalThis.fetch = async (input) => {
+    if (String(input) === `${origin}/healthz`) {
+      return new Response(null, { status: 200 });
+    }
+    pollUrls.push(String(input));
+    return Response.json({ turns: [{ ...readyTurn(), id: "turn_x" }] });
+  };
+
+  await pollChatTurn("turn_x", "tok", { intervalMs: 1 });
+
+  assert.equal(pollUrls.length, 1);
+  const url = new URL(pollUrls[0]);
+  assert.equal(url.pathname, "/v0/chat");
+  const since = url.searchParams.get("since");
+  assert.ok(since, "expected a since= query param");
+  assert.ok(
+    Date.parse(since) < Date.now(),
+    "since should be a timestamp before now",
+  );
 });
