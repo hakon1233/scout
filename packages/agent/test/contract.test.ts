@@ -230,6 +230,21 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (
     assert.equal(offsetBody.briefs[0].id, second.id);
     assert.equal(offsetBody.briefs[1].id, first.id);
 
+    // Empty query values should behave like omitted values. URLSearchParams
+    // returns "" for ?limit=&offset=; Number("") must not collapse either
+    // default into a first-item-only page.
+    const emptyParams = await fetch(
+      `http://127.0.0.1:${port}/v0/briefs?limit=&offset=`,
+      { headers: auth },
+    );
+    const emptyParamsBody = (await emptyParams.json()) as { briefs: Brief[]; total: number };
+    assert.equal(emptyParams.status, 200);
+    assert.equal(emptyParamsBody.total, 3);
+    assert.equal(emptyParamsBody.briefs.length, 3, "empty limit uses the default page size");
+    assert.equal(emptyParamsBody.briefs[0].id, third.id);
+    assert.equal(emptyParamsBody.briefs[1].id, second.id);
+    assert.equal(emptyParamsBody.briefs[2].id, first.id);
+
     // No params → the legacy single-slot poller contract is untouched.
     const legacy = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
       headers: auth,
