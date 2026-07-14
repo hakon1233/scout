@@ -53,10 +53,6 @@ async function sendMessage(page: Page, text: string) {
 test("a failed chat turn has no live retry: the only reachable Retry re-runs the WRONG turn; only a reload targets the right one", async ({
   page,
 }) => {
-  test.skip(
-    !!process.env.CI,
-    "AIR-642: stub-claude.mjs crashes deterministically in CI (ReferenceError: stdin is not defined) — test-infra bug, passes locally, tracked for root-cause",
-  );
   await page.goto(`${ORIGIN}/app/interests/`);
   await expect(page.getByLabel("Message Scout")).toBeVisible();
 
