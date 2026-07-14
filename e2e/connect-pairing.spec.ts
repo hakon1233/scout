@@ -25,6 +25,7 @@ const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const TARBALL_PATH = "/agent/scout-agent-0.3.0.tgz";
 const TOKEN_KEY = "scout.companion.token";
+const COMPANION_PORT_SWEEP = [47821, 47822, 47823, 47830, 47840];
 
 async function blockNonLoopback(page: import("@playwright/test").Page) {
   await page.route("**/*", (route) => {
@@ -46,13 +47,17 @@ async function blockNonLoopback(page: import("@playwright/test").Page) {
 // auto-adopted and the page settles on State B instead of redirecting to /app/.
 async function gotoUnpairedConnect(page: import("@playwright/test").Page) {
   await blockNonLoopback(page);
-  await page.route(`${ORIGIN}/healthz`, (route) =>
-    route.fulfill({
-      status: 404,
-      contentType: "application/json",
-      body: JSON.stringify({ ok: false }),
-    }),
-  );
+  for (const port of COMPANION_PORT_SWEEP) {
+    for (const host of ["127.0.0.1", "localhost"]) {
+      await page.route(`http://${host}:${port}/healthz`, (route) =>
+        route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: false }),
+        }),
+      );
+    }
+  }
   await page.route(`${ORIGIN}/v0/config`, (route) =>
     route.fulfill({
       status: 404,

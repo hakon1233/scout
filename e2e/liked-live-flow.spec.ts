@@ -67,7 +67,7 @@ test("like a freshly-generated story → it appears in the Liked feed, persists,
 
   // Fire the run from the profile menu (PER-219) and wait for the feed card.
   await page.getByRole("button", { name: "Open settings" }).click();
-  const runNow = page.getByRole("menuitem", { name: "Run now" });
+  const runNow = page.getByRole("button", { name: "Run now" });
   await expect(runNow).toBeEnabled({ timeout: 15_000 });
   await runNow.click();
 
@@ -106,11 +106,9 @@ test("like a freshly-generated story → it appears in the Liked feed, persists,
   await expect(page).toHaveURL(/\/app\/liked\/?$/);
 
   // THE write→read assertion: the story the feed captured is now rendered by the
-  // Liked page reading it back from the store. Headline (h2 — the Liked page has
-  // no per-topic h2 grouping above its cards, unlike the main feed's h3, so a
-  // card headline lands directly under the page's own h1; CAR-179 fixed this
-  // from h3 to h2 to close a heading-order-skip a11y bug) + topic + source all
-  // survive the likeInputFor snapshot → canonicalUrl key → useLikedStories path.
+  // Liked page reading it back from the store. Headline (h2; the Liked feed card
+  // heading level intentionally follows the page h1 for a11y) + topic + source
+  // all survive the likeInputFor snapshot → canonicalUrl key → useLikedStories path.
   const likedHeading = page.getByRole("heading", {
     name: "Alignment update",
     level: 2,

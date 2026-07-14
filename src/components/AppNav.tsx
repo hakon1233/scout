@@ -146,6 +146,7 @@ function FeedFilter({
 }) {
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
   const isFiltered = activeFilter !== null;
   // PER-262: the menu's horizontal offset from its trigger drifts every time a
   // sibling icon is added/removed from the nav (see PER-249, which inserted the
@@ -197,7 +198,12 @@ function FeedFilter({
       }
     }
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      // Escape closes and returns focus to the trigger so keyboard users land
+      // back where they opened from (AIR-407).
+      if (e.key === "Escape") {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
     }
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -215,10 +221,10 @@ function FeedFilter({
   return (
     <div ref={containerRef} className="relative shrink-0">
       <button
+        ref={buttonRef}
         type="button"
         aria-label={isFiltered ? `Filtering by ${activeFilter}` : "Filter feed"}
         title={isFiltered ? `Filtering by ${activeFilter}` : "Filter feed"}
-        aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={[
@@ -235,17 +241,20 @@ function FeedFilter({
 
       {open && menuStyle && (
         <div
-          role="menu"
-          aria-label="Filter feed by topic"
+          role="group"
+          aria-labelledby="feed-filter-heading"
           style={menuStyle}
           className="z-50 rounded-lg border border-border-default bg-page p-2 shadow-lg"
         >
-          <p className="mb-2 px-2 font-mono text-caption uppercase tracking-[0.06em] text-muted">
+          <p
+            id="feed-filter-heading"
+            className="mb-2 px-2 font-mono text-caption uppercase tracking-[0.06em] text-muted"
+          >
             Filter by topic
           </p>
           <button
             type="button"
-            role="menuitem"
+            aria-pressed={activeFilter === null}
             onClick={() => select(null)}
             className={[
               "mb-1 flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page",
@@ -267,7 +276,7 @@ function FeedFilter({
             <button
               key={interest.id}
               type="button"
-              role="menuitem"
+              aria-pressed={activeFilter === interest.topic}
               onClick={() => select(interest.topic)}
               className={[
                 "mb-1 flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-body-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page last:mb-0",
@@ -320,6 +329,7 @@ function ProfileMenu({
 }) {
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
 
   // Close on outside click or Escape while open.
   React.useEffect(() => {
@@ -333,7 +343,11 @@ function ProfileMenu({
       }
     }
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      // Escape closes and returns focus to the trigger (AIR-407).
+      if (e.key === "Escape") {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
     }
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -346,10 +360,10 @@ function ProfileMenu({
   return (
     <div ref={containerRef} className="relative ml-auto">
       <button
+        ref={buttonRef}
         type="button"
         aria-label="Open settings"
         title="Settings"
-        aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={ICON_CLASSES}
@@ -359,7 +373,7 @@ function ProfileMenu({
 
       {open && (
         <div
-          role="menu"
+          role="group"
           aria-label="Settings"
           className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border-default bg-surface p-3 shadow-lg"
         >
@@ -370,7 +384,6 @@ function ProfileMenu({
             <div className="mb-3 flex flex-col gap-2">
               <button
                 type="button"
-                role="menuitem"
                 disabled={running}
                 onClick={() => {
                   setOpen(false);
@@ -384,7 +397,6 @@ function ProfileMenu({
               {onWeeklyBrief && (
                 <button
                   type="button"
-                  role="menuitem"
                   disabled={running}
                   onClick={() => {
                     setOpen(false);
@@ -435,7 +447,6 @@ function MenuLink({
   return (
     <Link
       href={href}
-      role="menuitem"
       onClick={onSelect}
       className="mb-2 flex w-full items-center justify-between rounded-md border border-border-default bg-surface px-3 py-2 text-body-sm font-medium text-primary transition last:mb-0 hover:border-border-strong hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page"
     >

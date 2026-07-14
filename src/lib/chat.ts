@@ -131,15 +131,25 @@ export async function pollChatTurn(
   const base = await requireBase();
   const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
   const interval = opts.intervalMs ?? 1200;
+  // GET /v0/chat?since= filters by created_at server-side (AIR-639): without
+  // it every tick re-transfers the WHOLE persisted transcript just to check
+  // this one turn's status, which only gets worse as chat history grows.
+  // The companion is loopback (same clock as this tab), so a generous 30s
+  // slack safely predates the turn's created_at (set moments ago, when the
+  // kick's POST was handled) while still excluding older history.
+  const since = new Date(Date.now() - 30_000).toISOString();
   while (Date.now() < deadline) {
     if (opts.signal?.aborted) throw new Error("aborted");
     await new Promise((r) => setTimeout(r, interval));
     let turn: ChatTurn | undefined;
     try {
-      const res = await fetch(`${base}/v0/chat`, {
-        headers: { authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(5_000),
-      });
+      const res = await fetch(
+        `${base}/v0/chat?since=${encodeURIComponent(since)}`,
+        {
+          headers: { authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(5_000),
+        },
+      );
       if (!res.ok) continue;
       const json = (await res.json()) as { turns?: ChatTurn[] };
       // The slot holds one turn; match by id, else take whatever's latest.

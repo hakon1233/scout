@@ -23,7 +23,9 @@ test.describe("interest doc deep-link + browser back", () => {
     await page.goto(`${ORIGIN}/app/interests/?mock=1&id=ai-policy`);
 
     // The scope view — not the card list — is what hydrates.
-    await expect(page.getByText("Research scope")).toBeVisible();
+    await expect(
+      page.locator("header").getByText("Assignment", { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "AI policy & regulation" }),
     ).toBeVisible();
@@ -55,7 +57,9 @@ test.describe("interest doc deep-link + browser back", () => {
       .getByRole("link", { name: "AI policy & regulation" })
       .first()
       .click();
-    await expect(page.getByText("Research scope")).toBeVisible();
+    await expect(
+      page.locator("header").getByText("Assignment", { exact: true }),
+    ).toBeVisible();
     await expect(page).toHaveURL(/\/app\/interests\/\?.*id=ai-policy/);
 
     // THE assertion: the real browser Back button (popstate) — not the
@@ -65,7 +69,9 @@ test.describe("interest doc deep-link + browser back", () => {
     await expect(
       page.getByRole("heading", { name: "Skills setup" }),
     ).toBeVisible();
-    await expect(page.getByText("Research scope")).toBeHidden();
+    await expect(
+      page.locator("header").getByText("Assignment", { exact: true }),
+    ).toBeHidden();
     await expect(page).not.toHaveURL(/id=ai-policy/);
 
     // Chat stays mounted across the back navigation.

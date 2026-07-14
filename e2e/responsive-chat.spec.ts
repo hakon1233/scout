@@ -78,7 +78,7 @@ test.describe("responsive interest workbench", () => {
 
     // In-page drill-in: scope view in the left pane, ?id= in the URL, no
     // navigation to the chat-less standalone page.
-    await expect(page.getByText("Research scope")).toBeVisible();
+    await expect(page.getByText("Assignment", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "AI policy & regulation" }),
     ).toBeVisible();
@@ -119,7 +119,7 @@ test.describe("responsive interest workbench", () => {
       .first()
       .click();
 
-    await expect(page.getByText("Research scope")).toBeVisible();
+    await expect(page.getByText("Assignment", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "AI policy & regulation" }),
     ).toBeVisible();
@@ -130,6 +130,6 @@ test.describe("responsive interest workbench", () => {
 
     // …and toggling back returns to the doc detail, not the card list.
     await page.getByRole("button", { name: /Interests & skills/ }).click();
-    await expect(page.getByText("Research scope")).toBeVisible();
+    await expect(page.getByText("Assignment", { exact: true })).toBeVisible();
   });
 });

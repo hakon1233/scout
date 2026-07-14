@@ -55,7 +55,7 @@ async function blockNonLoopback(page: import("@playwright/test").Page) {
 // land. Each call persists one daily brief into the companion's rolling history.
 async function runDailyBrief(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Open settings" }).click();
-  const runNow = page.getByRole("menuitem", { name: "Run now" });
+  const runNow = page.getByRole("button", { name: "Run now" });
   await expect(runNow).toBeEnabled({ timeout: 15_000 });
   await runNow.click();
   await expect(
@@ -101,7 +101,7 @@ test("weekly brief assembles the week's daily stories, de-duplicated, under a We
   // 2. Fire the weekly brief from the profile menu. It is disabled while a run
   //    is in flight, so toBeEnabled also gates on the daily run having settled.
   await page.getByRole("button", { name: "Open settings" }).click();
-  const weekly = page.getByRole("menuitem", { name: "Weekly brief" });
+  const weekly = page.getByRole("button", { name: "Weekly brief" });
   await expect(weekly).toBeEnabled({ timeout: 15_000 });
   await weekly.click();
 
