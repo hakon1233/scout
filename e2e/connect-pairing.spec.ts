@@ -91,10 +91,6 @@ test("unpaired walkthrough advertises an install command pinned to the serving o
 test("the advertised companion tarball is actually served (onboarding link is not dangling)", async ({
   request,
 }) => {
-  test.skip(
-    !!process.env.CI,
-    "AIR-642: 404s deterministically in CI only (never locally) — likely a related symptom of the same test-infra issue as the stub-claude.mjs crash, tracked for root-cause",
-  );
   // The exact URL the walkthrough tells the user to `npm i -g`. If the page's
   // pinned version constant drifts from the packed artifact, this 404s and
   // first-run onboarding silently breaks. HEAD avoids pulling the ~100MB body;
