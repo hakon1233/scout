@@ -19,6 +19,22 @@ function safeParse<T>(raw: string | null): T | null {
   }
 }
 
+function isSettings(raw: unknown): raw is Settings {
+  if (!raw || typeof raw !== "object") return false;
+  const candidate = raw as Partial<Settings>;
+  return (
+    typeof candidate.name === "string" &&
+    Array.isArray(candidate.interests) &&
+    candidate.interests.every(
+      (interest) =>
+        interest &&
+        typeof interest === "object" &&
+        typeof interest.id === "string" &&
+        typeof interest.topic === "string",
+    )
+  );
+}
+
 // Persist one key via the shared write guard (safe-storage.ts). The guard
 // matters most here because `saveLastBrief` runs inside a `setBrief` updater
 // (app/page.tsx): an unguarded throw would abort the caller *before* its
@@ -32,7 +48,7 @@ export function loadSettings(): Settings | null {
   const raw = safeParse<Settings & { anthropicKey?: string; exaKey?: string }>(
     storage.getItem(SETTINGS_KEY),
   );
-  if (!raw) return null;
+  if (!isSettings(raw)) return null;
   // Migration (PER-133): the BYO-key path was removed (PER-109), so old stored
   // settings may still carry `anthropicKey`/`exaKey`. Drop them on read so the
   // in-memory shape matches the current `Settings` type. The next save persists
