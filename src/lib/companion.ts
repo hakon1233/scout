@@ -7,6 +7,23 @@ import type { Brief as AppBrief, TopicBasis, TopicCoverage } from "./types";
 import { readErrorBody } from "./errors";
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 
+// Dev/diagnostic trace for the browser→loopback transport (AIR-626). Every fetch
+// helper below degrades to a falsy/empty fallback on failure so the UI stays
+// usable — but that also made a genuine "my brief silently stopped updating"
+// report undiagnosable from the console: the transport could go fully dark while
+// the RunFailure surface built in this same file had nothing to key off. This
+// logs the *unexpected* data-fetch failures with a stable prefix. It never
+// surfaces raw errors in the UI and never changes control flow (callers still get
+// their existing fallback).
+//
+// Deliberately NOT wired into the two discovery probes (isServedFromCompanion,
+// pingPort): a negative probe is the *expected* result of discovery — the
+// marketing host has no /healthz and the loopback port sweep misses most ports
+// on every run — so logging there would be noise that drowns the signal.
+function logCompanionError(context: string, err: unknown): void {
+  console.error(`[companion] ${context} failed`, err);
+}
+
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
 export const COMPANION_PORT_SWEEP = [47821, 47822, 47823, 47830, 47840];
@@ -91,6 +108,8 @@ export async function isServedFromCompanion(): Promise<boolean> {
       servedFromCompanionConfirmed = res.ok;
       return res.ok;
     } catch {
+      // Silent by design: a negative probe is the expected result on the
+      // marketing host (no /healthz). See logCompanionError's note (AIR-626).
       return false;
     } finally {
       servedProbeInFlight = null;
@@ -132,7 +151,10 @@ async function fetchCompanionConfig(): Promise<CompanionConfig | null> {
       configCache = cfg;
       configCachedAt = Date.now();
       return cfg;
-    } catch {
+    } catch (err) {
+      // Reached only after isServedFromCompanion() already confirmed a companion
+      // serves this origin, so a failure here is unexpected, not routine.
+      logCompanionError("config-fetch", err);
       return null;
     } finally {
       configInFlight = null;
@@ -183,6 +205,8 @@ async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
     });
     return res.ok;
   } catch {
+    // Silent by design: the loopback port sweep misses most ports on every run —
+    // logging each would be noise, not signal (AIR-626).
     return false;
   }
 }
@@ -550,7 +574,8 @@ export async function fetchLatestBrief(
   try {
     const raw = await pollBriefsRaw(new Date(0).toISOString(), token);
     return newestReadyBrief(raw);
-  } catch {
+  } catch (err) {
+    logCompanionError("latest-brief-fetch", err);
     return null;
   }
 }
@@ -705,7 +730,8 @@ export async function fetchRunFailure(
       lastSuccessAt: lastSuccess?.generatedAt ?? null,
       now: Date.now(),
     });
-  } catch {
+  } catch (err) {
+    logCompanionError("run-failure-fetch", err);
     return null;
   }
 }
@@ -796,7 +822,8 @@ export async function fetchBriefHistory(
       .filter((b) => b.status === "ready" && b.summary_md)
       .map(adaptBrief);
     return { briefs, total: json.total ?? briefs.length };
-  } catch {
+  } catch (err) {
+    logCompanionError("brief-history-fetch", err);
     return { briefs: [], total: 0 };
   }
 }
