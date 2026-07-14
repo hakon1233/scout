@@ -71,7 +71,7 @@ test("like a freshly-generated story → it appears in the Liked feed, persists,
 
   // Fire the run from the profile menu (PER-219) and wait for the feed card.
   await page.getByRole("button", { name: "Open settings" }).click();
-  const runNow = page.getByRole("menuitem", { name: "Run now" });
+  const runNow = page.getByRole("button", { name: "Run now" });
   await expect(runNow).toBeEnabled({ timeout: 15_000 });
   await runNow.click();
 

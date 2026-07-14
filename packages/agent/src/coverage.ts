@@ -77,11 +77,15 @@ export function computeCoverage(
     if (raw === undefined) return { topic, status: "missing" as const };
     // Strip the heading line; judge the body.
     const body = raw.replace(/^##\s+.+$/m, "").trim();
+    // A real source is a `[label](url)` link. A markdown image (`![alt](url)`)
+    // is NOT a citation — strip images from each line BEFORE testing for a link
+    // so an image counts for nothing whether it sits on its own line or inline
+    // in prose. (The old guard only skipped lines that *started* with `!`, so an
+    // inline image left a bare `](https://…)` that falsely read as a citation.)
     const hasCitation = body
       .split("\n")
-      .some(
-        (line) =>
-          !line.trimStart().startsWith("!") && /\]\(https?:\/\//.test(line),
+      .some((line) =>
+        /\]\(https?:\/\//.test(line.replace(/!\[[^\]]*\]\([^)]*\)/g, "")),
       );
     const noNews = /_+\s*no fresh news\s*_+/i.test(body);
     if (noNews || !hasCitation) return { topic, status: "empty" as const };

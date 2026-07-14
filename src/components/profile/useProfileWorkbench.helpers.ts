@@ -63,8 +63,37 @@ export function markdownDemoMessages(): ChatMessage[] {
 // Project a companion transcript into the flat you/scout message log the dock
 // renders: each turn yields a `you` bubble, plus a `scout` bubble when the turn
 // is ready with a reply/change/pending action, or a quiet failure bubble.
+// Signature for a confirmed-rewrite match: a rewrite proposal is "applied" only
+// when a confirm-rewrite turn wrote its EXACT proposed doc. confirmRewriteTurn
+// echoes the stored doc verbatim as the applied `update` change (op:"update",
+// `doc` === pending_rewrite.doc), so we key consumed rewrites on interestId+doc.
+// The NUL separator can't appear in an `int_…` id, so pairs never collide.
+function rewriteSig(interestId: string, doc: string | undefined): string {
+  return `${interestId}\u0000${doc ?? ""}`;
+}
+
 export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
+  const consumedDeleteIds = new Set<string>();
+  // Deletes may key on interestId alone: an `op:"delete"` change ONLY ever comes
+  // from confirmDeleteTurn (model turns gate deletes and never apply one), so a
+  // delete change for an id ⟺ that exact delete was confirmed. A rewrite can't
+  // use the same shortcut: `op:"update"` is overloaded — it's produced by both a
+  // confirm-rewrite AND an ordinary incremental refine — so keying rewrites on
+  // interestId alone wrongly locked a still-pending proposal to "applied" the
+  // moment the interest got any unrelated update, stripping the user's [Apply].
+  const consumedRewriteSigs = new Set<string>();
+  for (const turn of turns) {
+    if (turn.status !== "ready" || !turn.changes) continue;
+    for (const ch of turn.changes) {
+      if (ch.op === "delete") consumedDeleteIds.add(ch.interestId);
+      if (ch.op === "update")
+        consumedRewriteSigs.add(rewriteSig(ch.interestId, ch.doc));
+    }
+  }
+
   return turns.flatMap((turn) => {
+    const pendingDelete = turn.pending_delete;
+    const pendingRewrite = turn.pending_rewrite;
     const out: ChatMessage[] = [
       {
         id: nextMsgId(),
@@ -77,8 +106,8 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
       turn.status === "ready" &&
       (turn.reply ||
         (turn.changes && turn.changes.length > 0) ||
-        turn.pending_delete ||
-        turn.pending_rewrite)
+        pendingDelete ||
+        pendingRewrite)
     ) {
       out.push({
         id: nextMsgId(),
@@ -87,8 +116,21 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
         ts: turn.created_at,
         changes:
           turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
-        pendingDelete: turn.pending_delete,
-        pendingRewrite: turn.pending_rewrite,
+        pendingDelete,
+        deleteResolved:
+          pendingDelete && consumedDeleteIds.has(pendingDelete.interestId)
+            ? "deleted"
+            : undefined,
+        deleteAutoFocus: pendingDelete ? false : undefined,
+        pendingRewrite,
+        rewriteResolved:
+          pendingRewrite &&
+          consumedRewriteSigs.has(
+            rewriteSig(pendingRewrite.interestId, pendingRewrite.doc),
+          )
+            ? "applied"
+            : undefined,
+        rewriteAutoFocus: pendingRewrite ? false : undefined,
       });
     } else if (turn.status === "failed" && turn.error_msg) {
       out.push({
@@ -101,6 +143,65 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
     }
     return out;
   });
+}
+
+// After a confirm-gated rewrite [Apply] or delete [Delete] lands, surface the
+// applied change as its own scout action card — the same shape `dispatch()` gives
+// a live turn and `transcriptMessages()` gives a reloaded one — so a confirmed
+// rewrite/delete gets the exact same live Undo affordance a create does (AIR-611).
+// Before this, confirmRewrite/confirmDelete only marked the proposal card resolved
+// and dropped the confirm turn's `changes` on the floor, so the founder had no
+// in-app way to reverse a confirmed change even though the create path did (and a
+// reload — which projects the same confirm turn through transcriptMessages —
+// already showed the Undo). `prevBody` is the doc as it was just before the
+// confirm, powering the diff and the verbatim undo. Returns null when the turn
+// carried no changes (defensive: a confirm turn always carries exactly one).
+export function appliedChangeMessage(
+  turn: ChatTurn,
+  interestId: string,
+  prevBody: string | null,
+): ChatMessage | null {
+  const changes =
+    turn.changes && turn.changes.length > 0 ? turn.changes : undefined;
+  if (!changes) return null;
+  const prev: Record<string, string | null> = {};
+  for (const ch of changes) {
+    if (ch.interestId)
+      prev[ch.interestId] = ch.interestId === interestId ? prevBody : null;
+  }
+  return {
+    id: nextMsgId(),
+    role: "scout",
+    text: turn.reply ?? "",
+    ts: turn.created_at,
+    changes,
+    prev,
+  };
+}
+
+// Pure core of retry(): given the current message log and the scout reply the
+// user asked to re-run, find the `you` message that produced it, and return the
+// trimmed log (everything up to but excluding that scout reply) plus the wire
+// text to re-dispatch. Returns null when there's nothing safe to re-run (the id
+// is unknown, it's the first message, or no `you` bubble precedes it). Kept pure
+// so the hook can compute it OUTSIDE a setMessages updater and dispatch exactly
+// once — scheduling the dispatch from inside the updater double-kicked the turn
+// under React's StrictMode double-invoke (the second kick 409'd).
+export function resolveRetryTarget(
+  messages: ChatMessage[],
+  scoutId: string,
+  focusTopic: string | null,
+): { nextMessages: ChatMessage[]; wire: string } | null {
+  const idx = messages.findIndex((m) => m.id === scoutId);
+  if (idx <= 0) return null;
+  let youIdx = idx - 1;
+  while (youIdx >= 0 && messages[youIdx].role !== "you") youIdx--;
+  if (youIdx < 0) return null;
+  const youText = messages[youIdx].text;
+  const wire = focusTopic
+    ? `Regarding my interest "${focusTopic}": ${youText}`
+    : youText;
+  return { nextMessages: messages.slice(0, idx), wire };
 }
 
 // Drop a key from a string-keyed record without mutating the input. Returns the

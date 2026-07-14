@@ -148,9 +148,15 @@ async function fetchCompanionConfig(): Promise<CompanionConfig | null> {
 export async function bootstrapCompanionToken(): Promise<string> {
   const existing = loadCompanionToken();
   const cfg = await fetchCompanionConfig();
-  if (cfg?.token && cfg.token !== existing) {
-    saveCompanionToken(cfg.token);
-    return cfg.token;
+  // Trim to match saveCompanionToken (which persists token.trim()). Comparing/
+  // returning the raw cfg.token instead would, for a padded token, return a value
+  // that differs from what's stored — a `Bearer abc ` header with trailing space
+  // that can fail server-side auth — and re-save it on every bootstrap because the
+  // trimmed store never equals the padded cfg value (AIR-107).
+  const fromCfg = cfg?.token?.trim();
+  if (fromCfg && fromCfg !== existing) {
+    saveCompanionToken(fromCfg);
+    return fromCfg;
   }
   return existing;
 }
@@ -503,14 +509,17 @@ function adaptBrief(b: AgentBrief): AppBrief {
   };
 }
 
-// Shared by fetchLatestBrief and fetchRunFailure so both can derive the
-// newest ready brief from a single already-fetched raw list instead of each
-// issuing their own /v0/briefs request (AIR-605).
-// Both callers fetch `since = epoch` (the entire ready-brief history), which
-// only grows over a companion's lifetime — so this ran adaptBrief (a full
-// regex parse of the brief's markdown body) over every ready brief just to
-// keep the single newest one, on every poll tick (AIR-617). Find the winner
-// on the cheap raw `generated_at` field first, then parse only that one.
+// Shared by fetchLatestBrief and fetchRunFailure so both can derive the newest
+// ready brief from an already-fetched raw list instead of each issuing their own
+// /v0/briefs request (AIR-605). Kept cheap: pick the winner on the raw
+// `generated_at` field first, then run adaptBrief (a full markdown regex parse)
+// only on that one, not on every ready brief every poll tick (AIR-617).
+//
+// NOTE (AIR-644): the `?since=` list both callers pass only ever holds the
+// single `last_brief` slot — briefs.ts filters `?since=` to that one slot, never
+// the ready-brief history — so `raw` here is ≤1 element. On a failed/pending slot
+// it therefore carries NO ready brief; fetchRunFailure falls back to
+// fetchBriefHistory (via resolveLastSuccessBrief) for the true last success.
 function newestReadyBrief(raw: AgentBrief[]): AppBrief | null {
   const ready = raw.filter((b) => b.status === "ready" && b.summary_md);
   if (ready.length === 0) return null;
@@ -608,17 +617,33 @@ export function assessRunFailure(input: {
   //    (schedule.last_run_status). Prefer the brief's captured error; fall back
   //    to the schedule's note.
   if (lastStatus === "failed" || scheduleStatus === "failed") {
-    const reason =
-      cleanFailureReason(lastError) ?? cleanFailureReason(scheduleNote);
-    return {
-      kind: "failed",
-      reason,
-      at:
-        lastStatus === "failed"
-          ? (lastAt ?? undefined)
-          : (scheduleAt ?? lastAt ?? undefined),
-      lastSuccessAt: lastSuccessAt ?? undefined,
-    };
+    const failedAt =
+      lastStatus === "failed" ? (lastAt ?? null) : (scheduleAt ?? lastAt ?? null);
+    // A failure only reflects the CURRENT state if no successful brief is newer
+    // than it. `schedule.last_run_status` is written ONLY by scheduled runs
+    // (runner.ts), so a 07:00 scheduled fire that failed but was superseded by a
+    // successful on-demand "Run now" at 09:00 leaves a STALE "failed" flag —
+    // last_brief is a fresh 09:00 ready brief yet scheduleStatus stays "failed".
+    // Without this guard the feed shows a self-contradictory banner ("Today's
+    // brief failed … showing your last good brief from 09:00") over that fresh
+    // 09:00 brief, and it persists across every reload until the next scheduled
+    // fire overwrites the flag. The failed-last_brief path is unaffected: it IS
+    // the most recent run of any kind, so its lastSuccessAt (from ready history)
+    // is always older and never supersedes it.
+    const supersededByNewerSuccess =
+      lastSuccessAt != null &&
+      failedAt != null &&
+      Date.parse(lastSuccessAt) > Date.parse(failedAt);
+    if (!supersededByNewerSuccess) {
+      const reason =
+        cleanFailureReason(lastError) ?? cleanFailureReason(scheduleNote);
+      return {
+        kind: "failed",
+        reason,
+        at: failedAt ?? undefined,
+        lastSuccessAt: lastSuccessAt ?? undefined,
+      };
+    }
   }
 
   // 2. No successful brief within the staleness window — a silent stop even when
@@ -633,6 +658,21 @@ export function assessRunFailure(input: {
   return null;
 }
 
+// AIR-644: resolve the "last successful brief" for the run-failure banner's
+// "Showing your last good brief from <date>" clause. `pollBriefsRaw(?since=)`
+// returns only the single `last_brief` slot, so on a failed/pending run
+// `slotReady` is null even though ready briefs still exist in history. In that
+// (uncommon, unhealthy) case only, fall back to one page of ready-brief history.
+// `fetchHistoryNewest` is invoked lazily so the healthy path — slot already
+// ready — stays a single request and doesn't undo the AIR-605/AIR-617 poll-dedup.
+export async function resolveLastSuccessBrief(
+  slotReady: AppBrief | null,
+  fetchHistoryNewest: () => Promise<AppBrief | null>,
+): Promise<AppBrief | null> {
+  if (slotReady) return slotReady;
+  return await fetchHistoryNewest();
+}
+
 // Fetch the companion's run health and assess it. Read-only (GET only) — never
 // writes interests or kicks a run. Returns null when healthy or unreachable.
 export async function fetchRunFailure(
@@ -644,7 +684,17 @@ export async function fetchRunFailure(
       fetchSchedule(token).catch(() => null),
     ]);
     const last = rawLast[0];
-    const latestReady = newestReadyBrief(rawLast);
+    // On a failed/pending slot the ?since= poll carries no ready brief, so fall
+    // back to the newest ready brief from history so the banner can honestly
+    // show "last good brief from <date>" (AIR-644). Lazy: the healthy path (slot
+    // ready) never issues the extra request.
+    const lastSuccess = await resolveLastSuccessBrief(
+      newestReadyBrief(rawLast),
+      () =>
+        fetchBriefHistory(token, { limit: 1, offset: 0 }).then(
+          (h) => h.briefs[0] ?? null,
+        ),
+    );
     return assessRunFailure({
       lastStatus: last?.status,
       lastError: last?.error_msg,
@@ -652,7 +702,7 @@ export async function fetchRunFailure(
       scheduleStatus: schedule?.last_run_status ?? null,
       scheduleNote: schedule?.last_run_note ?? null,
       scheduleAt: schedule?.last_run_at ?? null,
-      lastSuccessAt: latestReady?.generatedAt ?? null,
+      lastSuccessAt: lastSuccess?.generatedAt ?? null,
       now: Date.now(),
     });
   } catch {
@@ -762,8 +812,13 @@ export async function pollBriefsRaw(
     signal: AbortSignal.timeout(5_000),
   });
   if (!res.ok) return [];
-  const json = (await res.json()) as { briefs: AgentBrief[] };
-  return json.briefs;
+  const json = (await res.json()) as { briefs?: AgentBrief[] };
+  // Trust-boundary guard: a malformed/empty `{}` body (no `briefs`) must not
+  // hand callers `undefined` — every caller immediately `.filter`/`.reduce`s the
+  // result, so a missing field would throw a TypeError surfaced as a confusing
+  // generic error instead of a clean "no briefs". Mirrors the `?? []` fallback
+  // already in `fetchBriefsPage`.
+  return json.briefs ?? [];
 }
 
 // Per-topic client budget. research.ts's actual hard per-session cap

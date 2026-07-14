@@ -32,6 +32,7 @@ import type { Interest } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 import {
+  appliedChangeMessage,
   applyDocBodyChange,
   applyDocMetaChange,
   applyInterestChange,
@@ -43,6 +44,7 @@ import {
   mergeInterests,
   nextMsgId,
   resolveMessage,
+  resolveRetryTarget,
   transcriptMessages,
 } from "./useProfileWorkbench.helpers";
 
@@ -78,12 +80,20 @@ export function useProfileWorkbench() {
   const turnIdRef = useRef<string | null>(null);
   const stopRequestedRef = useRef(false);
   const docBodiesRef = useRef<Record<string, string>>({});
+  const messagesRef = useRef<ChatMessage[]>([]);
 
   // Mirror docBodies into a ref so `send` can read the pre-change body for the
   // diff/undo without re-binding on every keystroke-driven body update.
   useEffect(() => {
     docBodiesRef.current = docBodies;
   }, [docBodies]);
+
+  // Mirror messages into a ref so `retry` can read the current log to compute
+  // its target OUTSIDE a setMessages updater (see resolveRetryTarget) without
+  // re-binding the callback on every message append.
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -217,28 +227,43 @@ export function useProfileWorkbench() {
 
   // Confirm a gated delete (PER-230 #1): the deterministic [Delete] press. Hits
   // the no-model confirm-delete route, which actually removes the interest + doc
-  // and returns a ready turn. On success we flash-and-drop the card and mark the
-  // confirm message resolved so it locks to "Removed".
+  // and returns a ready turn. On success we flash-and-drop the card, mark the
+  // confirm message resolved so it locks to "Removed", and append the applied
+  // delete as its own action card so the founder gets a live Undo — same as a
+  // create, and matching what a reload already showed (AIR-611).
   const confirmDelete = useCallback(
     (pd: PendingDelete, msgId: string) => {
       if (sending) return;
       setSending(true);
       setError(null);
+      // Snapshot the doc as it is right now, before the delete drops it, so the
+      // action card diffs it out and undo re-creates it verbatim (AIR-611).
+      const prevBody = docBodiesRef.current[pd.interestId] ?? null;
+      abortedRef.current = false;
+      const controller = startAbortable();
       (async () => {
         try {
-          await confirmDeleteInterest(pd.interestId, token);
+          const turn = await confirmDeleteInterest(pd.interestId, token, {
+            signal: controller.signal,
+          });
           flashRemove(pd.interestId);
-          setMessages((prev) =>
-            resolveMessage(prev, msgId, { deleteResolved: "deleted" }),
-          );
+          const card = appliedChangeMessage(turn, pd.interestId, prevBody);
+          setMessages((prev) => {
+            const resolved = resolveMessage(prev, msgId, {
+              deleteResolved: "deleted",
+            });
+            return card ? [...resolved, card] : resolved;
+          });
         } catch (e) {
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(e instanceof Error ? e.message : "Couldn't remove that.");
         } finally {
-          setSending(false);
+          clearAbortable(controller);
+          if (!controller.signal.aborted) setSending(false);
         }
       })();
     },
-    [sending, token, flashRemove],
+    [sending, token, flashRemove, startAbortable, clearAbortable],
   );
 
   // Cancel a gated delete: nothing touches the store — just lock the card to
@@ -260,25 +285,42 @@ export function useProfileWorkbench() {
       if (sending) return;
       setSending(true);
       setError(null);
+      // Snapshot the pre-rewrite doc before applyChanges overwrites it, so the
+      // follow-up action card diffs old→new and undo reverts to it verbatim
+      // (AIR-611).
+      const prevBody = docBodiesRef.current[pr.interestId] ?? null;
+      abortedRef.current = false;
+      const controller = startAbortable();
       (async () => {
         try {
-          const turn = await confirmRewriteInterest(pr.interestId, token);
+          const turn = await confirmRewriteInterest(pr.interestId, token, {
+            signal: controller.signal,
+          });
           if (turn.changes && turn.changes.length > 0) {
             applyChanges(turn.changes, new Date().toISOString());
           }
-          setMessages((prev) =>
-            resolveMessage(prev, msgId, { rewriteResolved: "applied" }),
-          );
+          // Append the applied rewrite as its own action card so a confirmed
+          // rewrite gets the same live Undo a create does (AIR-611) — the proposal
+          // card itself just locks to "Applied".
+          const card = appliedChangeMessage(turn, pr.interestId, prevBody);
+          setMessages((prev) => {
+            const resolved = resolveMessage(prev, msgId, {
+              rewriteResolved: "applied",
+            });
+            return card ? [...resolved, card] : resolved;
+          });
         } catch (e) {
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(
             e instanceof Error ? e.message : "Couldn't apply that rewrite.",
           );
         } finally {
-          setSending(false);
+          clearAbortable(controller);
+          if (!controller.signal.aborted) setSending(false);
         }
       })();
     },
-    [sending, token, applyChanges],
+    [sending, token, applyChanges, startAbortable, clearAbortable],
   );
 
   // Discard a gated rewrite: FE-local, nothing touches the store — the doc on
@@ -391,7 +433,18 @@ export function useProfileWorkbench() {
           setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
           clearAbortable(controller);
-          setSending(false);
+          // Only THIS dispatch may clear `sending` — and only if it wasn't
+          // aborted. A stop-then-immediately-send aborts turn A's controller and
+          // starts turn B (which sets sending=true, resets abortedRef). Turn A's
+          // poll doesn't observe the abort until its next loop tick (up to
+          // ~1.2s + a poll fetch later — pollChatTurn only checks signal.aborted
+          // at the top of the loop), so this finally runs AFTER turn B is live.
+          // An unconditional setSending(false) here clobbered turn B's in-flight
+          // state — Stop reverted to Send mid-turn and a resend 409'd. Guarding on
+          // the closure-captured controller.signal.aborted (immune to abortedRef's
+          // reset) mirrors the catch guard above; stop() already set sending=false
+          // for the aborted turn, so nothing is left stuck (AIR-107).
+          if (!controller.signal.aborted) setSending(false);
         }
       })();
     },
@@ -445,27 +498,23 @@ export function useProfileWorkbench() {
 
   // Retry a scout turn: re-run the preceding `you` message without adding a new
   // bubble. We drop the old scout reply (and anything after it) first so the log
-  // stays one-reply-per-turn.
+  // stays one-reply-per-turn. Compute the target from the ref and dispatch ONCE
+  // here — NOT from inside a setMessages updater. React may invoke an updater
+  // more than once (StrictMode double-invokes it in dev), so the old
+  // `queueMicrotask(() => dispatch(wire))` inside the updater kicked the turn
+  // twice; the second kick hit the companion's single-flight slot and 409'd,
+  // surfacing a spurious "still working on your last message" error after a
+  // single Retry click.
   const retry = useCallback(
     (scoutId: string) => {
       if (sending) return;
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === scoutId);
-        if (idx <= 0) return prev;
-        let youIdx = idx - 1;
-        while (youIdx >= 0 && prev[youIdx].role !== "you") youIdx--;
-        if (youIdx < 0) return prev;
-        const youText = prev[youIdx].text;
-        const focusTopic = focusKey
-          ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
-          : null;
-        const wire = focusTopic
-          ? `Regarding my interest "${focusTopic}": ${youText}`
-          : youText;
-        // Defer the dispatch out of the updater.
-        queueMicrotask(() => dispatch(wire));
-        return prev.slice(0, idx);
-      });
+      const focusTopic = focusKey
+        ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
+        : null;
+      const target = resolveRetryTarget(messagesRef.current, scoutId, focusTopic);
+      if (!target) return;
+      setMessages(target.nextMessages);
+      dispatch(target.wire);
     },
     [sending, focusKey, interests, dispatch],
   );

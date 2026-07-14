@@ -17,11 +17,27 @@ own keychain.
 
 ## Local development
 
+**Prerequisites:** Node 22 and pnpm 11. The package manager is pinned via the
+`packageManager` field in `package.json` (`pnpm@11.9.0`). Enable
+[Corepack](https://nodejs.org/api/corepack.html) once and every `pnpm` command
+uses that exact pinned version — the same one CI and the lockfile expect:
+
 ```bash
-pnpm install
+corepack enable              # use the pnpm version pinned in package.json
+pnpm install                 # non-interactive; approved native builds run automatically
 cp .env.example .env.local   # fill in Supabase keys
 pnpm dev
 ```
+
+`pnpm install` needs **no** manual `pnpm approve-builds` step. The native
+dependencies that run install scripts (`esbuild`, `sharp`, `unrs-resolver`) are
+pre-approved in `pnpm-workspace.yaml` via `onlyBuiltDependencies`, so pnpm 11
+won't stop with `ERR_PNPM_IGNORED_BUILDS` or prompt interactively. To reproduce
+the CI install exactly, run `pnpm install --frozen-lockfile`.
+
+> **pnpm 11 note:** dependency `overrides` live in `pnpm-workspace.yaml`, not
+> `package.json` — pnpm 11 ignores `package.json#pnpm.overrides`, and the frozen
+> lockfile is generated under pnpm 11 (see `.github/workflows/ci.yml`).
 
 In a second terminal, build and run the loopback companion:
 

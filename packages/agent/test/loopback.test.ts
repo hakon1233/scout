@@ -10,10 +10,17 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { saveState, loadState, newPairingToken, type Brief, type State } from "../src/state.js";
+import {
+  saveState,
+  loadState,
+  newPairingToken,
+  type Brief,
+  type State,
+} from "../src/state.js";
 import { isSameOriginCaller, startServer } from "../src/server.js";
 
 async function makeStubClaude(): Promise<string> {
@@ -133,7 +140,10 @@ test("OPTIONS preflight grants Private Network Access for allowed origins (PER-1
     // A preflight WITHOUT the PNA request header must not get the grant.
     const noPna = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "OPTIONS",
-      headers: { origin: githubOrigin, "access-control-request-method": "POST" },
+      headers: {
+        origin: githubOrigin,
+        "access-control-request-method": "POST",
+      },
     });
     assert.equal(noPna.status, 204);
     assert.equal(
@@ -256,7 +266,10 @@ test("GET /v0/briefs + /healthz stay responsive during synthesis (PER-101)", asy
       if (body.briefs[0]?.status === "pending") sawPending = true;
       await new Promise((res) => setTimeout(res, 400));
     }
-    assert.ok(sawPending, "expected to observe a pending brief during synthesis");
+    assert.ok(
+      sawPending,
+      "expected to observe a pending brief during synthesis",
+    );
 
     const brief = await doneP;
     assert.equal(brief.status, "ready");
@@ -391,12 +404,95 @@ test("POST /v0/interests de-duplicates before the max-6 budget check (PER-126)",
         authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        interests: ["AI safety", "ai safety", "nba", "f1", "climate", "rust", "go"],
+        interests: [
+          "AI safety",
+          "ai safety",
+          "nba",
+          "f1",
+          "climate",
+          "rust",
+          "go",
+        ],
       }),
     });
     assert.equal(res.status, 202);
     const brief = await doneP;
     assert.equal(brief.status, "ready");
+  } finally {
+    server.close();
+    await fs.rm(tmpStateDir, { recursive: true, force: true });
+    await fs.rm(path.dirname(claudeBin), { recursive: true, force: true });
+  }
+});
+
+test("POST /v0/interests reconciles against state saved while the body is still streaming", async () => {
+  const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
+  const stateFile = path.join(tmpStateDir, "state.json");
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+
+  const claudeBin = await makeStubClaude();
+  let synthesisDone: (b: Brief) => void;
+  const doneP = new Promise<Brief>((r) => (synthesisDone = r));
+  const { server, port } = await startServer(0, {
+    stateFile,
+    claudeBin,
+    onSynthesisDone: (b) => synthesisDone(b),
+  });
+  const postBody = JSON.stringify({ interests: ["AI safety"] });
+
+  try {
+    const responseP = new Promise<{ status: number; body: unknown }>(
+      (resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port,
+            path: "/v0/interests",
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "content-length": Buffer.byteLength(postBody),
+              authorization: `Bearer ${token}`,
+            },
+          },
+          (res) => {
+            let raw = "";
+            res.setEncoding("utf8");
+            res.on("data", (chunk) => {
+              raw += chunk;
+            });
+            res.on("end", () => {
+              resolve({
+                status: res.statusCode ?? 0,
+                body: raw ? (JSON.parse(raw) as unknown) : null,
+              });
+            });
+          },
+        );
+        req.on("error", reject);
+        req.write(postBody.slice(0, 1));
+        setTimeout(() => {
+          req.end(postBody.slice(1));
+        }, 30);
+      },
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+    await saveState(
+      {
+        pairing_token: token,
+        interests: [{ id: "int_live_id", topic: "AI safety" }],
+      },
+      stateFile,
+    );
+
+    const response = await responseP;
+    assert.equal(response.status, 202);
+    const state = await loadState(stateFile);
+    assert.equal(state.interests?.[0]?.id, "int_live_id");
+    assert.equal(state.interests?.[0]?.topic, "AI safety");
+    await doneP;
   } finally {
     server.close();
     await fs.rm(tmpStateDir, { recursive: true, force: true });
@@ -668,12 +764,18 @@ test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404 
 
     // DELETE on /v0/interests (GET/POST/PUT only, PER-169 added GET) → 405,
     // Allow: GET, POST, PUT, OPTIONS.
-    const interestsDelete = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
-      method: "DELETE",
-      headers: auth,
-    });
+    const interestsDelete = await fetch(
+      `http://127.0.0.1:${port}/v0/interests`,
+      {
+        method: "DELETE",
+        headers: auth,
+      },
+    );
     assert.equal(interestsDelete.status, 405);
-    assert.equal(interestsDelete.headers.get("allow"), "GET, POST, PUT, OPTIONS");
+    assert.equal(
+      interestsDelete.headers.get("allow"),
+      "GET, POST, PUT, OPTIONS",
+    );
 
     // PUT on the GET-only /v0/briefs → 405, Allow: GET, OPTIONS.
     const briefsPut = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
@@ -715,11 +817,20 @@ test("serves the bundled static UI for non-API GETs (PER-110)", async () => {
   // A throwaway webroot mirroring the Next export layout (index.html, /app/,
   // hashed _next asset) — no dependency on a prior `next build`.
   const webroot = await fs.mkdtemp(path.join(os.tmpdir(), "scout-webroot-"));
-  await fs.writeFile(path.join(webroot, "index.html"), "<!doctype html><title>root</title>");
+  await fs.writeFile(
+    path.join(webroot, "index.html"),
+    "<!doctype html><title>root</title>",
+  );
   await fs.mkdir(path.join(webroot, "app"), { recursive: true });
-  await fs.writeFile(path.join(webroot, "app", "index.html"), "<!doctype html><title>app</title>");
+  await fs.writeFile(
+    path.join(webroot, "app", "index.html"),
+    "<!doctype html><title>app</title>",
+  );
   await fs.mkdir(path.join(webroot, "_next", "static"), { recursive: true });
-  await fs.writeFile(path.join(webroot, "_next", "static", "x.js"), "console.log(1)");
+  await fs.writeFile(
+    path.join(webroot, "_next", "static", "x.js"),
+    "console.log(1)",
+  );
 
   const { server, port } = await startServer(0, { stateFile, webroot });
   try {
@@ -766,9 +877,15 @@ test("SPA fallback + trailing-slash parity for the bundled UI (PER-127)", async 
   // Webroot mirroring the Next `trailingSlash: true` export: /app/ and
   // /app/connect/ are directory routes; there is NO /app/settings route.
   const webroot = await fs.mkdtemp(path.join(os.tmpdir(), "scout-webroot-"));
-  await fs.writeFile(path.join(webroot, "index.html"), "<!doctype html><title>root</title>");
+  await fs.writeFile(
+    path.join(webroot, "index.html"),
+    "<!doctype html><title>root</title>",
+  );
   await fs.mkdir(path.join(webroot, "app"), { recursive: true });
-  await fs.writeFile(path.join(webroot, "app", "index.html"), "<!doctype html><title>app</title>");
+  await fs.writeFile(
+    path.join(webroot, "app", "index.html"),
+    "<!doctype html><title>app</title>",
+  );
   await fs.mkdir(path.join(webroot, "app", "connect"), { recursive: true });
   await fs.writeFile(
     path.join(webroot, "app", "connect", "index.html"),
@@ -820,28 +937,39 @@ test("unknown route → styled 404.html, not raw JSON (PER-144/PER-148)", async 
   await saveState({ pairing_token: newPairingToken() }, stateFile);
 
   const webroot = await fs.mkdtemp(path.join(os.tmpdir(), "scout-webroot-"));
-  await fs.writeFile(path.join(webroot, "index.html"), "<!doctype html><title>root</title>");
+  await fs.writeFile(
+    path.join(webroot, "index.html"),
+    "<!doctype html><title>root</title>",
+  );
   await fs.mkdir(path.join(webroot, "app"), { recursive: true });
-  await fs.writeFile(path.join(webroot, "app", "index.html"), "<!doctype html><title>app</title>");
+  await fs.writeFile(
+    path.join(webroot, "app", "index.html"),
+    "<!doctype html><title>app</title>",
+  );
   await fs.writeFile(
     path.join(webroot, "404.html"),
-    "<!doctype html><title>Page not found</title><a href=\"/\">home</a>",
+    '<!doctype html><title>Page not found</title><a href="/">home</a>',
   );
 
   const html = { accept: "text/html,application/xhtml+xml" };
   const { server, port } = await startServer(0, { stateFile, webroot });
   try {
     // Genuinely-unknown top-level path, browser navigation → 404 + styled page.
-    const unknown = await fetch(`http://127.0.0.1:${port}/totally-unknown`, { headers: html });
+    const unknown = await fetch(`http://127.0.0.1:${port}/totally-unknown`, {
+      headers: html,
+    });
     assert.equal(unknown.status, 404);
     assert.match(unknown.headers.get("content-type") ?? "", /text\/html/);
     assert.match(await unknown.text(), /Page not found/);
 
     // The PER-144 repro path itself stays caught by the SPA fallback (200 shell),
     // never reaching the 404 page.
-    const appUnknown = await fetch(`http://127.0.0.1:${port}/app/nonexistent-xyz`, {
-      headers: html,
-    });
+    const appUnknown = await fetch(
+      `http://127.0.0.1:${port}/app/nonexistent-xyz`,
+      {
+        headers: html,
+      },
+    );
     assert.equal(appUnknown.status, 200);
     assert.match(await appUnknown.text(), /<title>app<\/title>/);
 

@@ -5,6 +5,7 @@
 // only callers — both verbs must apply the exact same rules.
 
 import {
+  loadState,
   saveState,
   reconcileInterests,
   interestTopics,
@@ -69,7 +70,10 @@ function parseInterestsPayload(raw: unknown): InterestParse {
 // requires an explicit `confirm_replace: true` token, mirroring the PER-230
 // confirm-delete seam. Case-insensitive to match parseInterestsPayload's dedupe
 // and reconcileInterests' id-preserving match.
-function droppedTopics(saved: State["interests"], incoming: string[]): string[] {
+function droppedTopics(
+  saved: State["interests"],
+  incoming: string[],
+): string[] {
   const incomingKeys = new Set(incoming.map((s) => s.toLowerCase()));
   return interestTopics(saved).filter(
     (t) => !incomingKeys.has(t.toLowerCase()),
@@ -122,7 +126,7 @@ export async function handleGetInterests(
 // distinct from POST below, which ALSO kicks a (~5-min) synthesis run.
 // The scheduler reuses whatever is persisted here on its next fire.
 export async function handlePutInterests(
-  { req, res, cors, state }: AuthedRequestContext,
+  { req, res, cors }: AuthedRequestContext,
   sc: ServerContext,
 ): Promise<void> {
   const parsedBody = await parseJsonBody<{
@@ -134,24 +138,33 @@ export async function handlePutInterests(
   const validated = parseInterestsPayload(parsed.interests);
   if (!validated.ok)
     return json(res, validated.status, { error: validated.error }, cors);
+  // Reload the state fresh AFTER the (network-bound) body read, and spread THIS
+  // snapshot — not the auth-time `state` the router loaded before parseJsonBody.
+  // A brief run, chat turn, or scheduler reschedule can complete during the body
+  // read and write last_brief/briefs/last_chat/schedule; spreading the stale
+  // auth-time snapshot would silently revert those concurrent writes (e.g. drop a
+  // brief that just finished). Mirrors the reload-before-persist the runner
+  // (runner.ts) and chat (chat.ts) paths already use. The remaining window (fresh
+  // load → save, both below with no await between) is effectively zero (AIR-107).
+  const fresh = await loadState(sc.stateFile);
   // Wipe guard (PER-240): PUT is replace-all, so a payload missing any
   // currently-saved topic is destructive. Refuse it unless the caller
   // explicitly confirms — additive edits (same set or supersets) pass
   // through untouched.
-  const dropped = droppedTopics(state.interests, validated.interests);
+  const dropped = droppedTopics(fresh.interests, validated.interests);
   if (dropped.length > 0 && parsed.confirm_replace !== true) {
     return json(res, 409, wipeGuardError(dropped), cors);
   }
   // Persist the rich {id, topic} model, preserving each existing topic's
   // id so its intent doc stays attached across an edit (PER-169). The
   // wire response stays a topic string[] for back-compat.
-  const interests = reconcileInterests(state.interests, validated.interests);
-  await saveState({ ...state, interests }, sc.stateFile);
+  const interests = reconcileInterests(fresh.interests, validated.interests);
+  await saveState({ ...fresh, interests }, sc.stateFile);
   json(res, 200, { interests: validated.interests, status: "saved" }, cors);
 }
 
 export async function handlePostInterests(
-  { req, res, cors, state }: AuthedRequestContext,
+  { req, res, cors }: AuthedRequestContext,
   sc: ServerContext,
 ): Promise<void> {
   const parsedBody = await parseJsonBody<{
@@ -167,6 +180,12 @@ export async function handlePostInterests(
   if (!validated.ok)
     return json(res, validated.status, { error: validated.error }, cors);
   const topics = validated.interests;
+  // Reload after the body read, matching PUT above. The router's auth-time
+  // `state` may be stale by now if a chat turn, settings save, or another
+  // companion write completed while the request body streamed in. The wipe
+  // guard and rich-id reconciliation must use the latest snapshot so a normal
+  // run never detaches intent docs from their current interest ids.
+  const fresh = await loadState(sc.stateFile);
 
   // Ephemeral / dry-run trigger (PER-218): research the supplied topics
   // and produce a brief WITHOUT persisting them as the founder's saved
@@ -181,7 +200,7 @@ export async function handlePostInterests(
   // the founder's 5 saved interests). Ephemeral runs skip the guard
   // because they persist nothing.
   if (!ephemeral) {
-    const dropped = droppedTopics(state.interests, topics);
+    const dropped = droppedTopics(fresh.interests, topics);
     if (dropped.length > 0 && parsed.confirm_replace !== true) {
       return json(res, 409, wipeGuardError(dropped), cors);
     }
@@ -189,7 +208,7 @@ export async function handlePostInterests(
 
   // Reconcile into the rich {id, topic} model (preserving ids) before the
   // run persists them, so the doc store stays anchored across runs.
-  const interests = reconcileInterests(state.interests, topics);
+  const interests = reconcileInterests(fresh.interests, topics);
 
   // Case-insensitively map a wire topic back to its canonical interest
   // casing, dropping anything not in the current list (no stale/foreign
@@ -249,8 +268,14 @@ export async function handlePostInterests(
     }
     // interests were validated non-empty above, so the only other reason
     // is a run already in flight → 409, echoing the in-flight id.
-    const briefId = outcome.reason === "in_flight" ? outcome.briefId : undefined;
-    return json(res, 409, { error: "brief in progress", brief_id: briefId }, cors);
+    const briefId =
+      outcome.reason === "in_flight" ? outcome.briefId : undefined;
+    return json(
+      res,
+      409,
+      { error: "brief in progress", brief_id: briefId },
+      cors,
+    );
   }
 
   json(res, 202, { brief_id: outcome.briefId, status: "pending" }, cors);

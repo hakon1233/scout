@@ -105,9 +105,9 @@ test("feed filter narrows the feed to the selected topic and restores it", async
 
   // Apply the "Markets" filter via the funnel dropdown.
   await page.getByRole("button", { name: "Filter feed" }).click();
-  const menu = page.getByRole("menu", { name: "Filter feed by topic" });
+  const menu = page.getByRole("group", { name: "Filter by topic" });
   await expect(menu).toBeVisible();
-  await menu.getByRole("menuitem", { name: "Markets" }).click();
+  await menu.getByRole("button", { name: "Markets" }).click();
 
   // THE functional assertion: the AI-safety story is gone, Markets remains.
   await expect(aiCard).toHaveCount(0);
@@ -125,9 +125,9 @@ test("feed filter narrows the feed to the selected topic and restores it", async
 
   // "All topics" restores the full feed.
   await page.getByRole("button", { name: "Filtering by Markets" }).click();
-  const menu2 = page.getByRole("menu", { name: "Filter feed by topic" });
+  const menu2 = page.getByRole("group", { name: "Filter by topic" });
   await expect(menu2).toBeVisible();
-  await menu2.getByRole("menuitem", { name: "All topics" }).click();
+  await menu2.getByRole("button", { name: "All topics" }).click();
 
   await expect(aiCard).toBeVisible();
   await expect(marketsCard).toBeVisible();

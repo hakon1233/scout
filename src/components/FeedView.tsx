@@ -129,9 +129,7 @@ export function FeedView({
     // page-level coverage banners already explain why; use the shared empty-state
     // primitive so this reads consistently with every other "nothing here yet"
     // surface in the app (Liked feed, interest docs, etc.) instead of a bare line.
-    return (
-      <EmptyState title="No stories in this edition yet" />
-    );
+    return <EmptyState title="No stories in this edition yet" />;
   }
 
   return (
@@ -261,13 +259,14 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 text-body-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
         >
+          {/* eslint-disable-next-line @next/next/no-img-element -- 16px favicon; next/image's client runtime buys nothing under images.unoptimized:true. */}
           <img
             src={faviconFor(item.source)}
             alt=""
             width={16}
             height={16}
-            className="h-4 w-4 rounded-sm"
             loading="lazy"
+            className="h-4 w-4 rounded-sm"
           />
           Read the full story at {item.source} ↗
         </a>
@@ -293,6 +292,7 @@ export function FeedImage({
   // referrerPolicy="no-referrer" so referer-checking CDNs (Crunchbase etc.) that
   // 403 a request carrying our ts.net origin still serve the image (PER-217).
   return (
+    // eslint-disable-next-line @next/next/no-img-element -- Arbitrary source images need no-referrer and graceful unknown-host fallback; next/image requires host policy we cannot predict.
     <img
       src={src}
       alt=""

@@ -67,6 +67,9 @@ export type ChatOptions = {
   // Abort signal (PER-232): when fired, the `claude` child is killed and the
   // round-trip rejects, so the turn can land as stopped WITHOUT applying changes.
   signal?: AbortSignal;
+  // Per-turn hard timeout in ms (AIR-540). Defaults to SCOUT_SESSION_TIMEOUT_MS
+  // env or 4 min; tests set it tiny to drive the kill path without waiting.
+  timeoutMs?: number;
 };
 
 // What the model is asked to return: a reply plus the changes it wants applied.
@@ -403,6 +406,20 @@ export function buildChatPrompt(
 }
 
 // Run the `claude` subprocess for one chat turn and parse its JSON output.
+// Bounded per-turn lifetime (AIR-540), mirroring research.ts's PER-181 session
+// timeout. Shares the SCOUT_SESSION_TIMEOUT_MS knob so one env var bounds every
+// `claude` child; a real chat turn is well under the 4-min default. Override
+// per-call via ChatOptions.timeoutMs (tests set it tiny).
+const DEFAULT_CHAT_TIMEOUT_MS = 4 * 60 * 1000;
+
+function chatTimeoutMs(override?: number): number {
+  if (override !== undefined && Number.isFinite(override) && override > 0) {
+    return override;
+  }
+  const env = Number(process.env.SCOUT_SESSION_TIMEOUT_MS);
+  return Number.isFinite(env) && env > 0 ? env : DEFAULT_CHAT_TIMEOUT_MS;
+}
+
 // Mirrors research.ts's delegated spawn (stdin prompt, niceness, error mapping)
 // but expects a JSON object back instead of brief markdown.
 export async function chatComplete(
@@ -414,6 +431,7 @@ export async function chatComplete(
   const claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ?? "claude";
   const spawnImpl = opts.spawnFn ?? spawn;
   const prompt = buildChatPrompt(message, snapshots, transcript);
+  const timeoutMs = chatTimeoutMs(opts.timeoutMs);
 
   const raw = await new Promise<string>((resolve, reject) => {
     if (opts.signal?.aborted) {
@@ -440,11 +458,46 @@ export async function chatComplete(
       }
     }
 
+    // Exactly one terminal outcome (close / error / abort / timeout). `settled`
+    // guards the timer↔close race so a child that both times out and later
+    // closes (or aborts then closes) can't double-settle or leave a dangling
+    // kill timer. The stub children in tests have no kill(); guard with `?.`.
+    let settled = false;
+    const kill = (sig: string) =>
+      (child as { kill?: (s?: string) => void }).kill?.(sig);
+
+    // Bounded per-turn lifetime (AIR-540), mirroring research.ts's PER-181 guard.
+    // Without it a hung `claude` child never emits `close`, so runChatTurn's
+    // `finally` never clears `chatInFlight` and every later /v0/chat*, confirm-
+    // delete, and confirm-rewrite returns 409 in_flight until the companion is
+    // restarted. On expiry: SIGTERM, then SIGKILL if it ignores the term, and
+    // reject so the turn lands `failed` and releases the in-flight guard.
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      opts.signal?.removeEventListener("abort", onAbort);
+      try {
+        kill("SIGTERM");
+        setTimeout(() => {
+          try {
+            kill("SIGKILL");
+          } catch {
+            /* already gone */
+          }
+        }, 2000).unref?.();
+      } catch {
+        /* already gone */
+      }
+      reject(new Error(`claude chat turn timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
     // PER-232: a Stop mid-round-trip kills the child and rejects immediately,
     // so the caller can mark the turn stopped instead of waiting out the model.
-    // The stub children in tests have no kill(); guard with `?.`.
     const onAbort = () => {
-      (child as { kill?: (sig?: string) => void }).kill?.("SIGTERM");
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      kill("SIGTERM");
       reject(new ChatStoppedError());
     };
     opts.signal?.addEventListener("abort", onAbort, { once: true });
@@ -460,14 +513,21 @@ export async function chatComplete(
     const errDecoder = new StringDecoder("utf8");
     child.stdout!.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
     child.stderr!.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
-    child.on("error", (e) =>
+    child.on("error", (e) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", onAbort);
       reject(
         new Error(
           `failed to spawn '${claudeBin}' — is the Claude Code CLI installed and on PATH? (${e.message})`,
         ),
-      ),
-    );
+      );
+    });
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
       opts.signal?.removeEventListener("abort", onAbort);
       // Flush any bytes the decoder buffered for an incomplete trailing char.
       stdout += outDecoder.end();
@@ -480,6 +540,16 @@ export async function chatComplete(
       resolve(stdout);
     });
 
+    // A broken pipe — `claude` closing its stdin read-end before we finish
+    // writing the multi-KB prompt, most likely when it exits immediately during
+    // an outage or usage-limit hit — emits an 'error' on this stream. With no
+    // listener that is an unhandled stream error that crashes the whole loopback
+    // server, abandoning every in-flight brief/chat. Log and swallow: the child's
+    // 'error'/'close' handlers above already settle this promise with the real
+    // cause (the non-zero exit), so no control-flow change is needed here.
+    child.stdin!.on("error", (e: Error) =>
+      console.error(`[chat] claude stdin write failed:`, e.message),
+    );
     child.stdin!.write(prompt);
     child.stdin!.end();
   });
@@ -628,6 +698,9 @@ export type ChatDeps = {
   chatTranscriptFile?: string;
   claudeBin?: string;
   spawnFn?: typeof spawn;
+  // Per-turn hard timeout in ms (AIR-540), threaded to chatComplete. Tests set
+  // it tiny to drive the hung-child kill path through the in-flight guard.
+  timeoutMs?: number;
   // Fired when a turn finishes (ready or failed). Tests await this.
   onChatDone?: (turn: ChatTurn) => void;
 };
@@ -904,6 +977,7 @@ async function runChatTurn(
       claudeBin: deps.claudeBin,
       spawnFn: deps.spawnFn,
       signal: abort.signal,
+      timeoutMs: deps.timeoutMs,
     });
     // PER-232: last abort gate BEFORE anything persists. Even if the model
     // round-trip outraced the Stop (or the killed child still flushed output),

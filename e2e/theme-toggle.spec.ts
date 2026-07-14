@@ -94,20 +94,13 @@ test.describe("settings · theme toggle", () => {
     await expect(html).not.toHaveClass(/dark/);
   });
 
-  // KNOWN BUG (AIR-283 QA finding) — runtime theme switches update the `.dark`
-  // class but NOT <html>.style.colorScheme, so native UA surfaces (scrollbars,
-  // the Settings/Schedule time <input>) keep painting in the OLD mode until a
-  // reload runs ThemeBootstrap. The bootstrap sets both; applyTheme() sets only
-  // the class. Flip this to a normal test once the fix lands. Tracked by the
-  // child fix-issue filed from this pass.
-  test.fixme("runtime Light→Dark switch keeps color-scheme in sync for UA surfaces", async ({
+  test("runtime Light→Dark switch keeps color-scheme in sync for UA surfaces", async ({
     page,
   }) => {
     await page.goto(`${ORIGIN}/app/settings/`);
     const html = page.locator("html");
     await themeGroup(page).getByRole("radio", { name: "Dark" }).click();
     await expect(html).toHaveClass(/dark/);
-    // BUG: stays "light" until reload.
     await expect(html).toHaveJSProperty("style.colorScheme", "dark");
   });
 });

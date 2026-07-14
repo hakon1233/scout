@@ -144,8 +144,13 @@ export default function ConnectPage() {
       await postInterests(interests, tok);
     } catch (err) {
       console.error("Failed to post interests to companion", err);
+      const message = err instanceof Error ? err.message : "";
+      const reachableFailure =
+        /network|fetch|reach|connect|companion not reachable/i.test(message);
       setGenMsg(
-        "Could not reach the companion. Make sure `scout-agent run` is running on this machine.",
+        reachableFailure
+          ? "Could not reach the companion. Make sure `scout-agent run` is running on this machine."
+          : message || "The companion rejected this run.",
       );
       setGenState("error");
       return;

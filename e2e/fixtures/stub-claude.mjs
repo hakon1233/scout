@@ -18,7 +18,17 @@
 // It also carries a `## topic` heading and a `[domain — Title](url)` citation
 // so the app's parser produces articles + a Sources panel (PER-106).
 
-process.stdin.on("data", () => {});
+// Accumulate the prompt piped on stdin. The brief path drains + ignores the
+// content, but the chat path (emit → emitChat) needs it to detect the chat
+// marker and parse the user's message — so it must be captured into a
+// module-scoped string. Referencing an undefined `stdin` in emit() was exactly
+// the AIR-642 crash (`ReferenceError: stdin is not defined`) that reds every e2e
+// `claude` shell-out (brief AND chat) the moment stdin closes.
+let stdin = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  stdin += chunk;
+});
 
 // Point the canned source image at the companion's OWN loopback origin so it
 // actually loads under the E2E offline guard (which aborts every non-loopback
