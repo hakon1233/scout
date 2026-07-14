@@ -933,6 +933,47 @@ test("startChatTurn clears the in-flight guard if persisting the pending turn fa
   }
 });
 
+test("AIR-540: a hung chat child times out, lands the turn failed, and clears the in-flight guard", async () => {
+  const { tmp, stateFile, interestsDir } = await seeded();
+
+  // A child that never emits `close` (autoClose:false queues `finish` but never
+  // releases it) — the exact hang the per-turn timeout guards against. Without
+  // the timeout, runChatTurn's `finally` never runs and `chatInFlight` stays true
+  // for the process lifetime, 409-ing every later chat request.
+  const { spawnFn, calls } = makeChatSpawn({ output: "", autoClose: false });
+  const { onChatDone, done } = awaitTurn();
+
+  try {
+    const outcome = await startChatTurn("please refine", {
+      stateFile,
+      interestsDir,
+      spawnFn,
+      timeoutMs: 50,
+      onChatDone,
+    });
+    assert.equal(outcome.started, true);
+
+    // `done` resolves only after runChatTurn's `finally` clears chatInFlight, so
+    // awaiting it both settles the turn and releases the module-global guard
+    // before the next test runs.
+    const turn = await done;
+    assert.equal(calls.length, 1, "the turn spawned exactly one claude child");
+    assert.equal(turn.status, "failed", "a hung turn must land failed, not hang forever");
+    assert.match(
+      turn.error_msg ?? "",
+      /timed out after 50ms/,
+      "the failure names the per-turn timeout",
+    );
+    assert.equal(
+      isChatInFlight(),
+      false,
+      "the timeout must release the in-flight guard so later turns aren't 409'd",
+    );
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/chat rejects an empty message with 400 and never spawns claude", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded();
   const recorder = makeChatSpawn({ output: "{}", autoClose: true });
@@ -1254,5 +1295,57 @@ test("CAR-195: a missing transcript returns [] without creating a backup", async
     assert.deepEqual(await fs.readdir(tmp), []);
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("CAR-146: a non-ENOENT transcript read failure logs and returns []", async () => {
+  const originalError = console.error;
+  const calls: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  try {
+    const file = path.join("/dev/null", "transcript.json");
+    assert.deepEqual(await readChatTranscript(file), []);
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(calls.length, 1);
+  assert.match(
+    String(calls[0][0]),
+    /^\[chat\] transcript .* could not be read:/,
+  );
+  assert.equal((calls[0][1] as NodeJS.ErrnoException).code, "ENOTDIR");
+});
+
+// Bug-hunt regression: a literal JSON `null` body (valid JSON, but not an
+// object) must yield a clean 400, not a 500. Before the parseJsonBody fix,
+// `JSON.parse("null")` returned `null`, which the handler then dereferenced
+// (`parsed.message`) → uncaught TypeError → 500 with a leaked error. Every
+// mutating /v0 route shares parseJsonBody, so exercising one proves the guard.
+test("POST /v0/chat with a literal `null` JSON body returns 400, not 500", async () => {
+  const { stateFile, interestsDir, token } = await seeded();
+  const { spawnFn } = makeChatSpawn({ output: "{}", autoClose: true });
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: "null",
+    });
+    // `null` body → treated as an empty object → "message required" (400).
+    assert.equal(res.status, 400);
+    const parsed = (await res.json()) as { error: string };
+    assert.equal(parsed.error, "message required");
+  } finally {
+    server.close();
   }
 });

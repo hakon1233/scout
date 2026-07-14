@@ -6,13 +6,16 @@ import {
   fetchCompanionInterests,
 } from "@/lib/companion";
 import {
+  useAbortableController,
+  useAbortableEffect,
+} from "@/hooks/useAbortableEffect";
+import {
   confirmDeleteInterest,
   confirmRewriteInterest,
   fetchChatTranscript,
   runChatTurn,
   stopChatTurn,
   type ChatChange,
-  type ChatTurn,
   type PendingDelete,
   type PendingRewrite,
 } from "@/lib/chat";
@@ -23,108 +26,27 @@ import {
   mockDocMeta,
   SAMPLE_INTERESTS,
 } from "@/lib/interest-docs";
+import { prefersReducedMotion } from "@/lib/motion";
 import { loadSettings } from "@/lib/storage";
 import type { Interest } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
-
-function mergeInterests(
-  local: Interest[],
-  companionTopics: string[],
-): Interest[] {
-  if (companionTopics.length === 0) return local;
-  const byTopic = new Map(local.map((i) => [i.topic.trim().toLowerCase(), i]));
-  return companionTopics.map((topic) => {
-    const match = byTopic.get(topic.trim().toLowerCase());
-    return match ?? { id: "", topic };
-  });
-}
-
-let msgSeq = 0;
-function nextMsgId(): string {
-  msgSeq += 1;
-  return `m${msgSeq}`;
-}
-
-function greetingMessage(): ChatMessage {
-  return {
-    id: nextMsgId(),
-    role: "scout",
-    text: "Hi — I'm Scout. Tell me what to track and I'll draft an intent doc for it, refine one you already have, or drop an interest. Pick “Refine” on any card to aim a message at it.",
-  };
-}
-
-function markdownDemoMessages(): ChatMessage[] {
-  return [
-    {
-      id: nextMsgId(),
-      role: "you",
-      text: "Track **user emphasis** and keep `<script>xss()</script>` as inert text.",
-      ts: "2026-06-05T12:00:00.000Z",
-    },
-    {
-      id: nextMsgId(),
-      role: "scout",
-      text: [
-        "## Scout markdown reply",
-        "",
-        "**assistant emphasis** and a [source link](https://example.com/brief).",
-        "",
-        "> quoted context",
-        "",
-        "```ts",
-        'const topic = "markdown";',
-        "```",
-      ].join("\n"),
-      ts: "2026-06-05T12:01:00.000Z",
-    },
-  ];
-}
-
-function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
-  return turns.flatMap((turn) => {
-    const out: ChatMessage[] = [
-      {
-        id: nextMsgId(),
-        role: "you",
-        text: turn.message,
-        ts: turn.created_at,
-      },
-    ];
-    if (
-      turn.status === "ready" &&
-      (turn.reply || turn.pending_delete || turn.pending_rewrite)
-    ) {
-      out.push({
-        id: nextMsgId(),
-        role: "scout",
-        text: turn.reply ?? "",
-        ts: turn.created_at,
-        changes:
-          turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
-        pendingDelete: turn.pending_delete,
-        pendingRewrite: turn.pending_rewrite,
-      });
-    } else if (turn.status === "failed" && turn.error_msg) {
-      out.push({
-        id: nextMsgId(),
-        role: "scout",
-        text: `I couldn't finish that turn: ${turn.error_msg}`,
-        ts: turn.created_at,
-        failed: true,
-      });
-    }
-    return out;
-  });
-}
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
+import {
+  appliedChangeMessage,
+  applyDocBodyChange,
+  applyDocMetaChange,
+  applyInterestChange,
+  buildDocCards,
+  dropInterest,
+  dropKey,
+  greetingMessage,
+  markdownDemoMessages,
+  mergeInterests,
+  nextMsgId,
+  resolveMessage,
+  resolveRetryTarget,
+  transcriptMessages,
+} from "./useProfileWorkbench.helpers";
 
 export function useProfileWorkbench() {
   const [hydrated, setHydrated] = useState(false);
@@ -149,7 +71,8 @@ export function useProfileWorkbench() {
 
   const beatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const streamTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const { startAbortable, clearAbortable, abortCurrent } =
+    useAbortableController();
   const abortedRef = useRef(false);
   // PER-232: the in-flight turn's server id (set once the kick lands) and
   // whether the user pressed Stop before we even had it — so the server-side
@@ -157,12 +80,20 @@ export function useProfileWorkbench() {
   const turnIdRef = useRef<string | null>(null);
   const stopRequestedRef = useRef(false);
   const docBodiesRef = useRef<Record<string, string>>({});
+  const messagesRef = useRef<ChatMessage[]>([]);
 
   // Mirror docBodies into a ref so `send` can read the pre-change body for the
   // diff/undo without re-binding on every keystroke-driven body update.
   useEffect(() => {
     docBodiesRef.current = docBodies;
   }, [docBodies]);
+
+  // Mirror messages into a ref so `retry` can read the current log to compute
+  // its target OUTSIDE a setMessages updater (see resolveRetryTarget) without
+  // re-binding the callback on every message append.
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -186,49 +117,51 @@ export function useProfileWorkbench() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    if (mockSeed !== null) return;
-    let cancelled = false;
-    (async () => {
-      const tok = await bootstrapCompanionToken();
-      if (cancelled) return;
-      setToken(tok);
-      const transcript = tok ? await fetchChatTranscript(tok) : [];
-      if (cancelled) return;
-      if (transcript.length > 0) {
-        setMessages(transcriptMessages(transcript));
-      }
-      const full = await fetchInterestsFull(tok);
-      if (cancelled) return;
-      if (full && full.interests.length > 0) {
-        setInterests(full.interests);
-        setDocMeta(full.meta);
-        setDocBodies(
-          Object.fromEntries(
-            Object.entries(full.meta)
-              .filter(([, meta]) => typeof meta.body === "string")
-              .map(([key, meta]) => [key, meta.body as string]),
-          ),
-        );
-        return;
-      }
-      const topics = await fetchCompanionInterests();
-      if (cancelled) return;
-      if (topics.length > 0)
-        setInterests((prev) => mergeInterests(prev, topics));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hydrated, mockSeed]);
+  useAbortableEffect(
+    (scope) => {
+      if (!hydrated) return;
+      if (mockSeed !== null) return;
+      (async () => {
+        const tok = await bootstrapCompanionToken();
+        if (scope.cancelled) return;
+        setToken(tok);
+        // transcript + full-interests both depend only on `tok` and are
+        // independent of each other — fetch concurrently instead of in series
+        // to roughly halve first-paint latency.
+        const [transcript, full] = await Promise.all([
+          tok ? fetchChatTranscript(tok) : Promise.resolve([]),
+          fetchInterestsFull(tok),
+        ]);
+        if (scope.cancelled) return;
+        if (transcript.length > 0) {
+          setMessages(transcriptMessages(transcript));
+        }
+        if (full && full.interests.length > 0) {
+          setInterests(full.interests);
+          setDocMeta(full.meta);
+          setDocBodies(
+            Object.fromEntries(
+              Object.entries(full.meta)
+                .filter(([, meta]) => typeof meta.body === "string")
+                .map(([key, meta]) => [key, meta.body as string]),
+            ),
+          );
+          return;
+        }
+        const topics = await fetchCompanionInterests();
+        if (scope.cancelled) return;
+        if (topics.length > 0)
+          setInterests((prev) => mergeInterests(prev, topics));
+      })();
+    },
+    [hydrated, mockSeed],
+  );
 
   useEffect(() => {
     const timers = beatTimers.current;
     return () => {
       Object.values(timers).forEach(clearTimeout);
       if (streamTimer.current) clearInterval(streamTimer.current);
-      abortRef.current?.abort();
     };
   }, []);
 
@@ -250,20 +183,12 @@ export function useProfileWorkbench() {
       for (const ch of changes) {
         const key = ch.interestId;
         if (!key) continue;
+        // Pure store transitions live in the helpers; the hook keeps the timer
+        // and focus side effects that can't be expressed as a reducer.
+        setInterests((prev) => applyInterestChange(prev, ch));
+        setDocBodies((prev) => applyDocBodyChange(prev, ch));
+        setDocMeta((prev) => applyDocMetaChange(prev, ch, at));
         if (ch.op === "delete") {
-          setInterests((prev) =>
-            prev.filter((i) => interestKey(i) !== key && i.id !== key),
-          );
-          setDocBodies((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
-          setDocMeta((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
           setFocusKey((cur) => (cur === key ? null : cur));
           if (beatTimers.current[key]) {
             clearTimeout(beatTimers.current[key]);
@@ -271,26 +196,6 @@ export function useProfileWorkbench() {
           }
           continue;
         }
-        const topic = ch.topic?.trim() ?? "";
-        setInterests((prev) => {
-          const idx = prev.findIndex(
-            (i) => interestKey(i) === key || i.id === key,
-          );
-          if (idx === -1) return [...prev, { id: key, topic }];
-          if (topic && prev[idx].topic !== topic) {
-            const next = [...prev];
-            next[idx] = { ...next[idx], id: prev[idx].id || key, topic };
-            return next;
-          }
-          return prev;
-        });
-        if (typeof ch.doc === "string") {
-          setDocBodies((prev) => ({ ...prev, [key]: ch.doc as string }));
-        }
-        setDocMeta((prev) => ({
-          ...prev,
-          [key]: { hasDoc: true, updatedAt: at },
-        }));
         flashBeat(key, ch.op === "create" ? "created" : "updated");
       }
     },
@@ -305,24 +210,10 @@ export function useProfileWorkbench() {
   const flashRemove = useCallback((key: string) => {
     setBeats((prev) => ({ ...prev, [key]: "removed" }));
     const drop = () => {
-      setInterests((prev) =>
-        prev.filter((i) => interestKey(i) !== key && i.id !== key),
-      );
-      setDocBodies((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      setDocMeta((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      setBeats((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
+      setInterests((prev) => dropInterest(prev, key));
+      setDocBodies((prev) => dropKey(prev, key));
+      setDocMeta((prev) => dropKey(prev, key));
+      setBeats((prev) => dropKey(prev, key));
       setFocusKey((cur) => (cur === key ? null : cur));
       delete beatTimers.current[key];
     };
@@ -336,39 +227,50 @@ export function useProfileWorkbench() {
 
   // Confirm a gated delete (PER-230 #1): the deterministic [Delete] press. Hits
   // the no-model confirm-delete route, which actually removes the interest + doc
-  // and returns a ready turn. On success we flash-and-drop the card and mark the
-  // confirm message resolved so it locks to "Removed".
+  // and returns a ready turn. On success we flash-and-drop the card, mark the
+  // confirm message resolved so it locks to "Removed", and append the applied
+  // delete as its own action card so the founder gets a live Undo — same as a
+  // create, and matching what a reload already showed (AIR-611).
   const confirmDelete = useCallback(
     (pd: PendingDelete, msgId: string) => {
       if (sending) return;
       setSending(true);
       setError(null);
+      // Snapshot the doc as it is right now, before the delete drops it, so the
+      // action card diffs it out and undo re-creates it verbatim (AIR-611).
+      const prevBody = docBodiesRef.current[pd.interestId] ?? null;
+      abortedRef.current = false;
+      const controller = startAbortable();
       (async () => {
         try {
-          await confirmDeleteInterest(pd.interestId, token);
+          const turn = await confirmDeleteInterest(pd.interestId, token, {
+            signal: controller.signal,
+          });
           flashRemove(pd.interestId);
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msgId ? { ...m, deleteResolved: "deleted" } : m,
-            ),
-          );
+          const card = appliedChangeMessage(turn, pd.interestId, prevBody);
+          setMessages((prev) => {
+            const resolved = resolveMessage(prev, msgId, {
+              deleteResolved: "deleted",
+            });
+            return card ? [...resolved, card] : resolved;
+          });
         } catch (e) {
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(e instanceof Error ? e.message : "Couldn't remove that.");
         } finally {
-          setSending(false);
+          clearAbortable(controller);
+          if (!controller.signal.aborted) setSending(false);
         }
       })();
     },
-    [sending, token, flashRemove],
+    [sending, token, flashRemove, startAbortable, clearAbortable],
   );
 
   // Cancel a gated delete: nothing touches the store — just lock the card to
   // "Kept" so the dead-control proof is visible.
   const cancelDelete = useCallback((msgId: string) => {
     setMessages((prev) =>
-      prev.map((m) =>
-        m.id === msgId ? { ...m, deleteResolved: "cancelled" } : m,
-      ),
+      resolveMessage(prev, msgId, { deleteResolved: "cancelled" }),
     );
   }, []);
 
@@ -383,27 +285,42 @@ export function useProfileWorkbench() {
       if (sending) return;
       setSending(true);
       setError(null);
+      // Snapshot the pre-rewrite doc before applyChanges overwrites it, so the
+      // follow-up action card diffs old→new and undo reverts to it verbatim
+      // (AIR-611).
+      const prevBody = docBodiesRef.current[pr.interestId] ?? null;
+      abortedRef.current = false;
+      const controller = startAbortable();
       (async () => {
         try {
-          const turn = await confirmRewriteInterest(pr.interestId, token);
+          const turn = await confirmRewriteInterest(pr.interestId, token, {
+            signal: controller.signal,
+          });
           if (turn.changes && turn.changes.length > 0) {
             applyChanges(turn.changes, new Date().toISOString());
           }
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msgId ? { ...m, rewriteResolved: "applied" } : m,
-            ),
-          );
+          // Append the applied rewrite as its own action card so a confirmed
+          // rewrite gets the same live Undo a create does (AIR-611) — the proposal
+          // card itself just locks to "Applied".
+          const card = appliedChangeMessage(turn, pr.interestId, prevBody);
+          setMessages((prev) => {
+            const resolved = resolveMessage(prev, msgId, {
+              rewriteResolved: "applied",
+            });
+            return card ? [...resolved, card] : resolved;
+          });
         } catch (e) {
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(
             e instanceof Error ? e.message : "Couldn't apply that rewrite.",
           );
         } finally {
-          setSending(false);
+          clearAbortable(controller);
+          if (!controller.signal.aborted) setSending(false);
         }
       })();
     },
-    [sending, token, applyChanges],
+    [sending, token, applyChanges, startAbortable, clearAbortable],
   );
 
   // Discard a gated rewrite: FE-local, nothing touches the store — the doc on
@@ -411,9 +328,7 @@ export function useProfileWorkbench() {
   // locks to "Discarded".
   const discardRewrite = useCallback((msgId: string) => {
     setMessages((prev) =>
-      prev.map((m) =>
-        m.id === msgId ? { ...m, rewriteResolved: "discarded" } : m,
-      ),
+      resolveMessage(prev, msgId, { rewriteResolved: "discarded" }),
     );
   }, []);
 
@@ -452,8 +367,7 @@ export function useProfileWorkbench() {
       abortedRef.current = false;
       turnIdRef.current = null;
       stopRequestedRef.current = false;
-      const controller = new AbortController();
-      abortRef.current = controller;
+      const controller = startAbortable();
 
       (async () => {
         try {
@@ -511,15 +425,30 @@ export function useProfileWorkbench() {
           }
           if (changes) applyChanges(changes, replyAt);
         } catch (e) {
-          if (abortedRef.current) return; // user stopped — not an error
+          // User stopped — not an error. Check THIS dispatch's own controller
+          // (not just the shared abortedRef, which a newly-started dispatch resets
+          // to false): a stop-then-immediately-send would otherwise let the just-
+          // aborted request's rejection surface a spurious error (AIR-527).
+          if (controller.signal.aborted || abortedRef.current) return;
           setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
-          if (abortRef.current === controller) abortRef.current = null;
-          setSending(false);
+          clearAbortable(controller);
+          // Only THIS dispatch may clear `sending` — and only if it wasn't
+          // aborted. A stop-then-immediately-send aborts turn A's controller and
+          // starts turn B (which sets sending=true, resets abortedRef). Turn A's
+          // poll doesn't observe the abort until its next loop tick (up to
+          // ~1.2s + a poll fetch later — pollChatTurn only checks signal.aborted
+          // at the top of the loop), so this finally runs AFTER turn B is live.
+          // An unconditional setSending(false) here clobbered turn B's in-flight
+          // state — Stop reverted to Send mid-turn and a resend 409'd. Guarding on
+          // the closure-captured controller.signal.aborted (immune to abortedRef's
+          // reset) mirrors the catch guard above; stop() already set sending=false
+          // for the aborted turn, so nothing is left stuck (AIR-107).
+          if (!controller.signal.aborted) setSending(false);
         }
       })();
     },
-    [token, applyChanges, startStream],
+    [token, applyChanges, startStream, startAbortable, clearAbortable],
   );
 
   const send = useCallback(
@@ -554,7 +483,7 @@ export function useProfileWorkbench() {
   const stop = useCallback(() => {
     abortedRef.current = true;
     stopRequestedRef.current = true;
-    abortRef.current?.abort();
+    abortCurrent();
     // Best-effort server abort: with the turn id when the kick already landed,
     // otherwise stop whatever is in flight (single-flight slot); onKick retries
     // with the concrete id if it arrives after this click.
@@ -565,31 +494,27 @@ export function useProfileWorkbench() {
     }
     setStreamId(null);
     setSending(false);
-  }, [token]);
+  }, [token, abortCurrent]);
 
   // Retry a scout turn: re-run the preceding `you` message without adding a new
   // bubble. We drop the old scout reply (and anything after it) first so the log
-  // stays one-reply-per-turn.
+  // stays one-reply-per-turn. Compute the target from the ref and dispatch ONCE
+  // here — NOT from inside a setMessages updater. React may invoke an updater
+  // more than once (StrictMode double-invokes it in dev), so the old
+  // `queueMicrotask(() => dispatch(wire))` inside the updater kicked the turn
+  // twice; the second kick hit the companion's single-flight slot and 409'd,
+  // surfacing a spurious "still working on your last message" error after a
+  // single Retry click.
   const retry = useCallback(
     (scoutId: string) => {
       if (sending) return;
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === scoutId);
-        if (idx <= 0) return prev;
-        let youIdx = idx - 1;
-        while (youIdx >= 0 && prev[youIdx].role !== "you") youIdx--;
-        if (youIdx < 0) return prev;
-        const youText = prev[youIdx].text;
-        const focusTopic = focusKey
-          ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
-          : null;
-        const wire = focusTopic
-          ? `Regarding my interest "${focusTopic}": ${youText}`
-          : youText;
-        // Defer the dispatch out of the updater.
-        queueMicrotask(() => dispatch(wire));
-        return prev.slice(0, idx);
-      });
+      const focusTopic = focusKey
+        ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
+        : null;
+      const target = resolveRetryTarget(messagesRef.current, scoutId, focusTopic);
+      if (!target) return;
+      setMessages(target.nextMessages);
+      dispatch(target.wire);
     },
     [sending, focusKey, interests, dispatch],
   );
@@ -618,23 +543,7 @@ export function useProfileWorkbench() {
 
   const cards: DocCardModel[] = useMemo(() => {
     const meta = mockSeed !== null ? mockDocMeta(interests, mockSeed) : docMeta;
-    return interests.map((i) => {
-      const key = interestKey(i);
-      const m = meta[key] ?? { hasDoc: false };
-      const body = docBodies[key];
-      return {
-        key,
-        topic: i.topic,
-        hasDoc: m.hasDoc || Boolean(body),
-        updatedAt: m.updatedAt,
-        body,
-        beat: beats[key] ?? null,
-        // Deep-links into the workbench itself (PER-236 fix 2) so a new-tab
-        // open lands on the scope view WITH the chat column, not the
-        // chat-less standalone page (which stays alive for old links).
-        href: `/app/interests/?id=${encodeURIComponent(key)}`,
-      };
-    });
+    return buildDocCards(interests, meta, docBodies, beats);
   }, [interests, docMeta, docBodies, beats, mockSeed]);
 
   const focusTopic = focusKey

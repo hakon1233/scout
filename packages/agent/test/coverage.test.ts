@@ -20,6 +20,7 @@ import {
   interestWantsEvergreen,
   FRESHNESS_CUTOFF_DAYS,
 } from "../src/coverage.js";
+import { defaultInterestDoc } from "../src/docs.js";
 
 test("normalizeTopic collapses casing, punctuation and whitespace", () => {
   assert.equal(normalizeTopic("OpenAI"), "openai");
@@ -146,6 +147,25 @@ test("computeCoverage does not count a source image as a citation", () => {
   ]);
 });
 
+test("computeCoverage does not count an INLINE image as a citation", () => {
+  // Same intent as the standalone-image case above, but the image is embedded
+  // mid-line inside prose so the line does NOT start with `!`. The old guard
+  // only skipped lines beginning with `!`, so the `](https://…)` inside the
+  // inline `![…](…)` still matched and the section — which has no real source —
+  // falsely read as "covered", suppressing the focused retry that would recover
+  // a real citation.
+  const md = [
+    "# Your brief",
+    "",
+    "## AI",
+    "- `2026-06-15` — Prose with an inline ![chart](https://example.com/c.png) but no source link.",
+  ].join("\n");
+
+  assert.deepEqual(computeCoverage(["ai"], md), [
+    { topic: "ai", status: "empty" },
+  ]);
+});
+
 test("mergeBriefSections replaces only retried topics, preserves the rest", () => {
   const base = [
     "# Your brief",
@@ -254,7 +274,9 @@ test("extractTopicSection emits the section already sorted newest-first", () => 
   ].join("\n");
   const section = extractTopicSection(sessionMd, "startup news");
   assert.ok(section);
-  const dates = [...section.matchAll(/`(\d{4}-\d{2}-\d{2})`/g)].map((m) => m[1]);
+  const dates = [...section.matchAll(/`(\d{4}-\d{2}-\d{2})`/g)].map(
+    (m) => m[1],
+  );
   assert.deepEqual(dates, ["2026-06-02", "2026-05-29", "2026-05-27"]);
 });
 
@@ -289,13 +311,22 @@ test("ordinary >30-day items are dropped, in-window items kept (acceptance #1)",
     "  [example.com — B](https://example.com/b)",
     "",
   ].join("\n");
-  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+  const out = enforceBriefFreshness(brief, {
+    now: NOW,
+    evergreenKeys: new Set(),
+  });
   // The stale ai item and its citation are gone; the fresh ai item survives.
-  assert.ok(!out.includes("2026-01-05"), "stale dated bullet should be dropped");
+  assert.ok(
+    !out.includes("2026-01-05"),
+    "stale dated bullet should be dropped",
+  );
   assert.ok(!out.includes("https://example.com/stale"), "stale citation gone");
   assert.ok(out.includes("2026-06-10"), "fresh ai item kept");
   // openai had nothing stale ⇒ its section is preserved byte-identical.
-  assert.ok(out.includes("https://example.com/a") && out.includes("https://example.com/b"));
+  assert.ok(
+    out.includes("https://example.com/a") &&
+      out.includes("https://example.com/b"),
+  );
   // ai stays "covered" (still has a fresh citation); openai stays "covered".
   assert.deepEqual(computeCoverage(["ai", "openai"], out), [
     { topic: "ai", status: "covered" },
@@ -326,6 +357,23 @@ test("evergreen/background interests keep older items (acceptance #2)", () => {
   assert.ok(out.includes("2019-03-01"));
 });
 
+test("AIR-527 regression: the default backfilled doc does NOT read as evergreen", () => {
+  // The default intent doc (docs.ts defaultInterestDoc) is backfilled for every
+  // interest without a hand-authored .md — the common case. It tells the model to
+  // SKIP old context, so it must NOT trip interestWantsEvergreen; a false positive
+  // there drops the topic's key into evergreenKeys and disables the >30-day
+  // freshness cutoff (PER-250) for it, letting months-old stories through — exactly
+  // the founder's bug. Guards against reintroducing an EVERGREEN_RE trigger word
+  // (evergreen/background/historical/explainer/…) into the default doc text.
+  for (const topic of ["ai coding tools", "climate", "Formula 1"]) {
+    assert.equal(
+      interestWantsEvergreen(topic, defaultInterestDoc(topic)),
+      false,
+      `default doc for "${topic}" must not opt into evergreen content`,
+    );
+  }
+});
+
 test("legitimate 7–30 day 'older items' note path is preserved (acceptance #3)", () => {
   // The model found nothing in the last week, widened to 30 days, and emitted the
   // required note. Those items are inside the window, so none are dropped and the
@@ -342,7 +390,10 @@ test("legitimate 7–30 day 'older items' note path is preserved (acceptance #3)
     "  [example.com — D](https://example.com/d)",
     "",
   ].join("\n");
-  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+  const out = enforceBriefFreshness(brief, {
+    now: NOW,
+    evergreenKeys: new Set(),
+  });
   assert.equal(out, brief, "in-window section untouched");
   assert.ok(out.includes(note), "older-items note preserved");
 });
@@ -357,7 +408,10 @@ test("freshness cutoff keeps items exactly 30 calendar days old", () => {
     "",
   ].join("\n");
 
-  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+  const out = enforceBriefFreshness(brief, {
+    now: NOW,
+    evergreenKeys: new Set(),
+  });
 
   assert.equal(out, brief);
 });
@@ -375,7 +429,10 @@ test("per-topic no-news state recorded when everything drops (acceptance #4)", (
     "  [example.com — S2](https://example.com/s2)",
     "",
   ].join("\n");
-  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+  const out = enforceBriefFreshness(brief, {
+    now: NOW,
+    evergreenKeys: new Set(),
+  });
   // No stale citations remain, the now-false note is gone, and the section is
   // rewritten to an honest no-news marker.
   assert.ok(!out.includes("https://example.com/s1"));
@@ -399,7 +456,10 @@ test("undated items are kept regardless of the cutoff (PER-250 keeps undated as-
     "  [example.com — U](https://example.com/u)",
     "",
   ].join("\n");
-  const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys: new Set() });
+  const out = enforceBriefFreshness(brief, {
+    now: NOW,
+    evergreenKeys: new Set(),
+  });
   assert.equal(out, brief, "nothing stale ⇒ section untouched, undated kept");
 });
 

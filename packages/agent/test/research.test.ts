@@ -83,6 +83,24 @@ test("today's date is injected as a recency anchor", () => {
   assert.match(prompt, /Today's date is 2026-06-02/);
 });
 
+test("today's date uses the local calendar day, not UTC", () => {
+  const previousTz = process.env.TZ;
+  process.env.TZ = "Europe/Oslo";
+  try {
+    const prompt = buildResearchPrompt(
+      { topic: "ai", doc: "track ai" },
+      new Date(2026, 5, 2, 0, 30, 0, 0),
+    );
+    assert.match(prompt, /Today's date is 2026-06-02/);
+  } finally {
+    if (previousTz === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = previousTz;
+    }
+  }
+});
+
 test("the prompt scopes the session to the single topic and its output section", () => {
   const prompt = buildResearchPrompt({ topic: "claude code", doc: "track claude code" });
   // Single-interest session: the topic appears as the session scope and as the
@@ -101,6 +119,31 @@ test("the prompt asks for a bold lead paragraph followed by deeper detail", () =
   assert.match(prompt, /bold/i);
   assert.match(prompt, /follow[- ]on paragraphs/i);
   assert.match(prompt, /insight|analysis|implication/i);
+});
+
+test("PER-265: the depth bar is substantive and applies equally to every topic", () => {
+  // Founder reported detail-view bodies felt shallow across EVERY topic, not
+  // just broad/general ones — so the fix is a straight quality/length bump
+  // applied uniformly, never a topic-breadth branch. Pin both halves: the
+  // wider paragraph range + concrete-detail requirement, and that nothing in
+  // the prompt or SEARCH_SKILLS conditions depth on how broad a topic is.
+  const broad = buildResearchPrompt({ topic: "world news", doc: "track world news" });
+  const narrow = buildResearchPrompt({ topic: "acme corp", doc: "track acme corp" });
+
+  for (const prompt of [broad, narrow]) {
+    assert.match(prompt, /3-5/, "prompt must ask for 3-5 follow-on paragraphs");
+    assert.match(
+      prompt,
+      /concrete,?\s*checkable detail/i,
+      "prompt must require each follow-on paragraph to add a concrete detail",
+    );
+  }
+  // The two prompts differ only in topic/doc — the depth instructions
+  // themselves (drawn from the shared SEARCH_SKILLS fragment + the fixed
+  // output-requirements block) must be byte-identical, proving there is no
+  // broad-vs-narrow branch anywhere in the pipeline.
+  const stripTopic = (p: string) => p.split(SEARCH_SKILLS)[1];
+  assert.equal(stripTopic(broad).replace(/world news|track world news/gi, ""), stripTopic(narrow).replace(/acme corp|track acme corp/gi, ""));
 });
 
 // A `claude` stub that NEVER closes — models a hung session (model stall /

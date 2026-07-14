@@ -62,6 +62,41 @@ export type RunDeps = {
 
 export type RunSource = "on_demand" | "scheduled";
 
+// Distil the per-session error messages from a wholesale-failed run into ONE
+// short, honest, user-facing reason (PER-259 item 1). When EVERY topic's session
+// fails and there's no base brief, the founder needs to know WHY — a Claude
+// usage/session-limit exhaustion at 07:00 (the PER-258 root cause) reads very
+// differently from a crashed CLI or a network timeout, and drives whether a
+// retry (item 3) can even help. Pure so runner.test.ts pins the mapping without
+// spawning anything. The inputs come from research.ts's reject messages:
+//   - usage/rate limit   → "claude exited N: …limit…"
+//   - per-session timeout → 'claude session for "X" timed out after Nms'
+//   - spawn failure       → "failed to spawn 'claude' — …"
+//   - empty output        → "claude returned empty output"
+// These messages are log-safe: research.ts slices stderr, which the OAuth token
+// never reaches, so nothing secret rides into the persisted reason.
+export function summarizeSessionFailures(errors: string[]): string {
+  const joined = errors.join("\n").toLowerCase();
+  if (
+    /usage limit|rate limit|limit reached|too many requests|\b429\b|resets? at/.test(
+      joined,
+    )
+  ) {
+    return "Claude usage/session limit reached — try again later";
+  }
+  if (/timed out|timeout/.test(joined)) {
+    return "the research sessions timed out";
+  }
+  if (/failed to spawn|enoent|on path|not found/.test(joined)) {
+    return "couldn't launch the Claude CLI (is it installed and on PATH?)";
+  }
+  if (/empty output|no content|no usable content/.test(joined)) {
+    return "the research sessions returned no usable content";
+  }
+  const first = errors.find((e) => e.trim().length > 0);
+  return first ? first.trim() : "unknown error";
+}
+
 export type RunOptions = {
   // Focused-retry path (PER-154): research ONLY this subset of `interests`
   // instead of the whole list, then merge the fresh sections into the prior
@@ -321,6 +356,13 @@ async function runSynthesis(
     // if they edit the doc afterwards. Keyed by topic so a backfilled default and
     // a real doc are treated identically.
     const basisByTopic = new Map<string, string>();
+    // Per-session failure messages, collected so a wholesale failure can report
+    // an honest REASON to the founder (PER-259 item 1) — "Claude usage limit
+    // reached" reads very differently from "the CLI isn't installed". Kept
+    // in-memory only; never persisted per-topic (the aggregate reason is what the
+    // UI shows). Safe to hold: research.ts never forwards the OAuth token into
+    // these messages (it slices stderr, which the token never reaches).
+    const sessionErrors: string[] = [];
     let anyOk = false;
     for (const interest of plan.researchInterests) {
       try {
@@ -347,6 +389,7 @@ async function runSynthesis(
           `[runner] research failed for topic "${interest.topic}":`,
           err,
         );
+        sessionErrors.push(err instanceof Error ? err.message : String(err));
         sections.push({ topic: interest.topic, section: null });
       }
     }
@@ -381,7 +424,9 @@ async function runSynthesis(
     // state rather than an empty "# Your brief"). With a base brief, we still
     // merge (preserving the topics that previously worked).
     if (!anyOk && !plan.baseMarkdown) {
-      throw new Error("all research sessions failed or returned no content");
+      throw new Error(
+        `all research sessions failed — ${summarizeSessionFailures(sessionErrors)}`,
+      );
     }
 
     const patch = assembleBrief(sections);

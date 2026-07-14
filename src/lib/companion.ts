@@ -5,7 +5,7 @@
 
 import type { Brief as AppBrief, TopicBasis, TopicCoverage } from "./types";
 import { readErrorBody } from "./errors";
-import { safeSetItem } from "./safe-storage";
+import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
@@ -14,13 +14,33 @@ const TOKEN_KEY = "scout.companion.token";
 
 let cachedBase: string | null = null;
 
+// In-flight coalescing for the cached-base re-ping (AIR-617), mirroring
+// isServedFromCompanion's pattern below. fetchRunFailure's poll tick runs
+// `Promise.all([pollBriefsRaw, fetchSchedule])`, and both independently call
+// requireBase() → discoverCompanion() in the same tick — without this, each
+// fired its own /healthz ping against the identical cached port, doubling
+// requests on every poll (10-30s, page.tsx). Sharing the in-flight promise
+// collapses that pair to one ping without changing what gets verified.
+let cachedBasePingInFlight: Promise<boolean> | null = null;
+
+async function pingCachedBase(port: number): Promise<boolean> {
+  if (cachedBasePingInFlight) return cachedBasePingInFlight;
+  cachedBasePingInFlight = (async () => {
+    try {
+      return await pingPort(port);
+    } finally {
+      cachedBasePingInFlight = null;
+    }
+  })();
+  return cachedBasePingInFlight;
+}
+
 function baseFor(port: number): string {
   return `http://127.0.0.1:${port}`;
 }
 
 export function loadCompanionToken(): string {
-  if (typeof window === "undefined") return "";
-  const current = window.localStorage.getItem(TOKEN_KEY);
+  const current = getLocalStorage()?.getItem(TOKEN_KEY);
   return current ?? "";
 }
 
@@ -60,7 +80,7 @@ let servedProbeInFlight: Promise<boolean> | null = null;
 // PER-124: previously a hardcoded localhost/127.0.0.1 regex, which excluded
 // *.ts.net and broke token bootstrap + same-origin API on the Tailscale origin.
 export async function isServedFromCompanion(): Promise<boolean> {
-  if (typeof window === "undefined") return false;
+  if (!isClient()) return false;
   if (servedFromCompanionConfirmed) return true;
   if (servedProbeInFlight) return servedProbeInFlight;
   servedProbeInFlight = (async () => {
@@ -96,7 +116,7 @@ let configCachedAt = 0;
 const CONFIG_TTL_MS = 3000;
 
 async function fetchCompanionConfig(): Promise<CompanionConfig | null> {
-  if (typeof window === "undefined") return null;
+  if (!isClient()) return null;
   if (configCache && Date.now() - configCachedAt < CONFIG_TTL_MS) {
     return configCache;
   }
@@ -128,9 +148,15 @@ async function fetchCompanionConfig(): Promise<CompanionConfig | null> {
 export async function bootstrapCompanionToken(): Promise<string> {
   const existing = loadCompanionToken();
   const cfg = await fetchCompanionConfig();
-  if (cfg?.token && cfg.token !== existing) {
-    saveCompanionToken(cfg.token);
-    return cfg.token;
+  // Trim to match saveCompanionToken (which persists token.trim()). Comparing/
+  // returning the raw cfg.token instead would, for a padded token, return a value
+  // that differs from what's stored — a `Bearer abc ` header with trailing space
+  // that can fail server-side auth — and re-save it on every bootstrap because the
+  // trimmed store never equals the padded cfg value (AIR-107).
+  const fromCfg = cfg?.token?.trim();
+  if (fromCfg && fromCfg !== existing) {
+    saveCompanionToken(fromCfg);
+    return fromCfg;
   }
   return existing;
 }
@@ -174,9 +200,7 @@ export async function discoverCompanion(): Promise<string | null> {
   }
   if (cachedBase) {
     const cachedPort = new URL(cachedBase).port;
-    if (
-      await pingPort(cachedPort ? Number(cachedPort) : COMPANION_PORT)
-    ) {
+    if (await pingCachedBase(cachedPort ? Number(cachedPort) : COMPANION_PORT)) {
       return cachedBase;
     }
     cachedBase = null;
@@ -359,7 +383,10 @@ type PendingStory = {
   bodyLines: string[];
 };
 
-function parseArticlesFromMarkdown(markdown: string, briefId: string) {
+// Exported (PER-271) so it can be unit-tested directly instead of only via the
+// full fetch/adapt path — this is the ~100-line regex parser that renders the
+// entire feed, previously covered only indirectly by e2e specs.
+export function parseArticlesFromMarkdown(markdown: string, briefId: string) {
   const articles: AppBrief["articles"] = [];
   const interests = new Set<string>();
   let currentTopic = "general";
@@ -482,6 +509,26 @@ function adaptBrief(b: AgentBrief): AppBrief {
   };
 }
 
+// Shared by fetchLatestBrief and fetchRunFailure so both can derive the newest
+// ready brief from an already-fetched raw list instead of each issuing their own
+// /v0/briefs request (AIR-605). Kept cheap: pick the winner on the raw
+// `generated_at` field first, then run adaptBrief (a full markdown regex parse)
+// only on that one, not on every ready brief every poll tick (AIR-617).
+//
+// NOTE (AIR-644): the `?since=` list both callers pass only ever holds the
+// single `last_brief` slot — briefs.ts filters `?since=` to that one slot, never
+// the ready-brief history — so `raw` here is ≤1 element. On a failed/pending slot
+// it therefore carries NO ready brief; fetchRunFailure falls back to
+// fetchBriefHistory (via resolveLastSuccessBrief) for the true last success.
+function newestReadyBrief(raw: AgentBrief[]): AppBrief | null {
+  const ready = raw.filter((b) => b.status === "ready" && b.summary_md);
+  if (ready.length === 0) return null;
+  const newest = ready.reduce((newest, b) =>
+    b.generated_at > newest.generated_at ? b : newest,
+  );
+  return adaptBrief(newest);
+}
+
 // Returns ready briefs strictly newer than `sinceTs`. Pending/failed are surfaced
 // via `pollBriefsRaw` for the polling loop.
 export async function pollBriefs(
@@ -501,11 +548,163 @@ export async function fetchLatestBrief(
   token: string,
 ): Promise<AppBrief | null> {
   try {
-    const briefs = await pollBriefs(new Date(0).toISOString(), token);
-    if (briefs.length === 0) return null;
-    return briefs.reduce((newest, b) =>
-      b.generatedAt > newest.generatedAt ? b : newest,
+    const raw = await pollBriefsRaw(new Date(0).toISOString(), token);
+    return newestReadyBrief(raw);
+  } catch {
+    return null;
+  }
+}
+
+// PER-259 item 1: a surfaced "your daily run failed / silently stopped" signal.
+// The PER-258 root cause was a failed run that overwrote `last_brief` with
+// status:"failed" and never entered the ready history — so the feed silently
+// kept showing the last success and the founder read it as "no new run since
+// June 18". This makes that state HONEST: the feed shows a clear banner with the
+// captured reason instead of pretending yesterday's brief is today's.
+export type RunFailure = {
+  // "failed": the most recent run errored. "stale": no successful brief in the
+  // staleness window even though nothing errored in the current slot (e.g. every
+  // scheduled fire was skipped) — a silent stop.
+  kind: "failed" | "stale";
+  // Human reason for a failed run (usage limit vs spawn error vs timeout),
+  // distilled by the companion into last_brief.error_msg / the schedule note.
+  reason?: string;
+  // ISO of the failed run (failed) — for display context.
+  at?: string;
+  // ISO of the newest successful brief we still have, if any.
+  lastSuccessAt?: string;
+};
+
+// Alert threshold (issue PER-259): flag a silent stop when the last SUCCESSFUL
+// brief is older than this, even if the current slot didn't explicitly error.
+export const STALE_SUCCESS_MS = 26 * 60 * 60 * 1000; // 26h
+
+// Strip the companion's internal "all research sessions failed — " prefix so the
+// banner's own "Today's brief failed —" lead-in doesn't read as a doubled clause.
+function cleanFailureReason(msg?: string | null): string | undefined {
+  if (!msg) return undefined;
+  const trimmed = msg
+    .replace(/^all research sessions failed\s*[—:-]\s*/i, "")
+    .trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+// Pure assessment (unit-friendly): given the raw last_brief slot, the schedule
+// telemetry, and the newest successful brief's timestamp, decide whether to
+// surface a failure/staleness banner. Returns null when the run is healthy.
+export function assessRunFailure(input: {
+  lastStatus?: string;
+  lastError?: string | null;
+  lastAt?: string | null;
+  scheduleStatus?: "success" | "failed" | "skipped" | null;
+  scheduleNote?: string | null;
+  scheduleAt?: string | null;
+  lastSuccessAt?: string | null;
+  now: number;
+}): RunFailure | null {
+  const {
+    lastStatus,
+    lastError,
+    lastAt,
+    scheduleStatus,
+    scheduleNote,
+    scheduleAt,
+    lastSuccessAt,
+    now,
+  } = input;
+
+  // 1. The most recent run errored — on-demand (last_brief) or scheduled
+  //    (schedule.last_run_status). Prefer the brief's captured error; fall back
+  //    to the schedule's note.
+  if (lastStatus === "failed" || scheduleStatus === "failed") {
+    const failedAt =
+      lastStatus === "failed" ? (lastAt ?? null) : (scheduleAt ?? lastAt ?? null);
+    // A failure only reflects the CURRENT state if no successful brief is newer
+    // than it. `schedule.last_run_status` is written ONLY by scheduled runs
+    // (runner.ts), so a 07:00 scheduled fire that failed but was superseded by a
+    // successful on-demand "Run now" at 09:00 leaves a STALE "failed" flag —
+    // last_brief is a fresh 09:00 ready brief yet scheduleStatus stays "failed".
+    // Without this guard the feed shows a self-contradictory banner ("Today's
+    // brief failed … showing your last good brief from 09:00") over that fresh
+    // 09:00 brief, and it persists across every reload until the next scheduled
+    // fire overwrites the flag. The failed-last_brief path is unaffected: it IS
+    // the most recent run of any kind, so its lastSuccessAt (from ready history)
+    // is always older and never supersedes it.
+    const supersededByNewerSuccess =
+      lastSuccessAt != null &&
+      failedAt != null &&
+      Date.parse(lastSuccessAt) > Date.parse(failedAt);
+    if (!supersededByNewerSuccess) {
+      const reason =
+        cleanFailureReason(lastError) ?? cleanFailureReason(scheduleNote);
+      return {
+        kind: "failed",
+        reason,
+        at: failedAt ?? undefined,
+        lastSuccessAt: lastSuccessAt ?? undefined,
+      };
+    }
+  }
+
+  // 2. No successful brief within the staleness window — a silent stop even when
+  //    nothing errored in THIS slot (e.g. every fire was skipped). Only meaningful
+  //    once we've ever had a success to measure against.
+  if (lastSuccessAt) {
+    const age = now - Date.parse(lastSuccessAt);
+    if (Number.isFinite(age) && age > STALE_SUCCESS_MS) {
+      return { kind: "stale", lastSuccessAt };
+    }
+  }
+  return null;
+}
+
+// AIR-644: resolve the "last successful brief" for the run-failure banner's
+// "Showing your last good brief from <date>" clause. `pollBriefsRaw(?since=)`
+// returns only the single `last_brief` slot, so on a failed/pending run
+// `slotReady` is null even though ready briefs still exist in history. In that
+// (uncommon, unhealthy) case only, fall back to one page of ready-brief history.
+// `fetchHistoryNewest` is invoked lazily so the healthy path — slot already
+// ready — stays a single request and doesn't undo the AIR-605/AIR-617 poll-dedup.
+export async function resolveLastSuccessBrief(
+  slotReady: AppBrief | null,
+  fetchHistoryNewest: () => Promise<AppBrief | null>,
+): Promise<AppBrief | null> {
+  if (slotReady) return slotReady;
+  return await fetchHistoryNewest();
+}
+
+// Fetch the companion's run health and assess it. Read-only (GET only) — never
+// writes interests or kicks a run. Returns null when healthy or unreachable.
+export async function fetchRunFailure(
+  token: string,
+): Promise<RunFailure | null> {
+  try {
+    const [rawLast, schedule] = await Promise.all([
+      pollBriefsRaw(new Date(0).toISOString(), token),
+      fetchSchedule(token).catch(() => null),
+    ]);
+    const last = rawLast[0];
+    // On a failed/pending slot the ?since= poll carries no ready brief, so fall
+    // back to the newest ready brief from history so the banner can honestly
+    // show "last good brief from <date>" (AIR-644). Lazy: the healthy path (slot
+    // ready) never issues the extra request.
+    const lastSuccess = await resolveLastSuccessBrief(
+      newestReadyBrief(rawLast),
+      () =>
+        fetchBriefHistory(token, { limit: 1, offset: 0 }).then(
+          (h) => h.briefs[0] ?? null,
+        ),
     );
+    return assessRunFailure({
+      lastStatus: last?.status,
+      lastError: last?.error_msg,
+      lastAt: last?.generated_at,
+      scheduleStatus: schedule?.last_run_status ?? null,
+      scheduleNote: schedule?.last_run_note ?? null,
+      scheduleAt: schedule?.last_run_at ?? null,
+      lastSuccessAt: lastSuccess?.generatedAt ?? null,
+      now: Date.now(),
+    });
   } catch {
     return null;
   }
@@ -613,9 +812,25 @@ export async function pollBriefsRaw(
     signal: AbortSignal.timeout(5_000),
   });
   if (!res.ok) return [];
-  const json = (await res.json()) as { briefs: AgentBrief[] };
-  return json.briefs;
+  const json = (await res.json()) as { briefs?: AgentBrief[] };
+  // Trust-boundary guard: a malformed/empty `{}` body (no `briefs`) must not
+  // hand callers `undefined` — every caller immediately `.filter`/`.reduce`s the
+  // result, so a missing field would throw a TypeError surfaced as a confusing
+  // generic error instead of a clean "no briefs". Mirrors the `?? []` fallback
+  // already in `fetchBriefsPage`.
+  return json.briefs ?? [];
 }
+
+// Per-topic client budget. research.ts's actual hard per-session cap
+// (DEFAULT_SESSION_TIMEOUT_MS) is 4 min, but live measurement during the
+// PER-267 investigation showed a real 6-topic run taking 32m40s wall-clock
+// end to end (the companion box runs several concurrent agent processes, so
+// the parent's kill-timer and the child session itself both see real
+// scheduling jitter beyond the nominal per-session cap) — comfortably over
+// what (topics × 4min) alone would predict. Budget 6 min/topic so the derived
+// deadline keeps real headroom over that observed number rather than being a
+// tight theoretical bound.
+const PER_TOPIC_SESSION_BUDGET_MS = 6 * 60 * 1000;
 
 // Kick a synthesis pass on the companion and poll until a fresh brief
 // (newer than `sinceTs`) lands or `timeoutMs` elapses. Throws on failure.
@@ -635,13 +850,35 @@ export async function refreshBriefViaCompanion(
   } = {},
 ): Promise<AppBrief> {
   const since = opts.sinceTs ?? new Date(0).toISOString();
-  // A real run researches every interest with live WebSearch + WebFetch, so a
-  // full 6-topic pass routinely runs past two minutes — especially cold or when
-  // `claude` is rate-limited. A 120s client deadline gave up while the companion
-  // kept working: the UI showed "Timed out…", and because the server run was
-  // still in flight, the user's next click hit the single-flight 409 and errored
-  // again — the "it doesn't work" go-around (PER-157). Give the run real room.
-  const deadline = Date.now() + (opts.timeoutMs ?? 300_000);
+  // The companion researches interests ONE AT A TIME, in its own `claude`
+  // session per topic (runner.ts: "Sequential, not concurrent"), each allowed
+  // up to PER_TOPIC_SESSION_BUDGET_MS before being killed as a hung-session
+  // guard (PER-181). A flat client deadline was already an approximation
+  // (PER-157 raised it from 120s to 300s because "a full 6-topic pass
+  // routinely runs past two minutes"), but PER-265's deeper per-paragraph
+  // detail bar (950-word cap, 3-5 follow-on paragraphs each needing a
+  // concrete checkable fact) measurably lengthened real per-topic session
+  // time — pushing a healthy, still-working multi-topic run past a flat 300s
+  // and surfacing as a false "Timed out waiting for the companion brief."
+  // (PER-267), even though the companion was up and the run eventually would
+  // have finished. Scale the deadline to the number of topics THIS run
+  // actually researches (a retry/selected-subset run researches fewer than
+  // the full interest list), with one extra topic's budget as buffer for
+  // brief assembly + freshness enforcement + polling overhead. Floor at 300s
+  // so a 1-2 topic run keeps the original PER-157 headroom.
+  const researchedTopicCount =
+    opts.retryTopics && opts.retryTopics.length > 0
+      ? opts.retryTopics.length
+      : opts.selectedTopics &&
+          opts.selectedTopics.length > 0 &&
+          opts.selectedTopics.length < interests.length
+        ? opts.selectedTopics.length
+        : interests.length;
+  const scaledDeadlineMs = Math.max(
+    300_000,
+    (researchedTopicCount + 1) * PER_TOPIC_SESSION_BUDGET_MS,
+  );
+  const deadline = Date.now() + (opts.timeoutMs ?? scaledDeadlineMs);
   await postInterests(interests, token, opts.retryTopics, opts.selectedTopics);
   while (Date.now() < deadline) {
     if (opts.signal?.aborted) throw new Error("aborted");
