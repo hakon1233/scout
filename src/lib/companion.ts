@@ -812,8 +812,13 @@ export async function pollBriefsRaw(
     signal: AbortSignal.timeout(5_000),
   });
   if (!res.ok) return [];
-  const json = (await res.json()) as { briefs: AgentBrief[] };
-  return json.briefs;
+  const json = (await res.json()) as { briefs?: AgentBrief[] };
+  // Trust-boundary guard: a malformed/empty `{}` body (no `briefs`) must not
+  // hand callers `undefined` — every caller immediately `.filter`/`.reduce`s the
+  // result, so a missing field would throw a TypeError surfaced as a confusing
+  // generic error instead of a clean "no briefs". Mirrors the `?? []` fallback
+  // already in `fetchBriefsPage`.
+  return json.briefs ?? [];
 }
 
 // Per-topic client budget. research.ts's actual hard per-session cap
