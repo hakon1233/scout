@@ -66,7 +66,7 @@ export { MAX_CHAT_MESSAGE_LEN } from "./routes/chat.js";
 export { MAX_INTEREST_LEN } from "./routes/interests.js";
 export type { ScheduleView } from "./routes/schedule.js";
 
-function defaultPort(raw: string | undefined): number {
+export function defaultPort(raw: string | undefined): number {
   if (raw === undefined) return 47821;
   const port = Number(raw);
   return Number.isInteger(port) && port >= 0 && port <= 65535 ? port : 47821;
