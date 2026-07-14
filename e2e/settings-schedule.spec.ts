@@ -16,6 +16,13 @@ import { expect, test } from "@playwright/test";
 //
 // Offline/deterministic: served same-origin from the loopback companion the
 // webServer boots; no Anthropic/Exa key, no network, no Apify.
+//
+// AIR-744: this file absorbed schedule-settings.spec.ts, a near-duplicate
+// covering the identical PER-152 flow — two separate QA-live passes picked
+// the same untested gap independently and each wrote a full spec for it. Kept
+// this file's two more narrowly-scoped UI tests and folded in the other
+// file's one genuinely non-overlapping test (the direct /v0/schedule
+// auth/validation/cross-origin contract, below) rather than running both.
 
 const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -81,6 +88,11 @@ test("scheduled-brief time-of-day persists across reload (real companion write)"
   await page.reload();
   const { timeInput: afterReload } = await openScheduleSettings(page);
   await expect(afterReload).toHaveValue("06:15");
+
+  // Restore the default so this test leaves no schedule drift for siblings
+  // (workers:1 shares one companion process across the whole suite).
+  await afterReload.fill("07:00");
+  await expect(afterReload).toHaveValue("07:00");
 });
 
 test("disabling the daily brief persists and clears the next-run time", async ({
@@ -121,4 +133,61 @@ test("disabling the daily brief persists and clears the next-run time", async ({
   await expect(afterReload).toHaveAttribute("aria-checked", "true", {
     timeout: 10_000,
   });
+});
+
+test("/v0/schedule contract: auth required, input validated, cross-origin denied", async ({
+  request,
+}) => {
+  // Same-origin GET /v0/config hands back the loopback pairing token (the same
+  // bootstrap the browser does), which authorizes the schedule endpoint.
+  const cfg = await request.get(`${ORIGIN}/v0/config`, {
+    headers: { origin: ORIGIN },
+  });
+  expect(cfg.status()).toBe(200);
+  const token = ((await cfg.json()) as { token?: string }).token ?? "";
+  expect(token.length).toBeGreaterThan(0);
+
+  // No bearer → 401 (the endpoint is not readable without the pairing token).
+  const noAuth = await request.get(`${ORIGIN}/v0/schedule`, {
+    headers: { origin: ORIGIN },
+  });
+  expect(noAuth.status()).toBe(401);
+
+  // Authed GET → 200 with the documented ScheduleView shape.
+  const ok = await request.get(`${ORIGIN}/v0/schedule`, {
+    headers: { origin: ORIGIN, authorization: `Bearer ${token}` },
+  });
+  expect(ok.status()).toBe(200);
+  const view = (await ok.json()) as Record<string, unknown>;
+  expect(typeof view.enabled).toBe("boolean");
+  expect(typeof view.time_of_day).toBe("string");
+  expect("next_run_at" in view).toBe(true);
+  expect("reboot_durable" in view).toBe(true);
+
+  // Malformed writes are rejected (400) before any mutation — these guard the
+  // documented PUT validation and keep this test non-mutating.
+  const badTime = await request.put(`${ORIGIN}/v0/schedule`, {
+    headers: { origin: ORIGIN, authorization: `Bearer ${token}` },
+    data: { time_of_day: "9am" },
+  });
+  expect(badTime.status()).toBe(400);
+
+  const badEnabled = await request.put(`${ORIGIN}/v0/schedule`, {
+    headers: { origin: ORIGIN, authorization: `Bearer ${token}` },
+    data: { enabled: "yes" },
+  });
+  expect(badEnabled.status()).toBe(400);
+
+  // Cross-origin PUT is denied by the same-origin guard (403) — a hostile web
+  // page must not be able to reprogram the local companion's schedule. The
+  // guard runs ahead of auth, so even a valid token over a foreign Origin is
+  // rejected.
+  const crossOrigin = await request.put(`${ORIGIN}/v0/schedule`, {
+    headers: {
+      origin: "http://evil.example.com",
+      authorization: `Bearer ${token}`,
+    },
+    data: { enabled: false },
+  });
+  expect(crossOrigin.status()).toBe(403);
 });

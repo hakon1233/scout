@@ -47,6 +47,27 @@ async function blockNonLoopback(page: import("@playwright/test").Page) {
 // auto-adopted and the page settles on State B instead of redirecting to /app/.
 async function gotoUnpairedConnect(page: import("@playwright/test").Page) {
   await blockNonLoopback(page);
+  // AIR-744: isServedFromCompanion()'s FIRST probe is same-origin
+  // (`${window.location.origin}/healthz`, companion.ts) — it only falls back
+  // to the fixed COMPANION_PORT_SWEEP list when that fails (e.g. the public
+  // marketing host, which has no /healthz at all). This suite's own webServer
+  // really is listening on ORIGIN, so without blocking ORIGIN's own /healthz
+  // directly, that same-origin probe succeeds for real and `status` becomes
+  // "connected" behind this helper's back — invisible to the "Connect your
+  // agent" heading check below (State B renders for reachableUnpaired too),
+  // but it flips `setupComplete` true (and triggers the redirect this file's
+  // tests don't expect) the moment a later test also saves a token. This was
+  // masked whenever SCOUT_E2E_PORT happened to be 47821 (the sweep list's own
+  // first/default entry) and flaked (~40% locally) on any other port —
+  // exactly the override this suite's own port-collision workaround
+  // recommends using. Block ORIGIN's own /healthz too, not just the sweep.
+  await page.route(`${ORIGIN}/healthz`, (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: false }),
+    }),
+  );
   for (const port of COMPANION_PORT_SWEEP) {
     for (const host of ["127.0.0.1", "localhost"]) {
       await page.route(`http://${host}:${port}/healthz`, (route) =>
@@ -69,6 +90,12 @@ async function gotoUnpairedConnect(page: import("@playwright/test").Page) {
   await expect(
     page.getByRole("heading", { name: "Connect your agent" }),
   ).toBeVisible();
+  // Guard the fix itself: the whole point is `status` must genuinely be
+  // "disconnected", not silently "connected" (reachableUnpaired) behind the
+  // shared "Connect your agent" heading both states render.
+  await expect(page.getByText("Not running", { exact: true })).toBeVisible({
+    timeout: 10_000,
+  });
 }
 
 test("unpaired walkthrough advertises an install command pinned to the serving origin", async ({
