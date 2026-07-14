@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadSettings, saveSettings } from "./storage";
+import {
+  loadLastBrief,
+  loadSettings,
+  saveLastBrief,
+  saveSettings,
+} from "./storage";
 
 const SETTINGS_KEY = "scout.settings.v1";
+const BRIEF_KEY = "scout.lastBrief.v1";
 
 function withStorage(
   entries: Record<string, string>,
@@ -90,5 +96,72 @@ test("saveSettings writes the current profile shape", () => {
         interests: [{ id: "int_ai", topic: "AI safety" }],
       }),
     );
+  });
+});
+
+test("loadLastBrief preserves a valid cached brief", () => {
+  const brief = {
+    id: "brief_1",
+    generatedAt: "2026-07-14T08:00:00.000Z",
+    interests: ["AI safety"],
+    articles: [],
+    markdown: "## AI safety",
+  };
+
+  withStorage({ [BRIEF_KEY]: JSON.stringify(brief) }, () => {
+    assert.deepEqual(loadLastBrief(), brief);
+  });
+});
+
+test("loadLastBrief rejects syntactically valid but malformed cached briefs", () => {
+  for (const raw of [
+    "[]",
+    JSON.stringify({
+      id: "brief_1",
+      generatedAt: 7,
+      interests: [],
+      articles: [],
+      markdown: "",
+    }),
+    JSON.stringify({
+      id: "brief_1",
+      generatedAt: "2026-07-14T08:00:00.000Z",
+      interests: "AI safety",
+      articles: [],
+      markdown: "",
+    }),
+    JSON.stringify({
+      id: "brief_1",
+      generatedAt: "2026-07-14T08:00:00.000Z",
+      interests: [],
+      articles: "not an array",
+      markdown: "",
+    }),
+    JSON.stringify({
+      id: "brief_1",
+      generatedAt: "2026-07-14T08:00:00.000Z",
+      interests: [],
+      articles: [{ id: "a1", title: "Story" }],
+      markdown: "",
+    }),
+  ]) {
+    withStorage({ [BRIEF_KEY]: raw }, () => {
+      assert.equal(loadLastBrief(), null);
+    });
+  }
+});
+
+test("saveLastBrief writes the current brief shape", () => {
+  const brief = {
+    id: "brief_1",
+    generatedAt: "2026-07-14T08:00:00.000Z",
+    interests: ["AI safety"],
+    articles: [],
+    markdown: "## AI safety",
+  };
+
+  withStorage({}, (writes) => {
+    saveLastBrief(brief);
+    assert.equal(writes.get(BRIEF_KEY), JSON.stringify(brief));
   });
 });

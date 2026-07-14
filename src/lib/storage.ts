@@ -35,6 +35,51 @@ function isSettings(raw: unknown): raw is Settings {
   );
 }
 
+function isBrief(raw: unknown): raw is Brief {
+  if (!raw || typeof raw !== "object") return false;
+  const candidate = raw as Partial<Brief>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.generatedAt === "string" &&
+    Array.isArray(candidate.interests) &&
+    candidate.interests.every((interest) => typeof interest === "string") &&
+    Array.isArray(candidate.articles) &&
+    candidate.articles.every(
+      (article) =>
+        article &&
+        typeof article === "object" &&
+        typeof article.id === "string" &&
+        typeof article.title === "string" &&
+        typeof article.url === "string" &&
+        typeof article.interest === "string",
+    ) &&
+    typeof candidate.markdown === "string" &&
+    (candidate.topics === undefined ||
+      (Array.isArray(candidate.topics) &&
+        candidate.topics.every(
+          (topic) =>
+            topic &&
+            typeof topic === "object" &&
+            typeof topic.topic === "string" &&
+            (topic.status === "covered" ||
+              topic.status === "empty" ||
+              topic.status === "missing"),
+        ))) &&
+    (candidate.failedTopics === undefined ||
+      (Array.isArray(candidate.failedTopics) &&
+        candidate.failedTopics.every((topic) => typeof topic === "string"))) &&
+    (candidate.bases === undefined ||
+      (Array.isArray(candidate.bases) &&
+        candidate.bases.every(
+          (basis) =>
+            basis &&
+            typeof basis === "object" &&
+            typeof basis.topic === "string" &&
+            typeof basis.doc === "string",
+        )))
+  );
+}
+
 // Persist one key via the shared write guard (safe-storage.ts). The guard
 // matters most here because `saveLastBrief` runs inside a `setBrief` updater
 // (app/page.tsx): an unguarded throw would abort the caller *before* its
@@ -63,7 +108,9 @@ export function saveSettings(s: Settings): void {
 export function loadLastBrief(): Brief | null {
   const storage = getLocalStorage();
   if (!storage) return null;
-  return safeParse<Brief>(storage.getItem(BRIEF_KEY));
+  const raw = safeParse<Brief>(storage.getItem(BRIEF_KEY));
+  if (!isBrief(raw)) return null;
+  return raw;
 }
 
 export function saveLastBrief(b: Brief): void {
