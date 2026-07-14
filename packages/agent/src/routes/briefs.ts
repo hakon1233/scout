@@ -23,6 +23,7 @@ export async function handleGetBriefs({
   if (limitRaw !== null || offsetRaw !== null) {
     const clamp = (raw: string | null, def: number, max: number) => {
       if (raw === null) return def;
+      if (raw.trim() === "") return def;
       const n = Number(raw);
       if (!Number.isFinite(n)) return def;
       return Math.min(max, Math.max(0, Math.floor(n)));
