@@ -7,7 +7,7 @@
 Set your interests, agents fetch and synthesize a brief with only the news you
 care about.
 
-Stack (see PER-2 architecture doc, v2): Next.js 15 (App Router, static export)
+Stack (see PER-2 architecture doc, v2): Next.js 16 (App Router, static export)
 hosted on GitHub Pages, Supabase for Postgres + Auth, and a local loopback
 companion (`@scout/agent`) that shells out to the user's own Claude Code CLI
 for ranking (Haiku 4.5), synthesis (Opus 4.7), and web research (the CLI's
