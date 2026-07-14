@@ -20,7 +20,12 @@ import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 // pingPort): a negative probe is the *expected* result of discovery — the
 // marketing host has no /healthz and the loopback port sweep misses most ports
 // on every run — so logging there would be noise that drowns the signal.
-function logCompanionError(context: string, err: unknown): void {
+//
+// Exported so the FE onboarding poll (connect/page.tsx) can share the same
+// stable prefix: that poll runs only after pairing is confirmed, so a transport
+// failure there is *unexpected* (same signal class as the read helpers below),
+// not an expected-negative discovery probe.
+export function logCompanionError(context: string, err: unknown): void {
   console.error(`[companion] ${context} failed`, err);
 }
 
