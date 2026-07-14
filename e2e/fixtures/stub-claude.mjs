@@ -92,12 +92,41 @@ function parseUserMessage(prompt) {
     .trim();
 }
 
-function parseFirstInterestId(prompt) {
-  // The snapshot JSON block carries each interest's opaque id; grab the first so
-  // a rewrite/delete can target a real, server-minted id (the model must never
-  // invent one — chat.ts drops unknown ids).
-  const m = prompt.match(/"id":\s*"([^"]+)"/);
-  return m ? m[1] : "";
+function parseInterestSnapshots(prompt) {
+  // The snapshot JSON block (buildInterestSnapshots, pretty-printed via
+  // JSON.stringify(snapshots, null, 2)) lists each interest as {id, topic, doc},
+  // in the SAME order the companion holds them. Capture id+topic pairs — lazily
+  // matching "topic" after "id" naturally skips each entry's `doc` (a real
+  // model never invents an id — chat.ts drops unknown ones — so only ids that
+  // actually appear here are ever emitted).
+  const out = [];
+  const re = /"id":\s*"([^"]+)"[\s\S]*?"topic":\s*"([^"]*)"/g;
+  let m;
+  while ((m = re.exec(prompt))) out.push({ id: m[1], topic: m[2] });
+  return out;
+}
+
+// AIR-691: resolve which interest(s) a delete/rewrite message targets by
+// matching the topic(s) the user actually named, instead of always grabbing
+// the first snapshot entry. A real model reads the topic list in the prompt
+// and picks the id(s) the user meant; a stub that always answers with the
+// first id would mask any real product bug that only shows up once a spec
+// targets a NON-first interest (confirmed real gap — see AIR-691 filing).
+// Sorted longest-topic-first so one topic name being a substring of another
+// (e.g. "AI" inside "AI safety") can't mis-resolve, then restored to snapshot
+// order. Falls back to the first snapshot when the message names no topic at
+// all — this is what every pre-existing spec's generic phrasing ("delete that
+// interest for good") relies on, so that exact prior behavior is preserved.
+function resolveTargetIds(message, snapshots) {
+  const lower = message.toLowerCase();
+  const matched = [...snapshots]
+    .sort((a, b) => b.topic.length - a.topic.length)
+    .filter((s) => s.topic && lower.includes(s.topic.toLowerCase()));
+  if (matched.length > 0) {
+    const matchedIds = new Set(matched.map((s) => s.id));
+    return snapshots.filter((s) => matchedIds.has(s.id)).map((s) => s.id);
+  }
+  return snapshots.length > 0 ? [snapshots[0].id] : [];
 }
 
 function topicFromMessage(message) {
@@ -123,7 +152,9 @@ function emitChat(prompt) {
   }
 
   const message = parseUserMessage(prompt);
-  const firstId = parseFirstInterestId(prompt);
+  const snapshots = parseInterestSnapshots(prompt);
+  const targetIds = resolveTargetIds(message, snapshots);
+  const firstId = targetIds[0] ?? "";
   let out;
 
   if (/\b(rewrite|start over|from scratch)\b/i.test(message) && firstId) {
@@ -149,13 +180,24 @@ function emitChat(prompt) {
     };
   } else if (
     /\b(delete|remove|drop|get rid of|stop tracking)\b/i.test(message) &&
-    firstId
+    targetIds.length > 0
   ) {
     // Confirm-gated delete (PER-230): propose, phrase as pending — the interest
-    // stays alive until the user presses [Delete].
+    // stays alive until the user presses [Delete]. AIR-691: a compound message
+    // naming MULTIPLE topics ("delete X and Y") resolves to one delete change
+    // per named topic, mirroring how a real model would emit one `delete` op
+    // per interest the user asked to remove in the same turn — this is what
+    // exposes chat.ts's `pendingDeletes[0]` truncation (only the first
+    // confirm-gated proposal in a turn is ever surfaced to the FE).
+    const topics = targetIds.map(
+      (id) => snapshots.find((s) => s.id === id)?.topic ?? "that interest",
+    );
     out = {
-      reply: "Delete that interest? Confirm below — this can't be undone here.",
-      changes: [{ op: "delete", interestId: firstId }],
+      reply:
+        topics.length > 1
+          ? `Delete ${topics.join(" and ")}? Confirm below — this can't be undone here.`
+          : "Delete that interest? Confirm below — this can't be undone here.",
+      changes: targetIds.map((id) => ({ op: "delete", interestId: id })),
     };
   } else {
     // Default: create a new interest. Auto-applied by chat.ts, so the FE renders
