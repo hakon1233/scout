@@ -66,10 +66,6 @@ async function runDailyBrief(page: import("@playwright/test").Page) {
 test("weekly brief assembles the week's daily stories, de-duplicated, under a Weekly-brief header", async ({
   page,
 }, testInfo) => {
-  test.skip(
-    !!process.env.CI,
-    "AIR-642: stub-claude.mjs crashes deterministically in CI (ReferenceError: stdin is not defined) — test-infra bug, passes locally, tracked for root-cause",
-  );
   await page.setViewportSize({ width: 1440, height: 900 });
   await blockNonLoopback(page);
 
