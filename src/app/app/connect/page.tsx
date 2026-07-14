@@ -7,6 +7,7 @@ import {
   bootstrapCompanionToken,
   COMPANION_PORT,
   loadCompanionToken,
+  logCompanionError,
   pingCompanion,
   pollBriefs,
   postInterests,
@@ -73,6 +74,10 @@ export default function ConnectPage() {
   const pollCountRef = useRef(0);
   const pollMaxAttemptsRef = useRef(MIN_POLL_ATTEMPTS);
   const startedAtRef = useRef("");
+  // Log a poll transport failure at most once per polling session (AIR-626
+  // diagnostic parity). The poll fires every few seconds, so an unguarded log
+  // would spam identical errors the whole time the companion is dark.
+  const pollErrorLoggedRef = useRef(false);
 
   useEffect(() => {
     // After hydration, resolve the tarball URL against the actual serving
@@ -173,6 +178,7 @@ export default function ConnectPage() {
     );
     startedAtRef.current = new Date().toISOString();
     pollCountRef.current = 0;
+    pollErrorLoggedRef.current = false;
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       pollCountRef.current++;
@@ -192,8 +198,14 @@ export default function ConnectPage() {
           setGenState("done");
           setGenMsg("Brief ready! Go to the app page to read it.");
         }
-      } catch {
-        // ignore transient errors, keep polling
+      } catch (err) {
+        // Keep polling through transient errors, but surface the *first* one to
+        // the console so a persistently-dark transport during onboarding is
+        // diagnosable instead of only showing the eventual timeout (AIR-626).
+        if (!pollErrorLoggedRef.current) {
+          pollErrorLoggedRef.current = true;
+          logCompanionError("onboarding-brief-poll", err);
+        }
       }
     }, POLL_INTERVAL_MS);
   }, []);
