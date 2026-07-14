@@ -17,6 +17,13 @@ import { expect, test } from "@playwright/test";
 // test from the single-section offline stub, and keeps the suite fully offline:
 // the non-loopback guard aborts every external request, so there is no real
 // Anthropic/Exa key, no quota, no network, no paid Apify scrape.
+//
+// The seeded brief must satisfy storage.ts's isBrief() shape (markdown:
+// string, topics[].status one of TopicStatus) since loadLastBrief() now
+// rejects anything else (commit 27cc55c, "reject malformed cached briefs")
+// — this fixture predates that validation and silently relied on the old
+// unchecked parse; a missing `markdown` + a bogus `status: "ok"` made
+// loadLastBrief() start returning null, so the feed rendered no cards at all.
 
 const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -64,9 +71,10 @@ test("feed filter narrows the feed to the selected topic and restores it", async
         id: "seed-brief-1",
         generatedAt: "2026-06-26T05:00:00.000Z",
         interests: ["AI safety", "Markets"],
+        markdown: "",
         topics: [
-          { topic: "AI safety", status: "ok" },
-          { topic: "Markets", status: "ok" },
+          { topic: "AI safety", status: "covered" },
+          { topic: "Markets", status: "covered" },
         ],
         articles: [
           {
