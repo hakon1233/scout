@@ -200,3 +200,11 @@ test("DEFAULT_PORT falls back when SCOUT_AGENT_PORT is malformed", async () => {
     else process.env.SCOUT_AGENT_PORT = previous;
   }
 });
+
+test("defaultPort rejects out-of-range explicit CLI ports", async () => {
+  const mod = await import(`../src/server.js?air656=${Date.now()}`);
+
+  assert.equal(mod.defaultPort("99999"), 47821);
+  assert.equal(mod.defaultPort("-1"), 47821);
+  assert.equal(mod.defaultPort("47822"), 47822);
+});

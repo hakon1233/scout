@@ -27,7 +27,7 @@ import {
   saveState,
   STATE_FILE,
 } from "./state.js";
-import { DEFAULT_PORT, PKG_VERSION, startServer } from "./server.js";
+import { PKG_VERSION, defaultPort, startServer } from "./server.js";
 import { Scheduler } from "./scheduler.js";
 import {
   installService,
@@ -82,12 +82,12 @@ async function cmdRun(portArg?: string): Promise<void> {
     await saveState({ ...state, schedule: defaultSchedule() });
   }
 
-  const port = portArg ? Number(portArg) : DEFAULT_PORT;
+  const port = defaultPort(portArg);
 
   // The scheduler fires the same run path the HTTP endpoint does; they share an
   // in-memory single-flight guard (runner.ts) so runs never overlap.
   const scheduler = new Scheduler({ stateFile: STATE_FILE });
-  const { port: bound } = await startServer(Number.isFinite(port) ? port : DEFAULT_PORT, {
+  const { port: bound } = await startServer(port, {
     onScheduleChanged: () => scheduler.reschedule(),
   });
   await scheduler.start();
