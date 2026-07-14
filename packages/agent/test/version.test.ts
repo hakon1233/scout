@@ -11,6 +11,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,8 +21,43 @@ import { startServer, PKG_VERSION } from "../src/server.js";
 async function seeded() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-version-"));
   const stateFile = path.join(tmp, "state.json");
-  await saveState({ pairing_token: newPairingToken() }, stateFile);
-  return { tmp, stateFile };
+  const token = newPairingToken();
+  await saveState({ pairing_token: token }, stateFile);
+  return { tmp, stateFile, token };
+}
+
+async function requestWithHost(
+  port: number,
+  path: string,
+  host: string,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: { error?: unknown } | null }> {
+  return await new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path,
+        method: "GET",
+        headers: { ...headers, host },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) =>
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+        );
+        res.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          resolve({
+            status: res.statusCode ?? 0,
+            body: text ? (JSON.parse(text) as { error?: unknown }) : null,
+          });
+        });
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 test("GET /v0/version returns baked build provenance without auth (PER-239)", async () => {
@@ -101,6 +137,53 @@ test("GET /v0/version degrades to null provenance when build-info.json is malfor
     assert.equal(health.status, 200);
     assert.equal((await health.json()).git_sha, null);
   } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("rejects non-allowlisted Host headers across public and authed routes (PER-276)", async () => {
+  const { tmp, stateFile, token } = await seeded();
+  const previousAllowedOrigins = process.env.SCOUT_ALLOWED_ORIGINS;
+  const { server, port } = await startServer(0, { stateFile });
+  try {
+    const health = await requestWithHost(port, "/healthz", "evil.example");
+    assert.equal(health.status, 403);
+    assert.ok(health.body);
+    assert.equal(health.body.error, "forbidden");
+
+    const version = await requestWithHost(port, "/v0/version", "evil.example");
+    assert.equal(version.status, 403);
+    assert.ok(version.body);
+    assert.equal(version.body.error, "forbidden");
+
+    const briefs = await requestWithHost(port, "/v0/briefs", "evil.example", {
+      authorization: `Bearer ${token}`,
+    });
+    assert.equal(briefs.status, 403);
+    assert.ok(briefs.body);
+    assert.equal(briefs.body.error, "forbidden");
+
+    const loopback = await requestWithHost(
+      port,
+      "/v0/version",
+      `127.0.0.1:${port}`,
+    );
+    assert.equal(loopback.status, 200);
+
+    process.env.SCOUT_ALLOWED_ORIGINS = "https://news.example.com:8443";
+    const configuredHost = await requestWithHost(
+      port,
+      "/v0/version",
+      `news.example.com:${port}`,
+    );
+    assert.equal(configuredHost.status, 200);
+  } finally {
+    if (previousAllowedOrigins === undefined) {
+      delete process.env.SCOUT_ALLOWED_ORIGINS;
+    } else {
+      process.env.SCOUT_ALLOWED_ORIGINS = previousAllowedOrigins;
+    }
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }

@@ -45,7 +45,7 @@ test("feed filter uses dark theme tokens for its button and menu", async ({
   await expect(filter).toBeVisible();
   await filter.click();
 
-  const menu = page.getByRole("menu", { name: "Filter feed by topic" });
+  const menu = page.getByRole("group", { name: "Filter by topic" });
   await expect(menu).toBeVisible();
 
   await expect(menu).toHaveCSS("background-color", "rgb(22, 20, 15)");
@@ -55,7 +55,7 @@ test("feed filter uses dark theme tokens for its button and menu", async ({
     "rgb(154, 145, 127)",
   );
 
-  await menu.getByRole("menuitem", { name: "AI safety" }).click();
+  await menu.getByRole("button", { name: "AI safety" }).click();
 
   const activeFilter = page.getByRole("button", {
     name: "Filtering by AI safety",
@@ -64,8 +64,10 @@ test("feed filter uses dark theme tokens for its button and menu", async ({
     "background-color",
     "rgb(36, 32, 26)",
   );
-  await expect(activeFilter).toHaveCSS("border-color", "rgb(196, 85, 63)");
-  await expect(activeFilter).toHaveCSS("color", "rgb(196, 85, 63)");
+  // Dark-mode --accent-signal is #d2694c (rgb(210,105,76)); PER-264 lightened
+  // it from #c4553f to reach WCAG AA contrast (see src/app/globals.css).
+  await expect(activeFilter).toHaveCSS("border-color", "rgb(210, 105, 76)");
+  await expect(activeFilter).toHaveCSS("color", "rgb(210, 105, 76)");
 });
 
 test("feed filter keeps the established light theme colors", async ({
@@ -89,15 +91,15 @@ test("feed filter keeps the established light theme colors", async ({
 
   await page.getByRole("button", { name: "Filter feed" }).click();
 
-  const menu = page.getByRole("menu", { name: "Filter feed by topic" });
+  const menu = page.getByRole("group", { name: "Filter by topic" });
   await expect(menu).toHaveCSS("background-color", "rgb(246, 242, 234)");
   await expect(menu).toHaveCSS("border-color", "rgb(216, 208, 193)");
 
-  const selectedAll = menu.getByRole("menuitem", { name: "All topics" });
+  const selectedAll = menu.getByRole("button", { name: "All topics" });
   await expect(selectedAll).toHaveCSS("background-color", "rgb(154, 59, 46)");
   await expect(selectedAll).toHaveCSS("color", "rgb(246, 242, 234)");
 
-  await menu.getByRole("menuitem", { name: "AI safety" }).click();
+  await menu.getByRole("button", { name: "AI safety" }).click();
 
   const activeFilter = page.getByRole("button", {
     name: "Filtering by AI safety",
@@ -132,8 +134,8 @@ test("feed filter topic labels use available dropdown space before ellipsis", as
   await page.goto(`${ORIGIN}/app/`);
   await page.getByRole("button", { name: "Filter feed" }).click();
 
-  const menu = page.getByRole("menu", { name: "Filter feed by topic" });
-  const label = menu.getByRole("menuitem", { name: topic }).locator("span");
+  const menu = page.getByRole("group", { name: "Filter by topic" });
+  const label = menu.getByRole("button", { name: topic }).locator("span");
 
   await expect(label).toBeVisible();
 
@@ -143,6 +145,47 @@ test("feed filter topic labels use available dropdown space before ellipsis", as
   }));
   expect(metrics.clientWidth).toBeGreaterThanOrEqual(metrics.scrollWidth);
 });
+
+// PER-262 regression: PER-249 inserted the Liked icon between the filter
+// trigger and the profile menu, which pushed the trigger left of where the
+// old `absolute right-0` + viewport-width menu assumed it sat — the menu
+// then spilled off the left edge on mobile widths. Assert full containment
+// at a spread of common mobile widths so a future header change can't quietly
+// break this positioning math again.
+for (const width of [360, 390, 430]) {
+  test(`feed filter menu stays fully within the ${width}px viewport`, async ({
+    page,
+  }) => {
+    await blockNonLoopback(page);
+    await page.setViewportSize({ width, height: 800 });
+
+    await page.addInitScript(() => {
+      window.localStorage.setItem("scout.theme", "light");
+      window.localStorage.setItem(
+        "scout.settings.v1",
+        JSON.stringify({
+          name: "Viewport Tester",
+          interests: [
+            { id: "int_ai_safety", topic: "AI safety" },
+            { id: "int_energy", topic: "Energy" },
+          ],
+        }),
+      );
+    });
+
+    await page.goto(`${ORIGIN}/app/`);
+    await page.getByRole("button", { name: "Filter feed" }).click();
+
+    const menu = page.getByRole("group", { name: "Filter by topic" });
+    await expect(menu).toBeVisible();
+
+    const box = await menu.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+  });
+}
 
 test("feed filter matches model topic headings case-insensitively", async ({
   page,
@@ -194,7 +237,10 @@ test("feed filter matches model topic headings case-insensitively", async ({
 
   await page.goto(`${ORIGIN}/app/`);
   await page.getByRole("button", { name: "Filter feed" }).click();
-  await page.getByRole("menuitem", { name: "openai" }).click();
+  await page
+    .getByRole("group", { name: "Filter by topic" })
+    .getByRole("button", { name: "openai" })
+    .click();
 
   await expect(
     page.getByRole("heading", { name: "OpenAI launches a research preview" }),

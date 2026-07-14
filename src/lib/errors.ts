@@ -50,6 +50,20 @@ export function classifyError(err: unknown): ClassifiedError {
       raw: stackOrMessage(err),
     };
   }
+  // `AbortSignal.timeout()` rejects with a DOMException named "TimeoutError"
+  // (NOT "AbortError"), and its message ("signal timed out") doesn't match the
+  // network keyword test below — so companion fetch timeouts used to fall
+  // through to "unknown" and miss the network-provider banner treatment. A
+  // timeout IS a network condition, but it wasn't user-cancelled, so it gets its
+  // own message rather than "Cancelled." (AIR-107).
+  if (e?.name === "TimeoutError") {
+    return {
+      kind: "network",
+      provider: "app",
+      message: "That took too long — check the companion is running and retry.",
+      raw: stackOrMessage(err),
+    };
+  }
   const msg = e?.message ?? String(err);
   if (/network|fetch|reach|connect/i.test(msg)) {
     return {

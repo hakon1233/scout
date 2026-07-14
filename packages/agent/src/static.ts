@@ -46,13 +46,25 @@ export function contentTypeFor(file: string): string {
   return CONTENT_TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream";
 }
 
+// Whether `root` exists is a build-time fact fixed for the whole process
+// lifetime (bundled in prod, absent in dev — see the file-level comment), yet
+// every static request re-`stat`s it, sometimes twice (trailingSlashRedirect,
+// then resolveStatic on fallthrough). Memoized per root path (tests use their
+// own distinct tmp roots, so this can't leak across them).
+const webrootExistsCache = new Map<string, boolean>();
+
 export async function hasWebroot(root: string = WEBROOT): Promise<boolean> {
+  const cached = webrootExistsCache.get(root);
+  if (cached !== undefined) return cached;
+  let exists: boolean;
   try {
     const st = await fs.stat(root);
-    return st.isDirectory();
+    exists = st.isDirectory();
   } catch {
-    return false;
+    exists = false;
   }
+  webrootExistsCache.set(root, exists);
+  return exists;
 }
 
 function decodePathname(pathname: string): string | null {

@@ -5,13 +5,17 @@
 // `~/.config/scout/state.json` with chmod 0600.
 
 import { promises as fs } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { TopicCoverage } from "./coverage.js";
+import { CONFIG_DIR, atomicWriteFile } from "./persistence.js";
 
-export const CONFIG_DIR = path.join(os.homedir(), ".config", "scout");
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
+
+// Re-exported from persistence.ts (CAR-244) so existing `from "./state.js"`
+// imports of these generic primitives keep working after the move; new call
+// sites should import them from persistence.ts directly.
+export { CONFIG_DIR, atomicWriteFile };
 
 // A snapshot of the intent doc that drove ONE topic's research, captured at
 // synthesis time (PER-187). The whole point of the per-interest doc is that it
@@ -341,35 +345,22 @@ async function preserveCorruptState(file: string): Promise<void> {
   }
 }
 
-// Atomic write: serialize to a sibling temp file, then rename over the target.
-// rename(2) is atomic on POSIX, so a crash/power-loss mid-write can never leave
-// a torn or truncated file — a reader that catches the parse error and returns
-// a default would otherwise silently wipe whatever the file held. The temp file
-// is uniquely named so concurrent savers can't clobber each other's in-flight
-// temp; last rename wins, matching the existing last-writer contract. Shared so
-// every persistence path (state.json, chat transcript, intent docs) gets the same
-// crash-safety instead of re-deriving it per call site.
-export async function atomicWriteFile(
-  file: string,
-  data: string,
-  mode = 0o600,
-): Promise<void> {
-  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+// List the .corrupt-*.bak recovery files preserveCorruptState left beside the
+// state file, oldest first (names embed a ms timestamp, so lexical sort is
+// chronological). preserveCorruptState is only console-loud, which no one
+// watches for a launchd-managed companion — after a recovery the app just
+// looks freshly unpaired with no explanation. /healthz folds this in (PER-272)
+// so the recovery is visible wherever the companion's health already is.
+export async function listCorruptStateBackups(
+  file = STATE_FILE,
+): Promise<string[]> {
+  const prefix = `${path.basename(file)}.corrupt-`;
   try {
-    await fs.writeFile(tmp, data, { mode });
-    await fs.rename(tmp, file);
-  } catch (err) {
-    // Best-effort cleanup so a failed write doesn't leave an orphan temp behind.
-    // A failed cleanup must not mask the original write error, but a silent
-    // swallow lets uniquely-named `.tmp` orphans accumulate in the config dir
-    // (every failed save adds one) with zero signal. Log at warn so the leak is
-    // observable; still re-throw the original write error below. Mirrors the
-    // ephemeral-dir cleanup treatment in runner.ts (CAR-225).
-    await fs.rm(tmp, { force: true }).catch((rmErr) => {
-      console.warn(`[state] temp cleanup failed for ${tmp}:`, rmErr);
-    });
-    throw err;
+    const entries = await fs.readdir(path.dirname(file));
+    return entries.filter((f) => f.startsWith(prefix) && f.endsWith(".bak")).sort();
+  } catch {
+    // Config dir absent — normal first run, nothing was ever recovered.
+    return [];
   }
 }
 

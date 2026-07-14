@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { Article, Brief } from "@/lib/types";
 import { canonicalUrl, type LikeInput } from "@/lib/likes";
 import { LikeButton } from "@/components/LikeButton";
+import { EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
 
 // AIR-186: react-markdown + rehype-sanitize (~170KB) are only needed by the
@@ -125,10 +126,10 @@ export function FeedView({
 
   if (items.length === 0) {
     // No parseable stories (e.g. every section reported `_no fresh news_`). The
-    // page-level coverage banners already explain why; keep the feed area quiet.
-    return (
-      <p className="text-body-sm text-muted">No stories in this edition yet.</p>
-    );
+    // page-level coverage banners already explain why; use the shared empty-state
+    // primitive so this reads consistently with every other "nothing here yet"
+    // surface in the app (Liked feed, interest docs, etc.) instead of a bare line.
+    return <EmptyState title="No stories in this edition yet" />;
   }
 
   return (
@@ -258,13 +259,14 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 text-body-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
         >
+          {/* eslint-disable-next-line @next/next/no-img-element -- 16px favicon; next/image's client runtime buys nothing under images.unoptimized:true. */}
           <img
             src={faviconFor(item.source)}
             alt=""
             width={16}
             height={16}
-            className="h-4 w-4 rounded-sm"
             loading="lazy"
+            className="h-4 w-4 rounded-sm"
           />
           Read the full story at {item.source} ↗
         </a>
@@ -290,6 +292,7 @@ export function FeedImage({
   // referrerPolicy="no-referrer" so referer-checking CDNs (Crunchbase etc.) that
   // 403 a request carrying our ts.net origin still serve the image (PER-217).
   return (
+    // eslint-disable-next-line @next/next/no-img-element -- Arbitrary source images need no-referrer and graceful unknown-host fallback; next/image requires host policy we cannot predict.
     <img
       src={src}
       alt=""

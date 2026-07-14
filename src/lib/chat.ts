@@ -193,6 +193,7 @@ export async function stopChatTurn(
 export async function confirmDeleteInterest(
   interestId: string,
   token: string,
+  opts: { signal?: AbortSignal } = {},
 ): Promise<ChatTurn> {
   const base = await requireBase();
   const res = await fetch(`${base}/v0/chat/confirm-delete`, {
@@ -202,7 +203,7 @@ export async function confirmDeleteInterest(
       authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ interestId }),
-    signal: AbortSignal.timeout(10_000),
+    signal: opts.signal ?? AbortSignal.timeout(10_000),
   });
   if (res.status === 409) {
     throw new Error(
@@ -232,6 +233,7 @@ export async function confirmDeleteInterest(
 export async function confirmRewriteInterest(
   interestId: string,
   token: string,
+  opts: { signal?: AbortSignal } = {},
 ): Promise<ChatTurn> {
   const base = await requireBase();
   const res = await fetch(`${base}/v0/chat/confirm-rewrite`, {
@@ -241,7 +243,7 @@ export async function confirmRewriteInterest(
       authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ interestId }),
-    signal: AbortSignal.timeout(10_000),
+    signal: opts.signal ?? AbortSignal.timeout(10_000),
   });
   if (res.status === 409) {
     throw new Error(

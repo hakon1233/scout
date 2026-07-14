@@ -4,7 +4,7 @@ The MVP UI is built on a small set of primitives and a token layer in `src/app/g
 
 ## Tokens
 
-All tokens live in `src/app/globals.css`. Light values are defined under `:root`; dark values swap via `@media (prefers-color-scheme: dark)`. There is no user-facing toggle yet (see PER-7j).
+All tokens live in `src/app/globals.css`. Light values are defined under `:root`; dark values swap when the root element has the `.dark` class (`:root.dark`). `ThemeBootstrap` applies the initial class before paint, and `ThemeToggle` lets users choose light, dark, or system mode.
 
 ### Color (semantic)
 
@@ -105,5 +105,5 @@ Live in `src/components/ui/`. Re-exported from `src/components/ui/index.ts`.
 
 1. Component code uses **semantic** tokens only. Raw `zinc-*` / `red-*` Tailwind utilities are forbidden outside `globals.css`.
 2. Add a variant to the existing primitive rather than re-creating button/field/banner shapes inline.
-3. New semantic tokens get added under `:root` AND the dark `@media` block AND `@theme` in `globals.css`.
-4. Dark mode is driven only by `prefers-color-scheme`. A user-facing toggle is tracked in PER-7j — do not introduce a `dark:` variant in component code.
+3. New semantic tokens get added under `:root`, `:root.dark`, and `@theme` in `globals.css`.
+4. Dark mode is class-based. `ThemeToggle` persists the user's light/dark/system choice and toggles `.dark` on `document.documentElement`; component code may use Tailwind `dark:` variants when a semantic token alone cannot express the state.

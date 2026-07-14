@@ -73,6 +73,13 @@
   --bg-page: var(--paper);
   --bg-surface: var(--card);
   --bg-surface-muted: var(--paper-2);
+  /*
+    Raised/selected fill — one warm step deeper than surface-muted, used for
+    the active run-scope pill, the primary "Run now" menu item, and chip hover.
+    Sits between paper-2 (#efe9dd) and line (#d8d0c1) so a filled element reads
+    as pressed/selected against both page and card. (AIR-201)
+  */
+  --bg-surface-strong: #e8dfcd;
   --border-default: var(--line);
   --border-strong: var(--line-2);
   --text-primary: var(--ink);
@@ -129,6 +136,8 @@
   --bg-page: #16140f;
   --bg-surface: #1d1a14;
   --bg-surface-muted: #24201a;
+  /* Raised/selected fill (dark) — a step up from surface-muted toward border. */
+  --bg-surface-strong: #2e2920;
   --border-default: #37322a;
   --border-strong: #4b443a;
   --text-primary: #f1ece1;
@@ -137,7 +146,9 @@
   --accent-bg: #f1ece1;
   --accent-fg: #1c1a17;
   --accent-bg-hover: #ffffff;
-  --accent-signal: #c4553f;
+  /* PER-264: lightened from #c4553f (3.89:1 on --bg-surface, fails AA) to
+     4.85:1 against #1d1a14, keeping the same warm brick-red hue family. */
+  --accent-signal: #d2694c;
   --accent-deep: #7da7bd;
   --danger-bg: #2c1a16;
   --danger-bg-hover: #3a201a;
@@ -161,6 +172,7 @@
   --color-page: var(--bg-page);
   --color-surface: var(--bg-surface);
   --color-surface-muted: var(--bg-surface-muted);
+  --color-surface-strong: var(--bg-surface-strong);
   --color-border-default: var(--border-default);
   --color-border-strong: var(--border-strong);
   --color-primary: var(--text-primary);

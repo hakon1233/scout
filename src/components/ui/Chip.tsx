@@ -31,13 +31,14 @@ export function Chip({
         <span className="font-medium text-primary">[{index}]</span>
       )}
       {favicon && (
+        // eslint-disable-next-line @next/next/no-img-element -- 12px favicon; next/image's client runtime buys nothing under images.unoptimized:true.
         <img
           src={favicon}
           alt=""
           width={12}
           height={12}
-          className="h-3 w-3 rounded-sm"
           loading="lazy"
+          className="h-3 w-3 rounded-sm"
         />
       )}
       <span className="truncate max-w-[16ch]">{children}</span>
@@ -45,7 +46,9 @@ export function Chip({
   );
 
   if (onRemove) {
-    const label = removeLabel ?? `Remove ${typeof children === "string" ? children : "item"}`;
+    const label =
+      removeLabel ??
+      `Remove ${typeof children === "string" ? children : "item"}`;
     return (
       <span className={`${base} pr-1 ${className}`}>
         {content}
@@ -86,9 +89,5 @@ export function Chip({
       </a>
     );
   }
-  return (
-    <span className={`${base} ${className}`}>
-      {content}
-    </span>
-  );
+  return <span className={`${base} ${className}`}>{content}</span>;
 }

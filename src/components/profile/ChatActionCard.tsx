@@ -150,6 +150,7 @@ export function ChatRewriteProposal({
   pr,
   prev,
   resolved,
+  autoFocus = true,
   onApply,
   onDiscard,
   disabled,
@@ -160,6 +161,7 @@ export function ChatRewriteProposal({
   // the proposal IS the full replacement text.
   prev: string | null;
   resolved: RewriteResolution;
+  autoFocus?: boolean;
   onApply: () => void;
   onDiscard: () => void;
   disabled: boolean;
@@ -172,11 +174,10 @@ export function ChatRewriteProposal({
   // Capture where focus was, then move it to the safe choice. When the card
   // resolves, hand focus back so keyboard users aren't stranded.
   useEffect(() => {
-    if (resolved) return;
+    if (!autoFocus || resolved) return;
     returnFocusRef.current = document.activeElement as HTMLElement | null;
     discardRef.current?.focus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [autoFocus, resolved]);
   useEffect(() => {
     if (resolved) returnFocusRef.current?.focus();
   }, [resolved]);

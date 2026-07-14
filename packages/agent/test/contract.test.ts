@@ -83,6 +83,21 @@ function makeSpawnRecorder(opts: { autoClose: boolean }) {
     releaseAll() {
       while (pending.length) pending.shift()!();
     },
+    // releaseAll() only drains children ALREADY gated on stdin-finish. The
+    // kick's 202 returns before the runner has written its state/doc files and
+    // spawned the child, so a test that releases "right after" the kick is
+    // racing that async setup — and since the PER-272 fsyncs it reliably
+    // loses, leaving the child gated forever until the 4-minute session
+    // timeout fails the run. Tests must await this before releaseAll().
+    async waitForGatedChild(count = 1) {
+      const deadline = Date.now() + 30_000;
+      while (pending.length < count) {
+        if (Date.now() > deadline) {
+          throw new Error(`no gated child after 30s (have ${pending.length}, want ${count})`);
+        }
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    },
   };
 }
 
@@ -232,7 +247,9 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (
 test("a second kick while a brief is in flight is rejected without clobbering the slot (PER-92)", async () => {
   const { tmp, stateFile, token } = await seededServer();
   // autoClose:false → the first synthesis hangs, holding last_brief = pending.
-  const { spawnFn, releaseAll } = makeSpawnRecorder({ autoClose: false });
+  const { spawnFn, releaseAll, waitForGatedChild } = makeSpawnRecorder({
+    autoClose: false,
+  });
 
   let synthesisDone: (b: Brief) => void;
   const doneP = new Promise<Brief>((r) => (synthesisDone = r));
@@ -257,6 +274,11 @@ test("a second kick while a brief is in flight is rejected without clobbering th
     const midBriefs = ((await mid.json()) as { briefs: Brief[] }).briefs;
     assert.equal(midBriefs[0]?.status, "pending");
     assert.equal(midBriefs[0]?.id, firstId);
+
+    // Wait for the first run's child to actually be spawned and gated, so
+    // "in flight" is literal when the second kick lands — and so the
+    // releaseAll() below is guaranteed to have a child to release.
+    await waitForGatedChild();
 
     // A second kick lands before the first finishes → 409, echoing the
     // in-flight id. Crucially it does NOT overwrite the pending slot.

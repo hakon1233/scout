@@ -2,15 +2,17 @@
   "name": "scout",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.9.0",
   "scripts": {
     "dev": "next dev",
     "build": "NODE_ENV=production next build",
-    "start": "next start",
+    "start": "npx serve out",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm --filter @scout/agent test",
+    "test": "node --test test/*.test.mjs && pnpm --filter @scout/agent test && pnpm run test:web",
+    "test:web": "tsx --test src/lib/chat.test.ts src/lib/companion.test.ts src/lib/likes.test.ts src/lib/run-history.test.ts src/lib/safe-storage.test.ts src/components/profile/useProfileWorkbench.helpers.test.ts src/app/app/page.test.ts",
     "build:agent-webroot": "node scripts/build-agent-webroot.mjs",
     "build:agent": "pnpm run build:agent-webroot && pnpm --filter @scout/agent build",
     "pack:agent": "pnpm run build:agent && mkdir -p public/agent && cd packages/agent && npm pack --pack-destination ../../public/agent",
@@ -24,14 +26,6 @@
     "react-markdown": "^10.1.0",
     "rehype-sanitize": "^6.0.0"
   },
-  "pnpm": {
-    "overrides": {
-      "postcss": ">=8.5.10",
-      "@babel/core": "^7.29.6",
-      "js-yaml": "^4.2.0",
-      "esbuild": ">=0.28.1"
-    }
-  },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
     "@tailwindcss/postcss": "^4",
@@ -42,6 +36,7 @@
     "eslint-config-next": "16.2.6",
     "prettier": "^3.3.3",
     "tailwindcss": "^4",
+    "tsx": "^4.19.0",
     "typescript": "^5"
   }
 }

@@ -1,7 +1,7 @@
 // The human-readable description of HOW Scout assembles researched findings into
 // the brief you read. This is the assembly counterpart to search-skills.ts:
 // SEARCH_SKILLS says how Scout RESEARCHES; ASSEMBLY_SKILLS says how Scout turns
-// that research into one ordered, deduped, dated brief.
+// that research into one ordered, dated brief.
 //
 // Unlike SEARCH_SKILLS, this string is NOT injected into the model — the
 // assembly behaviors it describes are enforced deterministically IN CODE
@@ -55,10 +55,9 @@ FRESHNESS ENFORCED, NOT JUST REQUESTED:
 - If enforcing freshness empties a topic, it's shown honestly as "nothing fresh"
   rather than padded with stale items.
 
-DATED, DEDUPED, SOURCED:
+DATED AND SOURCED:
 - Every story carries its real publish date, a one-sentence summary of what
   happened, and a link to the strongest source — primary sources are preferred
   over second-hand rewrites.
-- Near-identical stories about the same event are collapsed into a single item.
 - When the source page has a usable lead image, Scout handpicks that image to head
   the story — it never invents, generates, or substitutes a stock placeholder.`;

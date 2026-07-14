@@ -14,12 +14,14 @@ export type DeleteResolution = "deleted" | "cancelled" | undefined;
 export function ChatDeleteConfirm({
   pd,
   resolved,
+  autoFocus = true,
   onConfirm,
   onCancel,
   disabled,
 }: {
   pd: PendingDelete;
   resolved: DeleteResolution;
+  autoFocus?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   disabled: boolean;
@@ -35,13 +37,14 @@ export function ChatDeleteConfirm({
   // cards"). We land on Cancel — the SAFE default — so a stray Enter keeps the
   // interest rather than deleting it.
   useEffect(() => {
+    if (!autoFocus || resolved) return;
     if (typeof document !== "undefined") {
       const active = document.activeElement;
       returnFocusRef.current =
         active instanceof HTMLElement ? active : null;
     }
     cancelRef.current?.focus();
-  }, []);
+  }, [autoFocus, resolved]);
 
   // Once the turn resolves (Delete/Cancel pressed), the action buttons unmount.
   // Return focus to wherever it was before the card took it (the composer), so a
