@@ -199,13 +199,13 @@ export function InterestDocCard({
         </div>
       ) : hasDoc ? (
         <p className="mt-3 border-t border-border-default pt-3 font-reading text-[13px] leading-relaxed text-muted">
-          Scout is tracking an intent doc for this interest. Refine it in the
+          Scout is tracking an assignment for this interest. Refine it in the
           chat to see the latest draft here.
         </p>
       ) : (
         <p className="mt-3 border-t border-border-default pt-3 font-reading text-[13px] leading-relaxed text-muted">
-          No intent doc yet. Tell Scout what matters about this topic and it
-          will draft one — that doc steers every research run.
+          No assignment yet. Tell Scout what matters about this topic and it
+          will draft one — and follow it on every research run.
         </p>
       )}
     </article>
@@ -227,10 +227,10 @@ function DocLine({
   if (beat) {
     const label =
       beat === "created"
-        ? "Doc created just now"
+        ? "Assignment created just now"
         : beat === "removed"
           ? "Removing…"
-          : "Doc updated just now";
+          : "Assignment updated just now";
     return (
       <span className="mt-1 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-signal">
         <span
@@ -249,7 +249,7 @@ function DocLine({
           aria-hidden="true"
           className="inline-block h-1.5 w-1.5 rounded-full bg-signal"
         />
-        Intent doc{date ? ` · updated ${date}` : ""}
+        Assignment{date ? ` · updated ${date}` : ""}
       </span>
     );
   }
@@ -259,7 +259,7 @@ function DocLine({
         aria-hidden="true"
         className="inline-block h-1.5 w-1.5 rounded-full border border-dashed border-border-strong"
       />
-      No intent doc yet
+      No assignment yet
     </span>
   );
 }
