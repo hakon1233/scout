@@ -41,10 +41,6 @@ async function blockNonLoopback(page: import("@playwright/test").Page) {
 test("like a freshly-generated story → it appears in the Liked feed, persists, and unlikes in place", async ({
   page,
 }, testInfo) => {
-  test.skip(
-    !!process.env.CI,
-    "AIR-642: stub-claude.mjs crashes deterministically in CI (ReferenceError: stdin is not defined) — test-infra bug, passes locally, tracked for root-cause",
-  );
   await page.setViewportSize({ width: 1440, height: 900 });
   await blockNonLoopback(page);
 
@@ -110,11 +106,14 @@ test("like a freshly-generated story → it appears in the Liked feed, persists,
   await expect(page).toHaveURL(/\/app\/liked\/?$/);
 
   // THE write→read assertion: the story the feed captured is now rendered by the
-  // Liked page reading it back from the store. Headline (h3) + topic + source all
+  // Liked page reading it back from the store. Headline (h2 — the Liked page has
+  // no per-topic h2 grouping above its cards, unlike the main feed's h3, so a
+  // card headline lands directly under the page's own h1; CAR-179 fixed this
+  // from h3 to h2 to close a heading-order-skip a11y bug) + topic + source all
   // survive the likeInputFor snapshot → canonicalUrl key → useLikedStories path.
   const likedHeading = page.getByRole("heading", {
     name: "Alignment update",
-    level: 3,
+    level: 2,
   });
   await expect(likedHeading).toBeVisible();
   const likedCard = likedHeading.locator("xpath=ancestor::div[1]");
@@ -133,14 +132,14 @@ test("like a freshly-generated story → it appears in the Liked feed, persists,
   // Liked route must still show it — this is the survive-a-new-session promise.
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Alignment update", level: 3 }),
+    page.getByRole("heading", { name: "Alignment update", level: 2 }),
   ).toBeVisible();
 
   // Unlike in place from the Liked feed: the card's heart removes it, leaving the
   // empty state.
   await page.getByRole("button", { name: "Remove from liked stories" }).click();
   await expect(
-    page.getByRole("heading", { name: "Alignment update", level: 3 }),
+    page.getByRole("heading", { name: "Alignment update", level: 2 }),
   ).toHaveCount(0);
   await expect(page.getByText("No liked stories yet")).toBeVisible();
 
