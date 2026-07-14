@@ -298,6 +298,15 @@ export default function AppPage() {
       setError(null);
       setCancelled(false);
       setRanAt(null);
+      // A run replaces the on-screen brief, so any open single-story detail is
+      // about to unmount (the feed block swaps to the skeleton). Reset the
+      // story-open flags so the run's progress panel + skeleton — both gated on
+      // `!storyOpen` — actually render. Without this, pressing Run now while
+      // reading a story left `todayStoryOpen`/`historyStoryOpen` stuck true (the
+      // unmounting FeedView never fires onDetailOpenChange(false)), so the whole
+      // content area went blank with zero progress for the entire multi-minute run.
+      setTodayStoryOpen(false);
+      setHistoryStoryOpen(false);
       setProgress({
         stage: "synthesizing",
         message: isRetry
@@ -380,6 +389,10 @@ export default function AppPage() {
     setError(null);
     setCancelled(false);
     setRanAt(null);
+    // Same reason as generate(): close any open story so the run's progress
+    // panel + skeleton (gated on `!storyOpen`) render instead of a blank area.
+    setTodayStoryOpen(false);
+    setHistoryStoryOpen(false);
     setProgress({
       stage: "synthesizing",
       message:
