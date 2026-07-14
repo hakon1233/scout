@@ -63,7 +63,7 @@ test("Skills is reachable from the profile menu", async ({ page }) => {
   await expect(page).toHaveURL(`${ORIGIN}/app/`, { timeout: 15_000 });
 
   await page.getByRole("button", { name: "Open settings" }).click();
-  await page.getByRole("menuitem", { name: "Skills" }).click();
+  await page.getByRole("link", { name: "Skills" }).click();
 
   await expect(page).toHaveURL(`${ORIGIN}/app/skills/`, { timeout: 15_000 });
   await expect(
