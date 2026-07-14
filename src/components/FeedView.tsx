@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import type { Article, Brief } from "@/lib/types";
 import { canonicalUrl, type LikeInput } from "@/lib/likes";
 import { LikeButton } from "@/components/LikeButton";
@@ -130,9 +129,7 @@ export function FeedView({
     // page-level coverage banners already explain why; use the shared empty-state
     // primitive so this reads consistently with every other "nothing here yet"
     // surface in the app (Liked feed, interest docs, etc.) instead of a bare line.
-    return (
-      <EmptyState title="No stories in this edition yet" />
-    );
+    return <EmptyState title="No stories in this edition yet" />;
   }
 
   return (
@@ -262,13 +259,14 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 text-body-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
         >
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element -- 16px favicon; next/image's client runtime buys nothing under images.unoptimized:true. */}
+          <img
             src={faviconFor(item.source)}
             alt=""
             width={16}
             height={16}
-            className="h-4 w-4 rounded-sm"
             loading="lazy"
+            className="h-4 w-4 rounded-sm"
           />
           Read the full story at {item.source} ↗
         </a>
