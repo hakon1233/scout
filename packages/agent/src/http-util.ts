@@ -200,7 +200,13 @@ async function readBody(
     total += buf.length;
     if (total > maxBytes) {
       // Stop buffering and tear down the connection so we never hold the whole
-      // oversized payload in memory.
+      // oversized payload in memory. CAVEAT (AIR-640): req.destroy() also kills
+      // the shared socket, so on the streaming path (chunked / absent /
+      // under-declared content-length) the caller's 413 can't reach the client —
+      // it gets an ECONNRESET instead. Memory protection is intact; the
+      // response-correctness fix is tracked in AIR-640. An accurately-declared
+      // oversized body never reaches here: parseJsonBody fast-rejects it with a
+      // clean 413 (socket intact) before readBody runs.
       req.destroy();
       throw new BodyTooLargeError();
     }
