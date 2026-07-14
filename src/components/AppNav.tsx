@@ -134,6 +134,46 @@ function LikedNavLink() {
   );
 }
 
+// Shared disclosure-popover state for the nav's two dropdowns (FeedFilter and
+// ProfileMenu). Owns open state, the trigger/container refs, and the
+// outside-click + Escape-to-close-and-return-focus wiring (AIR-407) — the exact
+// block that previously lived, byte-identical, in both components and had to be
+// hand-edited in both when the focus-return behavior was added. Positioning
+// (FeedFilter's menuStyle) stays local to each consumer.
+function useDisclosure() {
+  const [open, setOpen] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      // Escape closes and returns focus to the trigger so keyboard users land
+      // back where they opened from (AIR-407).
+      if (e.key === "Escape") {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return { open, setOpen, containerRef, buttonRef };
+}
+
 // PER-241: funnel-icon filter button + dropdown. Reads interests; never writes.
 function FeedFilter({
   interests,
@@ -144,9 +184,7 @@ function FeedFilter({
   activeFilter: string | null;
   onFilterChange: (topic: string | null) => void;
 }) {
-  const [open, setOpen] = React.useState(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const { open, setOpen, containerRef, buttonRef } = useDisclosure();
   const isFiltered = activeFilter !== null;
   // PER-262: the menu's horizontal offset from its trigger drifts every time a
   // sibling icon is added/removed from the nav (see PER-249, which inserted the
@@ -185,33 +223,9 @@ function FeedFilter({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open]);
-
-  React.useEffect(() => {
-    if (!open) return;
-    function onPointerDown(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    function onKeyDown(e: KeyboardEvent) {
-      // Escape closes and returns focus to the trigger so keyboard users land
-      // back where they opened from (AIR-407).
-      if (e.key === "Escape") {
-        setOpen(false);
-        buttonRef.current?.focus();
-      }
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+    // containerRef now comes from useDisclosure(); it is a stable ref object, so
+    // listing it is a no-op that satisfies exhaustive-deps.
+  }, [open, containerRef]);
 
   function select(topic: string | null) {
     onFilterChange(topic);
@@ -327,35 +341,7 @@ function ProfileMenu({
   onWeeklyBrief?: () => void;
   running?: boolean;
 }) {
-  const [open, setOpen] = React.useState(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const buttonRef = React.useRef<HTMLButtonElement>(null);
-
-  // Close on outside click or Escape while open.
-  React.useEffect(() => {
-    if (!open) return;
-    function onPointerDown(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    function onKeyDown(e: KeyboardEvent) {
-      // Escape closes and returns focus to the trigger (AIR-407).
-      if (e.key === "Escape") {
-        setOpen(false);
-        buttonRef.current?.focus();
-      }
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  const { open, setOpen, containerRef, buttonRef } = useDisclosure();
 
   return (
     <div ref={containerRef} className="relative ml-auto">
