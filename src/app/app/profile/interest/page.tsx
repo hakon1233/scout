@@ -149,7 +149,7 @@ export default function InterestScopePage() {
             ← Interests
           </a>
           <div className="flex items-center gap-3">
-            <span>Interest scope</span>
+            <span>Assignment</span>
             <ThemeToggle />
           </div>
         </div>
@@ -166,14 +166,14 @@ export default function InterestScopePage() {
             <header className="border-b border-border-default pb-5">
               <p className="mb-3 flex items-center gap-2.5 font-mono text-[12px] uppercase tracking-[0.14em] text-signal">
                 <span className="h-[1.5px] w-[26px] bg-signal" />
-                Research scope
+                Assignment
               </p>
               <h1 className="font-serif text-[36px] font-semibold leading-[1.08] tracking-[-0.02em]">
                 {model.interest.topic}
               </h1>
               {model.meta.updatedAt && (
                 <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
-                  Intent doc updated {formatDocDate(model.meta.updatedAt)}
+                  Assignment updated {formatDocDate(model.meta.updatedAt)}
                 </p>
               )}
             </header>
@@ -185,13 +185,13 @@ export default function InterestScopePage() {
                 </div>
               ) : model.meta.hasDoc ? (
                 <p className="font-reading text-[16px] leading-relaxed text-secondary">
-                  Scout has an intent doc for this interest, but the companion
+                  Scout has an assignment for this interest, but the companion
                   did not return its markdown in this session.
                 </p>
               ) : (
                 <EmptyState
-                  title="No intent doc yet"
-                  body="Refine this interest in chat to create the research scope Scout will follow."
+                  title="No assignment yet"
+                  body="Refine this interest in chat to create the assignment Scout will follow."
                 />
               )}
             </section>

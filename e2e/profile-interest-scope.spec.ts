@@ -47,17 +47,23 @@ test.describe("standalone interest scope page", () => {
 
     // The standalone chrome — distinct from the workbench drill-in.
     await expect(page.getByRole("link", { name: "← Interests" })).toBeVisible();
-    await expect(page.getByText("Interest scope")).toBeVisible();
+    // AIR-441 renamed the chrome label "Interest scope" → "Assignment"; it is the
+    // first of the two "Assignment" labels (chrome, then the header eyebrow).
+    await expect(
+      page.getByText("Assignment", { exact: true }).first(),
+    ).toBeVisible();
 
     // The scope header + the seeded topic resolve from id → SAMPLE_INTERESTS.
-    await expect(page.getByText("Research scope")).toBeVisible();
+    await expect(
+      page.locator("header").getByText("Assignment", { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "AI policy & regulation" }),
     ).toBeVisible();
 
     // mockDocMeta(seed="full") marks every interest hasDoc:true with a fixed
     // updatedAt → the dateline renders.
-    await expect(page.getByText(/Intent doc updated/)).toBeVisible();
+    await expect(page.getByText(/Assignment updated/)).toBeVisible();
 
     // THE honesty contract: the mock seeds metadata but no markdown body, so the
     // page must NOT fabricate doc content — it shows the explicit "didn't return
@@ -65,10 +71,10 @@ test.describe("standalone interest scope page", () => {
     // would contradict hasDoc:true).
     await expect(
       page.getByText(
-        "Scout has an intent doc for this interest, but the companion did not return its markdown in this session.",
+        "Scout has an assignment for this interest, but the companion did not return its markdown in this session.",
       ),
     ).toBeVisible();
-    await expect(page.getByText("No intent doc yet")).toBeHidden();
+    await expect(page.getByText("No assignment yet")).toBeHidden();
 
     // Footer navigation pills are present.
     await expect(
@@ -99,7 +105,9 @@ test.describe("standalone interest scope page", () => {
     ).toBeVisible();
 
     // The scope header must NOT be on screen when nothing resolved.
-    await expect(page.getByText("Research scope")).toBeHidden();
+    await expect(
+      page.locator("header").getByText("Assignment", { exact: true }),
+    ).toBeHidden();
   });
 
   test("the ← Interests control links back to the interests list", async ({
@@ -109,7 +117,9 @@ test.describe("standalone interest scope page", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     await page.goto(`${ORIGIN}/app/profile/interest/?mock=full&id=ai-policy`);
-    await expect(page.getByText("Research scope")).toBeVisible();
+    await expect(
+      page.locator("header").getByText("Assignment", { exact: true }),
+    ).toBeVisible();
 
     await page.getByRole("link", { name: "← Interests" }).click();
     await expect(page).toHaveURL(/\/app\/interests/);

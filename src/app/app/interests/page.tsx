@@ -234,7 +234,7 @@ function PrimaryPane({
           </h2>
           {hydrated && cards.length > 0 ? (
             <span className="font-mono text-[11px] text-muted">
-              {docCount} of {cards.length} with intent doc
+              {docCount} of {cards.length} with an assignment
             </span>
           ) : null}
         </div>
