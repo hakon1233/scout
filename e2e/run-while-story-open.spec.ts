@@ -17,7 +17,21 @@ import { expect, test, type Page } from "@playwright/test";
 // one POST /v0/interests under test is intercepted (delayed, then 409'd) so no
 // synthesis runs — neither the real `claude` nor the e2e stub, and no paid
 // scrape is reachable.
-
+//
+// AIR-744: `generatedAt` must be set in the FUTURE, not just "recent" — this
+// suite shares one companion process across all specs (workers:1), and
+// src/app/app/page.tsx's mount effect fetches the companion's real
+// last-ready-brief and silently adopts it over whatever's cached locally
+// whenever it's newer (`prev.generatedAt >= latest.generatedAt`). Several
+// earlier-sorting specs (e.g. liked-live-flow.spec.ts) run a REAL synthesis
+// through the offline stub, which writes a genuinely "just now"-dated brief
+// to the companion. A seed dated in the past (this file originally used
+// 2026-06-25, always older than "today") loses that comparison and gets
+// silently replaced by the real brief — which is exactly what broke this
+// test under full-suite load: it seeded "Quantum batteries...", found the
+// real stub's canonical "Alignment update" story instead, and timed out
+// waiting for a heading that was never going to render. Same shared-state
+// contamination class as this suite's other companion-timing gotchas.
 const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
@@ -28,7 +42,7 @@ const SETTINGS = {
 
 const BRIEF = {
   id: "brief_air743_1",
-  generatedAt: "2026-06-25T09:00:00.000Z",
+  generatedAt: "2099-01-01T00:00:00.000Z",
   kind: "daily",
   interests: ["Energy"],
   topics: [{ topic: "Energy", status: "covered" }],
