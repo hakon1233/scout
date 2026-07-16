@@ -115,6 +115,16 @@ export class Scheduler {
   // Re-read schedule config from state, clear any pending timer, and arm a fresh
   // one (or none, if disabled). Persists the computed next_run_at so the UI can
   // show it. This is the single writer of schedule.next_run_at.
+  //
+  // TOTAL — never rejects (PER-280). On 2026-07-04 the 05:00Z fire's re-arm hit
+  // ENOSPC in saveState below; the exception escaped AFTER stop() had cleared
+  // the old timer and BEFORE a new one was armed, so the scheduler died silently
+  // inside a healthy 13-day-old process and no daily brief ran for 12 days.
+  // Arming the timer must therefore never depend on persistence succeeding:
+  // loadState is total (state.ts recovers/refreshes rather than throwing), the
+  // timer is armed BEFORE the telemetry write, and the write itself is
+  // log-only-on-failure. The worst a full disk can now do is stale next_run_at
+  // telemetry and a failed run — tomorrow's fire stays armed either way.
   async reschedule(): Promise<void> {
     this.stop();
     const state = await loadState(this.deps.stateFile);
@@ -122,10 +132,18 @@ export class Scheduler {
 
     if (!cfg?.enabled) {
       if (cfg?.next_run_at) {
-        await saveState(
-          { ...state, schedule: { ...cfg, next_run_at: undefined } },
-          this.deps.stateFile,
-        );
+        try {
+          await saveState(
+            { ...state, schedule: { ...cfg, next_run_at: undefined } },
+            this.deps.stateFile,
+          );
+        } catch (err) {
+          // Telemetry-only write; the schedule is disarmed regardless.
+          console.error(
+            "[scheduler] failed to persist cleared next_run_at:",
+            err,
+          );
+        }
       }
       return;
     }
@@ -136,11 +154,6 @@ export class Scheduler {
       // Malformed time-of-day shouldn't happen (PUT validates) but never wedge.
       return;
     }
-
-    await saveState(
-      { ...state, schedule: { ...cfg, next_run_at: next.toISOString() } },
-      this.deps.stateFile,
-    );
 
     const delay = Math.max(
       0,
@@ -172,6 +185,23 @@ export class Scheduler {
     // Don't keep the event loop alive purely for the schedule — the HTTP server
     // is what keeps the process up. (No-op under test harnesses that lack unref.)
     this.timer.unref?.();
+
+    // Persist next_run_at for the Settings UI only AFTER the timer is armed,
+    // and never let a failed write disarm the schedule (PER-280, see header).
+    // fire() awaits this whole method before kicking the run, so `schedule`
+    // writes remain sequential (reschedule → startRun → completion) and the
+    // two writers still can't clobber each other's fields.
+    try {
+      await saveState(
+        { ...state, schedule: { ...cfg, next_run_at: next.toISOString() } },
+        this.deps.stateFile,
+      );
+    } catch (err) {
+      console.error(
+        "[scheduler] failed to persist next_run_at (timer still armed):",
+        err,
+      );
+    }
   }
 
   // Fire a scheduled run, then re-arm for the next day. Runs through the shared

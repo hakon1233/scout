@@ -523,3 +523,34 @@ test("a scheduled run that keeps failing gives up after the retry budget (PER-25
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
+
+test("PER-280: a persistence failure while re-arming never disarms the schedule", async () => {
+  const { tmp, stateFile } = await tmpState({
+    pairing_token: newPairingToken(),
+    interests: [{ id: "int_aisafety", topic: "ai safety" }],
+    schedule: { enabled: true, time_of_day: "07:00" },
+  });
+  const now = () => new Date(2026, 5, 1, 7, 0, 0, 0);
+  const scheduler = new Scheduler({ stateFile }, now);
+  try {
+    // Make every state WRITE fail while reads still work (EACCES here;
+    // ENOSPC in the 2026-07-04 outage — same class: saveState's atomic
+    // tmp-file open in this directory rejects).
+    await fs.chmod(tmp, 0o555);
+    // Before the fix this rejected out of saveState AFTER stop() had already
+    // cleared the previous timer — leaving the scheduler permanently dead
+    // inside a healthy process (the 12-day PER-280 outage). It must resolve…
+    await scheduler.reschedule();
+    // …and the daily timer must be armed despite the failed telemetry write.
+    // White-box probe: `timer` holds the armed setTimeout handle.
+    const armed = (scheduler as unknown as { timer: unknown }).timer;
+    assert.ok(
+      armed !== null,
+      "daily timer must be armed even when saveState fails",
+    );
+  } finally {
+    await fs.chmod(tmp, 0o755);
+    scheduler.stop();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});

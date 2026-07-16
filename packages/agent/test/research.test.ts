@@ -222,3 +222,42 @@ test("PER-181: a session that closes in time is NOT affected by the timeout", as
   );
   assert.match(md, /## ai/);
 });
+
+test("PER-280: a non-zero exit with empty stderr surfaces the stdout tail", async () => {
+  // The real failure this pins: on 2026-07-15 the claude CLI reported
+  // "You've hit your session limit · resets 8:40pm (Europe/Oslo)" on STDOUT
+  // and exited 1 with stderr EMPTY, so all six topics of the founder's manual
+  // run failed with an undiagnosable `error_msg: "claude exited 1:"`. The
+  // actual cause must reach the rejection (and thus the brief's error_msg).
+  const spawnFn = ((_bin: string, _args: readonly string[], _opts: unknown) => {
+    const child = new EventEmitter() as EventEmitter & {
+      stdin: Writable;
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      pid?: number;
+    };
+    child.pid = undefined;
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = new Writable({ write(_c, _e, cb) { cb(); } });
+    child.stdin.on("finish", () =>
+      setImmediate(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from("You've hit your session limit · resets 8:40pm (Europe/Oslo)"),
+        );
+        child.emit("close", 1);
+      }),
+    );
+    return child;
+  }) as unknown as typeof spawn;
+
+  await assert.rejects(
+    researchAndSynthesize(
+      { topic: "ai", doc: "track ai" },
+      { spawnFn, timeoutMs: 5000 },
+    ),
+    /claude exited 1: You've hit your session limit/,
+    "the stdout-carried cause must appear in the error, not be dropped",
+  );
+});

@@ -162,8 +162,16 @@ export async function researchAndSynthesize(
       // Flush any bytes the decoder buffered for an incomplete trailing char.
       stdout += outDecoder.end();
       stderr += errDecoder.end();
-      if (code !== 0)
-        return reject(new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`));
+      if (code !== 0) {
+        // The CLI reports some terminal failures on STDOUT, not stderr — e.g.
+        // a usage cap prints "You've hit your session limit · resets 8:40pm"
+        // there and exits 1 with stderr empty. That produced PER-280's
+        // undiagnosable `error_msg: "claude exited 1:"` across all six topics
+        // of the founder's 2026-07-15 manual run. Prefer stderr, fall back to
+        // stdout, so the actual cause reaches the brief's error_msg and the UI.
+        const detail = (stderr.trim() || stdout.trim()).slice(0, 400);
+        return reject(new Error(`claude exited ${code}: ${detail}`));
+      }
       const text = stripBriefPreamble(stdout);
       if (!text) return reject(new Error("claude returned empty output"));
       resolve(text);
