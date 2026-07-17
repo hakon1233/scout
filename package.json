@@ -7,6 +7,7 @@
     "dev": "next dev",
     "build": "NODE_ENV=production next build",
     "start": "npx serve out",
+    "live-state-guard": "node scripts/live-state-guard.mjs",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

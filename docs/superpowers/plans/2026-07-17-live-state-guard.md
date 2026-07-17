@@ -55,8 +55,8 @@ Expected: FAIL because `scripts/live-state-guard.mjs` does not exist.
 The command interface is:
 
 ```text
-node scripts/live-state-guard.mjs snapshot
-node scripts/live-state-guard.mjs check
+pnpm --silent live-state-guard snapshot
+pnpm --silent live-state-guard check
 ```
 
 It requires `PAPERCLIP_RUN_ID`, defaults `SCOUT_STATE_DIR` to `~/.config/scout`, and allows `SCOUT_LIVE_GUARD_DIR` only to isolate automated tests. Store only relative paths, SHA-256 digests, and the run identifier; never copy or print founder data.
@@ -88,9 +88,9 @@ Add:
 Document the exact sequence:
 
 ```text
-pnpm live-state-guard snapshot
+pnpm --silent live-state-guard snapshot
 # approved live-origin interaction
-pnpm live-state-guard check
+pnpm --silent live-state-guard check
 ```
 
 State that `check` is silent with exit 0 on no delta and emits hash-only, run-attributed evidence with exit 1 on any delta.
