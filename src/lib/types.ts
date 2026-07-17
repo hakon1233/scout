@@ -49,6 +49,9 @@ export type TopicBasis = { topic: string; doc: string };
 export type Brief = {
   id: string;
   generatedAt: string;
+  // True only for QA/dry-run output. It can be polled by its initiating caller
+  // but is never eligible to become the user's current feed (PER-288).
+  ephemeral?: boolean;
   kind?: "daily" | "weekly";
   interests: string[];
   articles: Article[];

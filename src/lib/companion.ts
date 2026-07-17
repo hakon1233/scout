@@ -334,6 +334,7 @@ type AgentBrief = {
   id: string;
   generated_at: string;
   status: string;
+  ephemeral?: boolean;
   kind?: "daily" | "weekly";
   summary_md?: string;
   error_msg?: string;
@@ -529,6 +530,7 @@ function adaptBrief(b: AgentBrief): AppBrief {
   return {
     id: b.id,
     generatedAt: b.generated_at,
+    ephemeral: b.ephemeral,
     kind: b.kind,
     interests,
     articles,
@@ -578,7 +580,11 @@ export async function fetchLatestBrief(
 ): Promise<AppBrief | null> {
   try {
     const raw = await pollBriefsRaw(new Date(0).toISOString(), token);
-    return newestReadyBrief(raw);
+    return await resolveLastSuccessBrief(newestReadyBrief(raw), () =>
+      fetchBriefHistory(token, { limit: 1, offset: 0 }).then(
+        (history) => history.briefs[0] ?? null,
+      ),
+    );
   } catch (err) {
     logCompanionError("latest-brief-fetch", err);
     return null;
@@ -699,7 +705,10 @@ export async function resolveLastSuccessBrief(
   slotReady: AppBrief | null,
   fetchHistoryNewest: () => Promise<AppBrief | null>,
 ): Promise<AppBrief | null> {
-  if (slotReady) return slotReady;
+  // BUG-PER-288: ephemeral QA runs intentionally occupy last_brief so their
+  // initiator can poll the result, but they are not feed editions. Real history
+  // already excludes them at the runner, making it the safe fallback.
+  if (slotReady && !slotReady.ephemeral) return slotReady;
   return await fetchHistoryNewest();
 }
 
@@ -713,7 +722,9 @@ export async function fetchRunFailure(
       pollBriefsRaw(new Date(0).toISOString(), token),
       fetchSchedule(token).catch(() => null),
     ]);
-    const last = rawLast[0];
+    // A QA/dry-run result is not the user's run-health state. Its provenance is
+    // retained in last_brief only so the initiating automation can poll it.
+    const last = rawLast.find((brief) => !brief.ephemeral);
     // On a failed/pending slot the ?since= poll carries no ready brief, so fall
     // back to the newest ready brief from history so the banner can honestly
     // show "last good brief from <date>" (AIR-644). Lazy: the healthy path (slot

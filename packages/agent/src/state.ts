@@ -32,6 +32,9 @@ export type Brief = {
   id: string;
   generated_at: string;
   status: "pending" | "ready" | "failed";
+  // QA/dry-run output remains pollable through last_brief, but must never be
+  // presented as the user's real feed edition (PER-288).
+  ephemeral?: boolean;
   // Distinguishes normal per-run editions from weekly digests. Older persisted
   // briefs have no kind and are treated as daily by callers.
   kind?: "daily" | "weekly";

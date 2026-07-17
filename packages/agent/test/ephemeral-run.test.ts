@@ -128,10 +128,21 @@ test("ephemeral run produces a brief but never mutates the founder's saved inter
     // A brief still landed (the pipeline ran end-to-end).
     assert.equal(brief.status, "ready");
     assert.equal(calls.length, 2); // researched the two ephemeral topics
+    assert.equal(
+      (brief as Brief & { ephemeral?: boolean }).ephemeral,
+      true,
+      "PER-288: the pollable QA result must be marked so the real feed can ignore it",
+    );
 
     // INVARIANT 1: saved interests are byte-identical to the founder's set — the
     // test payload did NOT replace or shrink them.
     const state = await loadState(stateFile);
+    assert.equal(
+      (state.last_brief as (Brief & { ephemeral?: boolean }) | undefined)
+        ?.ephemeral,
+      true,
+      "PER-288: the persisted last_brief slot must retain its ephemeral provenance",
+    );
     assert.deepEqual(
       state.interests?.map((i) => ({ id: i.id, topic: i.topic })),
       founder,

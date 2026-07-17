@@ -264,6 +264,7 @@ export async function startRun(
     generated_at: new Date().toISOString(),
     status: "pending",
     kind: "daily",
+    ephemeral: ephemeral || undefined,
   };
   // Persist interests alongside the pending slot so a later scheduled fire has
   // something to research even with no browser attached. An EPHEMERAL run (PER-218)
@@ -340,6 +341,7 @@ async function runSynthesis(
 ): Promise<void> {
   const interestsDir =
     deps.interestsDir ?? path.join(path.dirname(deps.stateFile), "interests");
+  const isEphemeral = Boolean(deps.ephemeralDir);
   let brief: Brief;
   try {
     // Run each interest in its OWN headless `claude` session, carrying that
@@ -456,6 +458,9 @@ async function runSynthesis(
       generated_at: new Date().toISOString(),
       status: "ready",
       kind: "daily",
+      // BUG-PER-288: preserve QA provenance through the ready slot so feed
+      // clients can reject this pollable result and fall back to real history.
+      ephemeral: isEphemeral || undefined,
       summary_md: summary,
       topics: computeCoverage(interestTopics(plan.coverageInterests), summary),
       bases,
@@ -466,6 +471,7 @@ async function runSynthesis(
       generated_at: new Date().toISOString(),
       status: "failed",
       kind: "daily",
+      ephemeral: isEphemeral || undefined,
       // A non-Error throw (e.g. a rejected non-Error value) stringifies to a
       // useless "[object Object]" in the UI's last-run note; prefer .message.
       error_msg: err instanceof Error ? err.message : String(err),
@@ -493,7 +499,6 @@ async function runSynthesis(
     // upgraded into this feature immediately has one "previous edition" to show
     // instead of an empty history that only fills going forward.
     let briefs = fresh.briefs;
-    const isEphemeral = Boolean(deps.ephemeralDir);
     if (brief.status === "ready" && !isEphemeral) {
       const seed =
         briefs === undefined &&

@@ -286,6 +286,23 @@ test("AIR-644: a ready slot is returned as the last success WITHOUT fetching his
   );
 });
 
+test("PER-288: an ephemeral ready slot falls back to the newest real brief", async () => {
+  const ephemeral = {
+    ...readyBrief("qa-run", "2026-07-16T19:06:41.414Z"),
+    ephemeral: true,
+  } as Brief & { ephemeral: true };
+  const historic = readyBrief("scheduled", "2026-07-16T18:37:00.759Z");
+  let historyCalls = 0;
+
+  const result = await resolveLastSuccessBrief(ephemeral, async () => {
+    historyCalls += 1;
+    return historic;
+  });
+
+  assert.equal(historyCalls, 1, "an ephemeral slot must consult real history");
+  assert.equal(result, historic);
+});
+
 test("AIR-644: a failed/pending slot falls back to the newest ready brief from history", async () => {
   const historic = readyBrief("last-good", "2026-07-10T09:00:00.000Z");
   let historyCalls = 0;
