@@ -24,11 +24,16 @@ const PAGE_SIZE = 3;
 export function BriefHistory({
   token,
   currentBriefId,
+  activeFilter,
   onManageInterests,
   onDetailOpenChange,
 }: {
   token: string;
   currentBriefId: string | null;
+  // PER-297: the feed filter is page-wide, so every historical edition must
+  // derive its visible articles from the same selection as the current one.
+  // Filtering at render time also covers briefs appended by a later page load.
+  activeFilter?: string | null;
   onManageInterests: () => void;
   // PER-223: bubble up when a story inside ONE of the history editions opens its
   // focused detail. The page uses it to collapse the current edition + banners
@@ -129,25 +134,38 @@ export function BriefHistory({
 
   return (
     <div className="flex flex-col gap-10">
-      {visibleBriefs.map((b) => (
-        <section
-          key={b.id}
-          aria-label={`${briefHeading(b)} — ${formatBriefDate(b)}`}
-          // Drop the divider/top padding when this section is the isolated open
-          // story — a focused story should have nothing (not even a rule) above
-          // its "← Back to feed" affordance.
-          className={
-            openBriefId ? undefined : "border-t border-border-default pt-8"
-          }
-        >
-          <BriefLayout
-            brief={b}
-            name=""
-            heading={briefHeading(b)}
-            onDetailOpenChange={(open) => setOpenBriefId(open ? b.id : null)}
-          />
-        </section>
-      ))}
+      {visibleBriefs.map((b) => {
+        const filteredBrief = activeFilter
+          ? {
+              ...b,
+              articles: b.articles.filter(
+                (article) =>
+                  article.interest.trim().toLowerCase() ===
+                  activeFilter.trim().toLowerCase(),
+              ),
+            }
+          : b;
+
+        return (
+          <section
+            key={b.id}
+            aria-label={`${briefHeading(b)} — ${formatBriefDate(b)}`}
+            // Drop the divider/top padding when this section is the isolated open
+            // story — a focused story should have nothing (not even a rule) above
+            // its "← Back to feed" affordance.
+            className={
+              openBriefId ? undefined : "border-t border-border-default pt-8"
+            }
+          >
+            <BriefLayout
+              brief={filteredBrief}
+              name=""
+              heading={briefHeading(b)}
+              onDetailOpenChange={(open) => setOpenBriefId(open ? b.id : null)}
+            />
+          </section>
+        );
+      })}
 
       {/* PER-223: the pager footer is feed chrome — hide it while a history
           story is open so nothing shows below the focused story. */}

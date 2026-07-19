@@ -679,6 +679,7 @@ export default function AppPage() {
             <BriefHistory
               token={loadCompanionToken()}
               currentBriefId={filteredBrief.id}
+              activeFilter={effectiveFilter}
               onManageInterests={goToInterests}
               onDetailOpenChange={setHistoryStoryOpen}
             />
