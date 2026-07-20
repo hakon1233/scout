@@ -106,6 +106,11 @@ test(
     const domain = `gui/${process.getuid()}`;
     const target = `${domain}/${label}`;
     const port = await freePort();
+    // PER-310: the drain is an invariant inside activateRelease, so the spike
+    // now proves it against the REAL launchd-managed companion — real fetch,
+    // real /v0/version, no stub. Activation refuses unless this origin answers
+    // that nothing is in flight.
+    const origin = `http://127.0.0.1:${port}`;
     const shaA = "a".repeat(40);
     const shaB = "b".repeat(40);
     const shaFail = "f".repeat(40);
@@ -142,7 +147,7 @@ test(
     }
     async function verify({ sha }) {
       await verifyRelease({
-        origin: `http://127.0.0.1:${port}`,
+        origin,
         sha,
         attempts: 50,
         delayMs: 20,
@@ -158,12 +163,19 @@ test(
     await execFileP("launchctl", ["bootstrap", domain, plist]);
     await verify({ sha: shaA });
 
-    await activateRelease({ releaseRoot: root, sha: shaB, restart, verify });
+    await activateRelease({
+      origin,
+      releaseRoot: root,
+      sha: shaB,
+      restart,
+      verify,
+    });
     assert.equal((await fs.readFile(stateFile, "utf8")).trim(), shaB);
     assert.equal(await currentReleasePath(root), await fs.realpath(releaseB));
 
     await assert.rejects(
       activateRelease({
+        origin,
         releaseRoot: root,
         sha: shaFail,
         restart,

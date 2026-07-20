@@ -25,6 +25,29 @@ import {
 
 const execFileP = promisify(execFile);
 
+// PER-310: the busy-run drain lives inside activateRelease/migrateToReleases,
+// so EVERY caller must prove the companion is idle — there is no implicit
+// bypass for tests either. Suites not about the drain inject an idle companion
+// explicitly; `activityFetch` builds the other states.
+function activityFetch(activityInFlight) {
+  return async () =>
+    new Response(JSON.stringify({ activity_in_flight: activityInFlight }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+}
+
+const IDLE = { origin: "http://127.0.0.1:1", fetchImpl: activityFetch(false) };
+const BUSY = { origin: "http://127.0.0.1:1", fetchImpl: activityFetch(true) };
+// Activity state that cannot be read at all — the case SCOUT_ALLOW_UNKNOWN_ACTIVITY
+// is about. Unreachable companion, not a companion reporting "no activity".
+const UNKNOWN = {
+  origin: "http://127.0.0.1:1",
+  fetchImpl: async () => {
+    throw new Error("connect ECONNREFUSED 127.0.0.1:1");
+  },
+};
+
 async function removeTree(root) {
   const entries = await fs
     .readdir(root, { withFileTypes: true })
@@ -126,6 +149,7 @@ test("activateRelease atomically advances current to an immutable SHA directory"
 
   const restarted = [];
   const result = await activateRelease({
+    ...IDLE,
     releaseRoot: root,
     sha: "b".repeat(40),
     restart: async (release) => restarted.push(release),
@@ -151,6 +175,7 @@ test("activateRelease restores and restarts the previous release when verificati
   const restarted = [];
   await assert.rejects(
     activateRelease({
+      ...IDLE,
       releaseRoot: root,
       sha: "b".repeat(40),
       restart: async (release) => restarted.push(release),
@@ -174,6 +199,7 @@ test("activateRelease reports candidate and rollback failures together", async (
 
   await assert.rejects(
     activateRelease({
+      ...IDLE,
       releaseRoot: root,
       sha: "b".repeat(40),
       restart: async (release) => {
@@ -198,6 +224,7 @@ test("activateRelease refuses a concurrent activation lock", async (t) => {
 
   await assert.rejects(
     activateRelease({
+      ...IDLE,
       releaseRoot: root,
       sha: "b".repeat(40),
       restart: async () => undefined,
@@ -309,6 +336,7 @@ test("activateRelease refuses the separately approved first migration", async (t
 
   await assert.rejects(
     activateRelease({
+      ...IDLE,
       releaseRoot: root,
       sha: "b".repeat(40),
       restart: async (release) => restarted.push(release),
@@ -672,12 +700,19 @@ test("hermetic stable-current spike activates A to B and rolls a failed release 
 
   await restart();
   await verify({ sha: shaA });
-  await activateRelease({ releaseRoot: root, sha: shaB, restart, verify });
+  await activateRelease({
+    ...IDLE,
+    releaseRoot: root,
+    sha: shaB,
+    restart,
+    verify,
+  });
   assert.equal((await fs.readFile(stateFile, "utf8")).trim(), shaB);
   assert.equal(await currentReleasePath(root), await fs.realpath(releaseB));
 
   await assert.rejects(
     activateRelease({
+      ...IDLE,
       releaseRoot: root,
       sha: shaFail,
       restart,
@@ -837,6 +872,7 @@ test("migrateToReleases moves launchd onto current and carries env forward", asy
   const { root, sha, home, plist, legacy } = await migrationFixture(t);
 
   const result = await migrateToReleases({
+    ...IDLE,
     releaseRoot: root,
     sha,
     home,
@@ -872,6 +908,7 @@ test("a failed migration restores the legacy plist and leaves no current", async
 
   await assert.rejects(
     migrateToReleases({
+      ...IDLE,
       releaseRoot: root,
       sha,
       home,
@@ -892,6 +929,7 @@ test("migrateToReleases refuses once current already exists", async (t) => {
   const { root, sha, home } = await migrationFixture(t);
 
   await migrateToReleases({
+    ...IDLE,
     releaseRoot: root,
     sha,
     home,
@@ -901,6 +939,7 @@ test("migrateToReleases refuses once current already exists", async (t) => {
 
   await assert.rejects(
     migrateToReleases({
+      ...IDLE,
       releaseRoot: root,
       sha,
       home,
@@ -909,6 +948,183 @@ test("migrateToReleases refuses once current already exists", async (t) => {
     }),
     /Already migrated[\s\S]*deploy/,
   );
+});
+
+// --- PER-310: the drain is an invariant, and migrate cannot be softened ---
+//
+// Two CEO AC6 dispositions, one suite each. Both were "fixed" in PER-303 by a
+// single assertCompanionIdle call in main(), which satisfied neither: the
+// escape hatch reached the first migration, and every programmatic caller
+// skipped the drain entirely. Each test below goes red if its half is reverted.
+//
+// Method note (PER-302 rule 3): a refusal suite needs a control that is
+// ACCEPTED, or N refusals only prove the thing refuses everything. The controls
+// are "the hatch still opens for a steady-state activation" and the existing
+// happy-path tests, which pass an idle companion and succeed.
+
+test("the first migration refuses unknown activity even with SCOUT_ALLOW_UNKNOWN_ACTIVITY=1", async (t) => {
+  const { root, sha, home, plist, legacy } = await migrationFixture(t);
+  const previous = process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY;
+  process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY = "1";
+  t.after(() => {
+    if (previous === undefined) delete process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY;
+    else process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY = previous;
+  });
+
+  await assert.rejects(
+    migrateToReleases({
+      ...UNKNOWN,
+      releaseRoot: root,
+      sha,
+      home,
+      bootstrap: stubBootstrap,
+      verify: async () => undefined,
+    }),
+    /cannot prove the companion is idle/i,
+  );
+
+  // The migration boots launchd out and back in, so a refusal has to mean
+  // NOTHING moved — not "it refused after repointing current".
+  assert.equal(await fs.readFile(plist, "utf8"), legacy);
+  await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
+});
+
+test("no caller input can soften the first migration's drain", async (t) => {
+  const { root, sha, home } = await migrationFixture(t);
+
+  // migrate takes no allowUnknown parameter at all — passing one is inert
+  // rather than honoured. This is the property that makes the hatch
+  // structurally unreachable here, not merely unset by the current caller.
+  await assert.rejects(
+    migrateToReleases({
+      ...UNKNOWN,
+      allowUnknown: true,
+      releaseRoot: root,
+      sha,
+      home,
+      bootstrap: stubBootstrap,
+      verify: async () => undefined,
+    }),
+    /cannot prove the companion is idle/i,
+  );
+});
+
+test("the unknown-activity hatch still opens for a steady-state activation", async (t) => {
+  // The CEO's disposition was that SCOUT_ALLOW_UNKNOWN_ACTIVITY *stays* for
+  // routine deploys. Without this control, the migrate tests above would also
+  // pass if someone deleted the hatch outright.
+  const { root, releases } = await tempReleaseRoot();
+  t.after(() => removeTree(root));
+  const releaseA = await addRelease(releases, "a".repeat(40));
+  const releaseB = await addRelease(releases, "b".repeat(40));
+  await fs.symlink(releaseA, path.join(root, "current"));
+
+  const restarted = [];
+  const result = await activateRelease({
+    ...UNKNOWN,
+    allowUnknown: true,
+    releaseRoot: root,
+    sha: "b".repeat(40),
+    restart: async (release) => restarted.push(release),
+    verify: async () => undefined,
+  });
+
+  assert.equal(result.activated, "b".repeat(40));
+  assert.deepEqual(restarted, [releaseB]);
+
+  // ...and it is opt-in: the same unknown state refuses when it is not set.
+  await fs.rm(path.join(root, "current"));
+  await fs.symlink(releaseA, path.join(root, "current"));
+  await assert.rejects(
+    activateRelease({
+      ...UNKNOWN,
+      releaseRoot: root,
+      sha: "b".repeat(40),
+      restart: async (release) => restarted.push(release),
+      verify: async () => undefined,
+    }),
+    /cannot prove the companion is idle/i,
+  );
+});
+
+test("a programmatic caller inherits the drain: activateRelease refuses a busy companion", async (t) => {
+  // This is the one that would have caught the original defect. It never goes
+  // through main(), which is exactly how QA's own AC7 harness bypassed the
+  // drain without noticing.
+  const { root, releases } = await tempReleaseRoot();
+  t.after(() => removeTree(root));
+  const releaseA = await addRelease(releases, "a".repeat(40));
+  await addRelease(releases, "b".repeat(40));
+  await fs.symlink(releaseA, path.join(root, "current"));
+
+  const restarted = [];
+  await assert.rejects(
+    activateRelease({
+      ...BUSY,
+      releaseRoot: root,
+      sha: "b".repeat(40),
+      restart: async (release) => restarted.push(release),
+      verify: async () => undefined,
+    }),
+    /activity is in flight/i,
+  );
+
+  assert.deepEqual(restarted, [], "a busy companion is never restarted");
+  assert.equal(await currentReleasePath(root), await fs.realpath(releaseA));
+});
+
+test("a programmatic caller inherits the drain: migrateToReleases refuses a busy companion", async (t) => {
+  const { root, sha, home, plist, legacy } = await migrationFixture(t);
+
+  await assert.rejects(
+    migrateToReleases({
+      ...BUSY,
+      releaseRoot: root,
+      sha,
+      home,
+      bootstrap: stubBootstrap,
+      verify: async () => undefined,
+    }),
+    /activity is in flight/i,
+  );
+
+  assert.equal(await fs.readFile(plist, "utf8"), legacy);
+  await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
+});
+
+test("the activation path refuses a caller that cannot prove idleness at all", async (t) => {
+  // Omitting the origin must be a REFUSAL, not a skip. A default that made the
+  // check inert when unconfigured would rebuild the exact bypass this issue is
+  // about — and this tree has already lost two cycles to guards that were
+  // structurally incapable of failing.
+  const { root, releases } = await tempReleaseRoot();
+  t.after(() => removeTree(root));
+  const releaseA = await addRelease(releases, "a".repeat(40));
+  await addRelease(releases, "b".repeat(40));
+  await fs.symlink(releaseA, path.join(root, "current"));
+
+  await assert.rejects(
+    activateRelease({
+      releaseRoot: root,
+      sha: "b".repeat(40),
+      restart: async () => undefined,
+      verify: async () => undefined,
+    }),
+    /activate requires an origin/i,
+  );
+
+  const migration = await migrationFixture(t);
+  await assert.rejects(
+    migrateToReleases({
+      releaseRoot: migration.root,
+      sha: migration.sha,
+      home: migration.home,
+      bootstrap: stubBootstrap,
+      verify: async () => undefined,
+    }),
+    /migrate requires an origin/i,
+  );
+  assert.equal(await fs.readFile(migration.plist, "utf8"), migration.legacy);
 });
 
 // --- PER-303 blocker 7: provenance checks that can actually fail ----------
@@ -1025,6 +1241,7 @@ test("activation verification catches a release whose served UI is stale", async
 
   await assert.rejects(
     activateRelease({
+      ...IDLE,
       releaseRoot: root,
       sha: "b".repeat(40),
       restart: async () => undefined,

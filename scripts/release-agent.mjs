@@ -148,6 +148,33 @@ export async function assertCompanionIdle(
   return { known: true, activityInFlight: false };
 }
 
+// The busy-run drain is an invariant OF the activation path, not a courtesy the
+// CLI performs on its behalf. It used to be a single `main()` call site, so any
+// programmatic caller bypassed it in silence — QA's own PER-302 AC7 harness
+// called migrateToReleases() directly, got no drain, and did not notice.
+// Requiring `origin` rather than defaulting it is the point: a caller that has
+// no way to prove the companion is idle is refused, not quietly waved through.
+async function assertActivationPathIdle({
+  origin,
+  fetchImpl,
+  allowUnknown,
+  command,
+}) {
+  if (typeof origin !== "string" || origin === "") {
+    throw new Error(
+      `${command} requires an origin so it can prove the companion is idle ` +
+        "before restarting it.",
+    );
+  }
+  const idle = await assertCompanionIdle(origin, fetchImpl, { allowUnknown });
+  if (!idle.known) {
+    console.warn(
+      "Activity state is unknown; proceeding only because SCOUT_ALLOW_UNKNOWN_ACTIVITY=1.",
+    );
+  }
+  return idle;
+}
+
 export async function currentReleasePath(releaseRoot) {
   return await fs.realpath(path.join(releaseRoot, "current"));
 }
@@ -538,6 +565,8 @@ export async function restartLaunchAgent({
 export async function migrateToReleases({
   releaseRoot,
   sha,
+  origin,
+  fetchImpl = fetch,
   home = os.homedir(),
   verify,
   now = () => Date.now(),
@@ -546,6 +575,18 @@ export async function migrateToReleases({
   bootstrap,
 }) {
   if (!FULL_SHA.test(sha)) throw new Error(`Invalid release SHA: ${sha}`);
+  // allowUnknown is hardcoded false and takes no caller input. The hatch may
+  // soften a steady-state deploy, but this is the one-shot transition that
+  // reaches the founder: it boots launchd out and back in, so an in-flight
+  // research run or chat turn dies with it. "We could not reach the companion"
+  // is not evidence that nothing was running. Drain BEFORE taking the
+  // activation lock, so the lock is never held across network I/O.
+  await assertActivationPathIdle({
+    origin,
+    fetchImpl,
+    allowUnknown: false,
+    command: "migrate",
+  });
   const unlock = await acquireActivationLock(releaseRoot);
   try {
     const target = await validateStagedRelease(releaseRoot, sha);
@@ -697,8 +738,25 @@ async function acquireActivationLock(releaseRoot) {
   throw new Error("Could not acquire the activation lock.");
 }
 
-export async function activateRelease({ releaseRoot, sha, restart, verify }) {
+export async function activateRelease({
+  releaseRoot,
+  sha,
+  restart,
+  verify,
+  origin,
+  fetchImpl = fetch,
+  // Steady-state A→B activation is where SCOUT_ALLOW_UNKNOWN_ACTIVITY is
+  // allowed to open. It defaults closed so a caller that omits it inherits the
+  // strict behavior; only main() opts in, and only from the env var.
+  allowUnknown = false,
+}) {
   if (!FULL_SHA.test(sha)) throw new Error(`Invalid release SHA: ${sha}`);
+  await assertActivationPathIdle({
+    origin,
+    fetchImpl,
+    allowUnknown,
+    command: "activate",
+  });
   const unlock = await acquireActivationLock(releaseRoot);
   try {
     const target = await validateStagedRelease(releaseRoot, sha);
@@ -774,9 +832,15 @@ workspace onto the stable current path. It preserves the legacy plist, carries
 its environment and port forward verbatim, and restores it if the migrated
 service fails to verify. Use it once; use deploy from then on.
 
+Every activation command drains first: it refuses to restart the companion
+while a research run or chat turn is in flight.
+
 Environment:
   SCOUT_AGENT_PORT    Companion port (default 47821)
-  SCOUT_ALLOW_UNKNOWN_ACTIVITY=1  Explicitly override legacy drain detection
+  SCOUT_ALLOW_UNKNOWN_ACTIVITY=1  Proceed when activity state cannot be read.
+                      Applies to activate/deploy ONLY. migrate ignores it: the
+                      first transition reaches the founder and always refuses
+                      unless it can prove the companion is idle.
 `;
 }
 
@@ -814,19 +878,14 @@ async function main() {
 
   const { sha } = await assertDeployableCommit(repoRoot);
   releasePath ??= path.join(releaseRoot, "releases", sha);
-  const idle = await assertCompanionIdle(origin, fetch, {
-    allowUnknown: process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY === "1",
-  });
-  if (!idle.known) {
-    console.warn(
-      "Activity state is unknown; proceeding only because SCOUT_ALLOW_UNKNOWN_ACTIVITY=1.",
-    );
-  }
 
+  // No drain call site here. Both activation entry points run it themselves,
+  // so the CLI and any programmatic caller are held to the same bar.
   if (command === "migrate") {
     const migration = await migrateToReleases({
       releaseRoot,
       sha,
+      origin,
       verify: async ({ sha: expectedSha }) =>
         await verifyRelease({ origin, sha: expectedSha }),
     });
@@ -843,6 +902,8 @@ async function main() {
   const result = await activateRelease({
     releaseRoot,
     sha,
+    origin,
+    allowUnknown: process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY === "1",
     restart: async () => await restartLaunchAgent({ releaseRoot, port }),
     verify: async ({ sha: expectedSha }) =>
       await verifyRelease({ origin, sha: expectedSha }),
