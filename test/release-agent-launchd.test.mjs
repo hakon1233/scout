@@ -81,6 +81,16 @@ http.createServer((req, res) => {
   return dir;
 }
 
+// PER-303 blocker 6: this file was named *.spike.mjs, which the `test/*.test.mjs`
+// glob does not match — it never ran, so it was not evidence about anything.
+//
+// Its plist is hand-rolled on purpose: what this exercises is the `current`
+// symlink flip and the rollback of a failing release through REAL launchd, on a
+// unique temporary label (ing.scout.agent.per301.<pid>), port and state dir, so
+// it can never touch the founder's job. The legacy->current transition, which
+// must drive the real installService, is covered in release-agent.test.mjs
+// ("migrateToReleases ...") — a hand-rolled plist would prove nothing there.
+
 test(
   "macOS launchd spike switches A to B through stable current and rolls failed C back to B",
   { skip: process.platform !== "darwin" },

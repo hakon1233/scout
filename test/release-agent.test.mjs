@@ -81,12 +81,22 @@ async function addFakeCompanion(
   releases,
   sha,
   nextBuildId,
-  { fail = false } = {},
+  { fail = false, servedBuildId = nextBuildId, versionSha = sha } = {},
 ) {
   const dir = await addRelease(releases, sha, nextBuildId);
+  // The manifest side (/v0/version) and the served-webroot side
+  // (/scout-build.json) are stored as SEPARATE fields. Serving both from one
+  // field made verifyRelease's cross-check unfalsifiable — the check that
+  // catches a stale webroot had no real coverage at all.
   await fs.writeFile(
     path.join(dir, "release.json"),
-    `${JSON.stringify({ sha, next_build_id: nextBuildId, fail })}\n`,
+    `${JSON.stringify({
+      sha,
+      next_build_id: nextBuildId,
+      served_build_id: servedBuildId,
+      version_sha: versionSha,
+      fail,
+    })}\n`,
   );
   await fs.writeFile(
     path.join(dir, "server.mjs"),
@@ -97,9 +107,9 @@ if (release.fail) process.exit(1);
 await fs.writeFile(process.argv[3], release.sha + "\\n");
 http.createServer((req, res) => {
   res.setHeader("content-type", req.url === "/v0/version" || req.url === "/scout-build.json" ? "application/json" : "text/html");
-  if (req.url === "/v0/version") res.end(JSON.stringify({ ok: true, git_sha: release.sha, next_build_id: release.next_build_id, activity_in_flight: false }));
+  if (req.url === "/v0/version") res.end(JSON.stringify({ ok: true, git_sha: release.version_sha, next_build_id: release.next_build_id, activity_in_flight: false }));
   else if (req.url === "/app/") res.end('<link href="/_next/static/media/font.woff2"><script src="/_next/static/chunks/app.js"></script>');
-  else if (req.url === "/scout-build.json") res.end(JSON.stringify({ next_build_id: release.next_build_id }));
+  else if (req.url === "/scout-build.json") res.end(JSON.stringify({ next_build_id: release.served_build_id }));
   else { res.statusCode = 404; res.end("missing"); }
 }).listen(Number(process.argv[2]), "127.0.0.1");
 `,
@@ -899,4 +909,137 @@ test("migrateToReleases refuses once current already exists", async (t) => {
     }),
     /Already migrated[\s\S]*deploy/,
   );
+});
+
+// --- PER-303 blocker 7: provenance checks that can actually fail ----------
+//
+// Both fixtures used to serve /v0/version and /scout-build.json from the same
+// field, so verifyRelease's cross-check could not fail by construction. These
+// derive the two sides independently and assert each refusal goes red.
+
+function provenanceFetch({
+  gitSha,
+  manifestBuildId,
+  servedBuildId,
+  activityInFlight = false,
+}) {
+  return async (url) => {
+    const json = (body) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    if (url.endsWith("/v0/version")) {
+      return json({
+        ok: true,
+        git_sha: gitSha,
+        next_build_id: manifestBuildId,
+        activity_in_flight: activityInFlight,
+      });
+    }
+    if (url.endsWith("/scout-build.json")) {
+      return json({ next_build_id: servedBuildId });
+    }
+    if (url.endsWith("/app/")) return new Response("<html></html>");
+    return new Response("missing", { status: 404 });
+  };
+}
+
+test("verifyRelease refuses when the served UI is staler than the manifest", async () => {
+  const sha = "f".repeat(40);
+  await assert.rejects(
+    verifyRelease({
+      origin: "http://127.0.0.1:1",
+      sha,
+      attempts: 1,
+      fetchImpl: provenanceFetch({
+        gitSha: sha,
+        // The backend advanced; the webroot did not. This is the stale-webroot
+        // deploy the cross-check exists to catch.
+        manifestBuildId: "ui-new",
+        servedBuildId: "ui-old",
+      }),
+    }),
+    /served UI build ui-old does not match[\s\S]*ui-new/,
+  );
+});
+
+test("verifyRelease accepts only when both halves agree", async () => {
+  const sha = "f".repeat(40);
+  const version = await verifyRelease({
+    origin: "http://127.0.0.1:1",
+    sha,
+    attempts: 1,
+    fetchImpl: provenanceFetch({
+      gitSha: sha,
+      manifestBuildId: "ui-same",
+      servedBuildId: "ui-same",
+    }),
+  });
+  assert.equal(version.git_sha, sha);
+  assert.equal(version.next_build_id, "ui-same");
+});
+
+test("verifyRelease refuses a backend reporting a different commit", async () => {
+  await assert.rejects(
+    verifyRelease({
+      origin: "http://127.0.0.1:1",
+      sha: "f".repeat(40),
+      attempts: 1,
+      fetchImpl: provenanceFetch({
+        gitSha: "0".repeat(40),
+        manifestBuildId: "ui-x",
+        servedBuildId: "ui-x",
+      }),
+    }),
+    /\/v0\/version reported 0{40}, expected f{40}/,
+  );
+});
+
+test("verifyRelease refuses when the backend reports no UI build ID", async () => {
+  const sha = "f".repeat(40);
+  await assert.rejects(
+    verifyRelease({
+      origin: "http://127.0.0.1:1",
+      sha,
+      attempts: 1,
+      fetchImpl: provenanceFetch({
+        gitSha: sha,
+        manifestBuildId: null,
+        servedBuildId: "ui-x",
+      }),
+    }),
+    /did not report a UI build ID/,
+  );
+});
+
+test("activation verification catches a release whose served UI is stale", async (t) => {
+  const { root, releases } = await tempReleaseRoot();
+  t.after(() => removeTree(root));
+  const releaseA = await addFakeCompanion(releases, "a".repeat(40), "ui-a");
+  await addFakeCompanion(releases, "b".repeat(40), "ui-b", {
+    // Release B ships a new manifest but serves A's webroot.
+    servedBuildId: "ui-a",
+  });
+  await fs.symlink(releaseA, path.join(root, "current"));
+
+  await assert.rejects(
+    activateRelease({
+      releaseRoot: root,
+      sha: "b".repeat(40),
+      restart: async () => undefined,
+      verify: async ({ sha }) => {
+        const release = JSON.parse(
+          await fs.readFile(path.join(releases, sha, "release.json"), "utf8"),
+        );
+        if (release.served_build_id !== release.next_build_id) {
+          throw new Error(
+            `served UI build ${release.served_build_id} does not match ${release.next_build_id}`,
+          );
+        }
+      },
+    }),
+    /rolled back[\s\S]*served UI build ui-a does not match ui-b/i,
+  );
+  assert.equal(await currentReleasePath(root), await fs.realpath(releaseA));
 });
