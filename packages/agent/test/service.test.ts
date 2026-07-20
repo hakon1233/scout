@@ -34,7 +34,10 @@ test("buildLaunchAgentPlist emits RunAtLoad + KeepAlive and the run argv", () =>
   assert.doesNotMatch(xml, /--port/);
   // HOME + PATH are pinned so the spawned `claude` is resolvable under launchd.
   assert.match(xml, /<key>HOME<\/key>\s*<string>\/Users\/x<\/string>/);
-  assert.match(xml, /<key>PATH<\/key>\s*<string>\/usr\/local\/bin:\/usr\/bin:\/bin<\/string>/);
+  assert.match(
+    xml,
+    /<key>PATH<\/key>\s*<string>\/usr\/local\/bin:\/usr\/bin:\/bin<\/string>/,
+  );
   // Well-formed-ish: single plist root, balanced.
   assert.match(xml, /^<\?xml/);
   assert.match(xml, /<\/plist>\s*$/);
@@ -64,7 +67,7 @@ test("buildLaunchAgentPlist xml-escapes paths with special chars", () => {
   assert.doesNotMatch(xml, /a&b\/cli/); // raw & never leaks
 });
 
-test("isServiceInstalled tracks plist presence via the override path", async () => {
+test("isServiceInstalled tracks plist validity, not mere presence", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-svc-"));
   const p = path.join(tmp, "ing.scout.agent.plist");
   const prev = process.env.SCOUT_LAUNCH_AGENT_PLIST;
@@ -72,8 +75,31 @@ test("isServiceInstalled tracks plist presence via the override path", async () 
   try {
     assert.equal(plistPath(), p);
     assert.equal(isServiceInstalled(), false);
-    await fs.writeFile(p, "<plist/>");
+    await fs.writeFile(
+      p,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ing.scout.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/usr/bin/node</string>
+      <string>/tmp/cli.js</string>
+      <string>run</string>
+    </array>
+  </dict>
+</plist>
+`,
+    );
     assert.equal(isServiceInstalled(), true);
+
+    // Existence is not validity: a truncated write (what a non-atomic plist
+    // rewrite leaves behind) must not report the companion reboot-durable
+    // when launchd would fail to bootstrap it at next login (PER-303).
+    await fs.writeFile(p, "<plist/>");
+    assert.equal(isServiceInstalled(), false);
+
     await fs.rm(p);
     assert.equal(isServiceInstalled(), false);
   } finally {

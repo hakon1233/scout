@@ -7,6 +7,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
   activateRelease,
@@ -17,6 +18,7 @@ import {
   currentReleasePath,
   defaultReleaseRoot,
   restartLaunchAgent,
+  migrateToReleases,
   stagePackedRelease,
   verifyRelease,
 } from "../scripts/release-agent.mjs";
@@ -722,5 +724,179 @@ test("readiness and drain time out when headers arrive but the body stalls", asy
       requestTimeoutMs: 25,
     }),
     /timed out/i,
+  );
+});
+
+// --- PER-303 blockers 5/6: the first migration, legacy -> current ---------
+//
+// These drive the REAL installService compiled from packages/agent/src, not a
+// hand-rolled in-test plist. A hand-rolled one proves nothing about the code
+// that will actually run on the founder's machine.
+//
+// SAFETY: launchctl is never invoked — a `bootstrap` stub is injected, and
+// SCOUT_LAUNCH_AGENT_PLIST pins the plist under a temp dir. Compiling to a temp
+// outDir also means packages/agent/dist (which the live service runs from) is
+// never rewritten.
+
+const AGENT_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "packages",
+  "agent",
+);
+
+async function compileServiceInto(distDir) {
+  await fs.mkdir(distDir, { recursive: true });
+  await execFileP(
+    "pnpm",
+    [
+      "exec",
+      "tsc",
+      "src/service.ts",
+      "--outDir",
+      distDir,
+      "--module",
+      "nodenext",
+      "--moduleResolution",
+      "nodenext",
+      "--target",
+      "es2022",
+      "--skipLibCheck",
+    ],
+    { cwd: AGENT_DIR },
+  );
+}
+
+function legacyPlistXml({ scriptPath, home }) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ing.scout.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/usr/bin/node</string>
+      <string>${scriptPath}</string>
+      <string>run</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>HOME</key>
+      <string>${home}</string>
+      <key>PATH</key>
+      <string>/usr/bin:/bin</string>
+      <key>SCOUT_SESSION_TIMEOUT_MS</key>
+      <string>900000</string>
+    </dict>
+  </dict>
+</plist>
+`;
+}
+
+async function migrationFixture(t) {
+  const { root, releases } = await tempReleaseRoot();
+  const sha = "e".repeat(40);
+  const release = await addRelease(releases, sha);
+  await compileServiceInto(path.join(release, "dist"));
+
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "scout-migrate-home-"));
+  const plist = path.join(home, "ing.scout.agent.plist");
+  const legacyScript = path.join(home, "workspace", "dist", "cli.js");
+  const legacy = legacyPlistXml({ scriptPath: legacyScript, home });
+  await fs.writeFile(plist, legacy);
+
+  const previousOverride = process.env.SCOUT_LAUNCH_AGENT_PLIST;
+  process.env.SCOUT_LAUNCH_AGENT_PLIST = plist;
+  t.after(async () => {
+    if (previousOverride === undefined) {
+      delete process.env.SCOUT_LAUNCH_AGENT_PLIST;
+    } else {
+      process.env.SCOUT_LAUNCH_AGENT_PLIST = previousOverride;
+    }
+    await removeTree(root);
+    await fs.rm(home, { recursive: true, force: true });
+  });
+
+  return { root, sha, home, plist, legacy };
+}
+
+const stubBootstrap = async () => ({ bootstrapped: true, note: "stubbed" });
+
+test("migrateToReleases moves launchd onto current and carries env forward", async (t) => {
+  const { root, sha, home, plist, legacy } = await migrationFixture(t);
+
+  const result = await migrateToReleases({
+    releaseRoot: root,
+    sha,
+    home,
+    bootstrap: stubBootstrap,
+    verify: async () => undefined,
+  });
+
+  assert.equal(result.migrated, sha);
+  assert.equal(
+    await currentReleasePath(root),
+    await fs.realpath(path.join(root, "releases", sha)),
+  );
+
+  const migrated = await fs.readFile(plist, "utf8");
+  assert.match(migrated, /current\/dist\/cli\.js/);
+  assert.doesNotMatch(migrated, /workspace\/dist\/cli\.js/);
+  // Blocker 4: the var the founder's job actually carries.
+  assert.match(
+    migrated,
+    /<key>SCOUT_SESSION_TIMEOUT_MS<\/key>\s*<string>900000<\/string>/,
+  );
+  assert.deepEqual(result.carriedEnv, ["SCOUT_SESSION_TIMEOUT_MS"]);
+  // The legacy plist has no --port; adding one would move the founder off 47821.
+  assert.doesNotMatch(migrated, /--port/);
+  assert.equal(result.port, null);
+
+  // Blocker 3: the legacy bytes survive, so the migration is reversible.
+  assert.equal(await fs.readFile(result.preservedPlist, "utf8"), legacy);
+});
+
+test("a failed migration restores the legacy plist and leaves no current", async (t) => {
+  const { root, sha, home, plist, legacy } = await migrationFixture(t);
+
+  await assert.rejects(
+    migrateToReleases({
+      releaseRoot: root,
+      sha,
+      home,
+      bootstrap: stubBootstrap,
+      verify: async () => {
+        throw new Error("companion never became ready");
+      },
+    }),
+    /rolled back[\s\S]*companion never became ready/i,
+  );
+
+  // The whole point: the founder's launchd config is byte-identical to before.
+  assert.equal(await fs.readFile(plist, "utf8"), legacy);
+  await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
+});
+
+test("migrateToReleases refuses once current already exists", async (t) => {
+  const { root, sha, home } = await migrationFixture(t);
+
+  await migrateToReleases({
+    releaseRoot: root,
+    sha,
+    home,
+    bootstrap: stubBootstrap,
+    verify: async () => undefined,
+  });
+
+  await assert.rejects(
+    migrateToReleases({
+      releaseRoot: root,
+      sha,
+      home,
+      bootstrap: stubBootstrap,
+      verify: async () => undefined,
+    }),
+    /Already migrated[\s\S]*deploy/,
   );
 });

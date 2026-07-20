@@ -351,7 +351,27 @@ test("GET /v0/schedule returns the Settings-UI contract incl. reboot_durable:fal
 
     // Once a LaunchAgent plist is present, reboot_durable flips to true with no
     // restart or config write (PER-153) — the view reads the live filesystem.
-    await fs.writeFile(process.env.SCOUT_LAUNCH_AGENT_PLIST!, "<plist/>");
+    // A plist launchd could actually bootstrap. `<plist/>` used to be enough
+    // because durability was a bare existsSync; it now requires the label and
+    // program arguments to be present, so a half-written file no longer
+    // reports reboot_durable:true (PER-303 blocker 3).
+    await fs.writeFile(
+      process.env.SCOUT_LAUNCH_AGENT_PLIST!,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ing.scout.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/usr/bin/node</string>
+      <string>/tmp/cli.js</string>
+      <string>run</string>
+    </array>
+  </dict>
+</plist>
+`,
+    );
     const durable = await fetch(`http://127.0.0.1:${port}/v0/schedule`, {
       headers: auth,
     });
