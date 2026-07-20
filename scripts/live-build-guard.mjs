@@ -58,10 +58,58 @@ function launchAgentArguments(output) {
       continue;
     }
     if (value === "}") break;
-    if (path.isAbsolute(value)) args.push(value);
+    if (value) args.push(value);
   }
 
   return args;
+}
+
+// A relative argument means nothing without the directory it is relative to.
+// launchd reports one; the live job's is `/Users/<user>` while its script
+// argument is absolute.
+function launchAgentWorkingDirectory(output) {
+  for (const line of output.split("\n")) {
+    const match = line.trim().match(/^working directory = (.+)$/);
+    if (match) return match[1].trim();
+  }
+  return null;
+}
+
+// This used to be `if (path.isAbsolute(value)) args.push(value)` — a relative
+// argument was silently DROPPED. A job of the shape
+//   arguments = { <absolute node>, packages/agent/dist/cli.js }
+//   working directory = <this checkout>
+// then left one absolute argument standing, so the `args.length === 0` refusal
+// never fired and the relative live path was invisible to the containment
+// check. Every other unknown in this module refuses; this was the lone
+// exception. Relative arguments are now placed against the working directory
+// instead of discarded.
+function placeLaunchAgentArgument(value, workingDirectory) {
+  const describe = `${LAUNCH_AGENT_LABEL}'s argument`;
+  if (path.isAbsolute(value)) return canonicalPath(value, describe);
+
+  if (workingDirectory === null) {
+    throw refuse(
+      `${LAUNCH_AGENT_LABEL} has a relative argument (${value}) and no ` +
+        "readable working directory, so it cannot be placed. It may resolve " +
+        "inside this checkout.",
+    );
+  }
+
+  const placed = path.resolve(
+    canonicalPath(workingDirectory, `${LAUNCH_AGENT_LABEL}'s working directory`),
+    value,
+  );
+  // Subcommands (`run`) place outside the checkout and are not paths at all,
+  // so they must not refuse. Anything that places INSIDE the checkout is
+  // treated as live whether or not it exists yet — the build overwrites this
+  // tree either way. Canonicalise when it does exist, so a symlink under the
+  // working directory cannot redirect a lexically-outside path back inside.
+  try {
+    return realpathSync.native(placed);
+  } catch {
+    return placed;
+  }
 }
 
 export function defaultInspectLaunchAgent({
@@ -111,11 +159,14 @@ export function assertSafeToBuild({
     );
   }
 
-  // canonicalPath throws on any unresolvable argument, so a live job we cannot
-  // fully account for refuses here rather than falling through to `return`.
-  const liveTarget = args.find((arg) =>
-    isInside(canonicalPath(arg, `${LAUNCH_AGENT_LABEL}'s argument`), repo),
-  );
+  const workingDirectory = launchAgentWorkingDirectory(stdout);
+
+  // placeLaunchAgentArgument throws on any argument we cannot account for, so
+  // a live job we cannot fully read refuses here rather than falling through
+  // to `return`.
+  const liveTarget = args
+    .map((arg) => placeLaunchAgentArgument(arg, workingDirectory))
+    .find((placed) => isInside(placed, repo));
   if (!liveTarget) return;
 
   throw refuse(
@@ -126,12 +177,32 @@ export function assertSafeToBuild({
 }
 
 const scriptPath = fileURLToPath(import.meta.url);
-if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {
-  const repoRoot = path.resolve(path.dirname(scriptPath), "..");
+
+// Node's ESM loader realpaths `import.meta.url`, but `path.resolve` does not
+// follow symlinks. Invoked through any symlinked path component the two
+// disagree, this block never runs, and the guard exits 0 SILENTLY while the
+// `&& tsc` after it goes on to overwrite the live dist. That is not a corner
+// case: npm/pnpm prepend node_modules/.bin, which is entirely symlinks.
+// Canonicalise argv[1] so the comparison is between two real paths.
+export function invokedAsScript(argv1 = process.argv[1]) {
+  if (!argv1) return false;
   try {
-    assertSafeToBuild({ repoRoot });
+    return realpathSync.native(argv1) === scriptPath;
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
+    // We cannot tell whether we are the entrypoint. Staying silent here is
+    // exactly the fail-open this canonicalisation exists to close.
+    throw refuse(
+      `cannot determine whether the guard is running as a script ` +
+        `(${argv1}: ${error instanceof Error ? error.message : String(error)}).`,
+    );
   }
+}
+
+try {
+  if (invokedAsScript()) {
+    assertSafeToBuild({ repoRoot: path.resolve(path.dirname(scriptPath), "..") });
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
 }

@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import {
   LAUNCHCTL_BINARY,
   assertSafeToBuild,
+  invokedAsScript,
   defaultInspectLaunchAgent,
 } from "../scripts/live-build-guard.mjs";
 
@@ -28,7 +29,15 @@ const REPO_ROOT = path.resolve(
 // argv[0] is a real, resolvable interpreter — the guard refuses on ANY live
 // argument it cannot resolve, so the fixture must not depend on a host path
 // like /usr/local/bin/node that may not exist.
-function launchctlOutput(scriptPath, nodePath = process.execPath) {
+//
+// The `working directory` line is not decoration: the real job reports one
+// (`/Users/<user>`), and `run` is a relative argument that is only safe to
+// ignore because it places outside the checkout. A fixture without it would
+// not exercise the code path the live job actually takes.
+function launchctlOutput(
+  scriptPath,
+  { nodePath = process.execPath, workingDirectory = os.homedir() } = {},
+) {
   return `gui/501/ing.scout.agent = {
 \tstate = running
 \targuments = {
@@ -36,6 +45,8 @@ function launchctlOutput(scriptPath, nodePath = process.execPath) {
 \t\t${scriptPath}
 \t\trun
 \t}
+
+\tworking directory = ${workingDirectory}
 }`;
 }
 
@@ -359,3 +370,93 @@ test(
     assert.equal(after?.mtimeMs ?? null, before?.mtimeMs ?? null);
   },
 );
+
+// --- PER-303 blocker 8a: the CLI self-check must survive symlinks ----------
+
+test("recognises itself as the entrypoint when invoked through a symlink", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "scout-guard-symlink-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  const real = path.join(REPO_ROOT, "scripts", "live-build-guard.mjs");
+  const link = path.join(root, "live-build-guard.mjs");
+  await symlink(real, link);
+
+  // The bug: `path.resolve(link) !== realpath(link)`, so the old lexical
+  // comparison went false and the guard exited 0 without ever running.
+  assert.notEqual(path.resolve(link), real, "fixture must actually be a link");
+  assert.equal(invokedAsScript(link), true);
+  assert.equal(invokedAsScript(real), true);
+
+  // A different real script is genuinely not the entrypoint.
+  const other = path.join(root, "not-the-guard.mjs");
+  await writeFile(other, "// fixture\n");
+  assert.equal(invokedAsScript(other), false);
+
+  // An argv[1] we cannot canonicalise leaves us unable to tell whether we are
+  // the entrypoint. Silence there is the fail-open being closed, so it refuses.
+  assert.throws(
+    () => invokedAsScript(path.join(root, "missing.mjs")),
+    /REFUSING TO BUILD[\s\S]*running as a script/,
+  );
+});
+
+test(
+  "invoked through a symlink the guard still refuses, and is not silent",
+  { skip: liveSkip },
+  async (t) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scout-guard-symlink-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+
+    const link = path.join(root, "live-build-guard.mjs");
+    await symlink(path.join(REPO_ROOT, "scripts", "live-build-guard.mjs"), link);
+
+    // Real symlink invocation, not an injected stub: this is the shape
+    // npm/pnpm produce by prepending node_modules/.bin to PATH.
+    const result = spawnSync(process.execPath, [link], { encoding: "utf8" });
+
+    assert.equal(result.status, 1, "a symlink-invoked guard must not exit 0");
+    assert.match(`${result.stdout}${result.stderr}`, /REFUSING TO BUILD/);
+  },
+);
+
+// --- PER-303 blocker 8b: relative arguments are placed, never dropped ------
+
+test("refuses when a relative LaunchAgent argument places inside this checkout", async (t) => {
+  const { repoRoot, cli } = await fixture(t);
+
+  // The exact shape the old `path.isAbsolute` filter made invisible: one
+  // absolute argument survives, so the `args.length === 0` refusal never
+  // fires, while the relative one resolves onto the live cli under the job's
+  // working directory.
+  assert.throws(
+    () =>
+      assertSafeToBuild({
+        repoRoot,
+        platform: "darwin",
+        inspectLaunchAgent: () => ({
+          status: 0,
+          stdout: launchctlOutput(path.relative(repoRoot, cli), {
+            workingDirectory: repoRoot,
+          }),
+          stderr: "",
+        }),
+      }),
+    /REFUSING TO BUILD[\s\S]*live-serving path/,
+  );
+});
+
+test("refuses a relative LaunchAgent argument it cannot place", async (t) => {
+  const { repoRoot, cli } = await fixture(t);
+  const stdout = launchctlOutput(cli).replace(/\n\tworking directory = .*/, "");
+
+  assert.doesNotMatch(stdout, /working directory/);
+  assert.throws(
+    () =>
+      assertSafeToBuild({
+        repoRoot,
+        platform: "darwin",
+        inspectLaunchAgent: () => ({ status: 0, stdout, stderr: "" }),
+      }),
+    /REFUSING TO BUILD[\s\S]*relative argument \(run\)[\s\S]*working directory/,
+  );
+});
