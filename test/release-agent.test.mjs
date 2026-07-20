@@ -41,11 +41,39 @@ const IDLE = { origin: "http://127.0.0.1:1", fetchImpl: activityFetch(false) };
 const BUSY = { origin: "http://127.0.0.1:1", fetchImpl: activityFetch(true) };
 // Activity state that cannot be read at all — the case SCOUT_ALLOW_UNKNOWN_ACTIVITY
 // is about. Unreachable companion, not a companion reporting "no activity".
+//
+// There are THREE distinct ways of not knowing, and assertCompanionIdle softens
+// at all three (:128 unreachable, :132 non-200, :143 activity_in_flight not a
+// boolean). A suite that only exercises the first would stay green if a later
+// refactor reopened either of the others, so the migrate refusal is asserted
+// against all three. The hole is every way of not knowing, not "busy".
+const UNKNOWN_FLAVORS = [
+  {
+    name: "companion unreachable",
+    fetchImpl: async () => {
+      throw new Error("connect ECONNREFUSED 127.0.0.1:1");
+    },
+  },
+  {
+    name: "/v0/version returns non-200",
+    fetchImpl: async () =>
+      new Response(JSON.stringify({ error: "boom" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      }),
+  },
+  {
+    name: "activity_in_flight absent from the response",
+    fetchImpl: async () =>
+      new Response(JSON.stringify({ ok: true, git_sha: "x" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  },
+];
 const UNKNOWN = {
   origin: "http://127.0.0.1:1",
-  fetchImpl: async () => {
-    throw new Error("connect ECONNREFUSED 127.0.0.1:1");
-  },
+  fetchImpl: UNKNOWN_FLAVORS[0].fetchImpl,
 };
 
 async function removeTree(root) {
@@ -962,32 +990,36 @@ test("migrateToReleases refuses once current already exists", async (t) => {
 // are "the hatch still opens for a steady-state activation" and the existing
 // happy-path tests, which pass an idle companion and succeed.
 
-test("the first migration refuses unknown activity even with SCOUT_ALLOW_UNKNOWN_ACTIVITY=1", async (t) => {
-  const { root, sha, home, plist, legacy } = await migrationFixture(t);
-  const previous = process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY;
-  process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY = "1";
-  t.after(() => {
-    if (previous === undefined) delete process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY;
-    else process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY = previous;
+for (const flavor of UNKNOWN_FLAVORS) {
+  test(`the first migration refuses unknown activity (${flavor.name}) even with SCOUT_ALLOW_UNKNOWN_ACTIVITY=1`, async (t) => {
+    const { root, sha, home, plist, legacy } = await migrationFixture(t);
+    const previous = process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY;
+    process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY = "1";
+    t.after(() => {
+      if (previous === undefined)
+        delete process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY;
+      else process.env.SCOUT_ALLOW_UNKNOWN_ACTIVITY = previous;
+    });
+
+    await assert.rejects(
+      migrateToReleases({
+        origin: "http://127.0.0.1:1",
+        fetchImpl: flavor.fetchImpl,
+        releaseRoot: root,
+        sha,
+        home,
+        bootstrap: stubBootstrap,
+        verify: async () => undefined,
+      }),
+      /cannot prove the companion is idle/i,
+    );
+
+    // The migration boots launchd out and back in, so a refusal has to mean
+    // NOTHING moved — not "it refused after repointing current".
+    assert.equal(await fs.readFile(plist, "utf8"), legacy);
+    await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
   });
-
-  await assert.rejects(
-    migrateToReleases({
-      ...UNKNOWN,
-      releaseRoot: root,
-      sha,
-      home,
-      bootstrap: stubBootstrap,
-      verify: async () => undefined,
-    }),
-    /cannot prove the companion is idle/i,
-  );
-
-  // The migration boots launchd out and back in, so a refusal has to mean
-  // NOTHING moved — not "it refused after repointing current".
-  assert.equal(await fs.readFile(plist, "utf8"), legacy);
-  await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
-});
+}
 
 test("no caller input can soften the first migration's drain", async (t) => {
   const { root, sha, home } = await migrationFixture(t);
