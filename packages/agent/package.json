@@ -15,8 +15,7 @@
     "README.md"
   ],
   "scripts": {
-    "prebuild": "node ../../scripts/live-build-guard.mjs",
-    "build": "tsc -p tsconfig.json && node scripts/write-build-info.mjs",
+    "build": "node ../../scripts/live-build-guard.mjs && tsc -p tsconfig.json && node scripts/write-build-info.mjs",
     "dev": "tsx src/cli.ts",
     "test": "tsx --test test/*.test.ts",
     "prepublishOnly": "npm run build"

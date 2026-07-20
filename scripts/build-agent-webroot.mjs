@@ -25,7 +25,15 @@ const repoRoot = path.resolve(
 const outDir = path.join(repoRoot, "out");
 const webroot = path.join(repoRoot, "packages", "agent", "webroot");
 
-assertSafeToBuild({ repoRoot });
+// Refuse before anything below can replace bytes the founder's process serves.
+// Print the reason plainly: a stack trace above the message reads like a crash,
+// and this needs to read like a stop sign.
+try {
+  assertSafeToBuild({ repoRoot });
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 // Force empty basePath: next.config.ts derives basePath from GITHUB_REPOSITORY,
 // so we must run the export with it unset.
