@@ -16,10 +16,13 @@ import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertSafeToBuild } from "./live-build-guard.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = path.join(repoRoot, "out");
 const webroot = path.join(repoRoot, "packages", "agent", "webroot");
+
+assertSafeToBuild({ repoRoot });
 
 // Force empty basePath: next.config.ts derives basePath from GITHUB_REPOSITORY,
 // so we must run the export with it unset.
