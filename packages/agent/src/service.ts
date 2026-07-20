@@ -16,10 +16,12 @@
 // This is macOS-only; install/uninstall no-op-error on other platforms.
 
 import { execFile } from "node:child_process";
-import { existsSync, promises as fs } from "node:fs";
+import { existsSync, promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+
+import { atomicWriteFile } from "./persistence.js";
 
 const execFileP = promisify(execFile);
 
@@ -42,18 +44,54 @@ export function logPath(home = os.homedir()): string {
   return path.join(home, "Library", "Logs", "scout-agent.log");
 }
 
-// True when the LaunchAgent plist is installed at the canonical path. This is
-// the signal the server uses to report `reboot_durable`. Sync so the request
-// path (scheduleView) can call it without going async.
+export function backupPlistPath(home = os.homedir()): string {
+  return `${plistPath(home)}.previous`;
+}
+
+// The legacy (pre-release-system) plist, preserved once and never overwritten.
+// It is the only record of the workspace path launchd used before the first
+// migration: restartLaunchAgent can emit nothing but a `current`-pointing
+// plist, so without this file the information needed to reverse the migration
+// is destroyed by the migration itself.
+export function preMigrationPlistPath(home = os.homedir()): string {
+  return `${plistPath(home)}.pre-migration`;
+}
+
+// True when a VALID LaunchAgent plist is installed at the canonical path.
+//
+// This used to be a bare existsSync, which meant a truncated or half-written
+// plist still reported reboot_durable:true while launchd would fail to
+// bootstrap it at the next login. Existence is not validity. Sync so the
+// request path (scheduleView) can call it without going async, so this is a
+// structural check rather than a full parse: the label and the program
+// arguments are what launchd needs to run the job at all.
 export function isServiceInstalled(home = os.homedir()): boolean {
-  return existsSync(plistPath(home));
+  const plist = plistPath(home);
+  if (!existsSync(plist)) return false;
+  try {
+    return isPlistStructurallyValid(readFileSync(plist, "utf8"));
+  } catch {
+    return false;
+  }
+}
+
+export function isPlistStructurallyValid(xml: string): boolean {
+  if (!xml.includes("</plist>")) return false;
+  if (
+    !new RegExp(
+      `<key>Label</key>\\s*<string>${LAUNCH_AGENT_LABEL}</string>`,
+    ).test(xml)
+  ) {
+    return false;
+  }
+  const args = xml.match(
+    /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/,
+  );
+  return Boolean(args) && /<string>[^<]+<\/string>/.test(args![1]);
 }
 
 function xmlEscape(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export type PlistOptions = {
@@ -70,7 +108,97 @@ export type PlistOptions = {
   // PATH the job runs with. launchd does NOT inherit the login-shell PATH, so we
   // must set it explicitly or the spawned `claude` CLI won't be found.
   pathEnv: string;
+  // Extra EnvironmentVariables to reproduce verbatim. The plist is regenerated
+  // from scratch on every install, so anything not emitted here is SILENTLY
+  // dropped. The live job carries SCOUT_SESSION_TIMEOUT_MS=900000; losing it
+  // would drop research (research.ts) and per-chat-turn (chat.ts) timeouts back
+  // to the ~4-minute default with no error anywhere.
+  extraEnv?: Record<string, string>;
 };
+
+// Environment keys buildLaunchAgentPlist always emits itself.
+export const MANAGED_ENV_KEYS = ["HOME", "PATH"] as const;
+
+export type ExistingService = {
+  plist: string;
+  xml: string;
+  programArguments: string[];
+  environment: Record<string, string>;
+  port: number | undefined;
+};
+
+function plistStrings(block: string): string[] {
+  return [...block.matchAll(/<string>([\s\S]*?)<\/string>/g)].map((m) =>
+    xmlUnescape(m[1]),
+  );
+}
+
+function xmlUnescape(s: string): string {
+  return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
+// Read the plist launchd is currently configured with, so a rewrite can
+// reproduce what it holds instead of quietly replacing it.
+export async function readExistingService(
+  home = os.homedir(),
+): Promise<ExistingService | null> {
+  const plist = plistPath(home);
+  const xml = await fs.readFile(plist, "utf8").catch(() => null);
+  if (xml === null) return null;
+  if (!isPlistStructurallyValid(xml)) {
+    throw new Error(
+      `The installed LaunchAgent plist at ${plist} is not structurally valid, ` +
+        "so it cannot be safely reproduced. Inspect it by hand before migrating.",
+    );
+  }
+
+  const argsBlock = xml.match(
+    /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/,
+  );
+  const programArguments = argsBlock ? plistStrings(argsBlock[1]) : [];
+
+  const envBlock = xml.match(
+    /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/,
+  );
+  const environment: Record<string, string> = {};
+  if (envBlock) {
+    const pairs = [
+      ...envBlock[1].matchAll(
+        /<key>([\s\S]*?)<\/key>\s*<string>([\s\S]*?)<\/string>/g,
+      ),
+    ];
+    for (const [, key, value] of pairs) {
+      environment[xmlUnescape(key)] = xmlUnescape(value);
+    }
+  }
+
+  // The live plist carries NO --port, while restartLaunchAgent always passes
+  // one. Reproducing `undefined` rather than defaulting is what keeps a stray
+  // SCOUT_AGENT_PORT from moving the founder off 47821.
+  const portAt = programArguments.indexOf("--port");
+  const parsedPort =
+    portAt >= 0 ? Number.parseInt(programArguments[portAt + 1] ?? "", 10) : NaN;
+
+  return {
+    plist,
+    xml,
+    programArguments,
+    environment,
+    port: Number.isInteger(parsedPort) ? parsedPort : undefined,
+  };
+}
+
+// Every env var the existing plist holds that the new one would not reproduce.
+export function droppedEnvKeys(
+  existing: Record<string, string>,
+  extraEnv: Record<string, string> = {},
+): string[] {
+  return Object.keys(existing).filter(
+    (key) =>
+      !(MANAGED_ENV_KEYS as readonly string[]).includes(key) &&
+      !(key in extraEnv),
+  );
+}
 
 // Build the LaunchAgent plist XML. Pure + side-effect free so it can be unit
 // tested without touching the filesystem or launchctl.
@@ -105,7 +233,18 @@ ${programArgs}
       <key>HOME</key>
       <string>${xmlEscape(opts.home)}</string>
       <key>PATH</key>
-      <string>${xmlEscape(opts.pathEnv)}</string>
+      <string>${xmlEscape(opts.pathEnv)}</string>${Object.entries(
+        opts.extraEnv ?? {},
+      )
+        .filter(
+          ([key]) => !(MANAGED_ENV_KEYS as readonly string[]).includes(key),
+        )
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(
+          ([key, value]) =>
+            `\n      <key>${xmlEscape(key)}</key>\n      <string>${xmlEscape(value)}</string>`,
+        )
+        .join("")}
     </dict>
     <key>ProcessType</key>
     <string>Background</string>
@@ -150,6 +289,31 @@ async function launchctlDomainTarget(): Promise<string> {
   return `gui/${uid}`;
 }
 
+const RELEASE_SHA_DIR = /^[0-9a-f]{40}$/;
+
+// A plist pinned inside releases/<sha>/ LOOKS migrated and permanently defeats
+// the release design: every later deploy flips the `current` symlink while
+// launchd keeps re-launching the frozen SHA, which is the two-answers problem
+// PER-299 was opened to eliminate, made durable.
+//
+// This is exactly what the `realpath(process.argv[1])` default produces once a
+// release is active, because realpath dereferences `current`. The check is on
+// the literal path, not the resolved one, so the legitimate
+// `<releaseRoot>/current/dist/cli.js` that restartLaunchAgent passes is
+// accepted while the dereferenced form is refused. Adding a --script-path flag
+// alone would not have fixed this — the unsafe value is the DEFAULT.
+export function assertStableScriptPath(scriptPath: string): void {
+  const parts = scriptPath.split(path.sep);
+  const at = parts.findIndex((part) => RELEASE_SHA_DIR.test(part));
+  if (at > 0 && parts[at - 1] === "releases") {
+    throw new Error(
+      `Refusing to pin the LaunchAgent to an immutable release directory:\n  ${scriptPath}\n` +
+        "launchd must point at the stable `current` path so later deploys take " +
+        "effect. Pass --script-path <releaseRoot>/current/dist/cli.js instead.",
+    );
+  }
+}
+
 export type InstallResult = {
   plist: string;
   label: string;
@@ -160,10 +324,19 @@ export type InstallResult = {
 // Write the LaunchAgent plist and bootstrap it into the user's GUI domain so it
 // starts now and on every login/boot. Idempotent: re-installing overwrites the
 // plist and re-bootstraps (bootout first if already loaded).
+export type BootstrapFn = (
+  plist: string,
+) => Promise<{ bootstrapped: boolean; note: string }>;
+
 export async function installService(opts?: {
   port?: number;
   home?: string;
   scriptPath?: string;
+  extraEnv?: Record<string, string>;
+  // Seam so tests can drive the real plist-writing logic without letting
+  // `launchctl bootout ing.scout.agent` reach the founder's running job.
+  // Production callers leave it unset.
+  bootstrap?: BootstrapFn;
 }): Promise<InstallResult> {
   if (process.platform !== "darwin") {
     throw new Error(
@@ -177,6 +350,7 @@ export async function installService(opts?: {
   const scriptPath = opts?.scriptPath
     ? path.resolve(opts.scriptPath)
     : await fs.realpath(process.argv[1]);
+  assertStableScriptPath(scriptPath);
   const lp = logPath(home);
   const pathEnv = composePath(path.dirname(nodePath), await claudeDir());
 
@@ -187,42 +361,91 @@ export async function installService(opts?: {
     logPath: lp,
     home,
     pathEnv,
+    extraEnv: opts?.extraEnv,
   });
 
   await fs.mkdir(launchAgentsDir(home), { recursive: true });
   await fs.mkdir(path.dirname(lp), { recursive: true });
   const plist = plistPath(home);
-  await fs.writeFile(plist, xml, { mode: 0o644 });
 
-  // Bootstrap into the GUI domain. If a previous job is loaded, bootout first so
-  // the new plist takes effect. Tolerate bootout failure (job may not be loaded).
+  // Copy the prior plist BEFORE the first byte is written. This is the one
+  // non-atomic step in a system whose entire selling point is atomicity, and
+  // it runs at the moment of maximum risk on the founder's only instance.
+  const priorXml = await fs.readFile(plist, "utf8").catch(() => null);
+  if (priorXml !== null) {
+    await atomicWriteFile(backupPlistPath(home), priorXml, 0o644);
+  }
+  await atomicWriteFile(plist, xml, 0o644);
+
+  const { bootstrapped, note } = await (
+    opts?.bootstrap ?? bootstrapLaunchAgent
+  )(plist);
+  return { plist, label: LAUNCH_AGENT_LABEL, bootstrapped, note };
+}
+
+// Bootstrap into the GUI domain. If a previous job is loaded, bootout first so
+// the new plist takes effect. Tolerate bootout failure (job may not be loaded).
+// Shared so the migration's rollback path reloads launchd exactly the way the
+// forward path does.
+async function bootstrapLaunchAgent(
+  plist: string,
+): Promise<{ bootstrapped: boolean; note: string }> {
   const domain = await launchctlDomainTarget();
-  let bootstrapped = false;
-  let note = "";
   try {
-    await execFileP("launchctl", ["bootout", `${domain}/${LAUNCH_AGENT_LABEL}`]).catch(
-      () => undefined,
-    );
+    await execFileP("launchctl", [
+      "bootout",
+      `${domain}/${LAUNCH_AGENT_LABEL}`,
+    ]).catch(() => undefined);
     await execFileP("launchctl", ["bootstrap", domain, plist]);
     await execFileP("launchctl", [
       "kickstart",
       "-k",
       `${domain}/${LAUNCH_AGENT_LABEL}`,
     ]).catch(() => undefined);
-    bootstrapped = true;
-    note = "LaunchAgent bootstrapped — companion will start at login/boot.";
+    return {
+      bootstrapped: true,
+      note: "LaunchAgent bootstrapped — companion will start at login/boot.",
+    };
   } catch (err) {
     // Fall back to the legacy load API for older macOS.
     try {
       await execFileP("launchctl", ["load", "-w", plist]);
-      bootstrapped = true;
-      note = "LaunchAgent loaded (legacy launchctl load).";
+      return {
+        bootstrapped: true,
+        note: "LaunchAgent loaded (legacy launchctl load).",
+      };
     } catch {
-      note =
-        `Plist written but launchctl bootstrap failed (${String(err)}). ` +
-        `Load it manually: launchctl bootstrap ${domain} ${plist}`;
+      return {
+        bootstrapped: false,
+        note:
+          `Plist written but launchctl bootstrap failed (${String(err)}). ` +
+          `Load it manually: launchctl bootstrap ${domain} ${plist}`,
+      };
     }
   }
+}
+
+// Put an exact set of plist bytes back and reload launchd from them. The
+// rollback counterpart to installService: installService can only ever emit a
+// `current`-pointing plist, so it structurally cannot express "go back to the
+// legacy workspace path". Only the preserved bytes can.
+export async function restoreServicePlist(opts: {
+  xml: string;
+  home?: string;
+  bootstrap?: BootstrapFn;
+}): Promise<InstallResult> {
+  const home = opts.home ?? os.homedir();
+  const plist = plistPath(home);
+  if (!isPlistStructurallyValid(opts.xml)) {
+    throw new Error(
+      "Refusing to restore a LaunchAgent plist that is not structurally valid.",
+    );
+  }
+  await fs.mkdir(launchAgentsDir(home), { recursive: true });
+  await atomicWriteFile(plist, opts.xml, 0o644);
+  const { bootstrapped, note } = await (opts.bootstrap ?? bootstrapLaunchAgent)(
+    plist,
+  );
   return { plist, label: LAUNCH_AGENT_LABEL, bootstrapped, note };
 }
 
@@ -234,16 +457,19 @@ export type UninstallResult = {
 
 // Bootout the launchd job and remove the plist. After this, isServiceInstalled()
 // is false and /v0/schedule reports reboot_durable:false again.
-export async function uninstallService(opts?: { home?: string }): Promise<UninstallResult> {
+export async function uninstallService(opts?: {
+  home?: string;
+}): Promise<UninstallResult> {
   if (process.platform !== "darwin") {
     throw new Error("uninstall-service is macOS-only (launchd).");
   }
   const home = opts?.home ?? os.homedir();
   const plist = plistPath(home);
   const domain = await launchctlDomainTarget();
-  await execFileP("launchctl", ["bootout", `${domain}/${LAUNCH_AGENT_LABEL}`]).catch(
-    () => undefined,
-  );
+  await execFileP("launchctl", [
+    "bootout",
+    `${domain}/${LAUNCH_AGENT_LABEL}`,
+  ]).catch(() => undefined);
   // Legacy unload fallback (harmless if bootout already handled it).
   await execFileP("launchctl", ["unload", "-w", plist]).catch(() => undefined);
   let removed = false;
@@ -270,14 +496,19 @@ export type ServiceStatus = {
 
 // Report whether the LaunchAgent is installed (plist present) and, best-effort,
 // whether launchctl currently has the job loaded.
-export async function serviceStatus(opts?: { home?: string }): Promise<ServiceStatus> {
+export async function serviceStatus(opts?: {
+  home?: string;
+}): Promise<ServiceStatus> {
   const home = opts?.home ?? os.homedir();
   const installed = isServiceInstalled(home);
   let loaded: boolean | null = null;
   if (process.platform === "darwin") {
     const domain = await launchctlDomainTarget();
     try {
-      await execFileP("launchctl", ["print", `${domain}/${LAUNCH_AGENT_LABEL}`]);
+      await execFileP("launchctl", [
+        "print",
+        `${domain}/${LAUNCH_AGENT_LABEL}`,
+      ]);
       loaded = true;
     } catch {
       loaded = false;

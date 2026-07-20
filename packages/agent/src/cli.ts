@@ -43,11 +43,15 @@ async function cmdPair(force: boolean): Promise<void> {
   await saveState({ ...state, pairing_token: token });
 
   if (had && !rotated) {
-    console.log("Reusing existing pairing token (run `scout-agent pair --force` to rotate).\n");
+    console.log(
+      "Reusing existing pairing token (run `scout-agent pair --force` to rotate).\n",
+    );
   } else if (had && rotated) {
     console.log("Rotated pairing token — the previous token is now invalid.\n");
   }
-  console.log("Pairing token (stored locally — no need to paste it anywhere):\n");
+  console.log(
+    "Pairing token (stored locally — no need to paste it anywhere):\n",
+  );
   console.log(`  ${token}\n`);
   console.log(`Stored at ${STATE_FILE}.`);
   console.log(
@@ -132,9 +136,18 @@ async function main(): Promise<void> {
         break;
       case "install-service": {
         const portFlagIdx = rest.indexOf("--port");
-        const port = portFlagIdx >= 0 ? Number(rest[portFlagIdx + 1]) : undefined;
+        const port =
+          portFlagIdx >= 0 ? Number(rest[portFlagIdx + 1]) : undefined;
+        // Without this the scriptPath default is realpath(process.argv[1]),
+        // which dereferences the `current` symlink and pins the plist to a
+        // frozen releases/<sha>/. installService refuses that outright; this
+        // flag is how an operator names the stable path instead.
+        const scriptFlagIdx = rest.indexOf("--script-path");
+        const scriptPath =
+          scriptFlagIdx >= 0 ? rest[scriptFlagIdx + 1] : undefined;
         const r = await installService({
           port: port && Number.isFinite(port) ? port : undefined,
+          scriptPath: scriptPath || undefined,
         });
         console.log(`Wrote ${r.plist}`);
         console.log(r.note);

@@ -525,6 +525,133 @@ export async function restartLaunchAgent({
   return result;
 }
 
+// The first migration: launchd moves off the development workspace and onto
+// the stable `current` path. It happens exactly once, it is the only step in
+// this system with no immutable predecessor to fall back to, and it runs on
+// the founder's only instance — so unlike a routine A→B activation it must
+// carry its own reverse.
+//
+// Deliberately loads the service module from the STAGED RELEASE rather than
+// from `current`. restartLaunchAgent imports `current/dist/service.js`, which
+// pre-migration does not exist, so it structurally cannot create the first
+// `current`.
+export async function migrateToReleases({
+  releaseRoot,
+  sha,
+  home = os.homedir(),
+  verify,
+  now = () => Date.now(),
+  // Test seam only: keeps `launchctl bootout ing.scout.agent` away from the
+  // founder's running job. Production leaves it unset.
+  bootstrap,
+}) {
+  if (!FULL_SHA.test(sha)) throw new Error(`Invalid release SHA: ${sha}`);
+  const unlock = await acquireActivationLock(releaseRoot);
+  try {
+    const target = await validateStagedRelease(releaseRoot, sha);
+
+    let existingCurrent = null;
+    try {
+      existingCurrent = await currentReleasePath(releaseRoot);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    if (existingCurrent) {
+      throw new Error(
+        `Already migrated: current -> ${existingCurrent}. ` +
+          "Use `deploy` for subsequent releases; migrate is first-time only.",
+      );
+    }
+
+    const serviceUrl = pathToFileURL(path.join(target, "dist", "service.js"));
+    serviceUrl.searchParams.set("migration", `${now()}-${process.pid}`);
+    const {
+      readExistingService,
+      installService,
+      restoreServicePlist,
+      droppedEnvKeys,
+      preMigrationPlistPath,
+    } = await import(serviceUrl.href);
+
+    const existing = await readExistingService(home);
+    if (!existing) {
+      throw new Error(
+        "No LaunchAgent plist is installed, so there is nothing to migrate. " +
+          "Use `scout-agent install-service --script-path <releaseRoot>/current/dist/cli.js`.",
+      );
+    }
+
+    // Carry EVERY variable forward rather than an allowlist of the ones we
+    // happened to think of. The plist is regenerated from scratch, so an
+    // unreproduced var is dropped in silence: the live job carries
+    // SCOUT_SESSION_TIMEOUT_MS=900000, and losing it would drop research and
+    // per-chat-turn timeouts to the ~4-minute default with no error.
+    const extraEnv = {};
+    for (const key of droppedEnvKeys(existing.environment)) {
+      extraEnv[key] = existing.environment[key];
+    }
+
+    // Preserve the legacy bytes BEFORE anything is written, and never
+    // overwrite them: this file is the only record of the pre-release plist.
+    const preMigration = preMigrationPlistPath(home);
+    const alreadyPreserved = await fs
+      .readFile(preMigration, "utf8")
+      .catch(() => null);
+    if (alreadyPreserved === null) {
+      await fs.writeFile(preMigration, existing.xml, { mode: 0o644 });
+    }
+    const legacyXml = alreadyPreserved ?? existing.xml;
+
+    let pointed = false;
+    try {
+      await pointCurrent(releaseRoot, target);
+      pointed = true;
+      const result = await installService({
+        home,
+        // Reproduce the port the job already had. The live plist has none, and
+        // defaulting here is how a stray SCOUT_AGENT_PORT would silently move
+        // the founder off 47821.
+        port: existing.port,
+        scriptPath: path.join(releaseRoot, "current", "dist", "cli.js"),
+        extraEnv,
+        bootstrap,
+      });
+      if (!result.bootstrapped) {
+        throw new Error(result.note || "LaunchAgent did not bootstrap.");
+      }
+      if (verify) await verify({ sha });
+      return {
+        migrated: sha,
+        from: existing.programArguments,
+        preservedPlist: preMigration,
+        carriedEnv: Object.keys(extraEnv).sort(),
+        port: existing.port ?? null,
+      };
+    } catch (error) {
+      const failures = [error instanceof Error ? error.message : String(error)];
+      try {
+        await restoreServicePlist({ xml: legacyXml, home, bootstrap });
+      } catch (restoreError) {
+        failures.push(
+          `restoring the legacy plist ALSO failed: ${
+            restoreError instanceof Error
+              ? restoreError.message
+              : String(restoreError)
+          }. Reinstall by hand from ${preMigration}.`,
+        );
+      }
+      if (pointed) {
+        await fs
+          .rm(path.join(releaseRoot, "current"), { force: true })
+          .catch(() => undefined);
+      }
+      throw new Error(`Migration rolled back: ${failures.join(" — ")}`);
+    }
+  } finally {
+    await unlock();
+  }
+}
+
 async function pointCurrent(releaseRoot, releasePath) {
   const next = path.join(releaseRoot, `.current-${process.pid}-${Date.now()}`);
   await fs.symlink(releasePath, next);
@@ -583,7 +710,9 @@ export async function activateRelease({ releaseRoot, sha, restart, verify }) {
     }
     if (!previous) {
       throw new Error(
-        "First migration from the legacy workspace service requires separate approval and a rollback-aware migration command.",
+        "First migration from the legacy workspace service requires separate " +
+          "approval. Use `release-agent migrate`, which preserves the legacy " +
+          "plist and restores it if the migrated service fails to come up.",
       );
     }
     const previousSha = releaseSha(previous);
@@ -640,6 +769,11 @@ Usage:
 deploy is the canonical command: build a clean origin/main release, atomically
 point current at it, restart launchd once, and verify backend + UI provenance.
 
+migrate is the one-shot first transition: it moves launchd off the development
+workspace onto the stable current path. It preserves the legacy plist, carries
+its environment and port forward verbatim, and restores it if the migrated
+service fails to verify. Use it once; use deploy from then on.
+
 Environment:
   SCOUT_AGENT_PORT    Companion port (default 47821)
   SCOUT_ALLOW_UNKNOWN_ACTIVITY=1  Explicitly override legacy drain detection
@@ -652,7 +786,7 @@ async function main() {
     console.log(usage());
     return;
   }
-  if (!["build", "activate", "deploy"].includes(command)) {
+  if (!["build", "activate", "deploy", "migrate"].includes(command)) {
     throw new Error(`Unknown command: ${command}\n\n${usage()}`);
   }
 
@@ -688,6 +822,24 @@ async function main() {
       "Activity state is unknown; proceeding only because SCOUT_ALLOW_UNKNOWN_ACTIVITY=1.",
     );
   }
+
+  if (command === "migrate") {
+    const migration = await migrateToReleases({
+      releaseRoot,
+      sha,
+      verify: async ({ sha: expectedSha }) =>
+        await verifyRelease({ origin, sha: expectedSha }),
+    });
+    console.log(
+      `Migrated launchd to ${migration.migrated}\n` +
+        `  was: ${migration.from.join(" ")}\n` +
+        `  legacy plist preserved at: ${migration.preservedPlist}\n` +
+        `  env carried forward: ${migration.carriedEnv.join(", ") || "(none)"}\n` +
+        `  port: ${migration.port ?? "(unset, as before)"}`,
+    );
+    return;
+  }
+
   const result = await activateRelease({
     releaseRoot,
     sha,
