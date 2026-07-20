@@ -299,6 +299,49 @@ async function readBundledBuildInfo(releasePath) {
   return buildInfo;
 }
 
+// PER-299 exists because "what commit is live" had two answers. Writing the
+// expected SHA into the artifact's provenance record and reading it back does
+// not reduce that to one answer — it produces one answer that agrees with
+// itself. The packed artifact's own git_sha is the observation; `sha` is only
+// what we asked for. Compare them; never copy one onto the other.
+//
+// The absent and dirty cases are refusals rather than values to normalise:
+// write-build-info.mjs emits the `-dirty` suffix precisely so a dirty build
+// can never be byte-matched to the clean commit under test, and returns null
+// when git could not be read at all. Both are the signals that would have
+// caught this defect, so both must be loud.
+function assertObservedSha(buildInfo, expectedSha, expectedShortSha) {
+  const observed = buildInfo.git_sha;
+
+  if (typeof observed !== "string" || observed === "") {
+    throw new Error(
+      `Packed release records no git_sha (${JSON.stringify(observed) ?? "undefined"}). ` +
+        "Its provenance cannot be established, so it cannot be released.",
+    );
+  }
+  if (observed.endsWith("-dirty")) {
+    throw new Error(
+      `Packed release was built from a dirty worktree (${observed}). ` +
+        "Release only from a clean checkout — the -dirty marker exists so a " +
+        "dirty build is never matched to the clean commit under test.",
+    );
+  }
+  if (observed !== expectedSha) {
+    throw new Error(
+      `Packed release reports git_sha ${observed}, expected ${expectedSha}. ` +
+        "The artifact was not built from the commit being released.",
+    );
+  }
+  if (expectedShortSha && buildInfo.git_sha_short !== expectedShortSha) {
+    throw new Error(
+      `Packed release reports git_sha_short ${buildInfo.git_sha_short ?? "null"}, ` +
+        `expected ${expectedShortSha}.`,
+    );
+  }
+
+  return observed;
+}
+
 async function validateStagedRelease(releaseRoot, sha) {
   const releases = path.join(releaseRoot, "releases");
   const target = path.join(releases, sha);
@@ -318,9 +361,11 @@ async function validateStagedRelease(releaseRoot, sha) {
     await fs.readFile(path.join(target, "release.json"), "utf8"),
   );
   const buildInfo = await readBundledBuildInfo(target);
+  // Re-observes the artifact rather than trusting release.json, so a release
+  // staged by an older (or tampered-with) writer is still held to the bar.
+  assertObservedSha(buildInfo, sha, release.git_sha_short ?? undefined);
   if (
     release.sha !== sha ||
-    buildInfo.git_sha !== sha ||
     release.next_build_id !== buildInfo.next_build_id
   ) {
     throw new Error(`Existing release ${target} has invalid provenance.`);
@@ -357,19 +402,19 @@ export async function stagePackedRelease({
       { maxBuffer: 20 * 1024 * 1024 },
     );
     await assertNoSymlinks(staging);
-    const buildInfoFile = path.join(staging, "dist", "build-info.json");
     const buildInfo = await readBundledBuildInfo(staging);
-    buildInfo.git_sha = sha;
-    buildInfo.git_sha_short = shortSha;
-    await fs.writeFile(
-      buildInfoFile,
-      `${JSON.stringify(buildInfo, null, 2)}\n`,
-    );
+    const observedSha = assertObservedSha(buildInfo, sha, shortSha);
+    // dist/build-info.json is left exactly as it was packed. Rewriting it here
+    // is what turned the live SHA into an assertion instead of an observation.
     await fs.writeFile(
       path.join(staging, "release.json"),
       `${JSON.stringify(
         {
-          sha,
+          // Derived from the artifact's own provenance, not from the caller's
+          // argument, so validateStagedRelease and verifyRelease compare two
+          // independently-produced values rather than a value to a copy of it.
+          sha: observedSha,
+          git_sha_short: buildInfo.git_sha_short ?? null,
           next_build_id: buildInfo.next_build_id,
           built_at: buildInfo.built_at ?? null,
         },

@@ -408,7 +408,10 @@ test(
     t.after(() => rm(root, { recursive: true, force: true }));
 
     const link = path.join(root, "live-build-guard.mjs");
-    await symlink(path.join(REPO_ROOT, "scripts", "live-build-guard.mjs"), link);
+    await symlink(
+      path.join(REPO_ROOT, "scripts", "live-build-guard.mjs"),
+      link,
+    );
 
     // Real symlink invocation, not an injected stub: this is the shape
     // npm/pnpm produce by prepending node_modules/.bin to PATH.

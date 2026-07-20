@@ -308,21 +308,25 @@ test("activateRelease refuses the separately approved first migration", async (t
   await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
 });
 
-test("stagePackedRelease authors clean provenance and freezes the SHA directory", async (t) => {
-  const { root } = await tempReleaseRoot();
+// A packed artifact whose provenance fields are set by the FIXTURE, never by
+// the code under test. stagePackedRelease's job is to observe these, so a test
+// that let it author them would prove nothing.
+async function packedAgentFixture(
+  t,
+  { gitSha, gitShaShort, uiBuildId = "ui-c" },
+) {
   const fixture = await fs.mkdtemp(
     path.join(os.tmpdir(), "scout-packed-agent-"),
   );
   const packageDir = path.join(fixture, "package");
-  const sha = "c".repeat(40);
   await fs.mkdir(path.join(packageDir, "dist"), { recursive: true });
   await fs.mkdir(path.join(packageDir, "webroot", "app"), { recursive: true });
   await fs.writeFile(
     path.join(packageDir, "dist", "build-info.json"),
     `${JSON.stringify({
-      git_sha: `${sha}-dirty`,
-      git_sha_short: "ccccccc-dirty",
-      next_build_id: "ui-c",
+      git_sha: gitSha,
+      git_sha_short: gitShaShort,
+      next_build_id: uiBuildId,
       built_at: "2026-07-20T00:00:00.000Z",
     })}\n`,
   );
@@ -332,7 +336,7 @@ test("stagePackedRelease authors clean provenance and freezes the SHA directory"
   );
   await fs.writeFile(
     path.join(packageDir, "webroot", "scout-build.json"),
-    `${JSON.stringify({ next_build_id: "ui-c" })}\n`,
+    `${JSON.stringify({ next_build_id: uiBuildId })}\n`,
   );
   await fs.writeFile(
     path.join(packageDir, "package.json"),
@@ -340,10 +344,18 @@ test("stagePackedRelease authors clean provenance and freezes the SHA directory"
   );
   const tarball = path.join(fixture, "scout-agent.tgz");
   await execFileP("tar", ["-czf", tarball, "package"], { cwd: fixture });
-  t.after(async () => {
-    await removeTree(root);
-    await fs.rm(fixture, { recursive: true, force: true });
+  t.after(() => fs.rm(fixture, { recursive: true, force: true }));
+  return tarball;
+}
+
+test("stagePackedRelease observes the artifact's own SHA and freezes the directory", async (t) => {
+  const { root } = await tempReleaseRoot();
+  const sha = "c".repeat(40);
+  const tarball = await packedAgentFixture(t, {
+    gitSha: sha,
+    gitShaShort: "ccccccc",
   });
+  t.after(() => removeTree(root));
 
   const releasePath = await stagePackedRelease({
     tarball,
@@ -353,21 +365,33 @@ test("stagePackedRelease authors clean provenance and freezes the SHA directory"
   });
 
   assert.equal(releasePath, path.join(root, "releases", sha));
+
+  // The packed build-info must come through byte-identical. Rewriting it is
+  // what made the live SHA an assertion instead of an observation (PER-299).
   const buildInfo = JSON.parse(
     await fs.readFile(
       path.join(releasePath, "dist", "build-info.json"),
       "utf8",
     ),
   );
-  assert.equal(buildInfo.git_sha, sha);
-  assert.equal(buildInfo.git_sha_short, "ccccccc");
-  assert.equal(buildInfo.next_build_id, "ui-c");
+  assert.deepEqual(buildInfo, {
+    git_sha: sha,
+    git_sha_short: "ccccccc",
+    next_build_id: "ui-c",
+    built_at: "2026-07-20T00:00:00.000Z",
+  });
   assert.deepEqual(
     JSON.parse(
       await fs.readFile(path.join(releasePath, "release.json"), "utf8"),
     ),
-    { sha, next_build_id: "ui-c", built_at: "2026-07-20T00:00:00.000Z" },
+    {
+      sha,
+      git_sha_short: "ccccccc",
+      next_build_id: "ui-c",
+      built_at: "2026-07-20T00:00:00.000Z",
+    },
   );
+
   const fileMode = (await fs.stat(path.join(releasePath, "release.json"))).mode;
   const dirMode = (await fs.stat(releasePath)).mode;
   assert.equal(fileMode & 0o222, 0, "release files are read-only");
@@ -388,6 +412,76 @@ test("stagePackedRelease authors clean provenance and freezes the SHA directory"
   assert.equal(
     (await fs.stat(path.join(releasePath, "release.json"))).mode & 0o222,
     0,
+  );
+});
+
+// The three signals that would have caught the laundering. Each must refuse,
+// and each must refuse for its OWN stated reason — a single equality check
+// rejects all three but tells the operator nothing about which one fired.
+
+test("stagePackedRelease refuses an artifact built from a dirty worktree", async (t) => {
+  const { root } = await tempReleaseRoot();
+  const sha = "c".repeat(40);
+  const tarball = await packedAgentFixture(t, {
+    gitSha: `${sha}-dirty`,
+    gitShaShort: "ccccccc-dirty",
+  });
+  t.after(() => removeTree(root));
+
+  await assert.rejects(
+    stagePackedRelease({
+      tarball,
+      releaseRoot: root,
+      sha,
+      shortSha: "ccccccc",
+    }),
+    /dirty worktree/,
+  );
+  await assert.rejects(
+    fs.lstat(path.join(root, "releases", sha)),
+    /ENOENT/,
+    "a refused release must leave nothing staged",
+  );
+});
+
+test("stagePackedRelease refuses an artifact with no recorded SHA", async (t) => {
+  const { root } = await tempReleaseRoot();
+  const sha = "c".repeat(40);
+  // write-build-info.mjs returns null whenever git could not be read.
+  const tarball = await packedAgentFixture(t, {
+    gitSha: null,
+    gitShaShort: null,
+  });
+  t.after(() => removeTree(root));
+
+  await assert.rejects(
+    stagePackedRelease({
+      tarball,
+      releaseRoot: root,
+      sha,
+      shortSha: "ccccccc",
+    }),
+    /records no git_sha/,
+  );
+});
+
+test("stagePackedRelease refuses an artifact built from a different commit", async (t) => {
+  const { root } = await tempReleaseRoot();
+  const sha = "c".repeat(40);
+  const tarball = await packedAgentFixture(t, {
+    gitSha: "d".repeat(40),
+    gitShaShort: "ddddddd",
+  });
+  t.after(() => removeTree(root));
+
+  await assert.rejects(
+    stagePackedRelease({
+      tarball,
+      releaseRoot: root,
+      sha,
+      shortSha: "ccccccc",
+    }),
+    /reports git_sha d{40}, expected c{40}/,
   );
 });
 
@@ -439,12 +533,15 @@ test("buildRelease packs a detached clean commit into its SHA-addressed director
     repoRoot: repo,
     releaseRoot,
     pack: async (worktree) => {
-      assert.equal(
-        (
-          await execFileP("git", ["rev-parse", "HEAD"], { cwd: worktree })
-        ).stdout.trim(),
-        sha,
-      );
+      const worktreeSha = (
+        await execFileP("git", ["rev-parse", "HEAD"], { cwd: worktree })
+      ).stdout.trim();
+      assert.equal(worktreeSha, sha);
+      const worktreeShortSha = (
+        await execFileP("git", ["rev-parse", "--short", "HEAD"], {
+          cwd: worktree,
+        })
+      ).stdout.trim();
       const packageDir = path.join(worktree, "package");
       await fs.mkdir(path.join(packageDir, "dist"), { recursive: true });
       await fs.mkdir(path.join(packageDir, "webroot", "app"), {
@@ -452,7 +549,16 @@ test("buildRelease packs a detached clean commit into its SHA-addressed director
       });
       await fs.writeFile(
         path.join(packageDir, "dist", "build-info.json"),
-        `${JSON.stringify({ next_build_id: "ui-release", built_at: "now" })}\n`,
+        // Derived from the worktree the build actually ran in, the way
+        // write-build-info.mjs derives it. This stub previously emitted no
+        // git_sha at all and the assertion below still passed, because
+        // stagePackedRelease wrote the expected SHA in itself.
+        `${JSON.stringify({
+          git_sha: worktreeSha,
+          git_sha_short: worktreeShortSha,
+          next_build_id: "ui-release",
+          built_at: "now",
+        })}\n`,
       );
       await fs.writeFile(
         path.join(packageDir, "webroot", "app", "index.html"),

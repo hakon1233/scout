@@ -97,7 +97,10 @@ function placeLaunchAgentArgument(value, workingDirectory) {
   }
 
   const placed = path.resolve(
-    canonicalPath(workingDirectory, `${LAUNCH_AGENT_LABEL}'s working directory`),
+    canonicalPath(
+      workingDirectory,
+      `${LAUNCH_AGENT_LABEL}'s working directory`,
+    ),
     value,
   );
   // Subcommands (`run`) place outside the checkout and are not paths at all,
@@ -200,7 +203,9 @@ export function invokedAsScript(argv1 = process.argv[1]) {
 
 try {
   if (invokedAsScript()) {
-    assertSafeToBuild({ repoRoot: path.resolve(path.dirname(scriptPath), "..") });
+    assertSafeToBuild({
+      repoRoot: path.resolve(path.dirname(scriptPath), ".."),
+    });
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
