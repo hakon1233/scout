@@ -54,13 +54,21 @@ scout-agent status
 
 The companion exposes three endpoints, all bound to `127.0.0.1`:
 
-| Method | Path                      | Auth   | Body / Query                        |
-| ------ | ------------------------- | ------ | ----------------------------------- |
-| GET    | `/healthz`                | none   | —                                   |
-| POST   | `/v0/interests`           | Bearer | `{ "interests": ["topic", ...] }`   |
-| GET    | `/v0/briefs?since=<iso>`  | Bearer | —                                   |
+| Method | Path                     | Auth   | Body / Query                        |
+| ------ | ------------------------ | ------ | ----------------------------------- |
+| GET    | `/healthz`               | none   | —                                   |
+| GET    | `/v0/version`            | none   | release SHA, UI build ID, busy flag |
+| POST   | `/v0/interests`          | Bearer | `{ "interests": ["topic", ...] }`   |
+| GET    | `/v0/briefs?since=<iso>` | Bearer | —                                   |
 
 Auth is `Authorization: Bearer <pairing-token>`.
+
+For an already-migrated managed macOS companion, use `pnpm deploy:agent` from
+a clean repo at the pushed `origin/main` commit. It stages an immutable
+SHA-addressed package under Application Support and keeps launchd pointed at
+the stable `current` path; do not install launchd directly from a development
+workspace. The first legacy-to-immutable migration is a separately approved
+operation; `pnpm release:agent` safely stages its build without activation.
 
 ## State
 

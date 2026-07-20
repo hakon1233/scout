@@ -4,7 +4,9 @@
 // in the V0 dispatch table with auth "none".
 
 import { PKG_VERSION, readBuildInfo } from "../build-info.js";
+import { isChatInFlight } from "../chat.js";
 import { json } from "../http-util.js";
+import { isRunInFlight } from "../runner.js";
 import { listCorruptStateBackups } from "../state.js";
 import type { RequestContext, ServerContext } from "./types.js";
 
@@ -54,6 +56,8 @@ export async function handleVersion(
   sc: ServerContext,
 ): Promise<void> {
   const build = await readBuildInfo(sc.buildInfoFile);
+  const runInFlight = isRunInFlight();
+  const chatInFlight = isChatInFlight();
   json(
     res,
     200,
@@ -64,6 +68,11 @@ export async function handleVersion(
       git_sha_short: build.git_sha_short,
       next_build_id: build.next_build_id,
       built_at: build.built_at,
+      // Read-only deploy-drain signal. Activation refuses a known-busy process
+      // before asking launchd to restart it; no user or brief data is exposed.
+      run_in_flight: runInFlight,
+      chat_in_flight: chatInFlight,
+      activity_in_flight: runInFlight || chatInFlight,
     },
     cors,
   );

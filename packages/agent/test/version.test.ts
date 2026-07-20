@@ -77,7 +77,14 @@ test("GET /v0/version returns baked build provenance without auth (PER-239)", as
     const res = await fetch(`http://127.0.0.1:${port}/v0/version`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { ok: true, version: PKG_VERSION, ...baked });
+    assert.deepEqual(body, {
+      ok: true,
+      version: PKG_VERSION,
+      ...baked,
+      run_in_flight: false,
+      chat_in_flight: false,
+      activity_in_flight: false,
+    });
 
     const health = await fetch(`http://127.0.0.1:${port}/healthz`);
     assert.equal(health.status, 200);
@@ -105,6 +112,9 @@ test("GET /v0/version degrades to null provenance when build-info.json is missin
       git_sha_short: null,
       next_build_id: null,
       built_at: null,
+      run_in_flight: false,
+      chat_in_flight: false,
+      activity_in_flight: false,
     });
   } finally {
     server.close();
@@ -131,6 +141,9 @@ test("GET /v0/version degrades to null provenance when build-info.json is malfor
       git_sha_short: null,
       next_build_id: null,
       built_at: null,
+      run_in_flight: false,
+      chat_in_flight: false,
+      activity_in_flight: false,
     });
 
     const health = await fetch(`http://127.0.0.1:${port}/healthz`);

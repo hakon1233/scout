@@ -66,6 +66,12 @@ its own keychain. No `ANTHROPIC_API_KEY` or web-search API key needed.
 - `pnpm test:e2e` — Playwright end-to-end suite (`e2e/`).
 - `pnpm build:agent` / `pnpm pack:agent` — build and pack the loopback
   companion (`packages/agent`) for distribution.
+- `pnpm release:agent` — stage a clean, pushed `origin/main` companion under
+  `~/Library/Application Support/Scout/agent/releases/<sha>` without activating it.
+- `pnpm deploy:agent` — canonical local-companion deploy: stage the release,
+  atomically move the stable `current` symlink, restart launchd, and verify
+  `/v0/version` plus the served UI build marker. This restarts the companion
+  and requires an existing immutable `current` release.
 
 ## Environment variables
 
@@ -81,6 +87,22 @@ GitHub Actions builds the static export and deploys to GitHub Pages on every
 push to `main` (see `.github/workflows/deploy.yml`). The site is served at
 `https://<owner>.github.io/<repo>/`; `next.config.ts` derives the `basePath`
 from `GITHUB_REPOSITORY` at build time.
+
+The founder's local companion is a separate, single-host deployment. Its
+launchd plist must point at the stable Application Support path
+`~/Library/Application Support/Scout/agent/current/dist/cli.js`, never a
+development or Paperclip workspace. Releases are read-only and named by their
+full Git SHA. `pnpm deploy:agent` refuses dirty or unpushed source, fails closed
+unless both brief and chat activity are known idle, switches `current`
+atomically, and restores the previous release if bounded readiness or
+backend/UI provenance verification fails. The one canonical answer to “what
+is live?” is `GET /v0/version`: `git_sha` covers the whole immutable artifact
+and `next_build_id` must match the served `/scout-build.json` marker.
+
+The first migration from the legacy workspace-backed launchd job is
+intentionally not part of `deploy:agent`: it requires separate approval and a
+rollback-aware migration procedure. Until that migration has established the
+first immutable `current`, use `pnpm release:agent` for build-only evidence.
 
 ## Contributing
 

@@ -18,7 +18,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertSafeToBuild } from "./live-build-guard.mjs";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const outDir = path.join(repoRoot, "out");
 const webroot = path.join(repoRoot, "packages", "agent", "webroot");
 
@@ -29,7 +32,11 @@ assertSafeToBuild({ repoRoot });
 // NODE_ENV=production is required: the export prerender otherwise hits a React
 // "Cannot read properties of null (reading 'useContext')" crash on the static
 // error pages under Next 16.
-const env = { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NODE_ENV: "production" };
+const env = {
+  ...process.env,
+  NEXT_TELEMETRY_DISABLED: "1",
+  NODE_ENV: "production",
+};
 delete env.GITHUB_REPOSITORY;
 
 console.log("[webroot] next build (empty basePath, static export)...");
@@ -42,6 +49,18 @@ execFileSync("pnpm", ["exec", "next", "build"], {
 console.log(`[webroot] syncing ${outDir} -> ${webroot}`);
 await fs.rm(webroot, { recursive: true, force: true });
 await fs.cp(outDir, webroot, { recursive: true });
+
+// Stable, machine-readable UI provenance. Next's generated HTML starts with
+// `/_next/static/media` and `/_next/static/chunks`; neither segment is the
+// BUILD_ID. Keep verification independent of Next's serialized-page format.
+const nextBuildId = (
+  await fs.readFile(path.join(repoRoot, ".next", "BUILD_ID"), "utf8")
+).trim();
+if (!nextBuildId) throw new Error("[webroot] Next BUILD_ID is empty");
+await fs.writeFile(
+  path.join(webroot, "scout-build.json"),
+  `${JSON.stringify({ next_build_id: nextBuildId })}\n`,
+);
 
 // Sanity check: the export must be root-relative, not /scout-prefixed.
 const indexHtml = await fs.readFile(path.join(webroot, "index.html"), "utf8");
@@ -57,4 +76,6 @@ if (!indexHtml.includes("/_next/")) {
 const appIndex = path.join(webroot, "app", "index.html");
 await fs.access(appIndex); // throws if the /app/ route didn't export
 
-console.log("[webroot] OK — bundled static UI is root-relative and includes /app/.");
+console.log(
+  "[webroot] OK — bundled static UI is root-relative and includes /app/.",
+);
