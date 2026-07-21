@@ -553,6 +553,52 @@ test("stagePackedRelease refuses an artifact built from a different commit", asy
   );
 });
 
+// PER-308: 54eb606 claimed "validateStagedRelease re-observes rather than
+// trusting release.json" but shipped no test — deleting the assertObservedSha
+// call inside validateStagedRelease left the suite green. This is the failing
+// case for that claim: an already-staged, frozen release whose artifact is
+// mutated out from under it must be refused when re-validated. Re-validation is
+// reached by staging the same SHA a second time (stagePackedRelease returns
+// validateStagedRelease when the target already exists).
+test("validateStagedRelease re-observes the artifact, refusing a build-info corrupted after staging", async (t) => {
+  const { root } = await tempReleaseRoot();
+  const sha = "c".repeat(40);
+  const tarball = await packedAgentFixture(t, {
+    gitSha: sha,
+    gitShaShort: "ccccccc",
+  });
+  t.after(() => removeTree(root));
+
+  const releasePath = await stagePackedRelease({
+    tarball,
+    releaseRoot: root,
+    sha,
+    shortSha: "ccccccc",
+  });
+
+  // Corrupt ONLY the artifact's own git_sha, leaving release.json and the UI
+  // provenance untouched. release.sha still equals sha and both next_build_id
+  // fields still agree, so the artifact's re-read is the ONE check that can
+  // catch this — delete assertObservedSha's call and this staging goes green.
+  const distInfo = path.join(releasePath, "dist", "build-info.json");
+  const buildInfo = JSON.parse(await fs.readFile(distInfo, "utf8"));
+  await fs.chmod(distInfo, 0o644);
+  await fs.writeFile(
+    distInfo,
+    `${JSON.stringify({ ...buildInfo, git_sha: "d".repeat(40) })}\n`,
+  );
+
+  await assert.rejects(
+    stagePackedRelease({
+      tarball,
+      releaseRoot: root,
+      sha,
+      shortSha: "ccccccc",
+    }),
+    /reports git_sha d{40}, expected c{40}/,
+  );
+});
+
 test("stagePackedRelease rejects an existing SHA symlink", async (t) => {
   const { root, releases } = await tempReleaseRoot();
   const outside = await fs.mkdtemp(

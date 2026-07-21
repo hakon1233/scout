@@ -249,13 +249,25 @@ export function invokedAsScript(argv1 = process.argv[1]) {
   }
 }
 
-try {
-  if (invokedAsScript()) {
-    assertSafeToBuild({
-      repoRoot: path.resolve(path.dirname(scriptPath), ".."),
-    });
+// The entrypoint wiring, extracted so the call site itself is covered. Both
+// collaborators are parameters ONLY so a unit test can drive all four branches
+// — not the entrypoint (no check), the entrypoint (check), and either
+// collaborator throwing (exit 1) — without a live LaunchAgent. This is not a
+// production bypass: the sole caller is the top-level line below, which always
+// passes the real two, and there is no env-var or PATH seam to swap them.
+// Swapping the refusal seam is exactly the PATH-injection class PER-300 closed;
+// re-opening it through a test hook would defeat the guard just as thoroughly.
+export function runAsScript({ invokedAsScript, assertSafeToBuild }) {
+  try {
+    if (invokedAsScript()) {
+      assertSafeToBuild({
+        repoRoot: path.resolve(path.dirname(scriptPath), ".."),
+      });
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
 }
+
+runAsScript({ invokedAsScript, assertSafeToBuild });

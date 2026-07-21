@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import {
   mkdir,
   mkdtemp,
@@ -19,6 +20,7 @@ import {
   assertSafeToBuild,
   invokedAsScript,
   defaultInspectLaunchAgent,
+  runAsScript,
 } from "../scripts/live-build-guard.mjs";
 
 const REPO_ROOT = path.resolve(
@@ -310,6 +312,126 @@ test("the webroot build runs the guard before it touches webroot/", async () => 
       `guard must run before ${mutation} — it is the seam that replaces served assets`,
     );
   }
+});
+
+// --- the guard's own entrypoint (PER-308) ---------------------------------
+// The end-to-end tests below are the only ones that exercise the call site as a
+// real command, and they skip everywhere launchd does not serve from this
+// checkout — i.e. every CI run and every agent workspace. So the line that
+// actually arms the guard on `pnpm build` had no coverage where the suite runs.
+// These four drive the extracted runAsScript with both collaborators injected,
+// and the source-integrity test below proves the top-level call still wires the
+// real two — together they go red if the call site is deleted or neutered to
+// `if (false && invokedAsScript())`, without a launchd dependency.
+
+test("runAsScript checks the containing checkout when it is the entrypoint", () => {
+  const seen = [];
+  runAsScript({
+    invokedAsScript: () => true,
+    assertSafeToBuild: (options) => seen.push(options),
+  });
+
+  assert.equal(seen.length, 1, "the guard must run exactly once");
+  // repoRoot must be the checkout that CONTAINS the guard (the parent of
+  // scripts/), never scripts/ itself. Compared by realpath so a symlinked
+  // temp/CI path does not make an otherwise-correct wiring look wrong.
+  assert.equal(
+    realpathSync.native(
+      path.join(seen[0].repoRoot, "scripts", "live-build-guard.mjs"),
+    ),
+    realpathSync.native(
+      path.join(REPO_ROOT, "scripts", "live-build-guard.mjs"),
+    ),
+  );
+});
+
+test("runAsScript does not check the build when it is not the entrypoint", () => {
+  let checked = false;
+  runAsScript({
+    invokedAsScript: () => false,
+    assertSafeToBuild: () => {
+      checked = true;
+    },
+  });
+
+  assert.equal(checked, false, "importing the guard must not run it");
+});
+
+test("runAsScript fails closed (exit 1) when the guard refuses", (t) => {
+  const previousExit = process.exitCode;
+  const previousError = console.error;
+  const logged = [];
+  console.error = (message) => logged.push(String(message));
+  t.after(() => {
+    process.exitCode = previousExit;
+    console.error = previousError;
+  });
+
+  runAsScript({
+    invokedAsScript: () => true,
+    assertSafeToBuild: () => {
+      throw new Error(
+        "[live-build-guard] REFUSING TO BUILD: this checkout is live",
+      );
+    },
+  });
+
+  assert.equal(process.exitCode, 1, "a refusal must set a non-zero exit code");
+  assert.match(logged.join("\n"), /REFUSING TO BUILD/);
+});
+
+test("runAsScript fails closed when it cannot tell whether it is the entrypoint", (t) => {
+  const previousExit = process.exitCode;
+  const previousError = console.error;
+  const logged = [];
+  console.error = (message) => logged.push(String(message));
+  t.after(() => {
+    process.exitCode = previousExit;
+    console.error = previousError;
+  });
+
+  // The refuse-on-unresolvable-argv path throws OUT of invokedAsScript; the
+  // wiring must translate that to exit 1 too, never let it escape unhandled.
+  runAsScript({
+    invokedAsScript: () => {
+      throw new Error(
+        "[live-build-guard] REFUSING TO BUILD: cannot determine whether the guard is running as a script",
+      );
+    },
+    assertSafeToBuild: () => {
+      throw new Error(
+        "must not check the build once entry detection has failed",
+      );
+    },
+  });
+
+  assert.equal(process.exitCode, 1);
+  assert.match(logged.join("\n"), /REFUSING TO BUILD/);
+});
+
+test("the guard file invokes runAsScript unconditionally at the top level", async () => {
+  // The unit tests above prove runAsScript's logic; this proves the module
+  // actually CALLS it on load with the real collaborators. Deleting that line —
+  // or wrapping it as `if (false && invokedAsScript())` — drops the call from
+  // column 0, and this assertion goes red where a launchd run cannot.
+  const source = await readFile(
+    path.join(REPO_ROOT, "scripts", "live-build-guard.mjs"),
+    "utf8",
+  );
+
+  const topLevelCalls = source
+    .split("\n")
+    .filter((line) => /^runAsScript\(/.test(line));
+  assert.equal(
+    topLevelCalls.length,
+    1,
+    "expected exactly one top-level (column-0) runAsScript(...) invocation",
+  );
+  assert.match(
+    topLevelCalls[0],
+    /^runAsScript\(\{\s*invokedAsScript,\s*assertSafeToBuild\s*\}\);?$/,
+    "the entrypoint must pass the real invokedAsScript and assertSafeToBuild",
+  );
 });
 
 // --- end-to-end, on a machine where this checkout really is the live one ---
