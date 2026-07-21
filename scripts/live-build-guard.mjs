@@ -47,32 +47,82 @@ function isInside(candidate, parent) {
   );
 }
 
-function launchAgentArguments(output) {
+function indentDepth(line) {
+  let depth = 0;
+  while (depth < line.length && line[depth] === "\t") depth += 1;
+  return depth;
+}
+
+// `launchctl print` emits a tab-indented tree: the job dict's own keys sit one
+// tab in, and each nested block (`arguments`, `environment`, ...) indents its
+// contents one tab deeper and closes with a `}` dedented back to its opener.
+// We read the arguments and the working directory in a SINGLE structured pass
+// keyed on that indentation, so a value INSIDE `arguments = { … }` — which the
+// plist author controls — can never be read as one of the job's top-level keys.
+//
+// Two fail-opens this closes (PER-306), both of which made a live path
+// invisible to the containment check so the guard permitted instead of
+// refusing:
+//   - an argument whose literal text is `working directory = <outside>` was
+//     picked up as the job's working directory. It sits in the arguments block,
+//     which prints first, so a line-anywhere scan returned it before the real
+//     `working directory` line and re-placed every relative live argument
+//     outside the checkout.
+//   - an argument whose literal text is `}` terminated the arguments block
+//     early, hiding every argument after it — including the live path — while
+//     the surviving earlier arguments kept `args.length === 0` from firing.
+// Indentation depth decides both: argument values are read as opaque strings,
+// the block ends only at the dedented `}`, and a `working directory` key is
+// honoured only at the job's own top level. A relative argument means nothing
+// without the directory it is relative to; the live job reports one
+// (`/Users/<user>`) while its script argument is absolute.
+function parseLaunchAgent(output) {
   const args = [];
-  let inArguments = false;
+  let workingDirectory = null;
+  let workingDirectoryCount = 0;
+  let argumentsDepth = null;
 
   for (const line of output.split("\n")) {
     const value = line.trim();
-    if (!inArguments) {
-      inArguments = value === "arguments = {";
+    if (value === "") continue;
+    const depth = indentDepth(line);
+
+    if (argumentsDepth !== null) {
+      // Inside `arguments = { … }`: its values are indented deeper than the
+      // opener. Only a line dedented back to the opener's depth closes the
+      // block, so a `}` sitting at value depth is a literal argument, not the
+      // terminator.
+      if (depth > argumentsDepth) {
+        args.push(value);
+        continue;
+      }
+      argumentsDepth = null;
+      // fall through: re-read this dedented line as a top-level key.
+    }
+
+    if (value === "arguments = {") {
+      argumentsDepth = depth;
       continue;
     }
-    if (value === "}") break;
-    if (value) args.push(value);
+
+    const match = value.match(/^working directory = (.+)$/);
+    if (match) {
+      workingDirectoryCount += 1;
+      workingDirectory = match[1].trim();
+    }
   }
 
-  return args;
-}
-
-// A relative argument means nothing without the directory it is relative to.
-// launchd reports one; the live job's is `/Users/<user>` while its script
-// argument is absolute.
-function launchAgentWorkingDirectory(output) {
-  for (const line of output.split("\n")) {
-    const match = line.trim().match(/^working directory = (.+)$/);
-    if (match) return match[1].trim();
+  // An ambiguous working directory is exactly the uncertainty this module
+  // refuses on everywhere else: we cannot know which one the live service reads
+  // relative live arguments against.
+  if (workingDirectoryCount > 1) {
+    throw refuse(
+      `${LAUNCH_AGENT_LABEL} reports ${workingDirectoryCount} working ` +
+        "directories; which one the live service reads from is ambiguous.",
+    );
   }
-  return null;
+
+  return { args, workingDirectory };
 }
 
 // This used to be `if (path.isAbsolute(value)) args.push(value)` — a relative
@@ -154,15 +204,13 @@ export function assertSafeToBuild({
   }
 
   const repo = canonicalPath(repoRoot, "this checkout");
-  const args = launchAgentArguments(stdout);
+  const { args, workingDirectory } = parseLaunchAgent(stdout);
   if (args.length === 0) {
     throw refuse(
       `cannot verify whether this checkout is live; ` +
         `${LAUNCH_AGENT_LABEL} has no readable arguments.`,
     );
   }
-
-  const workingDirectory = launchAgentWorkingDirectory(stdout);
 
   // placeLaunchAgentArgument throws on any argument we cannot account for, so
   // a live job we cannot fully read refuses here rather than falling through

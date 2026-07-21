@@ -50,6 +50,22 @@ function launchctlOutput(
 }`;
 }
 
+// Like launchctlOutput but takes the raw argument lines verbatim, so a test
+// can plant a crafted argument (`}`, `working directory = …`) inside the block
+// in the real ordering: the arguments block prints before the working
+// directory line, each argument one tab deeper than the block's braces.
+function launchctlOutputWith(argLines, { workingDirectory }) {
+  const args = argLines.map((line) => `\t\t${line}`).join("\n");
+  return `gui/501/ing.scout.agent = {
+\tstate = running
+\targuments = {
+${args}
+\t}
+
+\tworking directory = ${workingDirectory}
+}`;
+}
+
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "scout-live-build-guard-"));
   const repoRoot = path.join(root, "workspace", "scout-repo");
@@ -461,5 +477,90 @@ test("refuses a relative LaunchAgent argument it cannot place", async (t) => {
         inspectLaunchAgent: () => ({ status: 0, stdout, stderr: "" }),
       }),
     /REFUSING TO BUILD[\s\S]*relative argument \(run\)[\s\S]*working directory/,
+  );
+});
+
+// --- PER-306: a crafted argument must not shadow the working directory or -----
+// --- truncate the arguments block. Both hid a live path and permitted. --------
+
+test("refuses when an argument literal shadows the job's working directory", async (t) => {
+  const { repoRoot, cli } = await fixture(t);
+  // A relative live path, placed against the honest working directory, lands
+  // inside the checkout. The crafted argument's literal text is a
+  // `working directory = …` line pointing outside; because the arguments block
+  // prints first, a line-anywhere scan reads it as THE working directory and
+  // re-places the live path under /tmp — outside — and permits.
+  const stdout = launchctlOutputWith(
+    [
+      process.execPath, // absolute, resolves, outside the checkout
+      "working directory = /tmp", // crafted: an argument value, not a real key
+      path.relative(repoRoot, cli), // the live path, placed against the WD
+      "run",
+    ],
+    { workingDirectory: repoRoot }, // the honest WD, printed after the args
+  );
+
+  assert.throws(
+    () =>
+      assertSafeToBuild({
+        repoRoot,
+        platform: "darwin",
+        inspectLaunchAgent: () => ({ status: 0, stdout, stderr: "" }),
+      }),
+    /REFUSING TO BUILD[\s\S]*live-serving path/,
+  );
+});
+
+test("refuses when an argument literal '}' truncates the arguments block", async (t) => {
+  const { root, repoRoot, cli } = await fixture(t);
+  // The live path is absolute-inside-repo and sits AFTER the `}` argument, so
+  // it is only reachable if the block is not truncated. The working directory
+  // is outside the checkout, so neither `}` nor `run` (both relative) place
+  // inside — the sole refusal trigger is the live cli seen past the `}`.
+  const stdout = launchctlOutputWith(
+    [
+      process.execPath, // absolute, outside the checkout
+      "}", // crafted: a bare `}` argument that used to end the block early
+      cli, // absolute live path inside the checkout, AFTER the `}`
+      "run",
+    ],
+    { workingDirectory: root },
+  );
+
+  assert.throws(
+    () =>
+      assertSafeToBuild({
+        repoRoot,
+        platform: "darwin",
+        inspectLaunchAgent: () => ({ status: 0, stdout, stderr: "" }),
+      }),
+    /REFUSING TO BUILD[\s\S]*live-serving path/,
+  );
+});
+
+test("refuses when the job reports more than one working directory", async (t) => {
+  const { repoRoot, cli } = await fixture(t);
+  // Which directory relative live arguments are placed against is ambiguous,
+  // and ambiguity is a refusal everywhere else in this module.
+  const stdout = `gui/501/ing.scout.agent = {
+\tstate = running
+\targuments = {
+\t\t${process.execPath}
+\t\t${path.relative(repoRoot, cli)}
+\t\trun
+\t}
+
+\tworking directory = ${repoRoot}
+\tworking directory = /tmp
+}`;
+
+  assert.throws(
+    () =>
+      assertSafeToBuild({
+        repoRoot,
+        platform: "darwin",
+        inspectLaunchAgent: () => ({ status: 0, stdout, stderr: "" }),
+      }),
+    /REFUSING TO BUILD[\s\S]*working directories[\s\S]*ambiguous/,
   );
 });
