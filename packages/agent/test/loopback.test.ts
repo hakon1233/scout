@@ -693,7 +693,7 @@ test("founder's Tailscale .ts.net origin reaches the run path, not a 403 (PER-15
     claudeBin,
     onSynthesisDone: (b) => synthesisDone(b),
   });
-  const tailnetOrigin = "https://your-host.example:48721";
+  const tailnetOrigin = "https://example-host.tailnet.ts.net:48721";
   try {
     // The run trigger over the tailnet origin is accepted (202), not 403'd.
     const kick = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
@@ -725,7 +725,7 @@ test("founder's Tailscale .ts.net origin reaches the run path, not a 403 (PER-15
     // did not turn into a wildcard.
     const evil = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
       headers: {
-        origin: "https://your-host.example.evil.com",
+        origin: "https://example-host.tailnet.ts.net.evil.com",
         authorization: `Bearer ${token}`,
       },
     });

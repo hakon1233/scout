@@ -2,44 +2,72 @@
 
 [![Test & Deploy](https://github.com/hakon1233/scout/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/hakon1233/scout/actions/workflows/deploy.yml)
 
-> Scout is a personalised AI news platform.
+A personalised news reader. Set your interests, and a set of agents fetch, rank and
+synthesise a short brief containing only the stories you care about.
 
-Set your interests, agents fetch and synthesize a brief with only the news you
-care about.
+**Live:** <https://hakon1233.github.io/scout/>
 
-Stack (see PER-2 architecture doc, v2): Next.js 16 (App Router, static export)
-hosted on GitHub Pages, Supabase for Postgres + Auth, and a local loopback
-companion (`@scout/agent`) that shells out to the user's own Claude Code CLI
-for ranking (Haiku 4.5), synthesis (Opus 4.7), and web research (the CLI's
-built-in `WebSearch` + `WebFetch` tools). No server-side Anthropic key, no
-third-party search provider — the user's `claude` CLI handles auth from its
-own keychain.
+## The idea worth stealing
 
-## Local development
+An AI product normally means a server holding an API key and paying per token. Scout
+does not have one. There is no server-side Anthropic key anywhere in this repository,
+and no third-party search provider.
 
-**Prerequisites:** Node 22 and pnpm 11. The package manager is pinned via the
-`packageManager` field in `package.json` (`pnpm@11.9.0`). Enable
-[Corepack](https://nodejs.org/api/corepack.html) once and every `pnpm` command
-uses that exact pinned version — the same one CI and the lockfile expect:
+Instead the site is a **static export** on GitHub Pages, and inference runs on the
+reader's own machine:
+
+```
+Browser (static Next.js on GitHub Pages)
+   │
+   │  fetch() to 127.0.0.1:47821, authorised by a pairing token
+   ▼
+@scout/agent — loopback companion on the reader's machine
+   │
+   │  shells out to the reader's own Claude Code CLI
+   ▼
+claude CLI ── authenticates from its own keychain
+   ├── ranking       (Haiku 4.5)
+   ├── synthesis     (Opus 4.7)
+   └── web research  (the CLI's built-in WebSearch / WebFetch)
+
+Supabase ── Postgres + Auth for interests and saved briefs, protected by RLS
+```
+
+The consequences are the point:
+
+- **No inference bill and no key custody.** Each reader brings their own CLI auth, so
+  the hosted part stays a static site with zero running cost.
+- **Article content never reaches a server I control.** Research and synthesis happen
+  on the reader's machine; only their interests and saved briefs go to Supabase.
+- **The trust boundary moves to the loopback port**, which becomes the thing worth
+  securing. `packages/agent` pins the origin, requires a pairing token, and is covered
+  by tests for origin-spoofing (including suffix attacks such as
+  `https://host.tailnet.ts.net.evil.com`) and for token handling.
+
+The cost is honest: the reader must install and run a companion process, so this trades
+consumer convenience for zero marginal cost and strong data locality.
+
+## Layout
+
+| Path | What lives there |
+|------|------------------|
+| `src/` | Next.js App Router UI, static-exported |
+| `packages/agent/` | The loopback companion — its own package, separately versioned |
+| `supabase/` | Schema and RLS policies |
+| `e2e/` | Playwright end-to-end suite |
+
+## Running it
+
+**Prerequisites:** Node 22 and pnpm 11, pinned via `packageManager` in `package.json`.
 
 ```bash
-corepack enable              # use the pnpm version pinned in package.json
+corepack enable              # use the pinned pnpm version
 pnpm install                 # non-interactive; approved native builds run automatically
 cp .env.example .env.local   # fill in Supabase keys
 pnpm dev
 ```
 
-`pnpm install` needs **no** manual `pnpm approve-builds` step. The native
-dependencies that run install scripts (`esbuild`, `sharp`, `unrs-resolver`) are
-pre-approved in `pnpm-workspace.yaml` via `onlyBuiltDependencies`, so pnpm 11
-won't stop with `ERR_PNPM_IGNORED_BUILDS` or prompt interactively. To reproduce
-the CI install exactly, run `pnpm install --frozen-lockfile`.
-
-> **pnpm 11 note:** dependency `overrides` live in `pnpm-workspace.yaml`, not
-> `package.json` — pnpm 11 ignores `package.json#pnpm.overrides`, and the frozen
-> lockfile is generated under pnpm 11 (see `.github/workflows/ci.yml`).
-
-In a second terminal, build and run the loopback companion:
+In a second terminal, build and run the companion:
 
 ```bash
 pnpm -F @scout/agent build
@@ -47,65 +75,51 @@ node packages/agent/dist/cli.js pair   # prints a pairing token
 node packages/agent/dist/cli.js run    # serves on 127.0.0.1:47821
 ```
 
-Open <http://localhost:3000>, go to **Connect**, paste the pairing token,
-and pick interests. The web app talks only to the loopback server; the
-companion shells out to your local `claude` CLI, which authenticates from
-its own keychain. No `ANTHROPIC_API_KEY` or web-search API key needed.
+Open <http://localhost:3000>, go to **Connect**, paste the pairing token, and pick
+interests.
 
-## Scripts
+> **pnpm 11 notes:** dependency `overrides` live in `pnpm-workspace.yaml`, not
+> `package.json`. Native dependencies that run install scripts (`esbuild`, `sharp`,
+> `unrs-resolver`) are pre-approved via `onlyBuiltDependencies`, so install never stops
+> with `ERR_PNPM_IGNORED_BUILDS`. Use `pnpm install --frozen-lockfile` to reproduce CI.
 
-- `pnpm dev` — Next.js dev server.
-- `pnpm build` — production build, emits a static site to `out/`.
-- `pnpm start` — serve the static export from `out/` via `npx serve`.
-- `pnpm lint` — ESLint.
-- `pnpm typecheck` — TypeScript no-emit check.
-- `pnpm format` / `pnpm format:check` — Prettier.
-- `pnpm test` — hermetic `@scout/agent` suite (unit + `/v0` API contract
-  tests). Mocks the `claude` shell-out, so it runs fully offline with no
-  Claude quota or network. CI runs it on every push/PR.
-- `pnpm test:e2e` — Playwright end-to-end suite (`e2e/`).
-- `pnpm build:agent` / `pnpm pack:agent` — build and pack the loopback
-  companion (`packages/agent`) for distribution.
-- `pnpm release:agent` — stage a clean, pushed `origin/main` companion under
-  `~/Library/Application Support/Scout/agent/releases/<sha>` without activating it.
-- `pnpm deploy:agent` — canonical local-companion deploy: stage the release,
-  atomically move the stable `current` symlink, restart launchd, and verify
-  `/v0/version` plus the served UI build marker. This restarts the companion
-  and requires an existing immutable `current` release.
+## Tests
+
+```bash
+pnpm test        # 234 tests — hermetic @scout/agent unit + /v0 API contract suite
+pnpm test:e2e    # Playwright
+pnpm typecheck   # tsc --noEmit
+```
+
+The unit suite mocks the `claude` shell-out, so it runs fully offline with no model
+quota and no network. CI runs it on every push and pull request.
 
 ## Environment variables
 
-See `.env.example`. The client only needs `NEXT_PUBLIC_SUPABASE_URL` and
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase Postgres + Auth, protected by RLS).
-Anthropic and web-search credentials are **not** required anywhere in this
-repo — the loopback companion (`packages/agent`) delegates to the user's
-local Claude Code CLI, which holds its own OAuth token.
+See `.env.example`. The client needs only `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`. Anthropic and web-search credentials are **not**
+required anywhere in this repository.
 
 ## Deployment
 
-GitHub Actions builds the static export and deploys to GitHub Pages on every
-push to `main` (see `.github/workflows/deploy.yml`). The site is served at
-`https://<owner>.github.io/<repo>/`; `next.config.ts` derives the `basePath`
-from `GITHUB_REPOSITORY` at build time.
+GitHub Actions builds the static export and deploys to GitHub Pages on every push to
+`main` (`.github/workflows/deploy.yml`). `next.config.ts` derives `basePath` from
+`GITHUB_REPOSITORY` at build time, so the site works under `/<repo>/` without
+hardcoding it.
 
-The founder's local companion is a separate, single-host deployment. Its
-launchd plist must point at the stable Application Support path
-`~/Library/Application Support/Scout/agent/current/dist/cli.js`, never a
-development or Paperclip workspace. Releases are read-only and named by their
-full Git SHA. `pnpm deploy:agent` refuses dirty or unpushed source, fails closed
-unless both brief and chat activity are known idle, switches `current`
-atomically, and restores the previous release if bounded readiness or
-backend/UI provenance verification fails. The one canonical answer to “what
-is live?” is `GET /v0/version`: `git_sha` covers the whole immutable artifact
-and `next_build_id` must match the served `/scout-build.json` marker.
-
-The first migration from the legacy workspace-backed launchd job is
-intentionally not part of `deploy:agent`: it requires separate approval and a
-rollback-aware migration procedure. Until that migration has established the
-first immutable `current`, use `pnpm release:agent` for build-only evidence.
+The companion deploys separately to a single host. Releases are read-only and named by
+their full Git SHA, staged under `~/Library/Application Support/Scout/agent/releases/`.
+`pnpm deploy:agent` refuses dirty or unpushed source, waits until both brief and chat
+activity are idle, switches the `current` symlink atomically, and restores the previous
+release if readiness or provenance checks fail. `GET /v0/version` is the single answer
+to "what is live?" — `git_sha` covers the whole immutable artifact, and `next_build_id`
+must match the served `/scout-build.json` marker.
 
 ## Contributing
 
-See [`AGENTS.md`](AGENTS.md) for the agent/contributor working guide —
-Next.js version caveats and the test conventions to follow before touching
-`packages/agent/src/*` or `/v0/*` behavior.
+See [`AGENTS.md`](AGENTS.md) for the contributor guide — Next.js version caveats and the
+test conventions to follow before touching `packages/agent/src/*` or `/v0/*` behaviour.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).
