@@ -442,6 +442,7 @@ test("POST /v0/interests reconciles against state saved while the body is still 
   const postBody = JSON.stringify({ interests: ["AI safety"] });
 
   try {
+    let finishBody!: () => void;
     const responseP = new Promise<{ status: number; body: unknown }>(
       (resolve, reject) => {
         const req = http.request(
@@ -472,13 +473,17 @@ test("POST /v0/interests reconciles against state saved while the body is still 
         );
         req.on("error", reject);
         req.write(postBody.slice(0, 1));
-        setTimeout(() => {
-          req.end(postBody.slice(1));
-        }, 30);
+        // The rest of the body is sent only once the out-of-band saveState
+        // below has landed — see finishBody.
+        finishBody = () => req.end(postBody.slice(1));
       },
     );
 
-    await new Promise((r) => setTimeout(r, 10));
+    // The point of this test is that state is written while the request body
+    // is still streaming. Sequencing that with two timers (save at 10ms, end
+    // the body at 30ms) left a 20ms margin, which a loaded CI runner loses —
+    // the save then lands after the body and the server mints a fresh id
+    // instead of reconciling onto int_live_id. Order it explicitly instead.
     await saveState(
       {
         pairing_token: token,
@@ -486,6 +491,7 @@ test("POST /v0/interests reconciles against state saved while the body is still 
       },
       stateFile,
     );
+    finishBody();
 
     const response = await responseP;
     assert.equal(response.status, 202);
