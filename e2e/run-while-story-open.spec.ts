@@ -61,6 +61,15 @@ async function seedPairedSession(page: Page) {
     },
     { settings: SETTINGS, brief: BRIEF },
   );
+  // The suite shares one companion process, and earlier specs persist real
+  // briefs into its state. The app asks the companion for briefs on load and
+  // prefers what it returns over the seeded localStorage copy — so without
+  // this the page renders another spec's brief and the headline below never
+  // appears. Report an empty history so the seeded brief is the only one.
+  await page.route(`**/v0/briefs?*`, (route) =>
+    route.fulfill({ json: { briefs: [], total: 0 } }),
+  );
+
   await page.goto(`${ORIGIN}/app/`);
   // Same-origin auto-adopt (as zero-prompt.spec.ts): the pairing prompt must be
   // gone before "Run now" is reachable/enabled.
@@ -72,13 +81,6 @@ async function seedPairedSession(page: Page) {
 test("Run now while a story detail is open still shows run progress (not a blank feed)", async ({
   page,
 }) => {
-  // This test deliberately spends ~19s waiting: a 4s hold on the intercepted
-  // POST below, plus a 15s budget for "Run now" to become enabled. Against the
-  // default 30s that leaves ~11s for page load, seeding and navigation, which
-  // is too tight on a slower CI runner — it timed out there while passing
-  // locally. Give the whole test proportionate room.
-  test.setTimeout(60_000);
-
   // Hold the run "in flight" long enough to assert, then reject. The intercept
   // means the companion never runs a synthesis — no claude/stub spawn, no scrape.
   await page.route(`${ORIGIN}/v0/interests`, async (route) => {
