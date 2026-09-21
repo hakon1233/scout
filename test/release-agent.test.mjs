@@ -942,7 +942,10 @@ async function migrationFixture(t) {
 
 const stubBootstrap = async () => ({ bootstrapped: true, note: "stubbed" });
 
-test("migrateToReleases moves launchd onto current and carries env forward", async (t) => {
+test(
+  "migrateToReleases moves launchd onto current and carries env forward",
+  { skip: process.platform !== "darwin" && "launchd migration is macOS-only" },
+  async (t) => {
   const { root, sha, home, plist, legacy } = await migrationFixture(t);
 
   const result = await migrateToReleases({
@@ -977,7 +980,10 @@ test("migrateToReleases moves launchd onto current and carries env forward", asy
   assert.equal(await fs.readFile(result.preservedPlist, "utf8"), legacy);
 });
 
-test("a failed migration restores the legacy plist and leaves no current", async (t) => {
+test(
+  "a failed migration restores the legacy plist and leaves no current",
+  { skip: process.platform !== "darwin" && "launchd migration is macOS-only" },
+  async (t) => {
   const { root, sha, home, plist, legacy } = await migrationFixture(t);
 
   await assert.rejects(
@@ -999,7 +1005,10 @@ test("a failed migration restores the legacy plist and leaves no current", async
   await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
 });
 
-test("migrateToReleases refuses once current already exists", async (t) => {
+test(
+  "migrateToReleases refuses once current already exists",
+  { skip: process.platform !== "darwin" && "launchd migration is macOS-only" },
+  async (t) => {
   const { root, sha, home } = await migrationFixture(t);
 
   await migrateToReleases({
