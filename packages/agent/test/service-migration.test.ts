@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import {
   assertStableScriptPath,
@@ -57,7 +57,7 @@ function legacyPlist(opts: { scriptPath: string; home: string }): string {
 `;
 }
 
-async function pinnedHome(t: any): Promise<string> {
+async function pinnedHome(t: TestContext): Promise<string> {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "scout-service-"));
   const plist = path.join(home, "ing.scout.agent.plist");
   const previous = process.env.SCOUT_LAUNCH_AGENT_PLIST;
