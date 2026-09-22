@@ -7,6 +7,8 @@
 import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
 
+import { MAX_BODY_BYTES } from "./limits.js";
+
 // CORS: loopback dev origins + the specific Scout production hostname(s) +
 // the founder's private Tailscale tailnet origin.
 // Do NOT add wildcard *.vercel.app or *.github.io — any user of those
@@ -171,14 +173,10 @@ export function json(
 }
 
 // Request-body cap, applied uniformly to every mutating /v0 route via
-// parseJsonBody below. The interest count is already capped at 6; this caps the
-// remaining unbounded dimension so an oversized body can't blow the companion's
-// memory or get forwarded into the (expensive, ~5-min) Claude synthesis prompt.
-// (PER-137)
-//
-// 16 KiB comfortably holds 6 interests of 200 chars each plus JSON framing and
-// any whitespace/unicode escaping, with generous headroom.
-export const MAX_BODY_BYTES = 16 * 1024;
+// parseJsonBody below. Defined in limits.ts next to the interest count and
+// length it is derived from, and re-exported here so existing importers are
+// unaffected. (PER-137)
+export { MAX_BODY_BYTES };
 
 // Thrown by readBody when the request body exceeds MAX_BODY_BYTES, so the
 // handler can answer 413 instead of buffering an unbounded body into memory.

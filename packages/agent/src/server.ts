@@ -63,7 +63,7 @@ export {
 } from "./http-util.js";
 export { PKG_VERSION } from "./build-info.js";
 export { MAX_CHAT_MESSAGE_LEN } from "./routes/chat.js";
-export { MAX_INTEREST_LEN } from "./routes/interests.js";
+export { MAX_INTEREST_LEN, MAX_INTERESTS } from "./routes/interests.js";
 export type { ScheduleView } from "./routes/schedule.js";
 
 export function defaultPort(raw: string | undefined): number {

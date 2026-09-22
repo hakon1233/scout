@@ -27,6 +27,7 @@ import path from "node:path";
 import type { spawn } from "node:child_process";
 import { saveState, loadState, newPairingToken, type Brief } from "../src/state.js";
 import { startServer } from "../src/server.js";
+import { MAX_INTERESTS } from "../src/limits.js";
 
 const CANNED_BRIEF =
   "# Your brief\n\n## ai safety\n- A model lab published new alignment work.\n  [example.com — Alignment update](https://example.com/a)\n";
@@ -457,7 +458,12 @@ test("PUT /v0/interests rejects an empty/oversized interest list (PER-160)", asy
     const tooMany = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "PUT",
       headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({ interests: ["a", "b", "c", "d", "e", "f", "g"] }),
+      body: JSON.stringify({
+        interests: Array.from(
+          { length: MAX_INTERESTS + 1 },
+          (_, i) => `topic ${i}`,
+        ),
+      }),
     });
     assert.equal(tooMany.status, 400);
 

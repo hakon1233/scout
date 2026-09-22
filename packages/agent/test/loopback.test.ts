@@ -22,6 +22,7 @@ import {
   type State,
 } from "../src/state.js";
 import { isSameOriginCaller, startServer } from "../src/server.js";
+import { MAX_INTERESTS } from "../src/limits.js";
 
 async function makeStubClaude(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-stub-"));
@@ -279,7 +280,7 @@ test("GET /v0/briefs + /healthz stay responsive during synthesis (PER-101)", asy
   }
 });
 
-test("POST /v0/interests rejects >6 interests with 400 (PER-91)", async () => {
+test("POST /v0/interests rejects more than MAX_INTERESTS with 400 (PER-91)", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -296,7 +297,12 @@ test("POST /v0/interests rejects >6 interests with 400 (PER-91)", async () => {
         authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        interests: ["a", "b", "c", "d", "e", "f", "g"],
+        // One past the cap, derived so this keeps testing the boundary if the
+        // limit moves.
+        interests: Array.from(
+          { length: MAX_INTERESTS + 1 },
+          (_, i) => `topic ${i}`,
+        ),
       }),
     });
     assert.equal(res.status, 400);
@@ -378,7 +384,7 @@ test("POST /v0/interests rejects an over-long single interest with 400 (PER-137)
   }
 });
 
-test("POST /v0/interests de-duplicates before the max-6 budget check (PER-126)", async () => {
+test("POST /v0/interests de-duplicates before the count budget check (PER-126)", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -394,9 +400,10 @@ test("POST /v0/interests de-duplicates before the max-6 budget check (PER-126)",
   });
 
   try {
-    // 7 raw items but only 6 unique after case-insensitive de-dup ("AI safety"
-    // appears twice). The dupe must be collapsed BEFORE the max-6 check, so this
-    // is accepted (202) rather than rejected as ">6". Pre-PER-126 this 400'd.
+    // MAX_INTERESTS + 1 raw items, but only MAX_INTERESTS unique after
+    // case-insensitive de-dup (the first topic is repeated in another casing).
+    // The dupe must be collapsed BEFORE the count check, so this is accepted
+    // (202) rather than rejected as over the cap. Pre-PER-126 this 400'd.
     const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: {
@@ -406,12 +413,11 @@ test("POST /v0/interests de-duplicates before the max-6 budget check (PER-126)",
       body: JSON.stringify({
         interests: [
           "AI safety",
-          "ai safety",
-          "nba",
-          "f1",
-          "climate",
-          "rust",
-          "go",
+          "ai safety", // same topic, different casing — must collapse
+          ...Array.from(
+            { length: MAX_INTERESTS - 1 },
+            (_, i) => `topic ${i}`,
+          ),
         ],
       }),
     });

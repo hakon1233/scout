@@ -38,6 +38,9 @@ import {
   type PendingRewrite,
 } from "./state.js";
 import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
+// Shared with the POST/PUT /v0/interests validator — see limits.ts for why the
+// constant lives in a leaf module rather than next to either consumer.
+import { MAX_INTERESTS } from "./limits.js";
 import {
   readInterestDoc,
   writeInterestDoc,
@@ -54,10 +57,6 @@ const ALLOWED_TOOLS = "";
 // single-threaded loopback event loop so polls/healthz stay responsive.
 const CHAT_CHILD_NICENESS = 10;
 
-// Hard ceiling on interests, matching parseInterestsPayload's max-6 in server.ts.
-// A chat "create" past the cap is dropped (and called out in the prompt context)
-// so the collection can't grow unbounded via conversation.
-export const MAX_INTERESTS = 6;
 
 export type ChatOptions = {
   claudeBin?: string;
@@ -359,7 +358,7 @@ export function buildChatPrompt(
     '    a `delete`, phrase `reply` as a PENDING REQUEST, never as a completed action.',
   );
   lines.push(
-    '    Say e.g. "Delete \\"X\\"? Confirm below — this would bring you to N of 6 interests."',
+    `    Say e.g. "Delete \\"X\\"? Confirm below — this would bring you to N of ${MAX_INTERESTS} interests."`,
   );
   lines.push(
     '    NEVER claim it is done ("Done — deleted", "Removed X", "You\'re back to N") on a',

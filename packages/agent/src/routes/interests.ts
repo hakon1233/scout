@@ -14,20 +14,21 @@ import {
 import { interestDocMeta, readInterestDoc } from "../docs.js";
 import { startRun } from "../runner.js";
 import { json, jsonBodyParseError, parseJsonBody } from "../http-util.js";
+import { MAX_INTEREST_LEN, MAX_INTERESTS } from "../limits.js";
 import type { AuthedRequestContext, ServerContext } from "./types.js";
 
-// Per-interest length bound (PER-137): the interest count is already capped at
-// 6 and the request size by MAX_BODY_BYTES (http-util.ts); this caps the last
-// unbounded dimension so an oversized topic can't be forwarded into the
-// (expensive, ~5-min) Claude synthesis prompt.
-export const MAX_INTEREST_LEN = 200;
+// The interest-count and per-interest-length bounds, plus the request-size cap
+// they feed, all live in limits.ts so the arithmetic between them stays in one
+// place. Re-exported here because server.ts and the routes import it from this
+// module. (PER-137)
+export { MAX_INTEREST_LEN, MAX_INTERESTS };
 
 type InterestParse =
   | { ok: true; interests: string[] }
   | { ok: false; status: number; error: string };
 
 // Clean → dedupe (case-insensitively, keeping first casing) → enforce the
-// 1..6 count and per-interest length budget. Shared by POST /v0/interests
+// 1..MAX_INTERESTS count and per-interest length budget. Shared by POST /v0/interests
 // (which also kicks a synthesis run) and PUT /v0/interests (persist-only,
 // PER-160) so both apply the exact same rules. (Dedupe rationale: PER-126;
 // length cap: PER-137.)
@@ -51,8 +52,12 @@ function parseInterestsPayload(raw: unknown): InterestParse {
   });
   if (interests.length === 0)
     return { ok: false, status: 400, error: "interests required" };
-  if (interests.length > 6)
-    return { ok: false, status: 400, error: "too many interests, max 6" };
+  if (interests.length > MAX_INTERESTS)
+    return {
+      ok: false,
+      status: 400,
+      error: `too many interests, max ${MAX_INTERESTS}`,
+    };
   if (interests.some((s) => s.length > MAX_INTEREST_LEN))
     return {
       ok: false,
