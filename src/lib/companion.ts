@@ -4,6 +4,7 @@
 // agent on a different port can still pair.
 
 import type { Brief as AppBrief } from "./types";
+import { parseBrief } from "@scout/agent/brief-document";
 import {
   PATHS,
   type Brief as WireBrief,
@@ -336,180 +337,36 @@ export async function saveInterests(
 }
 
 
-// The companion no longer returns a structured `articles` list — the model
-// emits the brief markdown directly, with citations inline as `[domain — Title](url)`.
-// We parse those out so the rest of the UI (Sources panel, interest chips) keeps
-// working without changing its data shape.
-// URL body inside a markdown `(...)` link/image. Tolerates ONE level of balanced
-// parens inside the URL so filenames like `...AI%20(13).png` — common on Webflow/
-// CDN hosts — are not truncated at the first `)` (PER-216). A bare `)` ends the
-// group, so it's still the closing markdown paren that terminates the match.
-const MD_URL = "https?:\\/\\/(?:[^()\\s]|\\([^()\\s]*\\))+";
-const LINK_RE = new RegExp(`\\[([^\\]]+)\\]\\((${MD_URL})\\)`, "g");
-// Markdown image: `![alt](url)`. Captured into Article.imageUrl (PER-211). Run
-// BEFORE/alongside LINK_RE; LINK_RE deliberately skips `!`-prefixed matches so an
-// image's `[alt](url)` tail is never collected as a citation.
-const IMAGE_RE = new RegExp(`!\\[[^\\]]*\\]\\((${MD_URL})\\)`, "g");
-const TOPIC_HEADING_RE = /^##\s+(.+?)\s*$/;
-const STORY_BULLET_RE = /^\s*[-*]\s+/;
-// In-depth body line: an indented markdown blockquote under the story's
-// citation/image (PER-214). `> text` → a body paragraph line; a bare `>` is a
-// paragraph break. We collect these into Article.body for the click-through
-// detail view. Captured value excludes the `> ` marker.
-const STORY_BODY_RE = /^\s*>\s?(.*)$/;
-// Per-story publish date: each story bullet may lead with its date as an ISO date
-// (or `undated`) in backticks — the contract set by the shared search-skills
-// fragment (packages/agent/src/search-skills.ts STORY_DATE_RE). We capture it
-// into Article.publishedAt so the UI can show it per item and sort newest-first.
-// (The sample brief uses dateless bullets, so a leading date is not required.)
-const STORY_DATE_RE =
-  /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`\s*(?:—|–|-)?\s*/;
-
-// Balanced-paren tolerance (PER-216) so a `(13)` in a CDN filename doesn't leave
-// a stray `).png)` tail in the card blurb. Kept scheme-agnostic (unlike
-// LINK_RE/IMAGE_RE) to match the original strip breadth. The `inner` pattern is
-// invariant, so these are compiled once at module load instead of on every
-// stripInlineMarkdown call — which runs per story bullet, per brief, and per
-// poll tick. Reuse with String#replace is safe: replace resets a global regex's
-// lastIndex on each call.
-const STRIP_INNER = "(?:[^()]|\\([^()]*\\))*";
-const STRIP_IMAGE_RE = new RegExp(`!\\[[^\\]]*\\]\\(${STRIP_INNER}\\)`, "g");
-const STRIP_LINK_RE = new RegExp(`\\[([^\\]]+)\\]\\(${STRIP_INNER}\\)`, "g");
-
-// Reduce inline markdown to plain text for the card blurb: drop images entirely,
-// unwrap links to their label, collapse leftover emphasis markers.
-function stripInlineMarkdown(s: string): string {
-  return s
-    .replace(STRIP_IMAGE_RE, "")
-    .replace(STRIP_LINK_RE, "$1")
-    .replace(/[*_`]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// A story accumulates its lines (bullet + continuation citation/image lines)
-// before being flushed into articles, because the source-image line follows the
-// citation line — so the image URL isn't known yet when the citation is seen.
-type PendingStory = {
-  topic: string;
-  date?: string;
-  blurb: string;
-  links: Array<{ label: string; url: string }>;
-  image?: string;
-  // Raw blockquote body lines (marker stripped). A bare `>` line lands here as
-  // "" and becomes a paragraph break when joined. Flushed into Article.body.
-  bodyLines: string[];
-};
-
-// Exported (PER-271) so it can be unit-tested directly instead of only via the
-// full fetch/adapt path — this is the ~100-line regex parser that renders the
-// entire feed, previously covered only indirectly by e2e specs.
+// The brief arrives as markdown; the feed shows one article per citation.
+// Exported so the mapping can be tested without a companion.
 export function parseArticlesFromMarkdown(markdown: string, briefId: string) {
+  const { topics, entries } = parseBrief(markdown);
   const articles: AppBrief["articles"] = [];
-  const interests = new Set<string>();
-  let currentTopic = "general";
-  let idx = 0;
-  let story: PendingStory | null = null;
-
-  const flush = () => {
-    if (!story) return;
-    // Join blockquote lines into paragraphs: bare `>` lines (captured as "")
-    // become blank lines, so trimming + collapsing 3+ newlines yields clean
-    // `\n\n`-separated paragraphs the detail view can split on.
-    const body =
-      story.bodyLines
-        .join("\n")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim() || undefined;
-    for (const link of story.links) {
+  for (const entry of entries) {
+    const interest = entry.topic ?? "general";
+    if (entry.kind === "citation") {
       articles.push({
-        id: `${briefId}-${idx++}`,
+        id: `${briefId}-${articles.length}`,
+        title: entry.label.trim(),
+        url: entry.url,
+        interest,
+      });
+      continue;
+    }
+    for (const link of entry.links) {
+      articles.push({
+        id: `${briefId}-${articles.length}`,
         title: link.label.trim(),
         url: link.url,
-        interest: story.topic,
-        publishedAt: story.date,
-        text: story.blurb || undefined,
-        imageUrl: story.image,
-        body,
+        interest,
+        publishedAt: entry.date ?? undefined,
+        text: entry.summary || undefined,
+        imageUrl: entry.image ?? undefined,
+        body: entry.body ?? undefined,
       });
     }
-    story = null;
-  };
-
-  const collectImages = (line: string) => {
-    let im: RegExpExecArray | null;
-    IMAGE_RE.lastIndex = 0;
-    while ((im = IMAGE_RE.exec(line)) !== null) {
-      if (story && !story.image) story.image = im[1];
-    }
-  };
-
-  const collectLinks = (line: string) => {
-    let m: RegExpExecArray | null;
-    LINK_RE.lastIndex = 0;
-    while ((m = LINK_RE.exec(line)) !== null) {
-      // Skip image markdown: `![alt](url)` — the `[alt](url)` tail matches LINK_RE
-      // but is preceded by `!`. Those are handled by collectImages, not citations.
-      if (m.index > 0 && line[m.index - 1] === "!") continue;
-      const [, label, url] = m;
-      if (story) {
-        story.links.push({ label, url });
-      } else {
-        // A citation outside any story bullet (e.g. inline in prose). Preserve the
-        // prior behavior of surfacing it as a standalone, dateless article.
-        articles.push({
-          id: `${briefId}-${idx++}`,
-          title: label.trim(),
-          url,
-          interest: currentTopic,
-        });
-      }
-    }
-  };
-
-  for (const line of markdown.split("\n")) {
-    const heading = TOPIC_HEADING_RE.exec(line);
-    if (heading) {
-      flush();
-      currentTopic = heading[1].trim();
-      interests.add(currentTopic);
-      continue;
-    }
-    if (STORY_BULLET_RE.test(line)) {
-      flush();
-      const dateMatch = STORY_DATE_RE.exec(line);
-      const date =
-        dateMatch && dateMatch[1] !== "undated" ? dateMatch[1] : undefined;
-      // Blurb = bullet text minus the marker and the leading `date` — token.
-      const blurb = stripInlineMarkdown(
-        dateMatch
-          ? line.slice(dateMatch[0].length)
-          : line.replace(STORY_BULLET_RE, ""),
-      );
-      story = {
-        topic: currentTopic,
-        date,
-        blurb,
-        links: [],
-        image: undefined,
-        bodyLines: [],
-      };
-    }
-    // In-depth body blockquote (`> …`): pure prose — collect it and DON'T run the
-    // link/image scanners on it, so a stray markdown link inside the body never
-    // pollutes the citation/source list (PER-214).
-    const bodyMatch = STORY_BODY_RE.exec(line);
-    if (bodyMatch && story) {
-      story.bodyLines.push(bodyMatch[1]);
-      continue;
-    }
-    // Image first so its URL is parked on the story; then citations (which skip
-    // the `!`-prefixed image match). Order within a line doesn't matter here.
-    collectImages(line);
-    collectLinks(line);
   }
-  flush();
-  return { articles, interests: [...interests] };
+  return { articles, interests: topics };
 }
 
 function adaptBrief(b: WireBrief): AppBrief {

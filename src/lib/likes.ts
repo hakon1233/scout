@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
+import { canonicalUrl } from "@scout/agent/brief-document";
 
 // PER-249: device-local "liked stories" store. A brand-new localStorage store,
 // fully separate from the interests store and from every companion endpoint.
@@ -52,22 +53,6 @@ type LikesStore = { version: 1; likes: Record<string, LikedStory> };
 // Stable empty reference for SSR / pre-hydration and for parse failures, so
 // useSyncExternalStore sees a referentially-stable snapshot.
 const EMPTY: LikesStore = { version: 1, likes: {} };
-
-// Strip hash, query, and a trailing slash so cosmetic URL variants of the same
-// story collapse to one key. Mirrors FeedView's historical dedupe behaviour
-// (which now imports this very function).
-export function canonicalUrl(u: string): string {
-  try {
-    const url = new URL(u);
-    url.hash = "";
-    url.search = "";
-    let s = url.toString();
-    if (s.endsWith("/")) s = s.slice(0, -1);
-    return s;
-  } catch {
-    return u;
-  }
-}
 
 export function likeKey(url: string): string {
   return canonicalUrl(url);

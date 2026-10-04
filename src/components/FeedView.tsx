@@ -3,7 +3,8 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import type { Article, Brief } from "@/lib/types";
-import { canonicalUrl, type LikeInput } from "@/lib/likes";
+import { canonicalUrl } from "@scout/agent/brief-document";
+import type { LikeInput } from "@/lib/likes";
 import { LikeButton } from "@/components/LikeButton";
 import { EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
@@ -375,9 +376,6 @@ function hostname(url: string): string {
 export function faviconFor(host: string): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`;
 }
-
-// canonicalUrl now lives in `@/lib/likes` (the like key and the feed dedupe must
-// use the SAME canonicalisation), and is imported above.
 
 // The canonical date formatter now lives in `@/lib/format-date` so the brief
 // surfaces share one timezone-safe implementation (imported above). Re-exported
