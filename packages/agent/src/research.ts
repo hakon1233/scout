@@ -1,194 +1,50 @@
 // Single-shot research + synthesis via the local `claude` CLI.
 //
 // Instead of calling a third-party search API and then asking a model to
-// summarize, we hand the whole pipeline to a headless `claude` subprocess
-// with WebSearch + WebFetch tools enabled. The model picks queries, reads
-// pages, and writes the brief directly.
-//
-// We never read or forward the user's `sk-ant-oat01-…` OAuth token — the
-// `claude` binary handles its own auth from `~/.claude/credentials.json`.
+// summarize, we hand the whole pipeline to a headless `claude` child that may
+// use only WebSearch and WebFetch (see claude-runner.ts). The model picks
+// queries, reads pages, and writes the brief section directly.
 
-import { spawn } from "node:child_process";
-import os from "node:os";
-import { StringDecoder } from "node:string_decoder";
+import type { spawn } from "node:child_process";
+import { runClaude } from "./claude-runner.js";
 import { SEARCH_SKILLS } from "./search-skills.js";
-
-// Read and Write are intentionally excluded — a research subprocess has no
-// legitimate reason to access or modify the local filesystem.
-const ALLOWED_TOOLS = "WebSearch,WebFetch";
-
-// Run the synthesis child at a lower scheduling priority than the loopback
-// server. The `claude` agent is CPU-heavy (web search + fetch + a full model
-// loop) and, on a constrained machine, can starve our single-threaded event
-// loop so that GET /v0/briefs and /healthz stop responding mid-synthesis —
-// the UI then sees its polling stall (PER-101). Niceness is advisory: it only
-// costs `claude` cycles when something else (us, answering a poll) actually
-// wants the CPU, so it doesn't slow synthesis on an idle box. Increasing
-// niceness is always permitted for unprivileged processes; we swallow the
-// rare EPERM/ENOSYS rather than fail the run.
-const SYNTH_CHILD_NICENESS = 10;
-
-// Hard ceiling on a SINGLE per-interest `claude` session (C2/PER-171 +
-// PER-181). Pre-C2 the run was ONE session; now it's one PER interest fired
-// sequentially, so a single hung session (model stall, network wedge, a
-// rate-limit retry that never returns) used to block the whole `for` loop in
-// runner.ts FOREVER — the brief stayed `pending` and, once the persisted
-// pending outlived the process, every later run returned `in_flight`. A bounded
-// timeout turns a hang into a normal per-topic failure: the child is killed, the
-// promise rejects, runner records that topic as a missing section, and the other
-// interests still get their brief. Default 4 min (a real research session is
-// ~1-3 min); override with SCOUT_SESSION_TIMEOUT_MS for slow boxes/tests.
-const DEFAULT_SESSION_TIMEOUT_MS = 4 * 60 * 1000;
-
-function sessionTimeoutMs(override?: number): number {
-  if (override !== undefined && Number.isFinite(override) && override > 0) {
-    return override;
-  }
-  const env = Number(process.env.SCOUT_SESSION_TIMEOUT_MS);
-  return Number.isFinite(env) && env > 0 ? env : DEFAULT_SESSION_TIMEOUT_MS;
-}
 
 export type ResearchOptions = {
   claudeBin?: string;
-  // Spawn override for tests — lets us inject a stub `claude` without hitting
-  // the real binary or network.
+  // Test seam: a stub `claude` without the real binary or network.
   spawnFn?: typeof spawn;
-  // Per-session hard timeout in ms (PER-181). Defaults to
-  // SCOUT_SESSION_TIMEOUT_MS env or 4 min. Set small in tests to assert the
-  // kill path without waiting.
+  // Per-session hard timeout in ms; defaults to SCOUT_SESSION_TIMEOUT_MS or 4 min.
   timeoutMs?: number;
 };
 
-// One interest to research in its own session (C2/PER-171). `topic` is the
-// short headline (and the canonical `## <topic>` heading); `doc` is that
-// interest's intent doc, injected VERBATIM. The caller backfills a default doc
-// (ensureInterestDoc) so `doc` is always non-empty.
+// One interest to research in its own session. `topic` is the short headline
+// (and the canonical `## <topic>` heading); `doc` is that interest's intent doc,
+// injected VERBATIM. The caller backfills a default doc (ensureInterestDoc) so
+// `doc` is always non-empty.
 export type ResearchInterest = {
   topic: string;
   doc: string;
 };
 
-// Research a SINGLE interest in its own headless `claude` session, carrying that
-// interest's intent doc (C2/PER-171). The brief used to be one multi-topic
-// session; now each interest gets its own, so the doc that scopes WHAT to look
-// for actually reaches the model. Returns the session's raw (preamble-stripped)
-// markdown — the caller (runner) extracts the topic's section and assembles the
-// full brief across interests.
+// Research a SINGLE interest in its own headless `claude` session with only
+// WebSearch and WebFetch. Each interest gets its own session so the doc that
+// scopes WHAT to look for reaches the model. Returns the session's
+// preamble-stripped markdown; the runner extracts the topic's section and
+// assembles the full brief across interests.
 export async function researchAndSynthesize(
   interest: ResearchInterest,
   opts: ResearchOptions = {},
 ): Promise<string> {
-  const claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ?? "claude";
-  const spawnImpl = opts.spawnFn ?? spawn;
-  const prompt = buildResearchPrompt(interest);
-  const timeoutMs = sessionTimeoutMs(opts.timeoutMs);
-
-  return await new Promise<string>((resolve, reject) => {
-    const child = spawnImpl(
-      claudeBin,
-      [
-        "--print",
-        "--output-format",
-        "text",
-        "--dangerously-skip-permissions",
-        "--allowed-tools",
-        ALLOWED_TOOLS,
-      ],
-      { stdio: ["pipe", "pipe", "pipe"] },
-    );
-
-    // De-prioritize the heavy child so it can't starve the loopback server.
-    if (child.pid !== undefined) {
-      try {
-        os.setPriority(child.pid, SYNTH_CHILD_NICENESS);
-      } catch {
-        // Not fatal — synthesis still runs, just without the niceness hedge.
-      }
-    }
-
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-
-    // Bounded per-session lifetime (PER-181). On expiry, kill the child and
-    // reject so a hung session degrades to one missing topic instead of wedging
-    // the whole run. SIGTERM first, then SIGKILL shortly after in case `claude`
-    // ignores the term (its own subprocesses/tools can swallow it). The kill is
-    // best-effort: a stub child in tests may have no real signal semantics.
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      try {
-        child.kill("SIGTERM");
-        setTimeout(() => {
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            /* already gone */
-          }
-        }, 2000).unref?.();
-      } catch {
-        /* already gone */
-      }
-      reject(
-        new Error(
-          `claude session for "${interest.topic}" timed out after ${timeoutMs}ms`,
-        ),
-      );
-    }, timeoutMs);
-
-    // Decode through a StringDecoder so a multi-byte UTF-8 char (em dash,
-    // accents, emoji — all common in real news markdown) split across two
-    // `data` chunks isn't mangled into replacement chars. Buffer.toString()
-    // per-chunk would corrupt any codepoint straddling a chunk boundary.
-    const outDecoder = new StringDecoder("utf8");
-    const errDecoder = new StringDecoder("utf8");
-    child.stdout!.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
-    child.stderr!.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
-    child.on("error", (e) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(
-        new Error(
-          `failed to spawn '${claudeBin}' — is the Claude Code CLI installed and on PATH? (${e.message})`,
-        ),
-      );
-    });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      // Flush any bytes the decoder buffered for an incomplete trailing char.
-      stdout += outDecoder.end();
-      stderr += errDecoder.end();
-      if (code !== 0) {
-        // The CLI reports some terminal failures on STDOUT, not stderr — e.g.
-        // a usage cap prints "You've hit your session limit · resets 8:40pm"
-        // there and exits 1 with stderr empty. That produced PER-280's
-        // undiagnosable `error_msg: "claude exited 1:"` across all six topics
-        // of the founder's 2026-07-15 manual run. Prefer stderr, fall back to
-        // stdout, so the actual cause reaches the brief's error_msg and the UI.
-        const detail = (stderr.trim() || stdout.trim()).slice(0, 400);
-        return reject(new Error(`claude exited ${code}: ${detail}`));
-      }
-      const text = stripBriefPreamble(stdout);
-      if (!text) return reject(new Error("claude returned empty output"));
-      resolve(text);
-    });
-
-    // A broken pipe — `claude` closing its stdin read-end before we finish
-    // writing the prompt, most likely on an immediate failure/usage-limit exit —
-    // emits an 'error' on this stream. With no listener that is an unhandled
-    // stream error that crashes the whole loopback server mid-run; the
-    // 'error'/'close'/timeout handlers above already settle this promise with the
-    // real cause, so log and swallow rather than change control flow.
-    child.stdin!.on("error", (e: Error) =>
-      console.error(`[research] claude stdin write failed:`, e.message),
-    );
-    child.stdin!.write(prompt);
-    child.stdin!.end();
+  const raw = await runClaude(buildResearchPrompt(interest), {
+    tools: "web-research",
+    label: `claude session for "${interest.topic}"`,
+    claudeBin: opts.claudeBin,
+    spawnFn: opts.spawnFn,
+    timeoutMs: opts.timeoutMs,
   });
+  const text = stripBriefPreamble(raw);
+  if (!text) throw new Error("claude returned empty output");
+  return text;
 }
 
 // Strip the `claude` CLI's conversational lead-in before the actual brief.

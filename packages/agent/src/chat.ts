@@ -5,13 +5,12 @@
 //   - refine/rename an existing interest's doc/topic,
 //   - delete an interest (+ its doc).
 //
-// We delegate the natural-language reasoning to a headless `claude` subprocess
-// the EXACT same delegated way research.ts does: we spawn the CLI and feed the
-// prompt over stdin. We NEVER read, env-pass, argv-pass, or forward the user's
-// `sk-ant-oat01-…` OAuth token — `claude` self-auths from
-// `~/.claude/credentials.json` (guarded by the PER-108 contract test).
+// We delegate the natural-language reasoning to a headless `claude` child
+// through claude-runner.ts, the same seam research uses: the prompt goes over
+// stdin and the CLI authenticates itself. The user's credentials never pass
+// through this process (the contract tests check argv, env and stdin).
 //
-// Unlike research, the subprocess touches NO filesystem and uses NO tools. It
+// Unlike research, the child gets NO tools at all and touches no files. It
 // only reasons over the interest snapshot we hand it and returns a structured
 // change set as JSON. THIS module is the trusted applier: it validates each
 // change against the current interest set, mints ids server-side (a model must
@@ -21,11 +20,9 @@
 // turn (CEO contract e81f2c2a) — and a created/deleted interest also lands in
 // `state.interests`, which a model editing files alone could never accomplish.
 
-import { spawn } from "node:child_process";
+import type { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { StringDecoder } from "node:string_decoder";
 import {
   loadState,
   saveState,
@@ -38,6 +35,7 @@ import {
   type PendingRewrite,
 } from "./state.js";
 import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
+import { runClaude } from "./claude-runner.js";
 // Shared with the POST/PUT /v0/interests validator — see limits.ts for why the
 // constant lives in a leaf module rather than next to either consumer.
 import { MAX_INTERESTS } from "./limits.js";
@@ -46,17 +44,6 @@ import {
   writeInterestDoc,
   deleteInterestDoc,
 } from "./docs.js";
-
-// No tools: the chat subprocess only reasons and returns JSON. We still pass
-// --dangerously-skip-permissions (as research does) so a stray tool attempt
-// can't hang waiting on an interactive permission prompt in --print mode; the
-// empty allow-list means there is nothing to invoke anyway.
-const ALLOWED_TOOLS = "";
-
-// Same niceness hedge as research.ts: keep the CPU-heavy child from starving the
-// single-threaded loopback event loop so polls/healthz stay responsive.
-const CHAT_CHILD_NICENESS = 10;
-
 
 export type ChatOptions = {
   claudeBin?: string;
@@ -404,155 +391,29 @@ export function buildChatPrompt(
   return lines.join("\n");
 }
 
-// Run the `claude` subprocess for one chat turn and parse its JSON output.
-// Bounded per-turn lifetime (AIR-540), mirroring research.ts's PER-181 session
-// timeout. Shares the SCOUT_SESSION_TIMEOUT_MS knob so one env var bounds every
-// `claude` child; a real chat turn is well under the 4-min default. Override
-// per-call via ChatOptions.timeoutMs (tests set it tiny).
-const DEFAULT_CHAT_TIMEOUT_MS = 4 * 60 * 1000;
-
-function chatTimeoutMs(override?: number): number {
-  if (override !== undefined && Number.isFinite(override) && override > 0) {
-    return override;
-  }
-  const env = Number(process.env.SCOUT_SESSION_TIMEOUT_MS);
-  return Number.isFinite(env) && env > 0 ? env : DEFAULT_CHAT_TIMEOUT_MS;
-}
-
-// Mirrors research.ts's delegated spawn (stdin prompt, niceness, error mapping)
-// but expects a JSON object back instead of brief markdown.
+// Run one chat turn through a tool-less `claude` child and parse its JSON
+// output. A Stop (opts.signal) kills the child and rejects with ChatStoppedError
+// so the turn lands stopped without applying changes.
 export async function chatComplete(
   message: string,
   snapshots: InterestSnapshot[],
   transcript: ChatTurn[] = [],
   opts: ChatOptions = {},
 ): Promise<ChatModelOutput> {
-  const claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ?? "claude";
-  const spawnImpl = opts.spawnFn ?? spawn;
-  const prompt = buildChatPrompt(message, snapshots, transcript);
-  const timeoutMs = chatTimeoutMs(opts.timeoutMs);
-
-  const raw = await new Promise<string>((resolve, reject) => {
-    if (opts.signal?.aborted) {
-      return reject(new ChatStoppedError());
-    }
-    const child = spawnImpl(
-      claudeBin,
-      [
-        "--print",
-        "--output-format",
-        "text",
-        "--dangerously-skip-permissions",
-        "--allowed-tools",
-        ALLOWED_TOOLS,
-      ],
-      { stdio: ["pipe", "pipe", "pipe"] },
-    );
-
-    if (child.pid !== undefined) {
-      try {
-        os.setPriority(child.pid, CHAT_CHILD_NICENESS);
-      } catch {
-        // Advisory only — proceed without the niceness hedge.
-      }
-    }
-
-    // Exactly one terminal outcome (close / error / abort / timeout). `settled`
-    // guards the timer↔close race so a child that both times out and later
-    // closes (or aborts then closes) can't double-settle or leave a dangling
-    // kill timer. The stub children in tests have no kill(); guard with `?.`.
-    let settled = false;
-    const kill = (sig: string) =>
-      (child as { kill?: (s?: string) => void }).kill?.(sig);
-
-    // Bounded per-turn lifetime (AIR-540), mirroring research.ts's PER-181 guard.
-    // Without it a hung `claude` child never emits `close`, so runChatTurn's
-    // `finally` never clears `chatInFlight` and every later /v0/chat*, confirm-
-    // delete, and confirm-rewrite returns 409 in_flight until the companion is
-    // restarted. On expiry: SIGTERM, then SIGKILL if it ignores the term, and
-    // reject so the turn lands `failed` and releases the in-flight guard.
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      opts.signal?.removeEventListener("abort", onAbort);
-      try {
-        kill("SIGTERM");
-        setTimeout(() => {
-          try {
-            kill("SIGKILL");
-          } catch {
-            /* already gone */
-          }
-        }, 2000).unref?.();
-      } catch {
-        /* already gone */
-      }
-      reject(new Error(`claude chat turn timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-
-    // PER-232: a Stop mid-round-trip kills the child and rejects immediately,
-    // so the caller can mark the turn stopped instead of waiting out the model.
-    const onAbort = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      kill("SIGTERM");
-      reject(new ChatStoppedError());
-    };
-    opts.signal?.addEventListener("abort", onAbort, { once: true });
-
-    let stdout = "";
-    let stderr = "";
-    // Decode through a StringDecoder so a multi-byte UTF-8 char (em dash,
-    // accents, emoji) split across two `data` chunks isn't mangled into
-    // replacement chars — chat replies and persisted intent docs carry such
-    // characters routinely. Per-chunk Buffer.toString() corrupts any codepoint
-    // straddling a chunk boundary.
-    const outDecoder = new StringDecoder("utf8");
-    const errDecoder = new StringDecoder("utf8");
-    child.stdout!.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
-    child.stderr!.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
-    child.on("error", (e) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      opts.signal?.removeEventListener("abort", onAbort);
-      reject(
-        new Error(
-          `failed to spawn '${claudeBin}' — is the Claude Code CLI installed and on PATH? (${e.message})`,
-        ),
-      );
+  let raw: string;
+  try {
+    raw = await runClaude(buildChatPrompt(message, snapshots, transcript), {
+      tools: "none",
+      label: "claude chat turn",
+      claudeBin: opts.claudeBin,
+      spawnFn: opts.spawnFn,
+      timeoutMs: opts.timeoutMs,
+      signal: opts.signal,
     });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      opts.signal?.removeEventListener("abort", onAbort);
-      // Flush any bytes the decoder buffered for an incomplete trailing char.
-      stdout += outDecoder.end();
-      stderr += errDecoder.end();
-      if (opts.signal?.aborted) return reject(new ChatStoppedError());
-      if (code !== 0)
-        return reject(
-          new Error(`claude exited ${code}: ${stderr.slice(0, 400)}`),
-        );
-      resolve(stdout);
-    });
-
-    // A broken pipe — `claude` closing its stdin read-end before we finish
-    // writing the multi-KB prompt, most likely when it exits immediately during
-    // an outage or usage-limit hit — emits an 'error' on this stream. With no
-    // listener that is an unhandled stream error that crashes the whole loopback
-    // server, abandoning every in-flight brief/chat. Log and swallow: the child's
-    // 'error'/'close' handlers above already settle this promise with the real
-    // cause (the non-zero exit), so no control-flow change is needed here.
-    child.stdin!.on("error", (e: Error) =>
-      console.error(`[chat] claude stdin write failed:`, e.message),
-    );
-    child.stdin!.write(prompt);
-    child.stdin!.end();
-  });
-
+  } catch (err) {
+    if (opts.signal?.aborted) throw new ChatStoppedError();
+    throw err;
+  }
   return parseChatOutput(raw);
 }
 

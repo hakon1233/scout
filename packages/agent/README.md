@@ -116,9 +116,11 @@ runner dependency).
 
 ## How research works
 
-On each `POST /v0/interests`, the companion spawns one headless `claude`
-subprocess with `--dangerously-skip-permissions` and `--allowed-tools
-WebSearch,WebFetch,Read,Write`, then pipes a prompt listing the user's
-interests. The model decides the queries, reads the pages it needs, and writes
-the brief markdown directly to stdout. The companion stores the result in
-`last_brief.summary_md`.
+For each run, the companion spawns one headless `claude` child per interest
+(`src/claude-runner.ts`). The child may use only WebSearch and WebFetch
+(`--tools WebSearch,WebFetch`), loads no MCP servers, runs in the temp
+directory and never bypasses permission checks, so a prompt-injected web page
+cannot reach a shell or your files. The model decides the queries, reads the
+pages it needs, and writes that interest's brief section to stdout. The chat
+child gets no tools at all. The companion assembles the sections and stores
+the result in `last_brief.summary_md`.
