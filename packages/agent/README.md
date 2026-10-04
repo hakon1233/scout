@@ -1,9 +1,8 @@
 # @scout/agent
 
 Local loopback companion for [Scout](https://github.com/hakon1233/scout). Runs an HTTP
-server on `127.0.0.1` only. The web app talks to it directly from your browser —
-there is no Supabase, no backend, no data leaving your machine except the
-outbound calls your local `claude` CLI makes on your behalf.
+server on `127.0.0.1` only and serves the Scout web app from that origin. No data
+leaves your machine except the calls your local `claude` CLI makes on your behalf.
 
 ## Why local
 
@@ -36,8 +35,8 @@ the host you opened it from.
 ## Use
 
 ```bash
-# one-time: generate a pairing token, paste it into the Scout Connect page.
-# Re-running reuses the stored token; nothing rotates.
+# one-time: generate a pairing token. The web app served by `run` picks it up by
+# itself; re-running reuses the stored token.
 scout-agent pair
 
 # rotate to a brand-new token (invalidates the old one — re-pair the browser after)
@@ -48,45 +47,41 @@ scout-agent run
 
 # check state
 scout-agent status
+
+# macOS: start at login so the daily brief survives a reboot
+scout-agent install-service
 ```
 
 ## Endpoints
 
-The companion exposes three endpoints, all bound to `127.0.0.1`:
+All bound to `127.0.0.1`. Shapes and paths are defined in `src/contract.ts`; the
+route table with each route's auth level is `src/routes/index.ts`.
 
-| Method | Path                     | Auth   | Body / Query                        |
-| ------ | ------------------------ | ------ | ----------------------------------- |
-| GET    | `/healthz`               | none   | —                                   |
-| GET    | `/v0/version`            | none   | release SHA, UI build ID, busy flag |
-| POST   | `/v0/interests`          | Bearer | `{ "interests": ["topic", ...] }`   |
-| GET    | `/v0/briefs?since=<iso>` | Bearer | —                                   |
+| Method         | Path                                                                   | Auth             | Purpose                                                                    |
+| -------------- | ---------------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------- |
+| GET            | `/healthz`, `/v0/version`                                              | none             | liveness; running version and build                                        |
+| GET            | `/v0/config`                                                           | same-origin page | hands the pairing token to the page the companion serves                   |
+| GET, PUT, POST | `/v0/interests`                                                        | Bearer           | read the interests with their intent docs; save them; save and start a run |
+| GET            | `/v0/briefs`                                                           | Bearer           | the latest brief (`?since=`) or the history (`?limit=&offset=`)            |
+| POST           | `/v0/weekly-brief`                                                     | Bearer           | assemble a weekly brief from the past week                                 |
+| GET, PUT       | `/v0/schedule`                                                         | Bearer           | the daily run's time and last result                                       |
+| GET, POST      | `/v0/chat`                                                             | Bearer           | the chat transcript; start a turn                                          |
+| POST           | `/v0/chat/stop`, `/v0/chat/confirm-delete`, `/v0/chat/confirm-rewrite` | Bearer           | stop a turn; confirm a proposed delete or rewrite                          |
 
-Auth is `Authorization: Bearer <pairing-token>`.
-
-For an already-migrated managed macOS companion, use `pnpm deploy:agent` from
-a clean repo at the pushed `origin/main` commit. It stages an immutable
-SHA-addressed package under Application Support and keeps launchd pointed at
-the stable `current` path; do not install launchd directly from a development
-workspace. The first legacy-to-immutable migration is a separately approved
-operation; `pnpm release:agent` safely stages its build without activation.
+Auth is `Authorization: Bearer <pairing-token>`. Releases of the companion are
+immutable, commit-named builds switched by `pnpm deploy:agent`
+(see `docs/adr/0003-immutable-companion-releases.md` at the repo root).
 
 ## State
 
-Everything lives at `~/.config/scout/state.json` (chmod 0600):
+Everything lives under `~/.config/scout/` (owner-only):
 
-```json
-{
-  "pairing_token": "…",
-  "last_brief": {
-    "id": "…",
-    "status": "ready",
-    "generated_at": "2026-05-24T12:00:00.000Z",
-    "summary_md": "# Your brief\n…"
-  }
-}
-```
+- `state.json`: the pairing token, interests, schedule, the latest brief and
+  the brief history;
+- `interests/<id>.md`: each interest's intent doc;
+- `chat/transcript.json`: the chat history.
 
-Delete the file to un-pair, or run `scout-agent pair --force` to rotate the token in place.
+Delete `state.json` to un-pair, or run `scout-agent pair --force` to rotate the token in place.
 
 ## Environment overrides
 
