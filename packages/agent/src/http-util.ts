@@ -141,12 +141,6 @@ export function json(
   res.end(JSON.stringify(body));
 }
 
-// Request-body cap, applied uniformly to every mutating /v0 route via
-// parseJsonBody below. Defined in limits.ts next to the interest count and
-// length it is derived from, and re-exported here so existing importers are
-// unaffected. (PER-137)
-export { MAX_BODY_BYTES };
-
 // Thrown by readBody when the request body exceeds MAX_BODY_BYTES, so the
 // handler can answer 413 instead of buffering an unbounded body into memory.
 export class BodyTooLargeError extends Error {

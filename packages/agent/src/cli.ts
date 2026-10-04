@@ -27,7 +27,8 @@ import {
   STATE_FILE,
   updateState,
 } from "./state.js";
-import { PKG_VERSION, defaultPort, startServer } from "./server.js";
+import { PKG_VERSION } from "./build-info.js";
+import { defaultPort, startServer } from "./server.js";
 import { Scheduler } from "./scheduler.js";
 import {
   installService,

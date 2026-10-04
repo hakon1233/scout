@@ -50,17 +50,6 @@ import { V0_ROUTES, V0_ROUTE_METHODS } from "./routes/index.js";
 import { handleHealthz } from "./routes/meta.js";
 import type { ServerContext } from "./routes/types.js";
 
-// Moved out of server.ts in the PER-274 decomposition; re-exported so existing
-// importers (cli, tests) keep their `./server.js` import path.
-export {
-  BodyTooLargeError,
-  MAX_BODY_BYTES,
-  isSameOriginCaller,
-} from "./http-util.js";
-export { PKG_VERSION } from "./build-info.js";
-export { MAX_CHAT_MESSAGE_LEN } from "./routes/chat.js";
-export { MAX_INTEREST_LEN, MAX_INTERESTS } from "./routes/interests.js";
-
 export function defaultPort(raw: string | undefined): number {
   if (raw === undefined) return 47821;
   const port = Number(raw);

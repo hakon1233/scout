@@ -16,7 +16,8 @@ import os from "node:os";
 import path from "node:path";
 import { saveState, loadState, newPairingToken, type State } from "../src/state.js";
 import type { Brief } from "../src/contract.js";
-import { isSameOriginCaller, startServer } from "../src/server.js";
+import { startServer } from "../src/server.js";
+import { isSameOriginCaller } from "../src/http-util.js";
 import { MAX_INTERESTS } from "../src/limits.js";
 
 async function makeStubClaude(): Promise<string> {

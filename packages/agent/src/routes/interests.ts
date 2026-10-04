@@ -17,12 +17,6 @@ import { json, jsonBodyParseError, parseJsonBody } from "../http-util.js";
 import { MAX_INTEREST_LEN, MAX_INTERESTS } from "../limits.js";
 import type { AuthedRequestContext, ServerContext } from "./types.js";
 
-// The interest-count and per-interest-length bounds, plus the request-size cap
-// they feed, all live in limits.ts so the arithmetic between them stays in one
-// place. Re-exported here because server.ts and the routes import it from this
-// module. (PER-137)
-export { MAX_INTEREST_LEN, MAX_INTERESTS };
-
 type InterestParse =
   | { ok: true; interests: string[] }
   | { ok: false; status: number; error: string };

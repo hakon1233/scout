@@ -17,11 +17,6 @@ import { CONFIG_DIR, atomicWriteFile, readJsonFile } from "./persistence.js";
 
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
 
-// Re-exported from persistence.ts (CAR-244) so existing `from "./state.js"`
-// imports of these generic primitives keep working after the move; new call
-// sites should import them from persistence.ts directly.
-export { CONFIG_DIR, atomicWriteFile };
-
 // Persisted recurring-schedule config for the in-process scheduler (PER-151).
 // `enabled` + `time_of_day` are user-writable (Settings UI / PUT /v0/schedule);
 // the `last_run_*` / `next_run_at` fields are telemetry the scheduler maintains

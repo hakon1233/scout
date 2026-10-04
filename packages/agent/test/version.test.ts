@@ -16,7 +16,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { saveState, newPairingToken } from "../src/state.js";
-import { startServer, PKG_VERSION } from "../src/server.js";
+import { startServer } from "../src/server.js";
+import { PKG_VERSION } from "../src/build-info.js";
 
 async function seeded() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-version-"));
