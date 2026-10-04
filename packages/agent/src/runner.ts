@@ -124,6 +124,10 @@ export type RunOptions = {
   // The transient `last_brief` slot is still written (callers poll it for the
   // result); briefs are derived, not authored, and regenerate on the next run.
   ephemeral?: boolean;
+  // The saved list `interests` was computed from. Interests created or deleted
+  // since (by the chat, say) are kept that way when the run saves its list,
+  // instead of being reverted.
+  replaces?: Interest[];
 };
 
 export type RunOutcome =
@@ -163,6 +167,24 @@ function isStalePending(brief: Brief | undefined, now: number): boolean {
   const startedAt = Date.parse(brief.generated_at);
   if (!Number.isFinite(startedAt)) return true; // unparseable → treat as dead.
   return now - startedAt > STALE_PENDING_MS;
+}
+
+// The list a run saves: `wanted`, minus interests deleted since `base` was read
+// and plus those created since, so a concurrent edit is not reverted.
+function keepChangesSince(
+  wanted: Interest[],
+  base: Interest[] | undefined,
+  current: Interest[],
+): Interest[] {
+  if (!base) return wanted;
+  const baseIds = new Set(base.map((i) => i.id));
+  const currentIds = new Set(current.map((i) => i.id));
+  const kept = wanted.filter((i) => !baseIds.has(i.id) || currentIds.has(i.id));
+  const keptIds = new Set(kept.map((i) => i.id));
+  const created = current.filter(
+    (i) => !baseIds.has(i.id) && !keptIds.has(i.id),
+  );
+  return [...kept, ...created];
 }
 
 // Begin a synthesis run for `interests`. Persists the interests (so the
@@ -282,7 +304,9 @@ export async function startRun(
   try {
     await updateState(deps.stateFile, (s) => ({
       ...s,
-      interests: ephemeral ? s.interests : interests,
+      interests: ephemeral
+        ? s.interests
+        : keepChangesSince(interests, opts.replaces, s.interests ?? []),
       last_brief: pending,
     }));
 

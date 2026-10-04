@@ -227,3 +227,26 @@ test("a failed startup save resets runInFlight so the slot stays reclaimable", a
     "the slot was reclaimable after the failure",
   );
 });
+
+test("a run started from an older list keeps interests changed since", async () => {
+  const stateFile = await tmpStateFile();
+  const a = { id: "int_a", topic: "ai" };
+  const b = { id: "int_b", topic: "golf" };
+  const c = { id: "int_c", topic: "chess" };
+  // The request was checked against [a, b]; since then the chat deleted b
+  // and created c.
+  await saveState({ interests: [a, c] }, stateFile);
+
+  const { spawnFn } = makeFastSpawn();
+  const done = new Promise<Brief>((resolve) => {
+    void startRun(
+      [a, b],
+      { stateFile, spawnFn, onSynthesisDone: (brief) => resolve(brief) },
+      "on_demand",
+      { replaces: [a, b] },
+    );
+  });
+  await done;
+
+  assert.deepEqual((await loadState(stateFile)).interests, [a, c]);
+});

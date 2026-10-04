@@ -234,7 +234,9 @@ export class Scheduler {
     const state = await loadState(this.deps.stateFile);
     const interests = state.interests ?? [];
 
-    const opts: RunOptions = {};
+    // A scheduled run saves back the list it read, so it must not revert an
+    // edit that lands while it starts.
+    const opts: RunOptions = { replaces: interests };
     if (isRetry) {
       const missing = missingTopics(state.last_brief);
       // Only a ready-but-partial brief has a base to merge a focused retry into.

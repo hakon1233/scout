@@ -244,7 +244,7 @@ export async function handlePostInterests(
       onSynthesisDone: sc.onSynthesisDone,
     },
     "on_demand",
-    { retryTopics, selectedTopics, ephemeral },
+    { retryTopics, selectedTopics, ephemeral, replaces: fresh.interests ?? [] },
   );
   if (!outcome.started) {
     // A retry asked for but there's no prior brief to merge into → tell
