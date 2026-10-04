@@ -5,11 +5,6 @@ import { getLocalStorage, safeSetItem } from "./safe-storage";
 
 const SETTINGS_KEY = "scout.settings.v1";
 const BRIEF_KEY = "scout.lastBrief.v1";
-// Legacy one-deep brief archive key (PER-146). The client-side prevBrief
-// rotation was removed (PER-219); no code reads or writes this anymore. Retained
-// only so clearSettings() purges any value left over in older installs.
-const PREV_BRIEF_KEY = "scout.prevBrief.v1";
-
 function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null;
   try {
@@ -115,16 +110,4 @@ export function loadLastBrief(): Brief | null {
 
 export function saveLastBrief(b: Brief): void {
   safeSet(BRIEF_KEY, JSON.stringify(b));
-}
-
-export function clearLastBrief(): void {
-  getLocalStorage()?.removeItem(BRIEF_KEY);
-}
-
-export function clearSettings(): void {
-  const storage = getLocalStorage();
-  if (!storage) return;
-  storage.removeItem(SETTINGS_KEY);
-  storage.removeItem(BRIEF_KEY);
-  storage.removeItem(PREV_BRIEF_KEY);
 }

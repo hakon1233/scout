@@ -47,13 +47,6 @@ export function interestKey(i: Interest): string {
   );
 }
 
-// Deep-link into the per-interest chat / doc editor owned by C5 (PER-155).
-// Query-based so it needs no dynamic-route entry in the static export; C5 will
-// add `src/app/app/interest/page.tsx` and read `?id`.
-export function interestEditorHref(i: Interest): string {
-  return `/app/interest?id=${encodeURIComponent(interestKey(i))}`;
-}
-
 // The companion's topic list, in its order, reusing the local record (for its
 // id) when a topic matches case-insensitively. A topic with no local record
 // gets its key as id.
@@ -133,17 +126,6 @@ export async function fetchCompanionInterestSet(
   const topics = await fetchCompanionInterests();
   if (topics.length === 0) return null;
   return { interests: mergeInterests(local, topics), meta: {} };
-}
-
-// Fetch doc metadata keyed by interestKey. Returns {} (→ every interest reads
-// as "no doc yet") whenever the companion isn't serving us or the read fails.
-// Thin wrapper over `fetchInterestsFull` kept for callers that only need the
-// metadata map (e.g. the read-only profile row before the chat workbench).
-export async function fetchInterestDocMeta(
-  token: string,
-): Promise<Record<string, InterestDocMeta>> {
-  const full = await fetchInterestsFull(token);
-  return full?.meta ?? {};
 }
 
 // Synthetic doc metadata for design/QA review of the indicator's two states

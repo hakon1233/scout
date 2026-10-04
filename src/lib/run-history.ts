@@ -43,29 +43,6 @@ function slugMatches(a: string, b: string): boolean {
   return singularizeSlug(a) === singularizeSlug(b);
 }
 
-// Dedupe the available briefs by id and order them newest-run-first. Nullish
-// entries (no cached brief yet) are dropped.
-export function orderedRuns(
-  briefs: ReadonlyArray<Brief | null | undefined>,
-): Brief[] {
-  const seen = new Set<string>();
-  const out: Brief[] = [];
-  for (const b of briefs) {
-    if (!b || seen.has(b.id)) continue;
-    seen.add(b.id);
-    out.push(b);
-  }
-  return out.sort((x, y) => {
-    const tx = Date.parse(x.generatedAt);
-    const ty = Date.parse(y.generatedAt);
-    // Unparseable dates sort last but keep a stable order otherwise.
-    if (Number.isNaN(tx) && Number.isNaN(ty)) return 0;
-    if (Number.isNaN(tx)) return 1;
-    if (Number.isNaN(ty)) return -1;
-    return ty - tx;
-  });
-}
-
 // For one interest topic, the per-run story lists (newest run first). Runs where
 // the interest produced no articles are omitted — an empty run carries no signal
 // for the card and would just add noise.

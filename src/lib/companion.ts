@@ -314,53 +314,15 @@ export async function postInterests(
   // Focused-retry (PER-154): when set, the companion re-researches ONLY these
   // topics and merges them into the prior brief instead of regenerating it all.
   retryTopics?: string[],
-  // Run-selector (C6/PER-173): when set, research ONLY this subset and produce a
-  // fresh brief over just those topics. `interests` still carries the FULL list
-  // so the companion's saved set (the scheduler's source of truth) is unchanged.
-  selectedTopics?: string[],
 ): Promise<{ brief_id: string; status: string }> {
-  const body: {
-    interests: string[];
-    retry_topics?: string[];
-    selected_topics?: string[];
-  } = { interests };
+  const body: { interests: string[]; retry_topics?: string[] } = { interests };
   if (retryTopics && retryTopics.length > 0) body.retry_topics = retryTopics;
-  if (selectedTopics && selectedTopics.length > 0)
-    body.selected_topics = selectedTopics;
   return companionJson(PATHS.interests, {
     token,
     method: "POST",
     body,
     timeoutMs: 10_000,
     failure: "Couldn't start the run",
-  });
-}
-
-// Persist the user's interests to the companion (state.json) WITHOUT kicking a
-// synthesis run — the "save my profile" action (PER-160). Distinct from
-// `postInterests`, which also runs a ~5-min brief. Best-effort: callers use this
-// so a profile edit sticks server-side (and survives for the headless scheduler)
-// even if the user doesn't immediately Run now. Throws the companion's
-// human-readable error on non-2xx so the caller can surface it.
-export async function saveInterests(
-  interests: string[],
-  token: string,
-  // Wipe-guard token (PER-240): the companion's PUT is replace-all and 409s any
-  // payload that would drop a currently-saved interest. A caller making a
-  // deliberate, user-confirmed removal must pass true; additive saves never
-  // need it.
-  confirmReplace?: boolean,
-): Promise<{ interests: string[]; status: string }> {
-  const body: { interests: string[]; confirm_replace?: boolean } = {
-    interests,
-  };
-  if (confirmReplace) body.confirm_replace = true;
-  return companionJson(PATHS.interests, {
-    token,
-    method: "PUT",
-    body,
-    timeoutMs: 8_000,
-    failure: "Couldn't save interests",
   });
 }
 
@@ -548,15 +510,8 @@ export async function pollBriefsRaw(
   return json.briefs ?? [];
 }
 
-// Per-topic client budget. research.ts's actual hard per-session cap
-// (DEFAULT_SESSION_TIMEOUT_MS) is 4 min, but live measurement during the
-// PER-267 investigation showed a real 6-topic run taking 32m40s wall-clock
-// end to end (the companion box runs several concurrent agent processes, so
-// the parent's kill-timer and the child session itself both see real
-// scheduling jitter beyond the nominal per-session cap) — comfortably over
-// what (topics × 4min) alone would predict. Budget 6 min/topic so the derived
-// deadline keeps real headroom over that observed number rather than being a
-// tight theoretical bound.
+// Each research session may run 4 minutes (research.ts), but on a busy machine
+// a real six-topic run took 32m40s; 6 minutes per topic leaves headroom.
 const PER_TOPIC_SESSION_BUDGET_MS = 6 * 60 * 1000;
 
 // Kick a synthesis pass on the companion and poll until a fresh brief
@@ -571,45 +526,25 @@ export async function refreshBriefViaCompanion(
     // Focused-retry (PER-154): re-research only these topics, merge into the
     // prior brief. Must be a subset of `interests`.
     retryTopics?: string[];
-    // Run-selector (C6/PER-173): research only this subset and produce a fresh
-    // brief over just those topics. Must be a subset of `interests`.
-    selectedTopics?: string[];
     // Called once the companion accepts the run, with how long we will wait.
     onStarted?: (waitMs: number) => void;
   } = {},
 ): Promise<AppBrief> {
   const since = opts.sinceTs ?? new Date(0).toISOString();
-  // The companion researches interests ONE AT A TIME, in its own `claude`
-  // session per topic (runner.ts: "Sequential, not concurrent"), each allowed
-  // up to PER_TOPIC_SESSION_BUDGET_MS before being killed as a hung-session
-  // guard (PER-181). A flat client deadline was already an approximation
-  // (PER-157 raised it from 120s to 300s because "a full 6-topic pass
-  // routinely runs past two minutes"), but PER-265's deeper per-paragraph
-  // detail bar (950-word cap, 3-5 follow-on paragraphs each needing a
-  // concrete checkable fact) measurably lengthened real per-topic session
-  // time — pushing a healthy, still-working multi-topic run past a flat 300s
-  // and surfacing as a false "Timed out waiting for the companion brief."
-  // (PER-267), even though the companion was up and the run eventually would
-  // have finished. Scale the deadline to the number of topics THIS run
-  // actually researches (a retry/selected-subset run researches fewer than
-  // the full interest list), with one extra topic's budget as buffer for
-  // brief assembly + freshness enforcement + polling overhead. Floor at 300s
-  // so a 1-2 topic run keeps the original PER-157 headroom.
+  // The companion researches one topic at a time, and a real six-topic run
+  // has taken over 30 minutes. Wait PER_TOPIC_SESSION_BUDGET_MS per researched
+  // topic plus one for assembly, and at least 5 minutes.
   const researchedTopicCount =
     opts.retryTopics && opts.retryTopics.length > 0
       ? opts.retryTopics.length
-      : opts.selectedTopics &&
-          opts.selectedTopics.length > 0 &&
-          opts.selectedTopics.length < interests.length
-        ? opts.selectedTopics.length
-        : interests.length;
+      : interests.length;
   const scaledDeadlineMs = Math.max(
     300_000,
     (researchedTopicCount + 1) * PER_TOPIC_SESSION_BUDGET_MS,
   );
   const waitMs = opts.timeoutMs ?? scaledDeadlineMs;
   const deadline = Date.now() + waitMs;
-  await postInterests(interests, token, opts.retryTopics, opts.selectedTopics);
+  await postInterests(interests, token, opts.retryTopics);
   opts.onStarted?.(waitMs);
   let pollErrorLogged = false;
   while (Date.now() < deadline) {

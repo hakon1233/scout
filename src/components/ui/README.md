@@ -65,18 +65,6 @@ Live in `src/components/ui/`. Re-exported from `src/components/ui/index.ts`.
 - `loading`: inline spinner, disables the button, sets `aria-busy`
 - Renders a real `<button>`. For navigation, use `<Link>` with the same visual classes (see `src/app/page.tsx`).
 
-### `<Field>`
-
-```tsx
-<Field label="Your name" value={...} onChange={...} helper="optional" />
-<Field as="textarea" label="Interests" error="Add one" ... />
-```
-
-- Wraps `<input>` or `<textarea>` (`as="textarea"`).
-- Wires `htmlFor` / `id`, `aria-invalid`, and `aria-describedby` for helper + error.
-- Error state uses `--danger-border` automatically.
-- Focus ring uses `--focus-ring`.
-
 ### `<Banner>`
 
 ```tsx

@@ -183,14 +183,6 @@ export function toggleLike(input: LikeInput): boolean {
   return liked;
 }
 
-export function removeLike(key: string): void {
-  const store = read();
-  if (!(key in store.likes)) return;
-  const likes = { ...store.likes };
-  delete likes[key];
-  write({ version: 1, likes });
-}
-
 // --- React hooks -----------------------------------------------------------
 
 function useStore(): LikesStore {

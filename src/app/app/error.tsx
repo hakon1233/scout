@@ -26,7 +26,6 @@ export default function AppError({
           <ErrorBanner
             error={{
               ...classified,
-              provider: "app",
               message:
                 "Scout hit an unexpected rendering error. Your saved brief and settings are still safe.",
             }}

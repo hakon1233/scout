@@ -222,7 +222,7 @@ export default function AppPage() {
   // The companion runs the local `claude` CLI over the loopback server, so
   // there are no API keys and no cross-origin calls.
   const generate = useCallback(
-    async (opts?: { retryTopics?: string[]; selectedTopics?: string[] }) => {
+    async (opts?: { retryTopics?: string[] }) => {
       if (!settings) return;
       const allTopics = settings.interests.map((i) => i.topic);
       // Only honor a retry subset that's still in the current interest list; the
@@ -231,19 +231,6 @@ export default function AppPage() {
         allTopics.includes(t),
       );
       const isRetry = retryTopics.length > 0;
-      // Run-selector subset (C6/PER-173): a STRICT subset of the interest list,
-      // ignored on a retry (which carries its own subset) and collapsed to a
-      // full run when it covers everything. The companion mirrors this gate.
-      const selectedTopics = (opts?.selectedTopics ?? []).filter((t) =>
-        allTopics.includes(t),
-      );
-      const isSelected =
-        !isRetry &&
-        selectedTopics.length > 0 &&
-        selectedTopics.length < allTopics.length;
-      // The topics this run actually researches — drives the progress panel so
-      // it shows only the sessions that will fire.
-      const runningTopics = isSelected ? selectedTopics : allTopics;
       const token = loadCompanionToken();
       if (!token) {
         setError(classifyError(new Error(COMPANION_NOT_PAIRED_MSG)));
@@ -268,13 +255,10 @@ export default function AppPage() {
         stage: "synthesizing",
         message: isRetry
           ? `Companion is re-researching ${retryTopics.length} topic${retryTopics.length === 1 ? "" : "s"}…`
-          : isSelected
-            ? `Companion is fetching ${selectedTopics.length} of ${allTopics.length} topics…`
-            : "Companion is fetching & synthesizing your brief…",
+          : "Companion is fetching & synthesizing your brief…",
         // On a focused retry, only the retried topics are "working"; the rest are
-        // carried over from the prior brief, so show them as already done. On a
-        // selected run, only the chosen topics fire at all — show just those.
-        perInterest: runningTopics.map((topic) => ({
+        // carried over from the prior brief, so show them as already done.
+        perInterest: allTopics.map((topic) => ({
           topic,
           state: isRetry && !retryTopics.includes(topic) ? "done" : "pending",
         })),
@@ -282,15 +266,14 @@ export default function AppPage() {
       try {
         const since = brief?.generatedAt ?? new Date(0).toISOString();
         const next = await refreshBriefViaCompanion(
-          // Always send the FULL interest list — the companion persists it as the
-          // scheduler's source of truth; `selectedTopics` only narrows THIS run.
+          // Always send the FULL interest list: the companion persists it as the
+          // scheduler's source of truth.
           allTopics,
           token,
           {
             sinceTs: since,
             signal: controller.signal,
             retryTopics: isRetry ? retryTopics : undefined,
-            selectedTopics: isSelected ? selectedTopics : undefined,
           },
         );
         // Per-topic status rides along on `next.topics` from the companion — no
@@ -327,10 +310,8 @@ export default function AppPage() {
   }, [brief, generate]);
 
   // Zero-arg wrapper for UI handler props (profile-menu Run-now / onRetry).
-  // `generate` takes an optional `{ retryTopics, selectedTopics }`, so binding it
-  // directly to a DOM event handler would forward the MouseEvent as that argument
-  // (and fail strict type-checking). PER-219: the run-scope selector was removed
-  // (AC5) — Run-now always fires a full pass over the saved interest list.
+  // `generate` takes an optional `{ retryTopics }`, so binding it directly to a
+  // DOM event handler would forward the MouseEvent as that argument.
   const runNow = useCallback(() => {
     void generate();
   }, [generate]);
