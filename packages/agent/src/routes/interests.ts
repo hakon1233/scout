@@ -6,8 +6,8 @@
 
 import {
   loadState,
-  saveState,
   reconcileInterests,
+  updateState,
   interestTopics,
   type State,
 } from "../state.js";
@@ -143,28 +143,23 @@ export async function handlePutInterests(
   const validated = parseInterestsPayload(parsed.interests);
   if (!validated.ok)
     return json(res, validated.status, { error: validated.error }, cors);
-  // Reload the state fresh AFTER the (network-bound) body read, and spread THIS
-  // snapshot — not the auth-time `state` the router loaded before parseJsonBody.
-  // A brief run, chat turn, or scheduler reschedule can complete during the body
-  // read and write last_brief/briefs/last_chat/schedule; spreading the stale
-  // auth-time snapshot would silently revert those concurrent writes (e.g. drop a
-  // brief that just finished). Mirrors the reload-before-persist the runner
-  // (runner.ts) and chat (chat.ts) paths already use. The remaining window (fresh
-  // load → save, both below with no await between) is effectively zero (AIR-107).
-  const fresh = await loadState(sc.stateFile);
-  // Wipe guard (PER-240): PUT is replace-all, so a payload missing any
-  // currently-saved topic is destructive. Refuse it unless the caller
-  // explicitly confirms — additive edits (same set or supersets) pass
-  // through untouched.
-  const dropped = droppedTopics(fresh.interests, validated.interests);
+  // PUT is replace-all, so a payload missing a saved topic is destructive: it
+  // is refused unless the caller confirms. Both the check and the write run
+  // against the state on disk now, not the router's auth-time snapshot. Ids
+  // of kept topics are preserved so their intent docs stay attached; the
+  // response stays a topic list.
+  let dropped: string[] = [];
+  await updateState(sc.stateFile, (state) => {
+    dropped = droppedTopics(state.interests, validated.interests);
+    if (dropped.length > 0 && parsed.confirm_replace !== true) return state;
+    return {
+      ...state,
+      interests: reconcileInterests(state.interests, validated.interests),
+    };
+  });
   if (dropped.length > 0 && parsed.confirm_replace !== true) {
     return json(res, 409, wipeGuardError(dropped), cors);
   }
-  // Persist the rich {id, topic} model, preserving each existing topic's
-  // id so its intent doc stays attached across an edit (PER-169). The
-  // wire response stays a topic string[] for back-compat.
-  const interests = reconcileInterests(fresh.interests, validated.interests);
-  await saveState({ ...fresh, interests }, sc.stateFile);
   json(res, 200, { interests: validated.interests, status: "saved" }, cors);
 }
 

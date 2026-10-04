@@ -19,7 +19,14 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadState, newBriefId, saveState, interestTopics, BRIEF_HISTORY_CAP, type ScheduleConfig } from "./state.js";
+import {
+  BRIEF_HISTORY_CAP,
+  interestTopics,
+  loadState,
+  newBriefId,
+  updateState,
+  type ScheduleConfig,
+} from "./state.js";
 import type { Brief, Interest } from "./contract.js";
 import { researchAndSynthesize } from "./research.js";
 import {
@@ -264,8 +271,6 @@ export async function startRun(
   // `state.interests` verbatim (leaving it absent if it was absent) instead of the
   // run's topic set — a test/QA payload can research arbitrary topics without
   // shrinking or replacing the saved list.
-  const persistedInterests = ephemeral ? state.interests : interests;
-
   // We hold `runInFlight` from line 221 (claimed synchronously, before the first
   // await, so a second startRun can't race in and double-start). But until
   // runSynthesis takes ownership of clearing the flag in its finally, any throw
@@ -275,10 +280,11 @@ export async function startRun(
   // early failure so the slot stays reclaimable, then rethrow to the caller.
   let runDeps = deps;
   try {
-    await saveState(
-      { ...state, interests: persistedInterests, last_brief: pending },
-      deps.stateFile,
-    );
+    await updateState(deps.stateFile, (s) => ({
+      ...s,
+      interests: ephemeral ? s.interests : interests,
+      last_brief: pending,
+    }));
 
     // Redirect the lazy intent-doc backfill to a throwaway dir for ephemeral runs
     // so researching a test topic never creates/overwrites a real
@@ -471,42 +477,39 @@ async function runSynthesis(
   }
 
   try {
-    // Reload to avoid clobbering a concurrent schedule reschedule() that may
-    // have written next_run_at while synthesis was running.
-    const fresh = await loadState(deps.stateFile);
-    let schedule = fresh.schedule;
-    if (source === "scheduled" && schedule) {
-      schedule = {
-        ...schedule,
-        last_run_at: brief.generated_at,
-        last_run_status: brief.status === "ready" ? "success" : "failed",
-        last_run_note: brief.status === "failed" ? brief.error_msg : undefined,
-      };
-    }
-    // Roll the brief history (PER-219). A READY brief from a NON-ephemeral run is
-    // pushed newest-first and capped; pending/failed briefs and ephemeral/QA runs
-    // (which must never mutate saved state, PER-218 — detected via the throwaway
-    // interests dir) leave the history untouched. Seed the history with the brief
-    // being replaced the first time we append, so an existing companion that
-    // upgraded into this feature immediately has one "previous edition" to show
-    // instead of an empty history that only fills going forward.
-    let briefs = fresh.briefs;
-    if (brief.status === "ready" && !isEphemeral) {
-      const seed =
-        briefs === undefined &&
-        fresh.last_brief?.status === "ready" &&
-        fresh.last_brief.id !== brief.id
-          ? [fresh.last_brief]
-          : (briefs ?? []);
-      briefs = [brief, ...seed.filter((b) => b.id !== brief.id)].slice(
-        0,
-        BRIEF_HISTORY_CAP,
-      );
-    }
-    await saveState(
-      { ...fresh, last_brief: brief, briefs, schedule },
-      deps.stateFile,
-    );
+    await updateState(deps.stateFile, (fresh) => {
+      let schedule = fresh.schedule;
+      if (source === "scheduled" && schedule) {
+        schedule = {
+          ...schedule,
+          last_run_at: brief.generated_at,
+          last_run_status: brief.status === "ready" ? "success" : "failed",
+          last_run_note:
+            brief.status === "failed" ? brief.error_msg : undefined,
+        };
+      }
+      // Roll the brief history (PER-219). A READY brief from a NON-ephemeral run is
+      // pushed newest-first and capped; pending/failed briefs and ephemeral/QA runs
+      // (which must never mutate saved state, PER-218 — detected via the throwaway
+      // interests dir) leave the history untouched. Seed the history with the brief
+      // being replaced the first time we append, so an existing companion that
+      // upgraded into this feature immediately has one "previous edition" to show
+      // instead of an empty history that only fills going forward.
+      let briefs = fresh.briefs;
+      if (brief.status === "ready" && !isEphemeral) {
+        const seed =
+          briefs === undefined &&
+          fresh.last_brief?.status === "ready" &&
+          fresh.last_brief.id !== brief.id
+            ? [fresh.last_brief]
+            : (briefs ?? []);
+        briefs = [brief, ...seed.filter((b) => b.id !== brief.id)].slice(
+          0,
+          BRIEF_HISTORY_CAP,
+        );
+      }
+      return { ...fresh, last_brief: brief, briefs, schedule };
+    });
   } finally {
     // An ephemeral run's intent docs live in a throwaway dir (PER-218) — remove it
     // so its default backfills never accumulate. Best-effort: a failed cleanup
@@ -540,13 +543,14 @@ export async function recordScheduledSkip(
   note: string,
   whenIso: string,
 ): Promise<void> {
-  const state = await loadState(stateFile);
-  if (!state.schedule) return;
-  const schedule: ScheduleConfig = {
-    ...state.schedule,
-    last_run_at: whenIso,
-    last_run_status: "skipped",
-    last_run_note: note,
-  };
-  await saveState({ ...state, schedule }, stateFile);
+  await updateState(stateFile, (state) => {
+    if (!state.schedule) return state;
+    const schedule: ScheduleConfig = {
+      ...state.schedule,
+      last_run_at: whenIso,
+      last_run_status: "skipped",
+      last_run_note: note,
+    };
+    return { ...state, schedule };
+  });
 }

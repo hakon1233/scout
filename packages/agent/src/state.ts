@@ -264,14 +264,16 @@ const writeQueues = new Map<string, Promise<unknown>>();
 // disk at that moment and returns the next state; calls for the same file
 // never interleave, so no writer can save over another's change with a stale
 // copy. Keep `change` synchronous and free of I/O: it runs inside the queue.
+// Returning the given state object unchanged skips the write.
 export async function updateState(
   file: string,
   change: (state: State) => State,
 ): Promise<State> {
   const previous = writeQueues.get(file) ?? Promise.resolve();
   const run = previous.then(async () => {
-    const next = change(await loadState(file));
-    await saveState(next, file);
+    const current = await loadState(file);
+    const next = change(current);
+    if (next !== current) await saveState(next, file);
     return next;
   });
   const tail = run.catch(() => undefined);

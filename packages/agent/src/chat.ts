@@ -23,8 +23,19 @@
 import type { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { loadState, saveState, newChatTurnId, newInterestId } from "./state.js";
-import type { ChatChange, ChatTurn, Interest, PendingDelete, PendingRewrite } from "./contract.js";
+import {
+  loadState,
+  newChatTurnId,
+  newInterestId,
+  updateState,
+} from "./state.js";
+import type {
+  ChatChange,
+  ChatTurn,
+  Interest,
+  PendingDelete,
+  PendingRewrite,
+} from "./contract.js";
 import {
   assertNotRealStateUnderTest,
   atomicWriteFile,
@@ -135,7 +146,10 @@ async function preserveCorruptTranscript(file: string): Promise<void> {
       `[chat] transcript ${file} was corrupt; preserved at ${backup} and started fresh`,
     );
   } catch (err) {
-    console.error(`[chat] transcript ${file} was corrupt and could not be backed up:`, err);
+    console.error(
+      `[chat] transcript ${file} was corrupt and could not be backed up:`,
+      err,
+    );
   }
 }
 
@@ -338,7 +352,7 @@ export function buildChatPrompt(
     "    still has to press [Delete] on a confirmation card. So when your changes include",
   );
   lines.push(
-    '    a `delete`, phrase `reply` as a PENDING REQUEST, never as a completed action.',
+    "    a `delete`, phrase `reply` as a PENDING REQUEST, never as a completed action.",
   );
   lines.push(
     `    Say e.g. "Delete \\"X\\"? Confirm below — this would bring you to N of ${MAX_INTERESTS} interests."`,
@@ -349,7 +363,9 @@ export function buildChatPrompt(
   lines.push(
     "    delete turn; the interest is still there until the user confirms. Create/update",
   );
-  lines.push("    apply immediately, so for those a done-style reply is correct.");
+  lines.push(
+    "    apply immediately, so for those a done-style reply is correct.",
+  );
   lines.push(
     "- A `rewrite` is for a FULL from-scratch replacement of an interest's doc — the",
   );
@@ -369,7 +385,7 @@ export function buildChatPrompt(
     "    COMPLETE proposed document. When your changes include a `rewrite`, phrase",
   );
   lines.push(
-    '    `reply` as a PENDING PROPOSAL, never as a completed action. Say e.g. "Here\'s',
+    "    `reply` as a PENDING PROPOSAL, never as a completed action. Say e.g. \"Here's",
   );
   lines.push(
     '    a full rewrite of \\"X\\" — review the diff and Apply below." NEVER claim it is',
@@ -380,9 +396,7 @@ export function buildChatPrompt(
   lines.push(
     "    until the user applies. Reserve `update` for incremental refinements the user",
   );
-  lines.push(
-    "    asked to make directly — those still apply immediately.",
-  );
+  lines.push("    asked to make directly — those still apply immediately.");
   lines.push("- Do not use any tools. Output only the JSON object.");
   return lines.join("\n");
 }
@@ -653,7 +667,7 @@ export async function startChatTurn(
     message: trimmed,
   };
   try {
-    await saveState({ ...state, last_chat: pending }, deps.stateFile);
+    await updateState(deps.stateFile, (s) => ({ ...s, last_chat: pending }));
   } catch (err) {
     chatInFlight = false;
     throw err;
@@ -712,7 +726,7 @@ export async function confirmDeleteTurn(
     // between the two loads. Applying against `fresh` also makes a double-confirm
     // safe: the second call finds the interest already gone and 404s.
     const fresh = await loadState(deps.stateFile);
-    const { interests, applied } = await applyConfirmedDelete(
+    const { applied } = await applyConfirmedDelete(
       fresh.interests ?? [],
       interestId,
       deps.interestsDir,
@@ -728,7 +742,11 @@ export async function confirmDeleteTurn(
       changes: [applied],
     };
 
-    await saveState({ ...fresh, interests, last_chat: turn }, deps.stateFile);
+    await updateState(deps.stateFile, (s) => ({
+      ...s,
+      interests: replayChanges(s.interests ?? [], [applied]),
+      last_chat: turn,
+    }));
     // The delete is already durable in state.last_chat above; the transcript is a
     // secondary append-only record. A transient write failure here must NOT turn a
     // committed delete into a route-level 500 — the client's retry would 404 (the
@@ -797,12 +815,10 @@ export async function confirmRewriteTurn(
       changes: [applied],
     };
 
-    // Reload before persisting so we don't clobber a concurrent writer (e.g. the
-    // scheduler updating next_run_at), exactly as runChatTurn does. The new turn
-    // replaces the proposal turn in the slot, so the pending_rewrite can't be
-    // re-applied later from a stale card (a second confirm 404s).
-    const fresh = await loadState(deps.stateFile);
-    await saveState({ ...fresh, last_chat: turn }, deps.stateFile);
+    // The new turn replaces the proposal turn in the slot, so the
+    // pending_rewrite can't be re-applied later from a stale card (a second
+    // confirm 404s).
+    await updateState(deps.stateFile, (s) => ({ ...s, last_chat: turn }));
     // The rewrite is already durable: the doc was written above and the turn is in
     // state.last_chat. The transcript is a secondary record — a transient write
     // failure must NOT surface as a 500 for an operation that committed (the
@@ -818,16 +834,18 @@ export async function confirmRewriteTurn(
   }
 }
 
-// Apply an already-applied change set (creates and renames) to another copy of
-// the interest list. Deletes never auto-apply, so they are not replayed.
+// Apply an already-applied change set to another copy of the interest list,
+// such as the one on disk at save time.
 function replayChanges(list: Interest[], changes: ChatChange[]): Interest[] {
-  const next = [...list];
+  let next = [...list];
   for (const c of changes) {
     const at = next.findIndex((i) => i.id === c.interestId);
     if (c.op === "create" && at === -1 && c.topic) {
       next.push({ id: c.interestId, topic: c.topic });
     } else if (c.op === "update" && at !== -1 && c.topic) {
       next[at] = { ...next[at], topic: c.topic };
+    } else if (c.op === "delete") {
+      next = next.filter((i) => i.id !== c.interestId);
     }
   }
   return next;
@@ -900,20 +918,16 @@ async function runChatTurn(
   }
 
   try {
-    // Reload before persisting, and replay this turn's changes onto the fresh
-    // list: the reader may have saved interests while the model was answering.
-    const fresh = await loadState(deps.stateFile);
-    await saveState(
-      {
-        ...fresh,
-        interests:
-          applied.length > 0
-            ? replayChanges(fresh.interests ?? [], applied)
-            : fresh.interests,
-        last_chat: turn,
-      },
-      deps.stateFile,
-    );
+    // Replay this turn's changes onto the current list: the reader may have
+    // saved interests while the model was answering.
+    await updateState(deps.stateFile, (s) => ({
+      ...s,
+      interests:
+        applied.length > 0
+          ? replayChanges(s.interests ?? [], applied)
+          : s.interests,
+      last_chat: turn,
+    }));
     await appendChatTranscript(turn, transcriptFileFor(deps));
   } finally {
     if (currentTurnAbort?.turnId === turnId) currentTurnAbort = null;

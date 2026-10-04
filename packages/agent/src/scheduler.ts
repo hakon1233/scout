@@ -8,7 +8,12 @@
 // exposes `reboot_durable: false` so the Settings UI (PER-152) can warn. A
 // launchd login item / durable `serve` is an optional follow-up, not built here.
 
-import { defaultSchedule, loadState, normalizeTimeOfDay, saveState } from "./state.js";
+import {
+  defaultSchedule,
+  loadState,
+  normalizeTimeOfDay,
+  updateState,
+} from "./state.js";
 import type { Brief } from "./contract.js";
 import {
   recordScheduledSkip,
@@ -128,10 +133,10 @@ export class Scheduler {
     if (!cfg?.enabled) {
       if (cfg?.next_run_at) {
         try {
-          await saveState(
-            { ...state, schedule: { ...cfg, next_run_at: undefined } },
-            this.deps.stateFile,
-          );
+          await updateState(this.deps.stateFile, (s) => ({
+            ...s,
+            schedule: { ...(s.schedule ?? cfg), next_run_at: undefined },
+          }));
         } catch (err) {
           // Telemetry-only write; the schedule is disarmed regardless.
           console.error(
@@ -187,10 +192,10 @@ export class Scheduler {
     // writes remain sequential (reschedule → startRun → completion) and the
     // two writers still can't clobber each other's fields.
     try {
-      await saveState(
-        { ...state, schedule: { ...cfg, next_run_at: next.toISOString() } },
-        this.deps.stateFile,
-      );
+      await updateState(this.deps.stateFile, (s) => ({
+        ...s,
+        schedule: { ...(s.schedule ?? cfg), next_run_at: next.toISOString() },
+      }));
     } catch (err) {
       console.error(
         "[scheduler] failed to persist next_run_at (timer still armed):",

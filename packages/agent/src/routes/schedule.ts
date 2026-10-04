@@ -4,7 +4,7 @@
 import {
   loadState,
   normalizeTimeOfDay,
-  saveState,
+  updateState,
   defaultSchedule,
   type ScheduleConfig,
 } from "../state.js";
@@ -52,23 +52,11 @@ export async function handlePutSchedule(
   if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
   const parsed = parsedBody.body;
 
-  // Reload fresh AFTER the (network-bound) body read and merge onto THIS
-  // snapshot — not the auth-time state the router loaded before parseJsonBody.
-  // The scheduler/runner writes schedule.last_run_* (and last_brief/briefs) as a
-  // run completes; spreading the stale auth-time snapshot here would revert that
-  // telemetry. Mirrors the runner's reload-before-persist (runner.ts). Only
-  // enabled/time_of_day come from the request; every other field is preserved
-  // from the freshest on-disk state (AIR-107).
-  const snapshot = await loadState(sc.stateFile);
-  const current = snapshot.schedule ?? defaultSchedule();
-  let enabled = current.enabled;
-  if (parsed.enabled !== undefined) {
-    if (typeof parsed.enabled !== "boolean") {
-      return json(res, 400, { error: "enabled must be a boolean" }, cors);
-    }
-    enabled = parsed.enabled;
+  if (parsed.enabled !== undefined && typeof parsed.enabled !== "boolean") {
+    return json(res, 400, { error: "enabled must be a boolean" }, cors);
   }
-  let timeOfDay = current.time_of_day;
+  const enabled = parsed.enabled;
+  let timeOfDay: string | undefined;
   if (parsed.time_of_day !== undefined) {
     const normalized = normalizeTimeOfDay(parsed.time_of_day);
     if (!normalized) {
@@ -77,12 +65,18 @@ export async function handlePutSchedule(
     timeOfDay = normalized;
   }
 
-  const next: ScheduleConfig = {
-    ...current,
-    enabled,
-    time_of_day: timeOfDay,
-  };
-  await saveState({ ...snapshot, schedule: next }, sc.stateFile);
+  // Only enabled and time_of_day come from the request; the run telemetry the
+  // scheduler maintains is kept from the state on disk.
+  const saved = await updateState(sc.stateFile, (state) => {
+    const current = state.schedule ?? defaultSchedule();
+    const next: ScheduleConfig = {
+      ...current,
+      enabled: enabled ?? current.enabled,
+      time_of_day: timeOfDay ?? current.time_of_day,
+    };
+    return { ...state, schedule: next };
+  });
+  const next = saved.schedule ?? defaultSchedule();
   // Re-arm the live scheduler; it also persists the recomputed
   // next_run_at, so re-read before returning the view.
   await sc.onScheduleChanged?.();

@@ -24,8 +24,8 @@ import {
   defaultSchedule,
   loadState,
   resolvePairingToken,
-  saveState,
   STATE_FILE,
+  updateState,
 } from "./state.js";
 import { PKG_VERSION, defaultPort, startServer } from "./server.js";
 import { Scheduler } from "./scheduler.js";
@@ -40,7 +40,7 @@ async function cmdPair(force: boolean): Promise<void> {
   const state = await loadState();
   const had = Boolean(state.pairing_token);
   const { token, rotated } = resolvePairingToken(state, force);
-  await saveState({ ...state, pairing_token: token });
+  await updateState(STATE_FILE, (s) => ({ ...s, pairing_token: token }));
 
   if (had && !rotated) {
     console.log(
@@ -82,9 +82,9 @@ async function cmdRun(portArg?: string): Promise<void> {
   // Materialize the default schedule on first run so the in-process scheduler
   // has concrete config to resume after a restart (PER-151). Existing config is
   // left untouched so a founder's enable/disable + time choice survives restart.
-  if (!state.schedule) {
-    await saveState({ ...state, schedule: defaultSchedule() });
-  }
+  await updateState(STATE_FILE, (s) =>
+    s.schedule ? s : { ...s, schedule: defaultSchedule() },
+  );
 
   const port = defaultPort(portArg);
 

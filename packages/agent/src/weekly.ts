@@ -1,4 +1,4 @@
-import { BRIEF_HISTORY_CAP, loadState, newBriefId, saveState } from "./state.js";
+import { BRIEF_HISTORY_CAP, newBriefId, updateState } from "./state.js";
 import { canonicalUrl, parseBrief } from "./brief-document.js";
 import type { Brief } from "./contract.js";
 
@@ -96,13 +96,16 @@ export async function createAndPersistWeeklyBrief(
   stateFile: string,
   now = new Date(),
 ): Promise<Brief> {
-  const state = await loadState(stateFile);
-  const brief = createWeeklyBriefFromHistory(state.briefs ?? [], now);
-  const prior = state.briefs ?? [];
-  const briefs = [brief, ...prior.filter((b) => b.id !== brief.id)].slice(
-    0,
-    BRIEF_HISTORY_CAP,
-  );
-  await saveState({ ...state, last_brief: brief, briefs }, stateFile);
-  return brief;
+  let brief: Brief | undefined;
+  await updateState(stateFile, (state) => {
+    const prior = state.briefs ?? [];
+    const weekly = createWeeklyBriefFromHistory(prior, now);
+    brief = weekly;
+    const briefs = [weekly, ...prior.filter((b) => b.id !== weekly.id)].slice(
+      0,
+      BRIEF_HISTORY_CAP,
+    );
+    return { ...state, last_brief: weekly, briefs };
+  });
+  return brief!;
 }
