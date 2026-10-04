@@ -84,8 +84,8 @@ pnpm test:e2e    # Playwright against a companion built from source (stub claude
 pnpm eval        # score recorded model outputs against the prompts' rules
 ```
 
-Checks run locally; there is no hosted CI. `pnpm test` runs about 330 unit and HTTP
-contract tests; the e2e suite has 79 specs.
+Checks run locally; there is no hosted CI. `pnpm test` runs about 310 unit and HTTP
+contract tests; the e2e suite runs 62 browser tests.
 
 ## Status
 
