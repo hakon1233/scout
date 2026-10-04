@@ -11,10 +11,7 @@ import {
 const SETTINGS_KEY = "scout.settings.v1";
 const BRIEF_KEY = "scout.lastBrief.v1";
 
-function withStorage(
-  entries: Record<string, string>,
-  fn: (writes: Map<string, string>) => void,
-) {
+function withStorage(entries: Record<string, string>, fn: () => void) {
   const previousWindow = globalThis.window;
   const writes = new Map(Object.entries(entries));
   Object.defineProperty(globalThis, "window", {
@@ -35,7 +32,7 @@ function withStorage(
   });
 
   try {
-    fn(writes);
+    fn();
   } finally {
     if (previousWindow) {
       Object.defineProperty(globalThis, "window", {
@@ -49,23 +46,27 @@ function withStorage(
   }
 }
 
-test("loadSettings preserves a valid saved profile and drops removed API-key fields", () => {
+test("loadSettings drops removed API-key fields, and a saved profile loads back unchanged", () => {
+  const profile = {
+    name: "Ada",
+    interests: [{ id: "int_ai", topic: "AI safety" }],
+  };
   withStorage(
     {
       [SETTINGS_KEY]: JSON.stringify({
-        name: "Ada",
-        interests: [{ id: "int_ai", topic: "AI safety" }],
+        ...profile,
         anthropicKey: "old",
         exaKey: "old",
       }),
     },
     () => {
-      assert.deepEqual(loadSettings(), {
-        name: "Ada",
-        interests: [{ id: "int_ai", topic: "AI safety" }],
-      });
+      assert.deepEqual(loadSettings(), profile);
     },
   );
+  withStorage({}, () => {
+    saveSettings(profile);
+    assert.deepEqual(loadSettings(), profile);
+  });
 });
 
 test("loadSettings rejects syntactically valid but malformed settings", () => {
@@ -82,24 +83,7 @@ test("loadSettings rejects syntactically valid but malformed settings", () => {
   }
 });
 
-test("saveSettings writes the current profile shape", () => {
-  withStorage({}, (writes) => {
-    saveSettings({
-      name: "Ada",
-      interests: [{ id: "int_ai", topic: "AI safety" }],
-    });
-
-    assert.equal(
-      writes.get(SETTINGS_KEY),
-      JSON.stringify({
-        name: "Ada",
-        interests: [{ id: "int_ai", topic: "AI safety" }],
-      }),
-    );
-  });
-});
-
-test("loadLastBrief preserves a valid cached brief", () => {
+test("a saved brief loads back unchanged", () => {
   const brief = {
     id: "brief_1",
     generatedAt: "2026-07-14T08:00:00.000Z",
@@ -108,7 +92,8 @@ test("loadLastBrief preserves a valid cached brief", () => {
     markdown: "## AI safety",
   };
 
-  withStorage({ [BRIEF_KEY]: JSON.stringify(brief) }, () => {
+  withStorage({}, () => {
+    saveLastBrief(brief);
     assert.deepEqual(loadLastBrief(), brief);
   });
 });
@@ -149,19 +134,4 @@ test("loadLastBrief rejects syntactically valid but malformed cached briefs", ()
       assert.equal(loadLastBrief(), null);
     });
   }
-});
-
-test("saveLastBrief writes the current brief shape", () => {
-  const brief = {
-    id: "brief_1",
-    generatedAt: "2026-07-14T08:00:00.000Z",
-    interests: ["AI safety"],
-    articles: [],
-    markdown: "## AI safety",
-  };
-
-  withStorage({}, (writes) => {
-    saveLastBrief(brief);
-    assert.equal(writes.get(BRIEF_KEY), JSON.stringify(brief));
-  });
 });

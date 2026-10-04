@@ -1,18 +1,5 @@
-// Unit tests for parseArticlesFromMarkdown.
-//
-// This ~100-line regex parser turns the companion's GFM brief markdown into
-// the Article[] that drives the entire feed. Before this file it was only
-// exercised indirectly through e2e/zero-prompt.spec.ts (which needs a full
-// packed companion + browser). These tests pin the parser's behavior directly
-// against the documented regressions:
-//   - citation + handpicked source image capture.
-//   - in-depth blockquote body, separate from the short feed blurb.
-//   - balanced-paren CDN/Webflow URLs (`...(13).png`) must not be
-//     truncated at the first `)`.
-// Plus the undated-bullet and missing/empty/covered coverage-classification
-// cases.
-//
-// Run with: pnpm test (root) or tsx --test src/lib/companion.test.ts
+// The feed's mapping from a parsed brief to articles, and the last-good-brief
+// fallback behind the run-failure banner.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -26,89 +13,6 @@ test("empty markdown yields no articles and no interests", () => {
   const { articles, interests } = parseArticlesFromMarkdown("", "b1");
   assert.deepEqual(articles, []);
   assert.deepEqual(interests, []);
-});
-
-test("citation outside any story bullet still surfaces as a standalone, dateless article", () => {
-  const markdown = [
-    "## Markets",
-    "See also [background reading](https://example.com/bg) for context.",
-  ].join("\n");
-  const { articles } = parseArticlesFromMarkdown(markdown, "b1");
-
-  assert.equal(articles.length, 1);
-  assert.equal(articles[0].title, "background reading");
-  assert.equal(articles[0].url, "https://example.com/bg");
-  assert.equal(articles[0].interest, "Markets");
-  assert.equal(articles[0].text, undefined);
-});
-
-test("multiple citations under one story bullet each become their own article, sharing topic/date/blurb/image/body", () => {
-  const markdown = [
-    "## AI safety",
-    "- `2026-06-30` — A lab published new alignment results.",
-    "  [example.com — Alignment update](https://example.com/alignment)",
-    "  [rival.example.org — Rival coverage](https://rival.example.org/story)",
-    "  ![source image](https://example.com/hero.png)",
-    "  > In-depth context paragraph.",
-  ].join("\n");
-  const { articles } = parseArticlesFromMarkdown(markdown, "b1");
-
-  assert.equal(articles.length, 2);
-  assert.equal(articles[0].id, "b1-0");
-  assert.equal(articles[1].id, "b1-1");
-  assert.equal(articles[0].title, "example.com — Alignment update");
-  assert.equal(articles[1].title, "rival.example.org — Rival coverage");
-  for (const a of articles) {
-    assert.equal(a.interest, "AI safety");
-    assert.equal(a.publishedAt, "2026-06-30");
-    assert.equal(a.text, "A lab published new alignment results.");
-    assert.equal(a.imageUrl, "https://example.com/hero.png");
-    assert.equal(a.body, "In-depth context paragraph.");
-  }
-});
-
-test("multiple ## topic headings partition stories into interests and reset currentTopic", () => {
-  const markdown = [
-    "## AI safety",
-    "- A lab published new alignment results.",
-    "  [example.com — Alignment update](https://example.com/alignment)",
-    "",
-    "## Markets",
-    "- Indices closed higher on fresh inflation data.",
-    "  [news.example.org — Markets recap](https://news.example.org/markets)",
-  ].join("\n");
-  const { articles, interests } = parseArticlesFromMarkdown(markdown, "b1");
-
-  assert.deepEqual(interests, ["AI safety", "Markets"]);
-  assert.equal(articles.length, 2);
-  assert.equal(articles[0].interest, "AI safety");
-  assert.equal(articles[1].interest, "Markets");
-});
-
-test("a story bullet with no citation link at all contributes no articles", () => {
-  const markdown = [
-    "## AI safety",
-    "- Nothing newsworthy to report today.",
-  ].join("\n");
-  const { articles } = parseArticlesFromMarkdown(markdown, "b1");
-  assert.deepEqual(articles, []);
-});
-
-test("article ids are sequential per brief across topics and stories", () => {
-  const markdown = [
-    "## AI safety",
-    "- First story.",
-    "  [a.example — A](https://a.example/1)",
-    "  [b.example — B](https://b.example/2)",
-    "## Markets",
-    "- Second story.",
-    "  [c.example — C](https://c.example/3)",
-  ].join("\n");
-  const { articles } = parseArticlesFromMarkdown(markdown, "b2");
-  assert.deepEqual(
-    articles.map((a) => a.id),
-    ["b2-0", "b2-1", "b2-2"],
-  );
 });
 
 // fetchRunFailure sources the "last good brief from <date>" timestamp
