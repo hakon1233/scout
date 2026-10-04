@@ -28,7 +28,8 @@ import { spawn } from "node:child_process";
 import { URL } from "node:url";
 import { loadState, STATE_FILE, type State } from "./state.js";
 import { PATHS, type Brief, type ChatTurn } from "./contract.js";
-import { defaultChatTranscriptFile, type ChatDeps } from "./chat.js";
+import type { ChatDeps } from "./chat.js";
+import { defaultChatTranscriptFile } from "./chat-transcript.js";
 import { DEFAULT_BUILD_INFO_FILE } from "./build-info.js";
 import {
   resolveStatic,

@@ -18,12 +18,9 @@ import type { spawn } from "node:child_process";
 import { saveState, loadState, newPairingToken, type State } from "../src/state.js";
 import type { ChatTurn } from "../src/contract.js";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
-import {
-  buildChatPrompt,
-  isChatInFlight,
-  readChatTranscript,
-  startChatTurn,
-} from "../src/chat.js";
+import { isChatInFlight, startChatTurn } from "../src/chat.js";
+import { buildChatPrompt } from "../src/chat-model.js";
+import { readChatTranscript } from "../src/chat-transcript.js";
 import { startServer } from "../src/server.js";
 
 // A spawn() stand-in that returns a fixed text payload (the model's JSON) and

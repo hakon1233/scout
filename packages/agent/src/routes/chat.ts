@@ -7,10 +7,10 @@
 import {
   confirmDeleteTurn,
   confirmRewriteTurn,
-  readChatTranscriptCached,
   startChatTurn,
   stopChatTurn,
 } from "../chat.js";
+import { readChatTranscriptCached } from "../chat-transcript.js";
 import { json, jsonBodyParseError, parseJsonBody } from "../http-util.js";
 import type { AuthedRequestContext, ServerContext } from "./types.js";
 

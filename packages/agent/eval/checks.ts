@@ -6,7 +6,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseBrief } from "../src/brief-document.js";
-import { applyChatChanges, parseChatOutput } from "../src/chat.js";
+import { applyChatChanges } from "../src/chat-changes.js";
+import { parseChatOutput } from "../src/chat-model.js";
 import { normalizeTopic } from "../src/coverage.js";
 import type { Interest } from "../src/contract.js";
 
