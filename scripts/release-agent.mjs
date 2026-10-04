@@ -71,7 +71,9 @@ export function assertExternalReleaseRoot(repoRoot, releaseRoot) {
   }
   // Nor inside any other checkout: a pull or build there would rewrite what
   // the live companion runs.
-  for (let dir = releases; ; dir = path.dirname(dir)) {
+  // Stops below the home directory, so a dotfiles repo in ~ doesn't count.
+  const home = canonicalFuturePath(os.homedir());
+  for (let dir = releases; dir !== home; dir = path.dirname(dir)) {
     if (existsSync(path.join(dir, ".git"))) {
       throw new Error(
         `Release root must not be inside a git checkout (${dir}).`,
