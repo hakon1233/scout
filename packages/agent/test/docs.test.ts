@@ -1,6 +1,6 @@
-// Per-interest id + intent-doc store tests (PER-169).
+// Per-interest id + intent-doc store tests.
 //
-// Covers the acceptance for C1:
+// Covers:
 //   - existing `state.json` (legacy string[] interests) migrates WITHOUT loss,
 //     with stable, filename-safe ids;
 //   - a persisted doc round-trips by id and is loadable;
@@ -8,7 +8,7 @@
 //   - `reconcileInterests` preserves an interest's id (so its doc stays
 //     attached) across reorder / rename / add / remove;
 //   - GET /v0/interests serves the {id, topic, hasDoc, docUpdatedAt} contract
-//     the profile doc-indicator (PER-170 fetchInterestDocMeta) consumes.
+//     the profile doc-indicator (fetchInterestDocMeta) consumes.
 //
 // Hermetic: pure functions + a tmp doc dir; the one server test mocks the
 // claude shell-out via startServer's spawnFn override. No network, no quota.
@@ -105,7 +105,7 @@ test("loadState migrates a legacy on-disk state.json to the rich model", async (
   const dir = await tmpDir();
   try {
     const file = path.join(dir, "state.json");
-    // Hand-write the OLD shape (string[]) exactly as a pre-PER-169 companion did.
+    // Hand-write the OLD shape (string[]) exactly as an older companion did.
     await fs.writeFile(
       file,
       JSON.stringify({ pairing_token: "tok", interests: ["ai safety", "nba"] }),
@@ -242,7 +242,7 @@ test("interestDocPath refuses a path-traversal / hostile id", () => {
   assert.throws(() => interestDocPath(""), /unsafe interest id/);
 });
 
-// ── GET /v0/interests payload contract (PER-169 / PER-170) ────────────────────
+// ── GET /v0/interests payload contract ───────────────────────────────────────
 
 test("GET /v0/interests serves {id, topic, hasDoc, docUpdatedAt, doc} on real doc state", async () => {
   const tmp = await tmpDir("scout-docs-srv-");

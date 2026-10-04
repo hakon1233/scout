@@ -1,13 +1,10 @@
-// Kill-during-write durability regression tests for state.json (PER-270).
+// Kill-during-write durability regression tests for state.json.
 //
-// PER-270 (audit finding C1) originally asked for a test capturing the
-// PRE-fix behavior: a non-atomic saveState + an error-swallowing loadState
-// meant a crash mid-write left a truncated state.json that the next load
-// silently replaced with {} — wiping the pairing token, interests, and brief
-// history. That fix has since landed (AIR-163 atomic writes, AIR-356 corrupt
-// backup, CAR-244 persistence seam), so the pre-fix behavior no longer exists
-// to capture. These tests instead pin the POST-fix durability contract so it
-// cannot silently regress — which is the safety net PER-270 was for:
+// A non-atomic saveState + an error-swallowing loadState once meant a crash
+// mid-write left a truncated state.json that the next load silently replaced
+// with {} — wiping the pairing token, interests, and brief history. Atomic
+// writes, the corrupt-file backup and the persistence seam fixed that. These
+// tests pin the durability contract so it cannot silently regress:
 //
 //   - A torn write artifact (state.json truncated mid-JSON, exactly what a
 //     killed non-atomic writer leaves behind) must be preserved as a
@@ -19,8 +16,9 @@
 //   - Concurrent savers must never produce a torn/interleaved file — the
 //     result is always exactly one complete payload (last rename wins).
 //
-// Complements state.test.ts (AIR-356: garbage-bytes corruption + first-run)
-// and chat.test.ts (CAR-195). Hermetic: temp files only, no network.
+// Complements state.test.ts (garbage-bytes corruption + first-run) and
+// chat.test.ts (corrupt transcript preservation). Hermetic: temp files only, no
+// network.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -45,7 +43,7 @@ const RICH_STATE: State = {
   ],
 };
 
-test("PER-270: a truncated (kill-during-write) state.json is preserved, not silently reset", async () => {
+test("a truncated (kill-during-write) state.json is preserved, not silently reset", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-torn-"));
   try {
     const file = path.join(tmp, "state.json");
@@ -77,7 +75,7 @@ test("PER-270: a truncated (kill-during-write) state.json is preserved, not sile
 });
 
 test(
-  "PER-270: a saveState that fails mid-write leaves the previous state intact",
+  "a saveState that fails mid-write leaves the previous state intact",
   // Root bypasses the permission bit this test uses to force the write failure.
   { skip: process.getuid?.() === 0 ? "meaningless as root" : false },
   async () => {
@@ -107,7 +105,7 @@ test(
   },
 );
 
-test("PER-270: a successful saveState leaves no temp-file residue", async () => {
+test("a successful saveState leaves no temp-file residue", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-residue-"));
   try {
     const file = path.join(tmp, "state.json");
@@ -125,7 +123,7 @@ test("PER-270: a successful saveState leaves no temp-file residue", async () => 
   }
 });
 
-test("PER-270: concurrent saves never tear the file — one complete payload wins", async () => {
+test("concurrent saves never tear the file — one complete payload wins", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-race-"));
   try {
     const file = path.join(tmp, "state.json");
@@ -159,7 +157,7 @@ test("PER-270: concurrent saves never tear the file — one complete payload win
   }
 });
 
-test("PER-272: listCorruptStateBackups reports the recovery file a corrupt load leaves behind", async () => {
+test("listCorruptStateBackups reports the recovery file a corrupt load leaves behind", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-recovery-"));
   try {
     const file = path.join(tmp, "state.json");
@@ -183,14 +181,15 @@ test("PER-272: listCorruptStateBackups reports the recovery file a corrupt load 
   }
 });
 
-test("PER-272: /healthz surfaces corrupt-state recoveries instead of a silent fresh boot", async () => {
+test("/healthz surfaces corrupt-state recoveries instead of a silent fresh boot", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-health-recovery-"));
   const stateFile = path.join(tmp, "state.json");
   await saveState(RICH_STATE, stateFile);
   const { server, port } = await startServer(0, { stateFile });
   try {
     // Healthy store: the field is present and explicitly null, so a consumer
-    // can distinguish "no recovery happened" from "companion predates PER-272".
+    // can distinguish "no recovery happened" from "companion predates this
+    // field".
     const clean = await (await fetch(`http://127.0.0.1:${port}/healthz`)).json();
     assert.equal(clean.state_recovery, null);
 

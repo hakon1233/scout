@@ -1,17 +1,17 @@
-// Contract for the ephemeral / dry-run trigger (PER-218).
+// Contract for the ephemeral / dry-run trigger.
 //
 // Background — the incident this guards against: a normal POST /v0/interests
-// persists its `interests` body as the founder's new saved list (reconcileInterests
+// persists its `interests` body as the user's new saved list (reconcileInterests
 // → startRun → saveState) and lazily backfills a default intent doc for every new
 // id. A QA/automation run that POSTed a reduced or generic test payload therefore
-// OVERWROTE the founder's authored interests and littered the doc store with
+// OVERWROTE the user's authored interests and littered the doc store with
 // templated docs.
 //
 // The fix: `ephemeral: true`. An ephemeral run researches the supplied topics and
-// produces a brief, but MUST NOT mutate the founder's saved config — `state.interests`
+// produces a brief, but MUST NOT mutate the user's saved config — `state.interests`
 // is left verbatim and the intent-doc backfill is redirected to a throwaway temp dir,
 // so no real `interests/<id>.md` is created or overwritten. This test pins exactly
-// that: founder's saved interests + on-disk docs are byte-identical after an ephemeral
+// that: the user's saved interests + on-disk docs are byte-identical after an ephemeral
 // run, while a brief still lands. Hermetic: no real claude, no network.
 
 import test from "node:test";
@@ -65,8 +65,9 @@ function makeTopicAwareSpawn() {
   return { calls, spawnFn };
 }
 
-// Seed a state file + an interests dir holding the founder's AUTHORED docs, with
-// state.interests anchored to those ids — the exact shape PER-218 must protect.
+// Seed a state file + an interests dir holding the user's AUTHORED docs, with
+// state.interests anchored to those ids — the exact shape an ephemeral run must
+// protect.
 async function seededFounder() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-ephemeral-test-"));
   const stateFile = path.join(tmp, "state.json");
@@ -90,7 +91,7 @@ async function seededFounder() {
   return { tmp, stateFile, interestsDir, token, founder, docs };
 }
 
-test("ephemeral run produces a brief but never mutates the founder's saved interests or docs (PER-218)", async () => {
+test("ephemeral run produces a brief but never mutates the user's saved interests or docs", async () => {
   const { tmp, stateFile, interestsDir, token, founder, docs } =
     await seededFounder();
   const { calls, spawnFn } = makeTopicAwareSpawn();
@@ -130,7 +131,7 @@ test("ephemeral run produces a brief but never mutates the founder's saved inter
       "PER-288: the pollable QA result must be marked so the real feed can ignore it",
     );
 
-    // INVARIANT 1: saved interests are byte-identical to the founder's set — the
+    // INVARIANT 1: saved interests are byte-identical to the seeded set — the
     // test payload did NOT replace or shrink them.
     const state = await loadState(stateFile);
     assert.equal(
@@ -156,9 +157,9 @@ test("ephemeral run produces a brief but never mutates the founder's saved inter
       assert.equal(body, docs[it.id]);
     }
 
-    // INVARIANT 3 (PER-219): an ephemeral run must NOT pollute the rolling brief
+    // INVARIANT 3: an ephemeral run must NOT pollute the rolling brief
     // history. `state.briefs` is the channel the feed's "previous briefs" pager
-    // reads — a QA/dry-run brief landing there would surface to the founder as a
+    // reads — a QA/dry-run brief landing there would surface to the user as a
     // real past edition. The runner gates the append on `!isEphemeral`, so the
     // history stays empty here even though a brief was produced above.
     assert.equal(state.briefs, undefined);
@@ -186,8 +187,8 @@ test("a NON-ephemeral POST still persists its interests (normal path unbroken)",
     const kick = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
-      // confirm_replace satisfies the PER-240 wipe guard — this intentionally
-      // replaces the seeded founder list with a fresh one.
+      // confirm_replace satisfies the wipe guard — this intentionally
+      // replaces the seeded list with a fresh one.
       body: JSON.stringify({ interests: ["ai", "robotics"], confirm_replace: true }),
     });
     assert.equal(kick.status, 202);

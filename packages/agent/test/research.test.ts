@@ -1,9 +1,9 @@
-// Unit tests for the research prompt builder + the shared search-skills layer
-// (PER-176). The founder's pain: runs surfaced months-old stories with no
-// dates. The fix is one canonical, version-controlled "skills folder" fragment
-// injected verbatim into every research session, plus a date-first bullet
-// contract. These tests pin that the fragment actually reaches the prompt and
-// that its non-negotiable rules are present. Run: pnpm --filter @scout/agent test
+// Unit tests for the research prompt builder + the shared search-skills layer.
+// The problem: runs surfaced months-old stories with no dates. The fix is one
+// canonical, version-controlled "skills folder" fragment injected verbatim into
+// every research session, plus a date-first bullet contract. These tests pin
+// that the fragment actually reaches the prompt and that its non-negotiable
+// rules are present. Run: pnpm --filter @scout/agent test
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -25,7 +25,7 @@ test("the built prompt contains the shared search-skills fragment VERBATIM", () 
 });
 
 test("THE INVARIANT: the interest's doc is injected into the prompt VERBATIM", () => {
-  // The whole epic turns on this (PER-139/PER-171): the per-interest intent doc
+  // Everything turns on this: the per-interest intent doc
   // MUST reach the actual research prompt byte-for-byte. If editing a doc doesn't
   // change the next run's prompt, the control is dead. A distinctive body proves
   // it's the doc — not the topic or the shared skills — that landed.
@@ -121,8 +121,8 @@ test("the prompt asks for a bold lead paragraph followed by deeper detail", () =
   assert.match(prompt, /insight|analysis|implication/i);
 });
 
-test("PER-265: the depth bar is substantive and applies equally to every topic", () => {
-  // Founder reported detail-view bodies felt shallow across EVERY topic, not
+test("the depth bar is substantive and applies equally to every topic", () => {
+  // Detail-view bodies felt shallow across EVERY topic, not
   // just broad/general ones — so the fix is a straight quality/length bump
   // applied uniformly, never a topic-breadth branch. Pin both halves: the
   // wider paragraph range + concrete-detail requirement, and that nothing in
@@ -148,9 +148,9 @@ test("PER-265: the depth bar is substantive and applies equally to every topic",
 
 // A `claude` stub that NEVER closes — models a hung session (model stall /
 // network wedge / a rate-limit retry that never returns). Records whether the
-// timeout path killed it. This is the PER-181 regression: before the per-session
-// timeout, a single hung session blocked the whole sequential run loop forever
-// and the brief stayed `pending` indefinitely.
+// timeout path killed it. This is the hung-session regression: before the
+// per-session timeout, a single hung session blocked the whole sequential run
+// loop forever and the brief stayed `pending` indefinitely.
 function makeHangingSpawn() {
   const state = { killed: false, killSignal: "" };
   const spawnFn = ((_bin: string, _args: readonly string[], _opts: unknown) => {
@@ -176,7 +176,7 @@ function makeHangingSpawn() {
   return { state, spawnFn };
 }
 
-test("PER-181: a hung claude session is killed and rejects after the timeout", async () => {
+test("a hung claude session is killed and rejects after the timeout", async () => {
   const { state, spawnFn } = makeHangingSpawn();
   await assert.rejects(
     researchAndSynthesize(
@@ -190,7 +190,7 @@ test("PER-181: a hung claude session is killed and rejects after the timeout", a
   assert.equal(state.killSignal, "SIGTERM", "kill should start with SIGTERM");
 });
 
-test("PER-181: a session that closes in time is NOT affected by the timeout", async () => {
+test("a session that closes in time is NOT affected by the timeout", async () => {
   // A fast, well-behaved stub still resolves normally — the timeout is a ceiling,
   // not a delay.
   const spawnFn = ((_bin: string, _args: readonly string[], _opts: unknown) => {
@@ -223,12 +223,12 @@ test("PER-181: a session that closes in time is NOT affected by the timeout", as
   assert.match(md, /## ai/);
 });
 
-test("PER-280: a non-zero exit with empty stderr surfaces the stdout tail", async () => {
+test("a non-zero exit with empty stderr surfaces the stdout tail", async () => {
   // The real failure this pins: on 2026-07-15 the claude CLI reported
   // "You've hit your session limit · resets 8:40pm (Europe/Oslo)" on STDOUT
-  // and exited 1 with stderr EMPTY, so all six topics of the founder's manual
-  // run failed with an undiagnosable `error_msg: "claude exited 1:"`. The
-  // actual cause must reach the rejection (and thus the brief's error_msg).
+  // and exited 1 with stderr EMPTY, so all six topics of a manual run failed
+  // with an undiagnosable `error_msg: "claude exited 1:"`. The actual cause
+  // must reach the rejection (and thus the brief's error_msg).
   const spawnFn = ((_bin: string, _args: readonly string[], _opts: unknown) => {
     const child = new EventEmitter() as EventEmitter & {
       stdin: Writable;

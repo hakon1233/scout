@@ -1,6 +1,6 @@
-// End-to-end contract for the run-selector path (C6/PER-173).
+// End-to-end contract for the run-selector path.
 //
-// The founder can pick one / several / all interests at run time and trigger a
+// The user can pick one / several / all interests at run time and trigger a
 // run for exactly that set. POST /v0/interests accepts `selected_topics`: a
 // STRICT subset of `interests`. Unlike `retry_topics` (which merges a subset
 // into a PRIOR brief), a selected run produces a FRESH brief containing only the
@@ -84,7 +84,7 @@ async function seededServer() {
 
 type BriefWithTopics = Brief & { topics?: TopicCoverage[] };
 
-test("selected_topics runs only the chosen interest and keeps the full list saved (C6/PER-173)", async () => {
+test("selected_topics runs only the chosen interest and keeps the full list saved", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const { calls, spawnFn } = makeTopicAwareSpawn();
   const auth = { authorization: `Bearer ${token}` };
@@ -150,7 +150,7 @@ test("selected_topics runs only the chosen interest and keeps the full list save
   }
 });
 
-test("selected_topics covering the whole list collapses to a normal full run (C6/PER-173)", async () => {
+test("selected_topics covering the whole list collapses to a normal full run", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const { calls, spawnFn } = makeTopicAwareSpawn();
   const auth = { authorization: `Bearer ${token}` };

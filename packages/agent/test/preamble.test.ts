@@ -1,4 +1,4 @@
-// Unit tests for stripBriefPreamble (PER-113 #1).
+// Unit tests for stripBriefPreamble.
 //
 // The headless `claude` run sometimes emits a conversational lead-in before
 // the brief (e.g. "I have enough to write the brief.") that leaked into the

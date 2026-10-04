@@ -1,10 +1,10 @@
-// PER-303 blockers 2/3/4: the launchd plist rewrite is the fragile half of the
-// release system, and the legacy->current migration is the one activation with
-// no immutable predecessor to fall back to.
+// The launchd plist rewrite is the fragile half of the release system, and the
+// legacy->current migration is the one activation with no immutable predecessor
+// to fall back to.
 //
 // SAFETY: nothing here may reach the real launchd job. installService shells
 // out to `launchctl bootout gui/<uid>/ing.scout.agent`, which would stop the
-// founder's running companion. Every call below injects a `bootstrap` stub, and
+// user's running companion. Every call below injects a `bootstrap` stub, and
 // SCOUT_LAUNCH_AGENT_PLIST pins the plist under a temp dir so no test can write
 // to ~/Library/LaunchAgents.
 
@@ -28,7 +28,7 @@ import {
 
 const SHA = "a".repeat(40);
 
-// A stand-in for the founder's real pre-release plist: launchd pointed straight
+// A stand-in for a real pre-release plist: launchd pointed straight
 // at a development workspace, carrying SCOUT_SESSION_TIMEOUT_MS and NO --port.
 function legacyPlist(opts: { scriptPath: string; home: string }): string {
   return `<?xml version="1.0" encoding="UTF-8"?>

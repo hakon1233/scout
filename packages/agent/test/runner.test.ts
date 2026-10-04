@@ -1,4 +1,4 @@
-// Stale-pending reclaim contract for the run loop (PER-181).
+// Stale-pending reclaim contract for the run loop.
 //
 // Background: within a live process, `runInFlight` is true for the whole
 // lifetime of a real run, so a second request is correctly refused. The ONLY
@@ -24,10 +24,10 @@ import type { Brief, Interest } from "../src/contract.js";
 import { startRun, summarizeSessionFailures } from "../src/runner.js";
 import { writeInterestDoc, defaultInterestDoc } from "../src/docs.js";
 
-// PER-259 item 1: a wholesale-failed run must report an HONEST reason so the
-// founder learns WHY (a usage limit reads very differently from a crashed CLI).
-// The classifier is pure — pin the mapping from research.ts's reject messages.
-test("summarizeSessionFailures distils per-session errors into an honest reason (PER-259)", () => {
+// A wholesale-failed run must report an HONEST reason so the user learns WHY (a
+// usage limit reads very differently from a crashed CLI). The classifier is
+// pure — pin the mapping from research.ts's reject messages.
+test("summarizeSessionFailures distils per-session errors into an honest reason", () => {
   assert.match(
     summarizeSessionFailures([
       "claude exited 1: Claude usage limit reached|resets at 3pm",
@@ -120,7 +120,7 @@ async function runToCompletion(
   return done;
 }
 
-test("PER-181: a STALE persisted pending is reclaimed by a new run", async () => {
+test("a STALE persisted pending is reclaimed by a new run", async () => {
   const stateFile = await tmpStateFile();
   // A pending brief from a process that died 40 min ago (> 30 min grace window).
   const stale: Brief = {
@@ -141,7 +141,7 @@ test("PER-181: a STALE persisted pending is reclaimed by a new run", async () =>
   assert.match(persisted.last_brief?.summary_md ?? "", /## ai/);
 });
 
-test("PER-187: the brief snapshots each topic's intent doc into `bases`", async () => {
+test("the brief snapshots each topic's intent doc into `bases`", async () => {
   const stateFile = await tmpStateFile();
   const interestsDir = path.join(path.dirname(stateFile), "interests");
   // Two interests: one with a hand-authored doc, one with NO doc (so the run
@@ -176,7 +176,7 @@ test("PER-187: the brief snapshots each topic's intent doc into `bases`", async 
   assert.equal(persisted.last_brief?.bases?.length, 2);
 });
 
-test("PER-181: a RECENT persisted pending is still refused (live run)", async () => {
+test("a RECENT persisted pending is still refused (live run)", async () => {
   const stateFile = await tmpStateFile();
   const fresh: Brief = {
     id: "live-run",
@@ -198,7 +198,7 @@ test("PER-181: a RECENT persisted pending is still refused (live run)", async ()
   assert.equal(persisted.last_brief?.status, "pending");
 });
 
-test("CAR-174: a failed startup save resets runInFlight so the slot stays reclaimable", async () => {
+test("a failed startup save resets runInFlight so the slot stays reclaimable", async () => {
   // `runInFlight` is claimed synchronously (before the first await) so a second
   // startRun can't race in and double-start. But the persisting save that
   // follows can throw (disk full, ENOTDIR). Before this fix that throw left

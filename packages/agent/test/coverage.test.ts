@@ -1,6 +1,6 @@
-// Pure unit tests for the per-topic coverage + section-merge engine (PER-154).
+// Pure unit tests for the per-topic coverage + section-merge engine.
 //
-// These pin the behavior that fixes the founder's bug: the companion must match
+// These pin the behavior that fixes the coverage bug: the companion must match
 // requested interests to brief sections by a NORMALIZED key (case / punctuation
 // insensitive) so "openai" matches the model's "## OpenAI", and must honestly
 // distinguish "covered" / "empty" / "missing". The merge path must splice fresh
@@ -47,7 +47,7 @@ test("computeCoverage matches compact and spaced topic variants", () => {
 });
 
 test("computeCoverage matches title-cased headings to lowercase interests (the bug)", () => {
-  // The six topics from the founder's report, lower-case as the user typed them.
+  // The six topics from the original report, lower-case as the user typed them.
   const interests = [
     "startup news",
     "ai",
@@ -215,10 +215,10 @@ test("mergeBriefSections appends a topic that was entirely missing from the base
   ]);
 });
 
-// --- C7/PER-186: within-section strict newest-first ordering ---------------
+// --- Within-section strict newest-first ordering ---------------------------
 
 test("sortSectionStoriesNewestFirst reorders out-of-order story bullets, citation in tow", () => {
-  // The exact failure shape from the PER-186 evidence: newest on top, but the
+  // The exact failure shape from the bug report: newest on top, but the
   // 2nd/3rd bullets out of order (05-27 before 05-29).
   const body = [
     "- `2026-06-02` — newest.",
@@ -280,10 +280,10 @@ test("extractTopicSection emits the section already sorted newest-first", () => 
   assert.deepEqual(dates, ["2026-06-02", "2026-05-29", "2026-05-27"]);
 });
 
-// ─── Freshness validator (PER-250) ───────────────────────────────────────────
-// Founder reported briefs surfacing months-old stories. SEARCH_SKILLS forbids
-// ordinary news older than ~30 days but only via the prompt; PER-247 confirmed
-// the backend accepted a stale item the model emitted anyway. enforceBriefFreshness
+// ─── Freshness validator ─────────────────────────────────────────────────────
+// Briefs surfaced months-old stories. SEARCH_SKILLS forbids ordinary news older
+// than ~30 days but only via the prompt, and the backend accepted a stale item
+// the model emitted anyway. enforceBriefFreshness
 // CODE-enforces the cutoff over the assembled brief just before it is saved.
 
 // A fixed "now" so the day-math is deterministic and offline.
@@ -357,13 +357,13 @@ test("evergreen/background interests keep older items (acceptance #2)", () => {
   assert.ok(out.includes("2019-03-01"));
 });
 
-test("AIR-527 regression: the default backfilled doc does NOT read as evergreen", () => {
+test("the default backfilled doc does NOT read as evergreen", () => {
   // The default intent doc (docs.ts defaultInterestDoc) is backfilled for every
   // interest without a hand-authored .md — the common case. It tells the model to
   // SKIP old context, so it must NOT trip interestWantsEvergreen; a false positive
   // there drops the topic's key into evergreenKeys and disables the >30-day
-  // freshness cutoff (PER-250) for it, letting months-old stories through — exactly
-  // the founder's bug. Guards against reintroducing an EVERGREEN_RE trigger word
+  // freshness cutoff for it, letting months-old stories through. Guards against
+  // reintroducing an EVERGREEN_RE trigger word
   // (evergreen/background/historical/explainer/…) into the default doc text.
   for (const topic of ["ai coding tools", "climate", "Formula 1"]) {
     assert.equal(
@@ -445,7 +445,7 @@ test("per-topic no-news state recorded when everything drops (acceptance #4)", (
   ]);
 });
 
-test("undated items are kept regardless of the cutoff (PER-250 keeps undated as-is)", () => {
+test("undated items are kept regardless of the cutoff", () => {
   const brief = [
     "# Your brief",
     "",

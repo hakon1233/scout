@@ -1,4 +1,4 @@
-// Chat-session contract tests (PER-172 / C4): POST /v0/chat → poll GET /v0/chat.
+// Chat-session contract tests: POST /v0/chat → poll GET /v0/chat.
 //
 // The chat manages the WHOLE interest collection: one turn can create, refine,
 // or delete an interest. We mock the `claude` shell-out with an in-process spawn
@@ -24,10 +24,10 @@ import { readChatTranscript } from "../src/chat-transcript.js";
 import { startServer } from "../src/server.js";
 
 // A spawn() stand-in that returns a fixed text payload (the model's JSON) and
-// records argv / spawn options / the prompt piped to stdin — so we can assert the
-// pairing token never leaks to the chat child (the PER-108 contract on this new
-// route too). With autoClose:false the child hangs until releaseAll(), to hold a
-// turn "in flight" for the single-flight (409) test.
+// records argv / spawn options / the prompt piped to stdin — so we can assert
+// the pairing token never leaks to the chat child (the same contract research
+// has). With autoClose:false the child hangs until releaseAll(), to hold a turn
+// "in flight" for the single-flight (409) test.
 function makeChatSpawn(opts: { output: string; autoClose: boolean }) {
   const calls: Array<{
     bin: string;
@@ -104,7 +104,7 @@ function awaitTurn(): {
   return { onChatDone: (t) => resolve(t), done };
 }
 
-test("POST /v0/chat refines an existing interest's doc; the edit persists and is in the change set (PER-172)", async () => {
+test("POST /v0/chat refines an existing interest's doc; the edit persists and is in the change set", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
@@ -198,7 +198,7 @@ test("POST /v0/chat refines an existing interest's doc; the edit persists and is
   }
 });
 
-test("POST /v0/chat creates a new interest (+ its doc) with a server-minted id (PER-172)", async () => {
+test("POST /v0/chat creates a new interest (+ its doc) with a server-minted id", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
@@ -256,7 +256,7 @@ test("POST /v0/chat creates a new interest (+ its doc) with a server-minted id (
   }
 });
 
-test("GET /v0/chat returns the full persisted transcript after companion restart (PER-201)", async () => {
+test("GET /v0/chat returns the full persisted transcript after companion restart", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
@@ -334,7 +334,7 @@ test("GET /v0/chat returns the full persisted transcript after companion restart
   }
 });
 
-test("a new chat turn receives earlier transcript turns as model context (PER-201)", async () => {
+test("a new chat turn receives earlier transcript turns as model context", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
@@ -400,7 +400,7 @@ test("a new chat turn receives earlier transcript turns as model context (PER-20
   }
 });
 
-test("POST /v0/chat GATES a delete: surfaces pending_delete and leaves the interest intact (PER-230)", async () => {
+test("POST /v0/chat GATES a delete: surfaces pending_delete and leaves the interest intact", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [
       { id: "int_keep01", topic: "ai safety" },
@@ -456,7 +456,7 @@ test("POST /v0/chat GATES a delete: surfaces pending_delete and leaves the inter
   }
 });
 
-test("POST /v0/chat/confirm-delete removes the interest + doc and returns a ready turn (PER-230)", async () => {
+test("POST /v0/chat/confirm-delete removes the interest + doc and returns a ready turn", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [
       { id: "int_keep01", topic: "ai safety" },
@@ -594,7 +594,7 @@ test("POST /v0/chat/confirm-delete returns 404 without a matching pending delete
   }
 });
 
-test("POST /v0/chat GATES a full rewrite: surfaces pending_rewrite and leaves the doc byte-identical (PER-235)", async () => {
+test("POST /v0/chat GATES a full rewrite: surfaces pending_rewrite and leaves the doc byte-identical", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
@@ -648,7 +648,7 @@ test("POST /v0/chat GATES a full rewrite: surfaces pending_rewrite and leaves th
   }
 });
 
-test("POST /v0/chat/confirm-rewrite writes the STORED proposed doc and returns a ready turn (PER-235)", async () => {
+test("POST /v0/chat/confirm-rewrite writes the STORED proposed doc and returns a ready turn", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
     last_chat: {
@@ -851,7 +851,7 @@ test("POST /v0/chat returns 409 while a turn is in flight; the prior turn isn't 
   }
 });
 
-test("a no-change chat turn doesn't clobber an interest a concurrent PUT added mid-turn (AIR-471)", async () => {
+test("a no-change chat turn doesn't clobber an interest a concurrent PUT added mid-turn", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
@@ -997,7 +997,7 @@ test("startChatTurn clears the in-flight guard if persisting the pending turn fa
   }
 });
 
-test("AIR-540: a hung chat child times out, lands the turn failed, and clears the in-flight guard", async () => {
+test("a hung chat child times out, lands the turn failed, and clears the in-flight guard", async () => {
   const { tmp, stateFile, interestsDir } = await seeded();
 
   // A child that never emits `close` (autoClose:false queues `finish` but never
@@ -1070,7 +1070,7 @@ test("POST /v0/chat rejects an empty message with 400 and never spawns claude", 
   }
 });
 
-test("the pairing token never reaches the chat claude child (argv/options/stdin) (PER-108)", async () => {
+test("the pairing token never reaches the chat claude child (argv/options/stdin)", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
@@ -1119,11 +1119,11 @@ test("the pairing token never reaches the chat claude child (argv/options/stdin)
   }
 });
 
-// PER-230 AC6 #1: "delete is non-functional" was a model op-selection bug, not
+// "Delete is non-functional" was a model op-selection bug, not
 // missing plumbing — the model rewrote/blanked the doc with `update` instead of
 // emitting `delete`. The fix is prompt steering. This guards that the steering
 // stays in the prompt so a future prompt edit can't silently regress delete.
-test("buildChatPrompt steers removal intents to the delete op, not update (PER-230)", () => {
+test("buildChatPrompt steers removal intents to the delete op, not update", () => {
   const prompt = buildChatPrompt("delete my ai safety interest", [
     { id: "int_abc123", topic: "ai safety", doc: "Track alignment research." },
   ]);
@@ -1134,10 +1134,10 @@ test("buildChatPrompt steers removal intents to the delete op, not update (PER-2
   assert.match(prompt, /NEVER try to/i);
 });
 
-// PER-231 #2: a `delete` is confirm-gated, so the model's reply must read as a
+// A `delete` is confirm-gated, so the model's reply must read as a
 // pending request, not a done-action. Guards the prompt rule that stops the
 // "Done — deleted X" / "Removed X" copy appearing before the user confirms.
-test("buildChatPrompt tells the model a delete is confirm-gated and the reply must be a pending request (PER-231)", () => {
+test("buildChatPrompt tells the model a delete is confirm-gated and the reply must be a pending request", () => {
   const prompt = buildChatPrompt("delete my ai safety interest", [
     { id: "int_abc123", topic: "ai safety", doc: "Track alignment research." },
   ]);
@@ -1147,13 +1147,13 @@ test("buildChatPrompt tells the model a delete is confirm-gated and the reply mu
   assert.match(prompt, /NEVER claim it is done/i);
 });
 
-// PER-232 (AC3/AC5 CRITICAL): Stop must abort the SERVER-side turn. The QA fail
-// was exactly this shape: Stop fired while the model child was in flight, the
-// client poll was dropped, and the completed edit still persisted ~14s later.
-// Here the child hangs (autoClose:false), we POST /v0/chat/stop, then release
-// the child's (full-rewrite) output — the turn must land stopped with NO write
-// to the interest doc and the interest set untouched.
-test("POST /v0/chat/stop aborts the in-flight turn — no doc edit is committed (PER-232)", async () => {
+// Stop must abort the SERVER-side turn. The original failure was exactly this
+// shape: Stop fired while the model child was in flight, the client poll was
+// dropped, and the completed edit still persisted ~14s later. Here the child
+// hangs (autoClose:false), we POST /v0/chat/stop, then release the child's
+// (full-rewrite) output — the turn must land stopped with NO write to the
+// interest doc and the interest set untouched.
+test("POST /v0/chat/stop aborts the in-flight turn — no doc edit is committed", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
@@ -1254,7 +1254,7 @@ test("POST /v0/chat/stop aborts the in-flight turn — no doc edit is committed 
 
 // A stale Stop (wrong turn id) and a Stop with nothing in flight are both
 // harmless no-ops — they must never abort a turn they don't name.
-test("POST /v0/chat/stop is a no-op for a stale turn id or no in-flight turn (PER-232)", async () => {
+test("POST /v0/chat/stop is a no-op for a stale turn id or no in-flight turn", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
   });
@@ -1325,10 +1325,10 @@ test("POST /v0/chat/stop is a no-op for a stale turn id or no in-flight turn (PE
   }
 });
 
-// CAR-195: a corrupt-but-present transcript must be preserved, not silently
+// A corrupt-but-present transcript must be preserved, not silently
 // overwritten. Before, readChatTranscript mapped a parse error to [] and the very
 // next append wiped the file — permanent chat-history loss on one bad read.
-test("CAR-195: a corrupt transcript is backed up to .corrupt-*.bak, not wiped", async () => {
+test("a corrupt transcript is backed up to .corrupt-*.bak, not wiped", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-corrupt-"));
   try {
     const file = path.join(tmp, "transcript.json");
@@ -1350,8 +1350,8 @@ test("CAR-195: a corrupt transcript is backed up to .corrupt-*.bak, not wiped", 
   }
 });
 
-// CAR-195: the common no-file case stays quiet (no spurious backup, returns []).
-test("CAR-195: a missing transcript returns [] without creating a backup", async () => {
+// The common no-file case stays quiet (no spurious backup, returns []).
+test("a missing transcript returns [] without creating a backup", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-missing-"));
   try {
     const file = path.join(tmp, "transcript.json");
@@ -1362,7 +1362,7 @@ test("CAR-195: a missing transcript returns [] without creating a backup", async
   }
 });
 
-test("CAR-146: a non-ENOENT transcript read failure logs and returns []", async () => {
+test("a non-ENOENT transcript read failure logs and returns []", async () => {
   const originalError = console.error;
   const calls: unknown[][] = [];
   console.error = (...args: unknown[]) => {

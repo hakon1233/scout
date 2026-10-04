@@ -1,11 +1,11 @@
-// State persistence tests (AIR-356). Hermetic: temp files only, no network,
+// State persistence tests. Hermetic: temp files only, no network,
 // no Claude quota.
 //
 // Covered:
 //   - A corrupt-but-present state.json is backed up to a `.corrupt-*.bak`
 //     sibling before loadState falls back to {}, so the very next saveState
-//     can't permanently wipe the founder's interests/briefs/pairing token.
-//     Symmetric with chat.ts CAR-195 (corrupt transcript preservation).
+//     can't permanently wipe the user's interests/briefs/pairing token.
+//     Symmetric with chat.ts (corrupt transcript preservation).
 //   - A missing state file (normal first run) is NOT backed up — there is
 //     nothing to preserve.
 
@@ -17,7 +17,7 @@ import path from "node:path";
 
 import { loadState, saveState } from "../src/state.js";
 
-test("AIR-356: a corrupt state.json is backed up to .corrupt-*.bak, not wiped", async () => {
+test("a corrupt state.json is backed up to .corrupt-*.bak, not wiped", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-corrupt-"));
   try {
     const file = path.join(tmp, "state.json");
@@ -29,7 +29,7 @@ test("AIR-356: a corrupt state.json is backed up to .corrupt-*.bak, not wiped", 
     assert.deepEqual(state, {}, "corrupt state should load as empty");
 
     // ...but the original bytes survive under a .corrupt-*.bak sibling, so the
-    // founder's config is recoverable rather than silently destroyed.
+    // user's config is recoverable rather than silently destroyed.
     const siblings = await fs.readdir(tmp);
     const backup = siblings.find(
       (f) => f.includes(".corrupt-") && f.endsWith(".bak"),
@@ -47,7 +47,7 @@ test("AIR-356: a corrupt state.json is backed up to .corrupt-*.bak, not wiped", 
   }
 });
 
-test("AIR-356: a missing state.json is not backed up (normal first run)", async () => {
+test("a missing state.json is not backed up (normal first run)", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-missing-"));
   try {
     const file = path.join(tmp, "state.json");

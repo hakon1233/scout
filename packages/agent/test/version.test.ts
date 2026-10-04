@@ -1,4 +1,4 @@
-// GET /v0/version build-provenance contract (PER-239).
+// GET /v0/version build-provenance contract.
 //
 // QA gates byte-match `git_sha` against the commit under test, so this pins:
 //   - the response shape (ok/version/git_sha/git_sha_short/next_build_id/built_at),
@@ -61,7 +61,7 @@ async function requestWithHost(
   });
 }
 
-test("GET /v0/version returns baked build provenance without auth (PER-239)", async () => {
+test("GET /v0/version returns baked build provenance without auth", async () => {
   const { tmp, stateFile } = await seeded();
   const buildInfoFile = path.join(tmp, "build-info.json");
   const baked = {
@@ -123,7 +123,7 @@ test("GET /v0/version degrades to null provenance when build-info.json is missin
   }
 });
 
-test("GET /v0/version degrades to null provenance when build-info.json is malformed (AIR-343)", async () => {
+test("GET /v0/version degrades to null provenance when build-info.json is malformed", async () => {
   const { tmp, stateFile } = await seeded();
   const buildInfoFile = path.join(tmp, "build-info.json");
   // A truncated / corrupted artifact (e.g. interrupted build write): valid file,
@@ -156,7 +156,7 @@ test("GET /v0/version degrades to null provenance when build-info.json is malfor
   }
 });
 
-test("rejects non-allowlisted Host headers across public and authed routes (PER-276)", async () => {
+test("rejects non-allowlisted Host headers across public and authed routes", async () => {
   const { tmp, stateFile, token } = await seeded();
   const previousAllowedOrigins = process.env.SCOUT_ALLOWED_ORIGINS;
   const { server, port } = await startServer(0, { stateFile });

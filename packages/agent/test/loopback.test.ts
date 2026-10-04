@@ -104,7 +104,7 @@ test("loopback round-trip: pair → POST interests → poll briefs", async () =>
   }
 });
 
-test("OPTIONS preflight grants Private Network Access for allowed origins (PER-107)", async () => {
+test("OPTIONS preflight grants Private Network Access for allowed origins", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   await saveState({ pairing_token: newPairingToken() }, stateFile);
@@ -169,7 +169,7 @@ test("OPTIONS preflight grants Private Network Access for allowed origins (PER-1
   }
 });
 
-test("POST /v0/interests returns 409 while a brief is pending (PER-92)", async () => {
+test("POST /v0/interests returns 409 while a brief is pending", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -209,7 +209,7 @@ test("POST /v0/interests returns 409 while a brief is pending (PER-92)", async (
   }
 });
 
-test("GET /v0/briefs + /healthz stay responsive during synthesis (PER-101)", async () => {
+test("GET /v0/briefs + /healthz stay responsive during synthesis", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -219,7 +219,7 @@ test("GET /v0/briefs + /healthz stay responsive during synthesis (PER-101)", asy
   // whole time — stands in for the heavy real agent. If the request handler
   // ever blocks the event loop on the in-flight child (e.g. a switch to a
   // synchronous spawn / blocking read), the polls below would hang and the
-  // latency assertion would fail. This is the guard for the PER-101 contract:
+  // latency assertion would fail. This is the guard for the contract:
   // synthesis is fire-and-forget and the server keeps answering.
   const dir = path.dirname(stateFile);
   const claudeBin = path.join(dir, "claude-busy");
@@ -276,7 +276,7 @@ test("GET /v0/briefs + /healthz stay responsive during synthesis (PER-101)", asy
   }
 });
 
-test("POST /v0/interests rejects more than MAX_INTERESTS with 400 (PER-91)", async () => {
+test("POST /v0/interests rejects more than MAX_INTERESTS with 400", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -311,7 +311,7 @@ test("POST /v0/interests rejects more than MAX_INTERESTS with 400 (PER-91)", asy
   }
 });
 
-test("POST /v0/interests rejects an oversized body with 413 (PER-137)", async () => {
+test("POST /v0/interests rejects an oversized body with 413", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -346,7 +346,7 @@ test("POST /v0/interests rejects an oversized body with 413 (PER-137)", async ()
   }
 });
 
-test("POST /v0/interests rejects an over-long single interest with 400 (PER-137)", async () => {
+test("POST /v0/interests rejects an over-long single interest with 400", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -380,7 +380,7 @@ test("POST /v0/interests rejects an over-long single interest with 400 (PER-137)
   }
 });
 
-test("POST /v0/interests de-duplicates before the count budget check (PER-126)", async () => {
+test("POST /v0/interests de-duplicates before the count budget check", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -399,7 +399,7 @@ test("POST /v0/interests de-duplicates before the count budget check (PER-126)",
     // MAX_INTERESTS + 1 raw items, but only MAX_INTERESTS unique after
     // case-insensitive de-dup (the first topic is repeated in another casing).
     // The dupe must be collapsed BEFORE the count check, so this is accepted
-    // (202) rather than rejected as over the cap. Pre-PER-126 this 400'd.
+    // (202) rather than rejected as over the cap.
     const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: {
@@ -508,7 +508,7 @@ test("POST /v0/interests reconciles against state saved while the body is still 
   }
 });
 
-// PER-110: the companion serves the web UI from its own loopback origin so the
+// The companion serves the web UI from its own loopback origin so the
 // page is same-origin with the API → no Local Network Access prompt. Two parts
 // are tested here: the /v0/config token bootstrap and the static file fallback.
 
@@ -570,7 +570,7 @@ test("GET /v0/config hands the token to a same-origin caller, refuses cross-orig
   }
 });
 
-// PER-157: the companion is the source of truth for the user's interests, so it
+// The companion is the source of truth for the user's interests, so it
 // hands them to a same-origin caller alongside the token. This lets a browser
 // with no locally-saved settings (cleared storage / different profile / a
 // different origin than first-run setup) recover the interests and render a
@@ -622,13 +622,13 @@ test("GET /v0/config returns the persisted interests to a same-origin caller", a
   }
 });
 
-// PER-135: the cross-origin origin-deny guard must be uniform across the whole
+// The cross-origin origin-deny guard must be uniform across the whole
 // /v0/* surface. Previously only /v0/config 403'd a hostile Origin; /v0/briefs
 // and /v0/interests served it (no ACAO, so unreadable in a browser, but the
 // posture was inconsistent — a defense-in-depth gap). Now every /v0/* route
 // rejects a non-allowlisted Origin with 403, while allowlisted app origins and
 // no-Origin (non-browser) callers still pass.
-test("a hostile Origin is 403'd uniformly across all /v0/* routes (PER-135)", async () => {
+test("a hostile Origin is 403'd uniformly across all /v0/* routes", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -771,10 +771,10 @@ test("a configured tailnet origin reaches the run path; unconfigured ones are re
   }
 });
 
-// PER-136: a wrong method on a KNOWN /v0/* route must return 405 Method Not
+// A wrong method on a KNOWN /v0/* route must return 405 Method Not
 // Allowed with an `Allow` header listing the valid methods — distinguishable
 // from the 404 a genuinely unknown path gets. An unknown path still 404s.
-test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404 (PER-136)", async () => {
+test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   const token = newPairingToken();
@@ -792,7 +792,7 @@ test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404 
     assert.equal(cfgDelete.headers.get("allow"), "GET, OPTIONS");
     assert.equal((await cfgDelete.json()).error, "method not allowed");
 
-    // DELETE on /v0/interests (GET/POST/PUT only, PER-169 added GET) → 405,
+    // DELETE on /v0/interests (GET/POST/PUT only) → 405,
     // Allow: GET, POST, PUT, OPTIONS.
     const interestsDelete = await fetch(
       `http://127.0.0.1:${port}/v0/interests`,
@@ -839,7 +839,7 @@ test("wrong method on a known /v0/* route → 405 + Allow; unknown path → 404 
   }
 });
 
-test("serves the bundled static UI for non-API GETs (PER-110)", async () => {
+test("serves the bundled static UI for non-API GETs", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   await saveState({ pairing_token: newPairingToken() }, stateFile);
@@ -896,10 +896,10 @@ test("serves the bundled static UI for non-API GETs (PER-110)", async () => {
   }
 });
 
-// PER-127: deep-linking / refreshing an in-app view (a panel at /app/, not a
+// Deep-linking / refreshing an in-app view (a panel at /app/, not a
 // real export route) must land on the app shell instead of a hard 404; and a
 // directory route hit without its trailing slash should 301 like GitHub Pages.
-test("SPA fallback + trailing-slash parity for the bundled UI (PER-127)", async () => {
+test("SPA fallback + trailing-slash parity for the bundled UI", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   await saveState({ pairing_token: newPairingToken() }, stateFile);
@@ -955,13 +955,13 @@ test("SPA fallback + trailing-slash parity for the bundled UI (PER-127)", async 
   }
 });
 
-// PER-144/PER-148: a genuinely-unknown route must render the export's styled
-// 404.html — not the raw JSON `{"error":"not found"}` a user would otherwise
-// see. PER-144 covered browser navigations (Accept: text/html); PER-148
-// broadens it to bare/`*/*` clients (curl, a directly-typed stray URL) on
-// extensionless routes too. Explicit JSON API clients and asset misses (paths
-// with a file extension) still get the machine-readable JSON 404.
-test("unknown route → styled 404.html, not raw JSON (PER-144/PER-148)", async () => {
+// A genuinely-unknown route must render the export's styled 404.html — not the
+// raw JSON `{"error":"not found"}` a user would otherwise see. That covers
+// browser navigations (Accept: text/html) and bare/`*/*` clients (curl, a
+// directly-typed stray URL) on extensionless routes too. Explicit JSON API
+// clients and asset misses (paths with a file extension) still get the
+// machine-readable JSON 404.
+test("unknown route → styled 404.html, not raw JSON", async () => {
   const tmpStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-"));
   const stateFile = path.join(tmpStateDir, "state.json");
   await saveState({ pairing_token: newPairingToken() }, stateFile);
@@ -992,7 +992,7 @@ test("unknown route → styled 404.html, not raw JSON (PER-144/PER-148)", async 
     assert.match(unknown.headers.get("content-type") ?? "", /text\/html/);
     assert.match(await unknown.text(), /Page not found/);
 
-    // The PER-144 repro path itself stays caught by the SPA fallback (200 shell),
+    // An unknown in-app path stays caught by the SPA fallback (200 shell),
     // never reaching the 404 page.
     const appUnknown = await fetch(
       `http://127.0.0.1:${port}/app/nonexistent-xyz`,
@@ -1011,7 +1011,7 @@ test("unknown route → styled 404.html, not raw JSON (PER-144/PER-148)", async 
     assert.equal(json404.status, 404);
     assert.equal((await json404.json()).error, "not found");
 
-    // PER-148: a bare/`*/*` client (curl, a directly-typed stray URL with no
+    // A bare/`*/*` client (curl, a directly-typed stray URL with no
     // text/html and no application/json) on an extensionless route is treated
     // as a human landing on a stray URL → styled 404 page, never raw JSON.
     const bare = await fetch(`http://127.0.0.1:${port}/totally-bogus-zzz`, {
@@ -1021,7 +1021,7 @@ test("unknown route → styled 404.html, not raw JSON (PER-144/PER-148)", async 
     assert.match(bare.headers.get("content-type") ?? "", /text\/html/);
     assert.match(await bare.text(), /Page not found/);
 
-    // PER-148: asset misses (path with a file extension) still get JSON 404 —
+    // Asset misses (path with a file extension) still get JSON 404 —
     // serving an HTML body for a missing script/style would be wrong.
     const asset404 = await fetch(`http://127.0.0.1:${port}/app/missing.js`, {
       headers: { accept: "*/*" },

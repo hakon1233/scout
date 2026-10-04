@@ -1,4 +1,4 @@
-// LaunchAgent service tests (PER-153). Hermetic: only the PURE plist builder and
+// LaunchAgent service tests. Hermetic: only the PURE plist builder and
 // the filesystem-presence detection are exercised — no launchctl is invoked, so
 // these touch nothing on the host's real launchd domain.
 
@@ -98,7 +98,7 @@ test("isServiceInstalled tracks plist validity, not mere presence", async () => 
 
     // Existence is not validity: a truncated write (what a non-atomic plist
     // rewrite leaves behind) must not report the companion reboot-durable
-    // when launchd would fail to bootstrap it at next login (PER-303).
+    // when launchd would fail to bootstrap it at next login.
     await fs.writeFile(p, "<plist/>");
     assert.equal(isServiceInstalled(), false);
 

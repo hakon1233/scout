@@ -1,16 +1,16 @@
-// In-process scheduler tests (PER-151). All hermetic: the `claude` shell-out is
+// In-process scheduler tests. All hermetic: the `claude` shell-out is
 // replaced with an in-process spawn stub, and time is injected, so these cost
 // zero quota, never touch the network, and don't wait on wall-clock.
 //
 // Covered:
 //   - nextFireAt rollover (today vs tomorrow) + normalizeTimeOfDay validation.
 //   - A scheduled fire actually produces a brief through the shared run path,
-//     and records last_run_status=success + a fresh next_run_at (the PER-139
+//     and records last_run_status=success + a fresh next_run_at (the
 //     "real, not dead" requirement: a configured schedule produces briefs).
 //   - Concurrency safety: a fire while a run is already in flight is SKIPPED
 //     (records last_run_status=skipped), never launching an overlapping run.
 //   - A fire with no stored interests is skipped, not a crash.
-//   - GET/PUT /v0/schedule contract the Settings UI (PER-152) consumes.
+//   - GET/PUT /v0/schedule contract the Settings UI consumes.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -79,7 +79,7 @@ function makeSpawnRecorder(opts: { autoClose: boolean }) {
 // A spawn stub whose sessions FAIL (emit empty output → research.ts rejects
 // "claude returned empty output") for the first `failFirst` calls, then SUCCEED
 // with the canned brief. Models a transient morning usage-limit that clears: the
-// 07:00 fire fails, a later retry recovers (PER-259 item 3). One call === one
+// 07:00 fire fails, a later retry recovers. One call === one
 // per-interest session, so with a single interest each attempt is one call.
 function makeFlakySpawn(opts: { failFirst: number }) {
   const calls: Array<{ stdin: string }> = [];
@@ -163,7 +163,7 @@ test("normalizeTimeOfDay validates + zero-pads, rejects garbage", () => {
   assert.equal(normalizeTimeOfDay(700), null);
 });
 
-test("a scheduled fire produces a brief and records success + next_run_at (PER-139 real-not-dead)", async () => {
+test("a scheduled fire produces a brief and records success + next_run_at", async () => {
   const { tmp, stateFile } = await tmpState({
     pairing_token: newPairingToken(),
     interests: [{ id: "int_aisafety", topic: "ai safety" }],
@@ -343,11 +343,11 @@ test("GET /v0/schedule returns the Settings-UI contract incl. reboot_durable:fal
     assert.equal(un.status, 401);
 
     // Once a LaunchAgent plist is present, reboot_durable flips to true with no
-    // restart or config write (PER-153) — the view reads the live filesystem.
+    // restart or config write — the view reads the live filesystem.
     // A plist launchd could actually bootstrap. `<plist/>` used to be enough
     // because durability was a bare existsSync; it now requires the label and
     // program arguments to be present, so a half-written file no longer
-    // reports reboot_durable:true (PER-303 blocker 3).
+    // reports reboot_durable:true.
     await fs.writeFile(
       process.env.SCOUT_LAUNCH_AGENT_PLIST!,
       `<?xml version="1.0" encoding="UTF-8"?>
@@ -430,7 +430,7 @@ test("PUT /v0/schedule validates, persists, and re-arms the scheduler", async ()
   }
 });
 
-test("a failed scheduled run auto-retries and recovers (PER-259 item 3)", async () => {
+test("a failed scheduled run auto-retries and recovers", async () => {
   const { tmp, stateFile } = await tmpState({
     pairing_token: newPairingToken(),
     interests: [{ id: "int_aisafety", topic: "ai safety" }],
@@ -464,7 +464,7 @@ test("a failed scheduled run auto-retries and recovers (PER-259 item 3)", async 
   try {
     await scheduler.fire();
     // The 07:00 fire failed; the armed retry produced a real brief with no
-    // founder intervention — the PER-258 self-heal.
+    // user intervention — the self-heal.
     const ready = await readyP;
     assert.equal(ready.status, "ready");
     assert.equal(seen[0].status, "failed", "the initial scheduled fire failed");
@@ -486,7 +486,7 @@ test("a failed scheduled run auto-retries and recovers (PER-259 item 3)", async 
   }
 });
 
-test("a scheduled run that keeps failing gives up after the retry budget (PER-259 item 3)", async () => {
+test("a scheduled run that keeps failing gives up after the retry budget", async () => {
   const { tmp, stateFile } = await tmpState({
     pairing_token: newPairingToken(),
     interests: [{ id: "int_aisafety", topic: "ai safety" }],
@@ -537,7 +537,7 @@ test("a scheduled run that keeps failing gives up after the retry budget (PER-25
   }
 });
 
-test("PER-280: a persistence failure while re-arming never disarms the schedule", async () => {
+test("a persistence failure while re-arming never disarms the schedule", async () => {
   const { tmp, stateFile } = await tmpState({
     pairing_token: newPairingToken(),
     interests: [{ id: "int_aisafety", topic: "ai safety" }],
@@ -552,7 +552,7 @@ test("PER-280: a persistence failure while re-arming never disarms the schedule"
     await fs.chmod(tmp, 0o555);
     // Before the fix this rejected out of saveState AFTER stop() had already
     // cleared the previous timer — leaving the scheduler permanently dead
-    // inside a healthy process (the 12-day PER-280 outage). It must resolve…
+    // inside a healthy process (a 12-day outage). It must resolve…
     await scheduler.reschedule();
     // …and the daily timer must be armed despite the failed telemetry write.
     // White-box probe: `timer` holds the armed setTimeout handle.

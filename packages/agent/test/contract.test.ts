@@ -1,13 +1,13 @@
 // Contract + regression tests that the loopback round-trip in
 // loopback.test.ts doesn't pin directly:
 //
-//   - PER-106: GET /v0/briefs returns the exact render contract the web app
+//   - GET /v0/briefs returns the exact render contract the web app
 //     parser (src/lib/companion.ts adaptBrief) consumes — id/generated_at/
 //     status/summary_md, with citations the app can turn into articles.
-//   - PER-92:  a second kick while a brief is in flight is rejected (409) and
+//   - a second kick while a brief is in flight is rejected (409) and
 //     the in-flight slot is NOT clobbered — last-writer-wins stays the *first*
 //     writer until it lands.
-//   - PER-108: the pairing token is never forwarded to the `claude` child
+//   - the pairing token is never forwarded to the `claude` child
 //     (argv / spawn options / stdin) and never written to stdout/stderr; the
 //     companion needs no Anthropic API key to synthesize (it relies on the
 //     local claude CLI's own auth), so a blank-key setup still works.
@@ -37,7 +37,8 @@ const CANNED_BRIEF =
 // piped to stdin) and lets the test control when each child "closes". With
 // `autoClose: true` the child emits the canned brief and exits 0 as soon as
 // stdin ends; otherwise the child hangs until `releaseAll()` is called, which
-// is how we hold a synthesis "in flight" to exercise the PER-92 race window.
+// is how we hold a synthesis "in flight" to exercise the single-flight race
+// window.
 function makeSpawnRecorder(opts: { autoClose: boolean }) {
   const calls: Array<{ bin: string; args: readonly string[]; options: unknown; stdin: string }> = [];
   const pending: Array<() => void> = [];
@@ -88,7 +89,7 @@ function makeSpawnRecorder(opts: { autoClose: boolean }) {
     // releaseAll() only drains children ALREADY gated on stdin-finish. The
     // kick's 202 returns before the runner has written its state/doc files and
     // spawned the child, so a test that releases "right after" the kick is
-    // racing that async setup — and since the PER-272 fsyncs it reliably
+    // racing that async setup — and since state writes fsync it reliably
     // loses, leaving the child gated forever until the 4-minute session
     // timeout fails the run. Tests must await this before releaseAll().
     async waitForGatedChild(count = 1) {
@@ -111,7 +112,7 @@ async function seededServer() {
   return { tmp, stateFile, token };
 }
 
-test("GET /v0/briefs returns the render contract the web app parses (PER-106)", async () => {
+test("GET /v0/briefs returns the render contract the web app parses", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const { spawnFn } = makeSpawnRecorder({ autoClose: true });
 
@@ -165,7 +166,7 @@ test("GET /v0/briefs returns the render contract the web app parses (PER-106)", 
   }
 });
 
-test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (PER-219)", async () => {
+test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const { spawnFn } = makeSpawnRecorder({ autoClose: true });
 
@@ -185,7 +186,7 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
       // Each sequential run intentionally replaces the prior topic list, so it
-      // must carry the PER-240 wipe-guard token.
+      // must carry the wipe-guard token.
       body: JSON.stringify({ interests, confirm_replace: true }),
     });
     assert.equal(kick.status, 202);
@@ -261,7 +262,7 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first (
   }
 });
 
-test("a second kick while a brief is in flight is rejected without clobbering the slot (PER-92)", async () => {
+test("a second kick while a brief is in flight is rejected without clobbering the slot", async () => {
   const { tmp, stateFile, token } = await seededServer();
   // autoClose:false → the first synthesis hangs, holding last_brief = pending.
   const { spawnFn, releaseAll, waitForGatedChild } = makeSpawnRecorder({
@@ -302,7 +303,7 @@ test("a second kick while a brief is in flight is rejected without clobbering th
     const kick2 = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
-      // confirm_replace satisfies the PER-240 wipe guard so this kick reaches
+      // confirm_replace satisfies the wipe guard so this kick reaches
       // the single-flight check — the rejection under test here.
       body: JSON.stringify({ interests: ["topic two"], confirm_replace: true }),
     });
@@ -323,7 +324,7 @@ test("a second kick while a brief is in flight is rejected without clobbering th
   }
 });
 
-test("the pairing token is never forwarded to claude or logged, and no API key is required (PER-108)", async () => {
+test("the pairing token is never forwarded to claude or logged, and no API key is required", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const recorder = makeSpawnRecorder({ autoClose: true });
 
@@ -345,7 +346,7 @@ test("the pairing token is never forwarded to claude or logged, and no API key i
   }
 
   // Make sure a blank-key environment is what we test: the companion must work
-  // with no Anthropic API key in the env (PER-108 — keys are optional; auth is
+  // with no Anthropic API key in the env (keys are optional; auth is
   // delegated to the local claude CLI's own credentials).
   const savedKey = process.env.ANTHROPIC_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
@@ -366,7 +367,7 @@ test("the pairing token is never forwarded to claude or logged, and no API key i
     const brief = await doneP;
     assert.equal(brief.status, "ready", "synthesis succeeds with no API key configured");
 
-    // Per-interest sessions (C2/PER-171): one claude child per topic.
+    // Per-interest sessions: one claude child per topic.
     assert.equal(recorder.calls.length, 2);
 
     // The token must appear in NONE of: argv, spawn options (incl. any env), or
@@ -397,7 +398,7 @@ test("the pairing token is never forwarded to claude or logged, and no API key i
   }
 });
 
-test("PUT /v0/interests persists to state.json WITHOUT running a synthesis (PER-160)", async () => {
+test("PUT /v0/interests persists to state.json WITHOUT running a synthesis", async () => {
   const { tmp, stateFile, token } = await seededServer();
   // autoClose:true would let a synthesis complete — but PUT must never spawn
   // claude at all. We assert `calls` stays empty to prove it's persist-only.
@@ -422,7 +423,7 @@ test("PUT /v0/interests persists to state.json WITHOUT running a synthesis (PER-
     assert.deepEqual(body.interests, ["ai safety", "markets"]);
 
     // It persisted to state.json (the headless scheduler's source of truth) as
-    // the rich {id, topic} model (PER-169); the topics round-trip losslessly.
+    // the rich {id, topic} model; the topics round-trip losslessly.
     const state = await loadState(stateFile);
     assert.deepEqual(
       (state.interests ?? []).map((i) => i.topic),
@@ -442,7 +443,7 @@ test("PUT /v0/interests persists to state.json WITHOUT running a synthesis (PER-
   }
 });
 
-test("PUT /v0/interests rejects an empty/oversized interest list (PER-160)", async () => {
+test("PUT /v0/interests rejects an empty/oversized interest list", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const recorder = makeSpawnRecorder({ autoClose: true });
   const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
@@ -510,13 +511,12 @@ test("PUT /v0/interests rejects malformed interest entries without partial write
 });
 
 // ---------------------------------------------------------------------------
-// Wipe guard (PER-240). Both interest writes are replace-all; on 2026-06-11 a
-// one-topic QA payload (`ephemeral:true` against a pre-PER-218 build) silently
-// destroyed the founder's 5 saved interests. The guard: any write that would
-// DROP a currently-saved topic is refused with 409 unless the caller passes an
-// explicit `confirm_replace: true` (mirroring the PER-230 confirm-delete seam).
-// Additive writes (same set / supersets) pass untouched, and ephemeral runs
-// skip the guard because they persist nothing (PER-218).
+// Wipe guard. Both interest writes are replace-all, so a one-topic test payload
+// could silently destroy a user's 5 saved interests. The guard: any write that
+// would DROP a currently-saved topic is refused with 409 unless the caller
+// passes an explicit `confirm_replace: true` (mirroring the chat confirm-delete
+// seam). Additive writes (same set / supersets) pass untouched, and ephemeral
+// runs skip the guard because they persist nothing.
 // ---------------------------------------------------------------------------
 
 async function seededServerWithInterests() {
@@ -532,7 +532,7 @@ async function seededServerWithInterests() {
   return { tmp, stateFile, token, saved };
 }
 
-test("POST /v0/interests refuses a subset payload that would drop saved interests (PER-240)", async () => {
+test("POST /v0/interests refuses a subset payload that would drop saved interests", async () => {
   const { tmp, stateFile, token, saved } = await seededServerWithInterests();
   const recorder = makeSpawnRecorder({ autoClose: true });
   const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
@@ -562,7 +562,7 @@ test("POST /v0/interests refuses a subset payload that would drop saved interest
   }
 });
 
-test("POST /v0/interests with confirm_replace:true performs the intentional replace (PER-240)", async () => {
+test("POST /v0/interests with confirm_replace:true performs the intentional replace", async () => {
   const { tmp, stateFile, token } = await seededServerWithInterests();
   const recorder = makeSpawnRecorder({ autoClose: true });
   let synthesisDone: (b: unknown) => void = () => {};
@@ -596,7 +596,7 @@ test("POST /v0/interests with confirm_replace:true performs the intentional repl
   }
 });
 
-test("POST /v0/interests passes a superset (additive) payload without confirmation (PER-240)", async () => {
+test("POST /v0/interests passes a superset (additive) payload without confirmation", async () => {
   const { tmp, stateFile, token } = await seededServerWithInterests();
   const recorder = makeSpawnRecorder({ autoClose: true });
   let synthesisDone: (b: unknown) => void = () => {};
@@ -633,7 +633,7 @@ test("POST /v0/interests passes a superset (additive) payload without confirmati
   }
 });
 
-test("POST /v0/interests {ephemeral:true} never alters persisted interests (PER-240 acceptance)", async () => {
+test("POST /v0/interests {ephemeral:true} never alters persisted interests", async () => {
   const { tmp, stateFile, token, saved } = await seededServerWithInterests();
   const recorder = makeSpawnRecorder({ autoClose: true });
   let synthesisDone: (b: unknown) => void = () => {};
@@ -647,7 +647,7 @@ test("POST /v0/interests {ephemeral:true} never alters persisted interests (PER-
 
   try {
     // A disjoint test topic, exactly like a QA fire — accepted (202, a brief is
-    // produced) but the founder's saved set must be byte-identical afterwards.
+    // produced) but the user's saved set must be byte-identical afterwards.
     const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
@@ -665,7 +665,7 @@ test("POST /v0/interests {ephemeral:true} never alters persisted interests (PER-
   }
 });
 
-test("PUT /v0/interests applies the same wipe guard as POST (PER-240)", async () => {
+test("PUT /v0/interests applies the same wipe guard as POST", async () => {
   const { tmp, stateFile, token, saved } = await seededServerWithInterests();
   const recorder = makeSpawnRecorder({ autoClose: true });
   const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });

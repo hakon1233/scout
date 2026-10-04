@@ -1,6 +1,6 @@
-// End-to-end contract for the focused-retry path (PER-154).
+// End-to-end contract for the focused-retry path.
 //
-// The founder's bug: a brief came back with some topics dropped, and the Retry
+// The bug: a brief came back with some topics dropped, and the Retry
 // affordance re-ran the WHOLE prompt and reproduced the same drop, so it never
 // recovered. The fix:
 //   1. The companion computes per-topic coverage and returns it on the brief, so
@@ -25,7 +25,7 @@ import { saveState, newPairingToken } from "../src/state.js";
 import type { Brief, TopicCoverage } from "../src/contract.js";
 import { startServer } from "../src/server.js";
 
-// A claude stub for the per-interest world (C2/PER-171): each session researches
+// A claude stub for the per-interest world: each session researches
 // ONE topic, so each prompt names a `single topic: "<topic>"`. The stub reads
 // that topic and emits exactly that topic's section — EXCEPT for "openai", which
 // it DROPS the first time it's asked (the bug: a topic comes back missing) and
@@ -95,7 +95,7 @@ async function seededServer() {
 
 type BriefWithTopics = Brief & { topics?: TopicCoverage[] };
 
-test("retry_topics re-researches only the dropped topic and merges it in (PER-154)", async () => {
+test("retry_topics re-researches only the dropped topic and merges it in", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const { calls, spawnFn } = makeTopicAwareSpawn();
   const auth = { authorization: `Bearer ${token}` };
@@ -179,7 +179,7 @@ test("retry_topics re-researches only the dropped topic and merges it in (PER-15
   }
 });
 
-test("retry_topics with no prior brief is refused with a clear error (PER-154)", async () => {
+test("retry_topics with no prior brief is refused with a clear error", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const { spawnFn } = makeTopicAwareSpawn();
   const auth = { authorization: `Bearer ${token}` };
@@ -192,7 +192,7 @@ test("retry_topics with no prior brief is refused with a clear error (PER-154)",
       body: JSON.stringify({ interests: ["openai"], retry_topics: ["openai"] }),
     });
     // No base brief to merge into → 409 with an actionable message, not a
-    // silent no-op (no dead controls, PER-139).
+    // silent no-op (no dead controls).
     assert.equal(res.status, 409);
     const body = (await res.json()) as { error: string };
     assert.match(body.error, /no base brief/i);

@@ -1,4 +1,4 @@
-// Unit tests for pairing-token resolution (PER-102).
+// Unit tests for pairing-token resolution.
 //
 // `scout-agent pair` must reuse an existing token by default but mint a fresh
 // one under --force/--reset. resolvePairingToken() is the pure decision the CLI
