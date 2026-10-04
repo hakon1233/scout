@@ -14,7 +14,6 @@ import { Banner, Button } from "@/components/ui";
 import type { AgentProgress } from "@/lib/agent";
 import {
   bootstrapCompanionToken,
-  fetchCompanionInterests,
   fetchLatestBrief,
   generateWeeklyBrief,
   loadCompanionToken,
@@ -22,6 +21,7 @@ import {
   refreshBriefViaCompanion,
 } from "@/lib/companion";
 import { fetchRunFailure, type RunFailure } from "@/lib/run-failure";
+import { fetchCompanionInterestSet } from "@/lib/interest-docs";
 import { formatDate } from "@/lib/format-date";
 import { classifyError, type ClassifiedError } from "@/lib/errors";
 import {
@@ -189,71 +189,29 @@ export default function AppPage() {
 
   useAbortableEffect(
     (scope) => {
-      // PER-157: when this browser has NO locally-saved settings but the companion
-      // (the source of truth) holds the user's interests, adopt them. Without this
-      // the app dead-ends on the setup form — and silently drops the ready brief it
-      // already fetched above — for any browser that didn't do first-run setup here
-      // (cleared storage, a different profile, or a different origin than the one
-      // the companion now serves). The result reads as "Run now doesn't work."
-      // Only fires when nothing is stored locally: a real saved config (with the
-      // user's name + curated interests) always wins and is never overwritten.
+      // The companion holds the reader's interests (its scheduler runs from
+      // them), so mirror its list into local settings: a browser that never
+      // did setup here gets a usable feed instead of the setup form, and one
+      // that did follows interests added, removed or renamed in the profile
+      // chat. The reader's name stays local.
       if (!hydrated) return;
-      if (loadSettings()) return;
       (async () => {
-        const topics = await fetchCompanionInterests();
-        if (scope.cancelled || topics.length === 0) return;
-        // Re-check: the user may have completed setup while this was in flight.
-        if (loadSettings()) return;
-        const adopted: Settings = {
-          name: "",
-          interests: topics.map((topic, i) => ({
-            id: `int_${i}_${topic.slice(0, 12)}`,
-            topic,
-          })),
-        };
-        saveSettings(adopted);
-        setSettings(adopted);
-      })();
-    },
-    [hydrated],
-  );
-
-  useAbortableEffect(
-    (scope) => {
-      // PER-191: keep the run-selector's interest list aligned with the companion's
-      // ACTUAL interests. The adoption effect above only seeds an EMPTY browser; a
-      // browser that set up earlier keeps its saved list verbatim, so when the user
-      // later adds/removes/renames interests via the profile chat, `settings.interests`
-      // drifts. The brief (built by the companion) then shows more `## topic` sections
-      // than the run-selector offers chips for — the founder's "way more topics than
-      // what we can filter by." Reconcile topics here (preserving the user's name and
-      // any existing stable ids) so run-selector, brief sections, and the brief filter
-      // all derive from one source of truth. No-op when nothing changed.
-      if (!hydrated) return;
-      const stored = loadSettings();
-      if (!stored || stored.interests.length === 0) return; // empty → adoption handles it
-      (async () => {
-        const topics = await fetchCompanionInterests();
-        if (scope.cancelled || topics.length === 0) return;
-        const idByTopic = new Map(
-          stored.interests.map((i) => [i.topic.trim().toLowerCase(), i.id]),
+        const stored = loadSettings();
+        const token = await bootstrapCompanionToken();
+        const set = await fetchCompanionInterestSet(
+          token,
+          stored?.interests ?? [],
         );
-        const current = stored.interests.map((i) => i.topic);
-        const sameOrder =
-          current.length === topics.length &&
-          current.every((t, idx) => t === topics[idx]);
-        if (sameOrder) return; // already aligned — nothing to write
-        const reconciled: Settings = {
-          name: stored.name,
-          interests: topics.map((topic, i) => ({
-            id:
-              idByTopic.get(topic.trim().toLowerCase()) ??
-              `int_${i}_${topic.slice(0, 12)}`,
-            topic,
-          })),
+        if (scope.cancelled || !set) return;
+        // The reader saved settings while this was in flight: theirs win.
+        if (JSON.stringify(loadSettings()) !== JSON.stringify(stored)) return;
+        const next: Settings = {
+          name: stored?.name ?? "",
+          interests: set.interests,
         };
-        saveSettings(reconciled);
-        if (!scope.cancelled) setSettings(reconciled);
+        if (JSON.stringify(next) === JSON.stringify(stored)) return;
+        saveSettings(next);
+        setSettings(next);
       })();
     },
     [hydrated],

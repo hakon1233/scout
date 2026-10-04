@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  bootstrapCompanionToken,
-  fetchCompanionInterests,
-} from "@/lib/companion";
+import { bootstrapCompanionToken } from "@/lib/companion";
 import {
   useAbortableController,
   useAbortableEffect,
@@ -12,7 +9,7 @@ import {
 import { confirmDeleteInterest, confirmRewriteInterest, fetchChatTranscript, runChatTurn, stopChatTurn } from "@/lib/chat";
 import type { ChatChange, PendingDelete, PendingRewrite } from "@scout/agent/contract";
 import {
-  fetchInterestsFull,
+  fetchCompanionInterestSet,
   type InterestDocMeta,
   interestKey,
   mockDocMeta,
@@ -33,7 +30,6 @@ import {
   dropKey,
   greetingMessage,
   markdownDemoMessages,
-  mergeInterests,
   nextMsgId,
   resolveMessage,
   resolveRetryTarget,
@@ -120,30 +116,24 @@ export function useProfileWorkbench() {
         // transcript + full-interests both depend only on `tok` and are
         // independent of each other — fetch concurrently instead of in series
         // to roughly halve first-paint latency.
-        const [transcript, full] = await Promise.all([
+        const [transcript, set] = await Promise.all([
           tok ? fetchChatTranscript(tok) : Promise.resolve([]),
-          fetchInterestsFull(tok),
+          fetchCompanionInterestSet(tok, loadSettings()?.interests ?? []),
         ]);
         if (scope.cancelled) return;
         if (transcript.length > 0) {
           setMessages(transcriptMessages(transcript));
         }
-        if (full && full.interests.length > 0) {
-          setInterests(full.interests);
-          setDocMeta(full.meta);
-          setDocBodies(
-            Object.fromEntries(
-              Object.entries(full.meta)
-                .filter(([, meta]) => typeof meta.body === "string")
-                .map(([key, meta]) => [key, meta.body as string]),
-            ),
-          );
-          return;
-        }
-        const topics = await fetchCompanionInterests();
-        if (scope.cancelled) return;
-        if (topics.length > 0)
-          setInterests((prev) => mergeInterests(prev, topics));
+        if (!set) return;
+        setInterests(set.interests);
+        setDocMeta(set.meta);
+        setDocBodies(
+          Object.fromEntries(
+            Object.entries(set.meta)
+              .filter(([, meta]) => typeof meta.body === "string")
+              .map(([key, meta]) => [key, meta.body as string]),
+          ),
+        );
       })();
     },
     [hydrated, mockSeed],

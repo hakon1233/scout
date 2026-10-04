@@ -12,11 +12,6 @@ import type { Interest } from "@scout/agent/contract";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 
-// mergeInterests now lives in @/lib/interest-docs (single home; it was copied
-// verbatim here and in the interest-scope page). Re-exported so existing
-// importers of this helpers module keep working.
-export { mergeInterests } from "@/lib/interest-docs";
-
 // Monotonic chat-message id source. Module-scoped so ids stay unique across the
 // seed messages and every live turn the hook appends.
 let msgSeq = 0;

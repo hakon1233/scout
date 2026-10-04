@@ -4,14 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { EmptyState } from "@/components/ui";
 import { LazyMarkdown } from "@/components/profile/LazyMarkdown";
+import { bootstrapCompanionToken } from "@/lib/companion";
 import {
-  bootstrapCompanionToken,
-  fetchCompanionInterests,
-} from "@/lib/companion";
-import {
-  fetchInterestsFull,
+  fetchCompanionInterestSet,
   interestKey,
-  mergeInterests,
   mockDocMeta,
   SAMPLE_INTERESTS,
   type InterestDocMeta,
@@ -113,18 +109,13 @@ export default function InterestScopePage() {
     (async () => {
       const tok = await bootstrapCompanionToken();
       if (cancelled) return;
-      const full = await fetchInterestsFull(tok);
-      if (cancelled) return;
-      if (full && full.interests.length > 0) {
-        setInterests(full.interests);
-        setDocMeta(full.meta);
-        return;
-      }
-      const topics = await fetchCompanionInterests();
-      if (cancelled) return;
-      if (topics.length > 0) {
-        setInterests((prev) => mergeInterests(prev, topics));
-      }
+      const set = await fetchCompanionInterestSet(
+        tok,
+        loadSettings()?.interests ?? [],
+      );
+      if (cancelled || !set) return;
+      setInterests(set.interests);
+      setDocMeta(set.meta);
     })();
     return () => {
       cancelled = true;

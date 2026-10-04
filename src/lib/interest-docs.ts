@@ -1,7 +1,11 @@
 "use client";
 
 import { PATHS, type Interest } from "@scout/agent/contract";
-import { companionFetch, isServedFromCompanion } from "./companion";
+import {
+  companionFetch,
+  fetchCompanionInterests,
+  isServedFromCompanion,
+} from "./companion";
 import { isClient } from "./safe-storage";
 
 // Per-interest "intent doc" metadata (PER-155 C1/C4). The intent doc is the
@@ -50,22 +54,18 @@ export function interestEditorHref(i: Interest): string {
   return `/app/interest?id=${encodeURIComponent(interestKey(i))}`;
 }
 
-// Reconcile the locally-stored interests against the topic list the companion
-// reports. With no companion topics we trust local state verbatim; otherwise the
-// companion list is authoritative for membership/order, reusing the local record
-// (for its id) when a topic matches case-insensitively. Pure — shared by the
-// profile workbench hook and the interest-scope page (previously copied verbatim
-// in both).
-export function mergeInterests(
-  local: Interest[],
-  companionTopics: string[],
-): Interest[] {
-  if (companionTopics.length === 0) return local;
+// The companion's topic list, in its order, reusing the local record (for its
+// id) when a topic matches case-insensitively. A topic with no local record
+// gets its key as id.
+function mergeInterests(local: Interest[], topics: string[]): Interest[] {
   const byTopic = new Map(local.map((i) => [i.topic.trim().toLowerCase(), i]));
-  return companionTopics.map((topic) => {
-    const match = byTopic.get(topic.trim().toLowerCase());
-    return match ?? { id: "", topic };
-  });
+  return topics.map(
+    (topic) =>
+      byTopic.get(topic.trim().toLowerCase()) ?? {
+        id: interestKey({ id: "", topic }),
+        topic,
+      },
+  );
 }
 
 // Fetch the FULL interest set from the authed GET /v0/interests — real stable
@@ -115,6 +115,24 @@ export async function fetchInterestsFull(token: string): Promise<{
   } catch {
     return null;
   }
+}
+
+// The companion's interests, the one source of truth when it serves this page:
+// the full set with doc metadata from /v0/interests, else its topic list from
+// /v0/config merged onto `local`. Null when the companion isn't serving this
+// page or holds no interests, so the caller keeps `local`.
+export async function fetchCompanionInterestSet(
+  token: string,
+  local: Interest[],
+): Promise<{
+  interests: Interest[];
+  meta: Record<string, InterestDocMeta>;
+} | null> {
+  const full = await fetchInterestsFull(token);
+  if (full && full.interests.length > 0) return full;
+  const topics = await fetchCompanionInterests();
+  if (topics.length === 0) return null;
+  return { interests: mergeInterests(local, topics), meta: {} };
 }
 
 // Fetch doc metadata keyed by interestKey. Returns {} (→ every interest reads
