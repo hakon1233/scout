@@ -818,13 +818,28 @@ export async function confirmRewriteTurn(
   }
 }
 
+// Apply an already-applied change set (creates and renames) to another copy of
+// the interest list. Deletes never auto-apply, so they are not replayed.
+function replayChanges(list: Interest[], changes: ChatChange[]): Interest[] {
+  const next = [...list];
+  for (const c of changes) {
+    const at = next.findIndex((i) => i.id === c.interestId);
+    if (c.op === "create" && at === -1 && c.topic) {
+      next.push({ id: c.interestId, topic: c.topic });
+    } else if (c.op === "update" && at !== -1 && c.topic) {
+      next[at] = { ...next[at], topic: c.topic };
+    }
+  }
+  return next;
+}
+
 async function runChatTurn(
   message: string,
   turnId: string,
   deps: ChatDeps,
 ): Promise<void> {
   let turn: ChatTurn;
-  let nextInterests: Interest[] | null = null;
+  let applied: ChatChange[] = [];
   const abort = new AbortController();
   currentTurnAbort = { turnId, controller: abort };
   try {
@@ -850,22 +865,13 @@ async function runChatTurn(
     // Deletes and full rewrites are gated: they come back as `pendingDeletes` /
     // `pendingRewrites` (NOT applied) for the FE to confirm. We surface the
     // first of each — the confirm cards are single-op.
-    const { interests, applied, pendingDeletes, pendingRewrites } =
-      await applyChatChanges(
-        state.interests ?? [],
-        output.changes,
-        deps.interestsDir,
-      );
-    // Only claim an interest-list write when this turn ACTUALLY changed the list.
-    // `applyChatChanges` mutates `interests` solely alongside an `applied` entry
-    // (create/update); gated deletes/rewrites and pure Q&A turns leave it a copy
-    // of the turn-start snapshot. Assigning `nextInterests` unconditionally made
-    // the persist below always overwrite `interests` with that STALE snapshot —
-    // silently reverting any interest a concurrent PUT /v0/interests added during
-    // the model round-trip. Leaving it null lets the persist fall through to the
-    // reloaded `fresh.interests`, honouring the "reload so we don't clobber a
-    // concurrent writer" invariant documented at that write. (AIR-471)
-    nextInterests = applied.length > 0 ? interests : null;
+    const result = await applyChatChanges(
+      state.interests ?? [],
+      output.changes,
+      deps.interestsDir,
+    );
+    applied = result.applied;
+    const { pendingDeletes, pendingRewrites } = result;
     turn = {
       id: turnId,
       created_at: new Date().toISOString(),
@@ -894,14 +900,16 @@ async function runChatTurn(
   }
 
   try {
-    // Reload before persisting so we don't clobber a concurrent writer (e.g. the
-    // scheduler updating next_run_at). Only overwrite `interests` when the turn
-    // actually changed them.
+    // Reload before persisting, and replay this turn's changes onto the fresh
+    // list: the reader may have saved interests while the model was answering.
     const fresh = await loadState(deps.stateFile);
     await saveState(
       {
         ...fresh,
-        interests: nextInterests ?? fresh.interests,
+        interests:
+          applied.length > 0
+            ? replayChanges(fresh.interests ?? [], applied)
+            : fresh.interests,
         last_chat: turn,
       },
       deps.stateFile,

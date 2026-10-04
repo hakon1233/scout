@@ -81,6 +81,10 @@ function makeChatSpawn(opts: { output: string; autoClose: boolean }) {
     releaseAll() {
       while (pending.length) pending.shift()!();
     },
+    // Resolves once a held child has received its whole prompt.
+    async waitForHeldChild() {
+      while (pending.length === 0) await new Promise((r) => setTimeout(r, 5));
+    },
   };
 }
 
@@ -1434,6 +1438,56 @@ test("a chat turn keeps its transcript next to the state file it was given", asy
       ["hello"],
     );
   } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("an interest saved while a chat turn runs survives the turn's own change", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_a", topic: "alpha" }],
+  });
+  const model = JSON.stringify({
+    reply: "Added beta.",
+    changes: [{ op: "create", topic: "beta", doc: "Track beta." }],
+  });
+  const chat = makeChatSpawn({ output: model, autoClose: false });
+  const { onChatDone, done } = awaitTurn();
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn: chat.spawnFn,
+    onChatDone,
+  });
+  const headers = {
+    "content-type": "application/json",
+    authorization: `Bearer ${token}`,
+  };
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ message: "add beta" }),
+    });
+    assert.equal(kick.status, 202);
+    await chat.waitForHeldChild();
+
+    // The reader saves a new interest while the model is still answering.
+    const put = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ interests: ["alpha", "gamma"] }),
+    });
+    assert.equal(put.status, 200);
+
+    chat.releaseAll();
+    assert.equal((await done).status, "ready");
+
+    const topics = ((await loadState(stateFile)).interests ?? []).map(
+      (i) => i.topic,
+    );
+    assert.deepEqual(topics, ["alpha", "gamma", "beta"]);
+  } finally {
+    server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
