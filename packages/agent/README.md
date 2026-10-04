@@ -92,6 +92,11 @@ Delete the file to un-pair, or run `scout-agent pair --force` to rotate the toke
 
 - `SCOUT_AGENT_PORT` — bind port (default 47821).
 - `SCOUT_CLAUDE_BIN` — path to the `claude` binary (default `claude` from `PATH`).
+- `SCOUT_ALLOWED_ORIGINS` — extra browser origins allowed to call the companion,
+  as a comma-separated list of exact origins (for example a `tailscale serve`
+  URL such as `https://my-mac.example-tailnet.ts.net:48721`). Loopback and the
+  hosted UI (`https://hakon1233.github.io`) are always allowed; nothing else is.
+- `SCOUT_SESSION_TIMEOUT_MS` — hard ceiling per `claude` run (default 4 minutes).
 
 ## Tests
 

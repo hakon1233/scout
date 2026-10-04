@@ -9,53 +9,48 @@ import { timingSafeEqual } from "node:crypto";
 
 import { MAX_BODY_BYTES } from "./limits.js";
 
-// CORS: loopback dev origins + the specific Scout production hostname(s) +
-// the founder's private Tailscale tailnet origin.
-// Do NOT add wildcard *.vercel.app or *.github.io — any user of those
-// platforms could make cross-origin requests to the companion.
-//
-// Tailscale (PER-157): the founder reaches the companion over his tailnet at
-// `https://<machine>.<tailnet>.ts.net(:<port>)?`, NOT loopback. A browser there
-// sends that Origin on every write (`POST /v0/interests` = Run now,
-// `PUT /v0/interests`/`/v0/schedule`), so without it `isOriginDenied()` 403s the
-// entire run path — exactly the founder's "run doesn't work". MagicDNS `.ts.net`
-// names resolve only inside a user's own tailnet, so a public attacker site can
-// never present such an Origin; the only cross-origin caller able to is a page
-// served within the founder's own private tailnet — an acceptable trust boundary.
-const CORS_ALLOWED_ORIGINS = [
-  /^https?:\/\/localhost(:\d+)?$/,
-  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https:\/\/scout\.notiva\.no$/,
-  /^https:\/\/hakon1233\.github\.io$/,
-  /^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.ts\.net(:\d+)?$/i,
-  ...extraAllowedOrigins(),
-];
+// Which browser origins may call the companion, and which Host names it
+// answers to (the Host check defeats DNS rebinding). Loopback and the hosted UI
+// are always allowed. Anything else, such as a `tailscale serve` URL or a
+// self-hosted UI, is opted into with SCOUT_ALLOWED_ORIGINS: a comma-separated
+// list of exact origins, e.g.
+//   SCOUT_ALLOWED_ORIGINS="https://my-mac.example-tailnet.ts.net:48721"
+// No wildcards: a pattern such as *.ts.net would also admit any public
+// Tailscale Funnel site.
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const LOOPBACK_HOSTNAMES = ["localhost", "127.0.0.1", "::1"];
+// The static UI on GitHub Pages calls the reader's loopback companion.
+const HOSTED_UI_ORIGIN = "https://hakon1233.github.io";
 
-const HOST_ALLOWED_HOSTNAMES = [
-  /^localhost$/i,
-  /^127\.0\.0\.1$/,
-  /^::1$/,
-  /^scout\.notiva\.no$/i,
-  /^hakon1233\.github\.io$/i,
-  /^[a-z0-9-]+\.[a-z0-9-]+\.ts\.net$/i,
-];
+// Parsed once per distinct env value, so a test can change the variable
+// between requests without restarting the server.
+let configuredRaw: string | undefined;
+let configured: string[] = [];
 
-// Optional operator-configured serving origins, so a non-tailnet deployment can
-// be allowlisted without a code change (PER-157). Set SCOUT_ALLOWED_ORIGINS to a
-// comma-separated list of exact origins, e.g.
-//   SCOUT_ALLOWED_ORIGINS="https://news.example.com,https://news.example.com:8443"
-// Each entry is matched exactly (scheme+host+port), never as a wildcard.
-function extraAllowedOrigins(): RegExp[] {
+function configuredOrigins(): string[] {
   const raw = process.env.SCOUT_ALLOWED_ORIGINS;
-  if (!raw) return [];
-  return raw
+  if (raw === configuredRaw) return configured;
+  configuredRaw = raw;
+  configured = (raw ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
-    .map(
-      (origin) =>
-        new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
-    );
+    .flatMap((entry) => {
+      try {
+        return [new URL(entry).origin];
+      } catch {
+        return [];
+      }
+    });
+  return configured;
+}
+
+function isAllowedOrigin(origin: string): boolean {
+  return (
+    LOOPBACK_ORIGIN.test(origin) ||
+    origin === HOSTED_UI_ORIGIN ||
+    configuredOrigins().includes(origin)
+  );
 }
 
 function normalizeHostname(hostname: string): string {
@@ -71,40 +66,13 @@ function hostnameFromHostHeader(host: string | undefined): string | null {
   }
 }
 
-// isHostAllowed runs on every single request (server.ts's Host-header gate,
-// ahead of routing), so re-splitting/re-parsing SCOUT_ALLOWED_ORIGINS on every
-// call is wasted work at volume. Cache keyed by the raw env value rather than
-// memoized once at module load: PER-276's test flips SCOUT_ALLOWED_ORIGINS
-// AFTER the server has already started and expects the very next request to
-// see the new value, with no restart — a plain one-shot memo would break that.
-let cachedRawAllowedOrigins: string | undefined;
-let cachedAllowedOriginHostnames: string[] = [];
-
-function extraAllowedOriginHostnames(): string[] {
-  const raw = process.env.SCOUT_ALLOWED_ORIGINS;
-  if (raw === cachedRawAllowedOrigins) return cachedAllowedOriginHostnames;
-  cachedRawAllowedOrigins = raw;
-  cachedAllowedOriginHostnames = !raw
-    ? []
-    : raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .flatMap((origin) => {
-          try {
-            return [normalizeHostname(new URL(origin).hostname)];
-          } catch {
-            return [];
-          }
-        });
-  return cachedAllowedOriginHostnames;
-}
-
 export function isHostAllowed(host: string | undefined): boolean {
   const hostname = hostnameFromHostHeader(host);
   if (!hostname) return false;
-  if (HOST_ALLOWED_HOSTNAMES.some((rx) => rx.test(hostname))) return true;
-  return extraAllowedOriginHostnames().includes(hostname);
+  if (LOOPBACK_HOSTNAMES.includes(hostname)) return true;
+  return configuredOrigins().some(
+    (origin) => normalizeHostname(new URL(origin).hostname) === hostname,
+  );
 }
 
 export function timingSafeTokenEqual(
@@ -135,24 +103,23 @@ export function isSameOriginCaller(
 // a caller has no legitimate business touching any /v0/* route, so we 403 it
 // uniformly across the whole surface (defense in depth) instead of serving a
 // no-ACAO 200 the browser would block from reading anyway. This keeps the
-// origin-deny posture consistent: previously only /v0/config rejected a hostile
-// Origin while /v0/briefs and /v0/interests served it. (PER-135)
+// origin-deny posture consistent across every route.
 //
 // No-Origin callers (non-browser clients, or same-origin GETs where the browser
 // omits Origin) pass this gate and remain subject to bearer auth. Allowlisted
-// app origins (the hosted UI on github.io / vercel.app) also pass, since briefs
+// app origins (the hosted UI and SCOUT_ALLOWED_ORIGINS) also pass, since briefs
 // and interests are designed to be called cross-origin by that UI. /v0/config
 // stays stricter still — same-origin only — via isSameOriginCaller.
 export function isOriginDenied(origin: string | undefined): boolean {
   if (!origin) return false;
-  return !CORS_ALLOWED_ORIGINS.some((rx) => rx.test(origin));
+  return !isAllowedOrigin(origin);
 }
 
 export function corsHeaders(
   origin: string | undefined,
 ): Record<string, string> {
   if (!origin) return {};
-  if (!CORS_ALLOWED_ORIGINS.some((rx) => rx.test(origin))) return {};
+  if (!isAllowedOrigin(origin)) return {};
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-headers": "authorization, content-type",
