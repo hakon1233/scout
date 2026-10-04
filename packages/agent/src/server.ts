@@ -208,7 +208,13 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         if (route) {
           if (
             route.auth === "same_origin" &&
-            !isSameOriginCaller(origin, req.headers.host)
+            !isSameOriginCaller(
+              origin,
+              req.headers.host,
+              typeof req.headers["sec-fetch-site"] === "string"
+                ? req.headers["sec-fetch-site"]
+                : undefined,
+            )
           ) {
             return json(res, 403, { error: "forbidden" }, cors);
           }

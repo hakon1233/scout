@@ -86,15 +86,17 @@ export function timingSafeTokenEqual(
   return timingSafeEqual(expectedBytes, actualBytes);
 }
 
-// True when the request is same-origin with this server: either no Origin header
-// (browsers omit it for same-origin GETs) or an explicit Origin whose host
-// matches the request Host exactly. Used to gate `/v0/config`, which hands the
-// page its pairing token — only the UI we serve (same-origin) should get it.
+// True when the request comes from a page this server (or its HTTPS proxy)
+// served. Gates `/v0/config`, which hands out the pairing token. Browsers omit
+// Origin on same-origin GETs but send `Sec-Fetch-Site: same-origin`; a caller
+// with neither header (curl, or the claude child's WebFetch following an
+// injected link) is refused, as is any Origin other than this host.
 export function isSameOriginCaller(
   origin: string | undefined,
   host: string | undefined,
+  secFetchSite: string | undefined,
 ): boolean {
-  if (!origin) return true;
+  if (!origin) return secFetchSite === "same-origin";
   if (!host) return false;
   return origin === `http://${host}` || origin === `https://${host}`;
 }

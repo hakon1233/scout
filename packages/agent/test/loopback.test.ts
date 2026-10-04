@@ -524,10 +524,18 @@ test("GET /v0/config hands the token to a same-origin caller, refuses cross-orig
 
   const { server, port } = await startServer(0, { stateFile });
   try {
-    // Same-origin: browsers omit Origin for same-origin GETs.
-    const noOrigin = await fetch(`http://127.0.0.1:${port}/v0/config`);
-    assert.equal(noOrigin.status, 200);
-    assert.equal((await noOrigin.json()).token, token);
+    // Same-origin page fetch: browsers omit Origin for same-origin GETs but
+    // mark them `Sec-Fetch-Site: same-origin`.
+    const sameOriginFetch = await fetch(`http://127.0.0.1:${port}/v0/config`, {
+      headers: { "sec-fetch-site": "same-origin" },
+    });
+    assert.equal(sameOriginFetch.status, 200);
+    assert.equal((await sameOriginFetch.json()).token, token);
+
+    // A non-browser caller with neither header (curl, or the claude child's
+    // WebFetch following a prompt-injected link) gets no token.
+    const headerless = await fetch(`http://127.0.0.1:${port}/v0/config`);
+    assert.equal(headerless.status, 403);
 
     // Explicit same-origin loopback (the served UI) also gets the token.
     const loopback = await fetch(`http://127.0.0.1:${port}/v0/config`, {
@@ -549,6 +557,7 @@ test("GET /v0/config hands the token to a same-origin caller, refuses cross-orig
       isSameOriginCaller(
         "https://mac-mini.tailnet.ts.net",
         "mac-mini.tailnet.ts.net",
+        undefined,
       ),
       true,
     );
@@ -579,7 +588,8 @@ test("GET /v0/config returns the persisted interests to a same-origin caller", a
   try {
     // No interests stored yet → an empty array, never undefined.
     await saveState({ pairing_token: token }, stateFile);
-    const empty = await fetch(`http://127.0.0.1:${port}/v0/config`);
+    const sameOrigin = { headers: { "sec-fetch-site": "same-origin" } };
+    const empty = await fetch(`http://127.0.0.1:${port}/v0/config`, sameOrigin);
     assert.equal(empty.status, 200);
     assert.deepEqual((await empty.json()).interests, []);
 
@@ -594,7 +604,10 @@ test("GET /v0/config returns the persisted interests to a same-origin caller", a
       } as unknown as State,
       stateFile,
     );
-    const withInterests = await fetch(`http://127.0.0.1:${port}/v0/config`);
+    const withInterests = await fetch(
+      `http://127.0.0.1:${port}/v0/config`,
+      sameOrigin,
+    );
     assert.equal(withInterests.status, 200);
     assert.deepEqual((await withInterests.json()).interests, [
       "ai",
