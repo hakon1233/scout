@@ -257,6 +257,31 @@ export async function listCorruptStateBackups(
   }
 }
 
+// Writes to each state file run one at a time, in arrival order.
+const writeQueues = new Map<string, Promise<unknown>>();
+
+// Read-modify-write of the state file. `change` receives the state as it is on
+// disk at that moment and returns the next state; calls for the same file
+// never interleave, so no writer can save over another's change with a stale
+// copy. Keep `change` synchronous and free of I/O: it runs inside the queue.
+export async function updateState(
+  file: string,
+  change: (state: State) => State,
+): Promise<State> {
+  const previous = writeQueues.get(file) ?? Promise.resolve();
+  const run = previous.then(async () => {
+    const next = change(await loadState(file));
+    await saveState(next, file);
+    return next;
+  });
+  const tail = run.catch(() => undefined);
+  writeQueues.set(file, tail);
+  void tail.then(() => {
+    if (writeQueues.get(file) === tail) writeQueues.delete(file);
+  });
+  return await run;
+}
+
 export async function saveState(
   state: State,
   file = STATE_FILE,

@@ -32,6 +32,7 @@ import {
   listCorruptStateBackups,
   loadState,
   saveState,
+  updateState,
   type State,
 } from "../src/state.js";
 import { startServer } from "../src/server.js";
@@ -207,6 +208,44 @@ test("PER-272: /healthz surfaces corrupt-state recoveries instead of a silent fr
     );
   } finally {
     server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("concurrent updates to one state file each see the previous one's result", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-update-"));
+  const file = path.join(tmp, "state.json");
+  try {
+    await saveState({ interests: [] }, file);
+    // Twenty writers start at once; each appends one interest.
+    await Promise.all(
+      Array.from({ length: 20 }, (_, n) =>
+        updateState(file, (s) => ({
+          ...s,
+          interests: [...(s.interests ?? []), { id: `int_${n}`, topic: `t${n}` }],
+        })),
+      ),
+    );
+    const saved = (await loadState(file)).interests ?? [];
+    assert.equal(saved.length, 20);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a failed update does not block the next one", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-update-"));
+  const file = path.join(tmp, "state.json");
+  try {
+    await assert.rejects(
+      updateState(file, () => {
+        throw new Error("boom");
+      }),
+      /boom/,
+    );
+    await updateState(file, (s) => ({ ...s, pairing_token: "tok" }));
+    assert.equal((await loadState(file)).pairing_token, "tok");
+  } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
