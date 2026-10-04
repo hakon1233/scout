@@ -50,7 +50,7 @@ export function useProfileWorkbench() {
   const [error, setError] = useState<string | null>(null);
   const [mockSeed, setMockSeed] = useState<string | null>(null);
 
-  // Simulated token streaming (PER-228 chunk 3). The companion is kick→poll, not
+  // Simulated token streaming. The companion is kick→poll, not
   // SSE, so a reply arrives whole; we reveal it with a client-side typewriter so
   // turns feel alive. `streamId` is the scout message being revealed; `streamLen`
   // is how many chars are shown so far. Reduced-motion users skip the reveal.
@@ -62,7 +62,7 @@ export function useProfileWorkbench() {
   const { startAbortable, clearAbortable, abortCurrent } =
     useAbortableController();
   const abortedRef = useRef(false);
-  // PER-232: the in-flight turn's server id (set once the kick lands) and
+  // The in-flight turn's server id (set once the kick lands) and
   // whether the user pressed Stop before we even had it — so the server-side
   // abort can fire as soon as the id arrives instead of being silently lost.
   const turnIdRef = useRef<string | null>(null);
@@ -185,10 +185,10 @@ export function useProfileWorkbench() {
   );
 
   // Play the "removed" flash on a card, then actually drop the interest, doc,
-  // and meta from the rail (PER-230 #3). The card stays mounted with the
-  // scout-doc-flash for ~2.4s so QA automation can observe the highlight before
-  // the card disappears — "card disappears with the flash" per the CEO. Reduced-
-  // motion users skip the dwell and remove immediately.
+  // and meta from the rail. The card stays mounted with the scout-doc-flash for
+  // ~2.4s so the highlight is observable (by users and automation) before the
+  // card disappears with the flash. Reduced-motion users skip the dwell and
+  // remove immediately.
   const flashRemove = useCallback((key: string) => {
     setBeats((prev) => ({ ...prev, [key]: "removed" }));
     const drop = () => {
@@ -207,19 +207,19 @@ export function useProfileWorkbench() {
     beatTimers.current[key] = setTimeout(drop, 2400);
   }, []);
 
-  // Confirm a gated delete (PER-230 #1): the deterministic [Delete] press. Hits
+  // Confirm a gated delete: the deterministic [Delete] press. Hits
   // the no-model confirm-delete route, which actually removes the interest + doc
   // and returns a ready turn. On success we flash-and-drop the card, mark the
   // confirm message resolved so it locks to "Removed", and append the applied
-  // delete as its own action card so the founder gets a live Undo — same as a
-  // create, and matching what a reload already showed (AIR-611).
+  // delete as its own action card so the user gets a live Undo — same as a
+  // create, and matching what a reload already shows.
   const confirmDelete = useCallback(
     (pd: PendingDelete, msgId: string) => {
       if (sending) return;
       setSending(true);
       setError(null);
       // Snapshot the doc as it is right now, before the delete drops it, so the
-      // action card diffs it out and undo re-creates it verbatim (AIR-611).
+      // action card diffs it out and undo re-creates it verbatim.
       const prevBody = docBodiesRef.current[pd.interestId] ?? null;
       abortedRef.current = false;
       const controller = startAbortable();
@@ -256,7 +256,7 @@ export function useProfileWorkbench() {
     );
   }, []);
 
-  // Confirm a gated rewrite (PER-235): the deterministic [Apply] press. Hits the
+  // Confirm a gated rewrite: the deterministic [Apply] press. Hits the
   // no-model confirm-rewrite route, which writes the server-stored proposed doc
   // and returns a ready turn whose `changes` carry the applied update. Routing
   // that change set through applyChanges gives the docs-rail card the exact same
@@ -268,8 +268,7 @@ export function useProfileWorkbench() {
       setSending(true);
       setError(null);
       // Snapshot the pre-rewrite doc before applyChanges overwrites it, so the
-      // follow-up action card diffs old→new and undo reverts to it verbatim
-      // (AIR-611).
+      // follow-up action card diffs old→new and undo reverts to it verbatim.
       const prevBody = docBodiesRef.current[pr.interestId] ?? null;
       abortedRef.current = false;
       const controller = startAbortable();
@@ -282,7 +281,7 @@ export function useProfileWorkbench() {
             applyChanges(turn.changes, new Date().toISOString());
           }
           // Append the applied rewrite as its own action card so a confirmed
-          // rewrite gets the same live Undo a create does (AIR-611) — the proposal
+          // rewrite gets the same live Undo a create does — the proposal
           // card itself just locks to "Applied".
           const card = appliedChangeMessage(turn, pr.interestId, prevBody);
           setMessages((prev) => {
@@ -355,7 +354,7 @@ export function useProfileWorkbench() {
         try {
           const turn = await runChatTurn(wire, token, {
             signal: controller.signal,
-            // PER-232: capture the server turn id the moment the kick lands.
+            // Capture the server turn id the moment the kick lands.
             // If Stop already fired (sub-kick-latency click), abort it now.
             onKick: (id) => {
               turnIdRef.current = id;
@@ -410,7 +409,7 @@ export function useProfileWorkbench() {
           // User stopped — not an error. Check THIS dispatch's own controller
           // (not just the shared abortedRef, which a newly-started dispatch resets
           // to false): a stop-then-immediately-send would otherwise let the just-
-          // aborted request's rejection surface a spurious error (AIR-527).
+          // aborted request's rejection surface a spurious error.
           if (controller.signal.aborted || abortedRef.current) return;
           setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
@@ -425,7 +424,7 @@ export function useProfileWorkbench() {
           // state — Stop reverted to Send mid-turn and a resend 409'd. Guarding on
           // the closure-captured controller.signal.aborted (immune to abortedRef's
           // reset) mirrors the catch guard above; stop() already set sending=false
-          // for the aborted turn, so nothing is left stuck (AIR-107).
+          // for the aborted turn, so nothing is left stuck.
           if (!controller.signal.aborted) setSending(false);
         }
       })();
@@ -455,13 +454,13 @@ export function useProfileWorkbench() {
     [sending, focusKey, interests, dispatch],
   );
 
-  // Stop the in-flight turn (PER-228 chunk 3, fixed in PER-232). Aborting the
-  // client poll is NOT enough — the companion is kick→poll, so the server-side
-  // model edit would still complete and persist (~14s later, the AC3/AC5 fail).
-  // We also tell the companion to abort the turn itself: it kills the model
-  // child and writes the turn as stopped with NO changes applied. If the reply
-  // already arrived and is mid-typewriter, those changes are already durable —
-  // the server stop is then a no-op and we just finish the reveal.
+  // Stop the in-flight turn. Aborting the client poll is NOT enough — the
+  // companion is kick→poll, so the server-side model edit would still complete
+  // and persist (~14s later). We also tell the companion to abort the turn
+  // itself: it kills the model child and writes the turn as stopped with NO
+  // changes applied. If the reply already arrived and is mid-typewriter, those
+  // changes are already durable — the server stop is then a no-op and we just
+  // finish the reveal.
   const stop = useCallback(() => {
     abortedRef.current = true;
     stopRequestedRef.current = true;

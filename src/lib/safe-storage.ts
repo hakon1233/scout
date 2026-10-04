@@ -1,7 +1,7 @@
 "use client";
 
 // Single source of truth for browser storage availability and the
-// device-local-storage WRITE guard (AIR-326).
+// device-local-storage WRITE guard.
 //
 // localStorage writes throw *synchronously* in two situations every client
 // store has to survive:
@@ -15,7 +15,7 @@
 // rather than letting the throw escape into a click handler, an async bootstrap,
 // or a `setState` updater. Before this module that exact guard was hand-copied
 // into FOUR places — `storage.ts:safeSet`, `likes.ts:write`,
-// `companion.ts:saveCompanionToken` (added by FLI-333) and `ThemeToggle`'s bare
+// `companion.ts:saveCompanionToken` and `ThemeToggle`'s bare
 // catch — three of which carried comments explicitly telling the reader to keep
 // them in sync with the others by hand. Routing every write through one
 // primitive removes that drift risk.

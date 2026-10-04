@@ -8,7 +8,7 @@ import { buttonClasses } from "@/components/ui";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 // Single 404 surface for the static export (GitHub Pages serves this exported
-// 404.html for any unknown path). PER-167: we no longer redirect unknown
+// 404.html for any unknown path). We don't redirect unknown
 // `/app/*` to the app shell — that masked dead routes/typos by silently
 // rendering the brief. The only real `/app/*` routes (`/app`, `/app/connect`)
 // are statically prerendered with their own index.html and never reach this
@@ -17,7 +17,7 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 // We branch on pathname so an onboarded user who mistypes an `/app/*` URL gets
 // an in-app 404 (app chrome + a route back into the brief) rather than the
 // marketing-home recovery. Non-`/app` paths keep the generic public 404, since
-// 404.html is shared with the public github.io site (PER-144).
+// 404.html is shared with the public github.io site.
 //
 // The static markup pre-rendered at build time is the generic variant; after
 // hydration we read the real pathname and swap to the app-aware variant for

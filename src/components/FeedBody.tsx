@@ -7,11 +7,11 @@ import rehypeSanitize from "rehype-sanitize";
 // The in-depth body arrives as RAW markdown from the brief's `> ` blockquote
 // lines (companion.ts keeps it unstripped on purpose — only card blurbs are
 // plain-stripped). Render it as sanitized markdown styled to the editorial
-// type, instead of dumping literal `**bold**`/backticks into <p> tags
-// (PER-236 fix 1). Live briefs use bold + inline code heavily; links, lists,
-// and quotes are styled too so future bodies degrade gracefully.
+// type, instead of dumping literal `**bold**`/backticks into <p> tags. Live
+// briefs use bold + inline code heavily; links, lists, and quotes are styled
+// too so future bodies degrade gracefully.
 //
-// AIR-186: this module is the ONLY feed-side importer of react-markdown +
+// This module is the ONLY feed-side importer of react-markdown +
 // rehype-sanitize (~170KB of JS). It renders solely inside the single-story
 // detail view, which the feed grid never mounts until the reader opens a card.
 // FeedView pulls it in via `next/dynamic`, so the markdown pipeline is split

@@ -2,7 +2,7 @@
 //
 // These used to back a browser→Exa execution path (`runAgent`) that fetched
 // api.exa.ai and Anthropic directly from the page. That path was CORS-broken
-// and was removed in PER-109 — Scout now generates briefs exclusively through
+// and was removed — Scout now generates briefs exclusively through
 // the local companion (`refreshBriefViaCompanion` in ./companion). The
 // progress shape is kept because `AgentProgressPanel` and the app page still
 // render it while the companion synthesizes.

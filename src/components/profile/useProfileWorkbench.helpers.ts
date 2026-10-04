@@ -1,4 +1,4 @@
-// Pure state-transition seams extracted from useProfileWorkbench (CAR-248).
+// Pure state-transition seams extracted from useProfileWorkbench.
 //
 // Everything here is a plain function of its inputs — no React, no timers, no
 // browser globals. The hook keeps ownership of effects, refs, and timers and
@@ -143,14 +143,15 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
 // After a confirm-gated rewrite [Apply] or delete [Delete] lands, surface the
 // applied change as its own scout action card — the same shape `dispatch()` gives
 // a live turn and `transcriptMessages()` gives a reloaded one — so a confirmed
-// rewrite/delete gets the exact same live Undo affordance a create does (AIR-611).
-// Before this, confirmRewrite/confirmDelete only marked the proposal card resolved
-// and dropped the confirm turn's `changes` on the floor, so the founder had no
-// in-app way to reverse a confirmed change even though the create path did (and a
-// reload — which projects the same confirm turn through transcriptMessages —
-// already showed the Undo). `prevBody` is the doc as it was just before the
-// confirm, powering the diff and the verbatim undo. Returns null when the turn
-// carried no changes (defensive: a confirm turn always carries exactly one).
+// rewrite/delete gets the exact same live Undo affordance a create does.
+// Otherwise confirmRewrite/confirmDelete would only mark the proposal card
+// resolved and drop the confirm turn's `changes` on the floor, leaving the user
+// no in-app way to reverse a confirmed change even though the create path has
+// one (and a reload — which projects the same confirm turn through
+// transcriptMessages — already shows the Undo). `prevBody` is the doc as it was
+// just before the confirm, powering the diff and the verbatim undo. Returns
+// null when the turn carried no changes (defensive: a confirm turn always
+// carries exactly one).
 export function appliedChangeMessage(
   turn: ChatTurn,
   interestId: string,
@@ -290,7 +291,7 @@ export function buildDocCards(
       updatedAt: m.updatedAt,
       body,
       beat: beats[key] ?? null,
-      // Deep-links into the workbench itself (PER-236 fix 2) so a new-tab open
+      // Deep-links into the workbench itself so a new-tab open
       // lands on the scope view WITH the chat column, not the chat-less
       // standalone page (which stays alive for old links).
       href: `/app/interests/?id=${encodeURIComponent(key)}`,

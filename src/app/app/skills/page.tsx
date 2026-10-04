@@ -4,11 +4,11 @@ import { AppNav } from "@/components/AppNav";
 import { SkillSection } from "@/components/skills/SkillSection";
 import { ARTICLE_ASSEMBLY_SKILLS, RESEARCH_SKILLS } from "@/lib/skills";
 
-// In-development transparency page (PER-212): shows the REAL general skills Scout
+// In-development transparency page: shows the REAL general skills Scout
 // uses to (a) research the news and (b) assemble your brief. The content is parsed
 // from the engine's own canonical strings (search-skills.ts / assembly-skills.ts),
 // so it stays honest as the engine evolves — it is not a hand-kept marketing list.
-// The section renderer is shared with the interests workbench (PER-233), which
+// The section renderer is shared with the interests workbench, which
 // surfaces the same Skills setup inside its big left pane.
 
 export default function SkillsPage() {

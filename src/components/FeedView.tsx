@@ -9,7 +9,7 @@ import { LikeButton } from "@/components/LikeButton";
 import { EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
 
-// AIR-186: react-markdown + rehype-sanitize (~170KB) are only needed by the
+// react-markdown + rehype-sanitize (~170KB) are only needed by the
 // single-story detail body, which never mounts until a reader opens a card.
 // Lazy-load it so the markdown pipeline is split out of the /app feed's initial
 // JS and fetched on first detail open. A short text placeholder holds the spot
@@ -18,7 +18,7 @@ const FeedBody = dynamic(() => import("@/components/FeedBody"), {
   loading: () => <p className="font-reading text-body text-muted">…</p>,
 });
 
-// News-feed presentation of a brief (PER-211). Replaces the sectioned-markdown
+// News-feed presentation of a brief. Replaces the sectioned-markdown
 // BriefView as the default home view: each story is a card with a headline, one
 // short blurb, and — where the research run handpicked one from the source — a
 // lead image. Clicking a card opens a still-short in-page detail with the source
@@ -30,7 +30,7 @@ type FeedItem = {
   id: string;
   headline: string;
   blurb?: string;
-  // In-depth write-up shown ONLY in the detail view (PER-214). A few concise
+  // In-depth write-up shown ONLY in the detail view. A few concise
   // paragraphs (`\n\n`-separated); absent when the story had nothing deeper.
   body?: string;
   imageUrl?: string;
@@ -45,7 +45,7 @@ export function FeedView({
   onDetailOpenChange,
 }: {
   brief: Brief;
-  // PER-222: notify the page when a single-story detail opens/closes so it can
+  // Notify the page when a single-story detail opens/closes so it can
   // hide everything else (brief header, coverage banners, the history pager) and
   // render ONLY the focused story. The feed itself already swaps grid→detail; the
   // surrounding page chrome is what made "the rest of the feed" show below it.
@@ -56,8 +56,8 @@ export function FeedView({
     [brief.articles],
   );
 
-  // PER-219: the per-topic filter chips were removed from the feed — the founder
-  // wanted a clean read straight into headlines, no filter UI. The chip logic
+  // The per-topic filter chips were removed from the feed — the reader gets a
+  // clean read straight into headlines, no filter UI. The chip logic
   // (a `topics` memo + `activeTopic` state + the `FilterChip` component + the
   // chip render block) is intentionally gone, not just hidden, so the feed has
   // one obvious reading order. To reintroduce later: derive topics from `items`,
@@ -71,7 +71,7 @@ export function FeedView({
 
   // Close the detail on browser/OS Back. openDetail() pushes one history entry;
   // Back (hardware, gesture, or our in-app button via history.back()) pops it and
-  // this fires — an in-app SPA transition with no landing flash (PER-206/209).
+  // this fires — an in-app SPA transition with no landing flash.
   React.useEffect(() => {
     const onPop = () => setSelectedId(null);
     window.addEventListener("popstate", onPop);
@@ -83,13 +83,13 @@ export function FeedView({
     : null;
   const detailOpen = selected != null;
 
-  // PER-222: tell the page when we're in single-story mode so it can drop the
+  // Tell the page when we're in single-story mode so it can drop the
   // brief header, banners, and history pager — leaving only this one story.
   React.useEffect(() => {
     onDetailOpenChange?.(detailOpen);
   }, [detailOpen, onDetailOpenChange]);
 
-  // PER-222 (AC2): remember where the feed was scrolled so Back lands the reader
+  // Remember where the feed was scrolled so Back lands the reader
   // back on the story they came from. Opening a story jumps to the top (the
   // dedicated page starts at its headline); closing restores the saved offset.
   const feedScrollY = React.useRef(0);
@@ -291,7 +291,7 @@ export function FeedImage({
   // Remote, unknown-host source images — next/image needs preconfigured domains
   // we can't predict, so a plain <img> with graceful onError is correct here.
   // referrerPolicy="no-referrer" so referer-checking CDNs (Crunchbase etc.) that
-  // 403 a request carrying our ts.net origin still serve the image (PER-217).
+  // 403 a request carrying our ts.net origin still serve the image.
   return (
     // eslint-disable-next-line @next/next/no-img-element -- Arbitrary source images need no-referrer and graceful unknown-host fallback; next/image requires host policy we cannot predict.
     <img

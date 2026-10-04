@@ -11,7 +11,7 @@ import {
 import { ChatDeleteConfirm, type DeleteResolution } from "./ChatDeleteConfirm";
 import { ChatMarkdown } from "./ChatMarkdown";
 
-// One rendered line in the chat transcript. `you` is the founder's raw message
+// One rendered line in the chat transcript. `you` is the user's raw message
 // (never the scope-prefixed wire form); `scout` is the assistant's reply plus
 // any durable doc changes that turn applied (rendered as inline action cards).
 export type ChatMessage = {
@@ -20,22 +20,22 @@ export type ChatMessage = {
   text: string;
   // A faint dateline; omitted for the seeded greeting.
   ts?: string;
-  // Durable changes this scout turn applied (PER-228 chunk 5).
+  // Durable changes this scout turn applied.
   changes?: ChatChange[];
   // Pre-change doc bodies keyed by interestId, for the diff/undo affordance.
   prev?: Record<string, string | null>;
-  // A confirm-gated delete this turn proposed (PER-230). Renders a
+  // A confirm-gated delete this turn proposed. Renders a
   // [Delete]/[Cancel] card; the interest is removed only on [Delete].
   pendingDelete?: PendingDelete;
-  // Whether the founder resolved the pending delete (and how).
+  // Whether the user resolved the pending delete (and how).
   deleteResolved?: DeleteResolution;
   // Transcript-hydrated proposal cards are historical; they should not yank
   // focus away from the restored conversation on page load.
   deleteAutoFocus?: boolean;
-  // A confirm-gated full rewrite this turn proposed (PER-235). Renders an
+  // A confirm-gated full rewrite this turn proposed. Renders an
   // [Apply]/[Discard] diff card; the doc is written only on [Apply].
   pendingRewrite?: PendingRewrite;
-  // Whether the founder resolved the pending rewrite (and how).
+  // Whether the user resolved the pending rewrite (and how).
   rewriteResolved?: RewriteResolution;
   rewriteAutoFocus?: boolean;
   // A turn that failed — offer retry, render quietly.
@@ -95,7 +95,7 @@ function CopyMessage({ text }: { text: string }) {
 
 // The conversation surface: a single scrolling transcript over a sticky
 // composer. ONE chat manages the whole interest collection; the targeting chip
-// tells the founder (and Scout) which interest the next message is aimed at.
+// tells the user (and Scout) which interest the next message is aimed at.
 export function ChatDock({
   messages,
   sending,
@@ -338,7 +338,7 @@ export function ChatDock({
   );
 }
 
-// Owns the composer's own `draft` keystroke state (PER-228/AIR-605): kept out
+// Owns the composer's own `draft` keystroke state: kept out
 // of ChatDock itself so typing doesn't re-render (and re-parse markdown for)
 // the whole message transcript above it.
 function Composer({

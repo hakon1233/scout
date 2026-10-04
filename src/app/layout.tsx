@@ -3,7 +3,7 @@ import { Fraunces, Inter, JetBrains_Mono, Newsreader } from "next/font/google";
 import "./globals.css";
 import { ThemeBootstrap } from "@/components/ThemeToggle";
 
-// Direction A — Editorial / "Private Wire Service" (PER-114).
+// Direction A — Editorial / "Private Wire Service".
 // Fraunces: serif display for mastheads & titles.
 // Newsreader: reading serif for long-form brief prose.
 // Inter: UI sans. JetBrains Mono: datelines & labels.
@@ -76,7 +76,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   // Mobile keyboard resizes the layout instead of overlaying the sticky chat
-  // composer (PER-228, chunk 2). Pairs with the 100dvh/svh + safe-area paddings
+  // composer. Pairs with the 100dvh/svh + safe-area paddings
   // in the chat composer so the input is never hidden behind the keyboard.
   interactiveWidget: "resizes-content",
   themeColor: [
@@ -98,7 +98,7 @@ export default function RootLayout({
       <head>
         {/*
           Resolve the theme on <html> before <body> paints — eliminates the
-          light → dark theme flash (FOUC, PER-131). Must stay in <head>, ahead
+          light → dark theme flash (FOUC). Must stay in <head>, ahead
           of body content; do not move it back into <body>.
         */}
         <ThemeBootstrap />

@@ -1,6 +1,6 @@
 // Parses the canonical skill strings the Scout engine actually uses and exposes
 // them as structured, titled groups for the in-development `/app/skills`
-// transparency page (PER-212).
+// transparency page.
 //
 // We import the REAL constants from the agent package source — not a copy — so
 // the page stays honest as the engine evolves:

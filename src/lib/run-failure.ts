@@ -11,12 +11,11 @@ import {
   resolveLastSuccessBrief,
 } from "./companion";
 
-// PER-259 item 1: a surfaced "your daily run failed / silently stopped" signal.
-// The PER-258 root cause was a failed run that overwrote `last_brief` with
-// status:"failed" and never entered the ready history — so the feed silently
-// kept showing the last success and the founder read it as "no new run since
-// June 18". This makes that state HONEST: the feed shows a clear banner with the
-// captured reason instead of pretending yesterday's brief is today's.
+// A surfaced "your daily run failed / silently stopped" signal. A failed run
+// overwrites `last_brief` with status:"failed" and never enters the ready
+// history — so the feed would silently keep showing the last success, read as
+// "no new run". This makes that state HONEST: the feed shows a clear banner
+// with the captured reason instead of pretending yesterday's brief is today's.
 export type RunFailure = {
   // "failed": the most recent run errored. "stale": no successful brief in the
   // staleness window even though nothing errored in the current slot (e.g. every
@@ -31,7 +30,7 @@ export type RunFailure = {
   lastSuccessAt?: string;
 };
 
-// Alert threshold (issue PER-259): flag a silent stop when the last SUCCESSFUL
+// Alert threshold: flag a silent stop when the last SUCCESSFUL
 // brief is older than this, even if the current slot didn't explicitly error.
 export const STALE_SUCCESS_MS = 26 * 60 * 60 * 1000; // 26h
 
@@ -131,7 +130,7 @@ export async function fetchRunFailure(
     const last = rawLast.find((brief) => !brief.ephemeral);
     // On a failed/pending slot the ?since= poll carries no ready brief, so fall
     // back to the newest ready brief from history so the banner can honestly
-    // show "last good brief from <date>" (AIR-644). Lazy: the healthy path (slot
+    // show "last good brief from <date>". Lazy: the healthy path (slot
     // ready) never issues the extra request.
     const lastSuccess = await resolveLastSuccessBrief(
       newestReadyBrief(rawLast),

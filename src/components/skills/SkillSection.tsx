@@ -4,11 +4,11 @@ import * as React from "react";
 import { Card } from "@/components/ui";
 import type { SkillBullet, SkillSet } from "@/lib/skills";
 
-// Shared renderer for the engine's canonical skill sets (PER-212). Extracted
-// from the standalone /app/skills page so the consolidated interests workbench
-// (PER-233) can surface the same Skills setup UI without duplicating it. The
-// content is parsed from the engine's own strings (search-skills.ts /
-// assembly-skills.ts), so it stays honest as the engine evolves.
+// Shared renderer for the engine's canonical skill sets. Extracted from the
+// standalone /app/skills page so the consolidated interests workbench can
+// surface the same Skills setup UI without duplicating it. The content is
+// parsed from the engine's own strings (search-skills.ts / assembly-skills.ts),
+// so it stays honest as the engine evolves.
 
 // Render a line with `backtick` code spans as <code>. Everything else is plain
 // text. (The source strings only use inline code + plain prose — no other markup.)

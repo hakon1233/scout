@@ -4,11 +4,11 @@ import { useState } from "react";
 import { LazyMarkdown } from "./LazyMarkdown";
 
 // The "just changed" beat fired the instant a chat turn confirms a durable
-// write to this interest's doc. It is the PER-139 no-dead-control proof: the
+// write to this interest's doc. It is the no-dead-control proof: the
 // conversation visibly moves the card, and only on a confirmed write — never
 // optimistically. `created` for a brand-new interest, `updated` for a refine,
 // `removed` for the brief flash a confirmed delete plays before the card leaves
-// the rail (PER-230).
+// the rail.
 export type DocBeat = "created" | "updated" | "removed" | null;
 
 // One interest's doc card. `body` is the markdown the companion persisted,
@@ -94,7 +94,7 @@ export function InterestDocCard({
   model: DocCardModel;
   focused: boolean;
   onFocusToggle: () => void;
-  // PER-236 fix 2: when provided, opening the card stays in-page (the
+  // When provided, opening the card stays in-page (the
   // workbench swaps its left pane to the scope view, chat stays mounted on
   // the right) instead of navigating away and losing the chat. `href` is
   // kept on the title anchor so middle-click/new-tab still deep-links.
@@ -118,7 +118,7 @@ export function InterestDocCard({
         focused
           ? "border-signal"
           : "border-border-default hover:border-border-strong",
-        // PER-230 AC6: an unmistakable card-level flash the instant a turn
+        // An unmistakable card-level flash the instant a turn
         // confirms a durable write. The dateline pill (below) names what
         // changed; this ring/tint sweep makes the moved card impossible to miss.
         beat ? "scout-doc-flash" : "",

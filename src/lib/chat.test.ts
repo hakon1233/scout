@@ -64,7 +64,7 @@ test("confirmRewriteInterest passes through a caller abort signal", async () => 
   assert.equal(confirmSignal, controller.signal);
 });
 
-test("pollChatTurn passes a since= filter so the poll doesn't re-fetch the whole transcript (AIR-639)", async () => {
+test("pollChatTurn passes a since= filter so the poll doesn't re-fetch the whole transcript", async () => {
   installWindow();
   const pollUrls: string[] = [];
 

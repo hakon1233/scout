@@ -7,7 +7,7 @@ import { fetchBriefHistory } from "@/lib/companion";
 import { formatDate } from "@/lib/format-date";
 import type { Brief } from "@/lib/types";
 
-// PER-219 (AC6): the "previous briefs" pager that lives below the current brief.
+// The "previous briefs" pager that lives below the current brief.
 // Scrolling past the current edition reveals previous editions, each rendered as
 // a full "Daily brief — <date>" feed (reusing BriefLayout/FeedView). It pages the
 // companion's rolling history via GET /v0/briefs?limit=&offset= — 3 at a time,
@@ -30,16 +30,16 @@ export function BriefHistory({
 }: {
   token: string;
   currentBriefId: string | null;
-  // PER-297: the feed filter is page-wide, so every historical edition must
+  // The feed filter is page-wide, so every historical edition must
   // derive its visible articles from the same selection as the current one.
   // Filtering at render time also covers briefs appended by a later page load.
   activeFilter?: string | null;
   onManageInterests: () => void;
-  // PER-223: bubble up when a story inside ONE of the history editions opens its
+  // Bubble up when a story inside ONE of the history editions opens its
   // focused detail. The page uses it to collapse the current edition + banners
   // above; we use it to collapse to just the open section (hide the other
   // editions and this footer) so the focused view is ONLY that one story — the
-  // same isolation the current edition already had (PER-222).
+  // same isolation the current edition already had.
   onDetailOpenChange?: (open: boolean) => void;
 }) {
   const [briefs, setBriefs] = React.useState<Brief[]>([]);
@@ -55,9 +55,9 @@ export function BriefHistory({
 
   const seenIds = React.useRef<Set<string>>(new Set());
 
-  // PER-223: which history edition (if any) currently has a story open in its
+  // Which history edition (if any) currently has a story open in its
   // focused detail view. When set, we render ONLY that edition and drop the
-  // pager footer, so the page below the story is empty — matching AC1.
+  // pager footer, so the page below the story is empty.
   const [openBriefId, setOpenBriefId] = React.useState<string | null>(null);
   React.useEffect(() => {
     onDetailOpenChange?.(openBriefId != null);
@@ -103,8 +103,7 @@ export function BriefHistory({
     // Intentional synchronous reset of the pager when the current edition
     // changes (history shifts down by one, cached pages are stale). The
     // react-compiler lint rules flag the synchronous setState + ref write, but
-    // this is the correct pattern here and changes no behavior. (PER-224: this
-    // was blocking the Pages deploy from PER-219, where lint wasn't run.)
+    // this is the correct pattern here and changes no behavior.
     /* eslint-disable react-hooks/set-state-in-effect, react-hooks/immutability */
     setBriefs([]);
     setTotal(0);
@@ -125,7 +124,7 @@ export function BriefHistory({
   // than a bare "Manage interests" bar that would flash then grow.
   if (!loaded && briefs.length === 0) return null;
 
-  // PER-223: in single-story mode show ONLY the edition holding the open story;
+  // In single-story mode show ONLY the edition holding the open story;
   // its BriefLayout already drops its own "Daily brief — <date>" header, so the
   // focused view is just the one story (matching the current-edition path).
   const visibleBriefs = openBriefId
@@ -167,7 +166,7 @@ export function BriefHistory({
         );
       })}
 
-      {/* PER-223: the pager footer is feed chrome — hide it while a history
+      {/* The pager footer is feed chrome — hide it while a history
           story is open so nothing shows below the focused story. */}
       {!openBriefId && (
         <div className="measure-prose flex flex-col gap-3 border-t border-border-default pt-6 min-[480px]:flex-row min-[480px]:items-center min-[480px]:justify-between">

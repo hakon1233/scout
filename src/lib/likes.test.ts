@@ -3,11 +3,11 @@ import test from "node:test";
 
 import { isLiked, likeKey, toggleLike } from "./likes";
 
-// Regression tests for the device-local likes store's write/read cache coherence
-// (AIR-612 bug-hunt). The store keeps a raw-string cache so useSyncExternalStore
-// sees a referentially-stable snapshot; the invariant is that a swallowed persist
-// (Safari private mode / QuotaExceededError) must NOT undo the optimistic like —
-// safe-storage.ts promises "the in-memory cache still reflects the toggle for
+// Regression tests for the device-local likes store's write/read cache
+// coherence. The store keeps a raw-string cache so useSyncExternalStore sees a
+// referentially-stable snapshot; the invariant is that a swallowed persist
+// (Safari private mode / QuotaExceededError) must NOT undo the optimistic like
+// — safe-storage.ts promises "the in-memory cache still reflects the toggle for
 // this session; it just won't survive a reload."
 
 const LIKES_KEY = "scout.likes.v1";

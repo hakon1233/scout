@@ -45,13 +45,13 @@ const INTERESTS_PATH = "/app/interests";
 const COMPANION_NOT_PAIRED_MSG =
   "Scout companion isn't paired yet. Start `scout-agent run` and open the app it prints, or visit /app/connect to pair.";
 
-// Bucket a brief's topics into the two states the UI treats differently
-// (PER-154). `missing` = the model dropped the section → actionable, Retry can
+// Bucket a brief's topics into the two states the UI treats differently.
+// `missing` = the model dropped the section → actionable, Retry can
 // recover it. `empty` = a section exists but had no fresh news today → honest,
 // NOT an error, NOT retryable. Prefers the companion's authoritative `topics`;
 // falls back to the legacy client-side `failedTopics` for briefs cached before
-// PER-154 (treated as missing, since the old field meant "didn't come back").
-// Exported (PER-271) so it can be unit-tested directly.
+// the companion reported coverage (treated as missing, since the old field
+// meant "didn't come back"). Exported so it can be unit-tested directly.
 export function coverageBuckets(b: Brief): {
   missing: string[];
   empty: string[];
@@ -86,9 +86,9 @@ export default function AppPage() {
   // run threads an AbortController through refreshBriefViaCompanion, so Cancel
   // aborts it; the weekly digest assembles synchronously via generateWeeklyBrief
   // (no signal), so there is nothing to abort. Drives the progress panel's Cancel
-  // button so it never shows a dead control during a weekly run (PER-139).
+  // button so it never shows a dead control during a weekly run.
   const [cancelable, setCancelable] = useState(true);
-  // PER-150: explicit success state for an on-demand "Run now". Holds the
+  // Explicit success state for an on-demand "Run now". Holds the
   // generated_at of the most recent run that completed in THIS session, so we
   // can show a "fresh brief delivered" confirmation instead of silently
   // swapping the brief. Cleared whenever a new run starts or context changes.
@@ -96,11 +96,11 @@ export default function AppPage() {
   const [error, setError] = useState<ClassifiedError | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [companionReady, setCompanionReady] = useState(false);
-  // PER-259 item 1: surfaced "your daily run failed / silently stopped" signal.
+  // Surfaced "your daily run failed / silently stopped" signal.
   // Read-only telemetry from the companion; null when the run is healthy.
   const [runFailure, setRunFailure] = useState<RunFailure | null>(null);
-  // PER-222: a single story can be opened from EITHER the current edition or the
-  // history pager. We track the origin separately (PER-223 fix) because the two
+  // A single story can be opened from EITHER the current edition or the
+  // history pager. We track the origin separately because the two
   // collapse in opposite directions: a current-edition story hides the history
   // pager below it, while a history-pager story hides the current edition ABOVE
   // it. Collapsing the wrong one would unmount the very feed holding the open
@@ -109,7 +109,7 @@ export default function AppPage() {
   const [todayStoryOpen, setTodayStoryOpen] = useState(false);
   const [historyStoryOpen, setHistoryStoryOpen] = useState(false);
   const storyOpen = todayStoryOpen || historyStoryOpen;
-  // PER-241: client-side interest filter. null = show all; string = show only
+  // Client-side interest filter. null = show all; string = show only
   // articles whose `interest` field matches that topic. Never mutates settings.
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const { startAbortable, clearAbortable, abortCurrent } =
@@ -133,7 +133,7 @@ export default function AppPage() {
         const token = await bootstrapCompanionToken();
         const ok = token ? await pingCompanion() : false;
         if (!scope.cancelled) setCompanionReady(ok);
-        // PER-259 item 1: poll run health alongside the reachability ping so a
+        // Poll run health alongside the reachability ping so a
         // silently-failed daily run (or a stale feed with no run in >26h) is
         // surfaced instead of the feed quietly showing yesterday's edition.
         const failure = ok && token ? await fetchRunFailure(token) : null;
@@ -170,10 +170,10 @@ export default function AppPage() {
         // computed authoritatively by the companion. We no longer reverse-engineer
         // "failed" topics here via a case-sensitive heading diff — that brittle
         // match (e.g. "openai" vs the model's "## OpenAI") was the source of the
-        // false "topic didn't come back" reports and the dead Retry (PER-154).
+        // false "topic didn't come back" reports and the dead Retry.
         setBrief((prev) => {
           if (prev && prev.generatedAt >= latest.generatedAt) return prev;
-          // PER-146: do NOT rotate scout.prevBrief.v1 here. This adoption is a
+          // Do NOT rotate scout.prevBrief.v1 here. This adoption is a
           // non-destructive "show the newest brief on load," not the audited
           // user-initiated overwrite — only generate() archives the outgoing
           // brief. Rotating here would clobber a real previous edition with a
@@ -218,7 +218,7 @@ export default function AppPage() {
   );
 
   // Single brief path: the local Scout companion. The browser→Exa path was
-  // removed (PER-109) — it fetched api.exa.ai directly and was CORS-broken.
+  // removed — it fetched api.exa.ai directly and was CORS-broken.
   // The companion runs the local `claude` CLI over the loopback server, so
   // there are no API keys and no cross-origin calls.
   const generate = useCallback(
@@ -277,9 +277,9 @@ export default function AppPage() {
           },
         );
         // Per-topic status rides along on `next.topics` from the companion — no
-        // client-side heading diff (PER-154). The outgoing brief isn't archived
+        // client-side heading diff. The outgoing brief isn't archived
         // client-side anymore: previous editions now come from the companion's
-        // rolling history via the BriefHistory pager (PER-219), so there's no
+        // rolling history via the BriefHistory pager, so there's no
         // local prevBrief slot to rotate.
         saveLastBrief(next);
         setBrief(next);
@@ -302,7 +302,7 @@ export default function AppPage() {
 
   // Retry ONLY the topics the model dropped (status "missing"), merging the
   // fresh sections into the prior brief instead of regenerating everything
-  // (PER-154). Falls back to a full run if there's nothing structured to retry.
+  // Falls back to a full run if there's nothing structured to retry.
   const retryMissingTopics = useCallback(() => {
     const missing = brief ? coverageBuckets(brief).missing : [];
     if (missing.length === 0) return generate();
@@ -365,7 +365,7 @@ export default function AppPage() {
 
   if (!settings) {
     // No stored config yet (and the companion held no interests to adopt). The
-    // in-page keyword setup form was removed in PER-188 — interests are now set
+    // in-page keyword setup form was removed — interests are now set
     // and managed exclusively in the chat-driven profile. Show the example brief
     // and route the single "Manage interests" affordance there.
     return (
@@ -393,7 +393,7 @@ export default function AppPage() {
 
   const showSkeleton = progress?.stage === "synthesizing";
 
-  // PER-241 follow-up: an active filter can outlive its topic. Renaming or
+  // An active filter can outlive its topic. Renaming or
   // deleting an interest (via the profile chat) updates settings.interests but
   // leaves activeFilter pointing at the old topic string. Honoring a stale value
   // would wedge the feed into an empty "No stories in this edition yet." view
@@ -408,7 +408,7 @@ export default function AppPage() {
     );
   const effectiveFilter = filterIsLive ? activeFilter : null;
 
-  // PER-241: derive a filtered brief for BriefLayout; leaves the stored brief
+  // Derive a filtered brief for BriefLayout; leaves the stored brief
   // untouched. When no filter is active we pass the brief as-is.
   const filteredBrief =
     brief && effectiveFilter
@@ -430,8 +430,8 @@ export default function AppPage() {
       activeFilter={effectiveFilter}
       onFilterChange={setActiveFilter}
     >
-      {/* PER-222: every banner/skeleton here is page chrome that sits around the
-          feed. In single-story mode the founder wants ONLY the story, so the
+      {/* Every banner/skeleton here is page chrome that sits around the
+          feed. In single-story mode the reader wants ONLY the story, so the
           whole cluster collapses while a story is open. */}
       {!storyOpen && (
         <>
@@ -455,10 +455,10 @@ export default function AppPage() {
             </Banner>
           )}
 
-          {/* PER-259 item 1: honestly surface a silently-failed daily run. The
-          PER-258 outage overwrote last_brief with status:"failed" and the feed
-          kept quietly showing yesterday's edition — read as "no run since June
-          18". Now the founder sees a clear banner with the captured reason.
+          {/* Honestly surface a silently-failed daily run. A failed run
+          overwrites last_brief with status:"failed", and the feed used to keep
+          quietly showing yesterday's edition — read as "no new run". Now the
+          user sees a clear banner with the captured reason.
           Suppressed while a run is in flight or a fresh brief just landed this
           session (the failure is already resolved), and when an error banner is
           already speaking for the current action. */}
@@ -516,7 +516,7 @@ export default function AppPage() {
             </Banner>
           )}
 
-          {/* PER-150: explicit success state for an on-demand run — a fresh brief
+          {/* Explicit success state for an on-demand run — a fresh brief
           actually landed, not a silent swap. Suppressed while another run
           starts or an error is showing. */}
           {ranAt && !running && !error && (
@@ -543,7 +543,7 @@ export default function AppPage() {
 
           {error && <ErrorBanner error={error} onRetry={runNow} />}
 
-          {/* PER-154: distinguish two honest states. "Missing" = the model dropped
+          {/* Distinguish two honest states. "Missing" = the model dropped
           the section → warning + a Retry that re-researches ONLY those topics.
           "Empty" = a section came back with no fresh news today → info, not an
           error, no Retry (re-running won't conjure news that doesn't exist). */}
@@ -592,13 +592,13 @@ export default function AppPage() {
 
       {filteredBrief && !showSkeleton ? (
         <>
-          {/* PER-219 (AC1): the clean current edition — header reads exactly
+          {/* The clean current edition — header reads exactly
               "Your brief — <date>", then straight into headlines.
-              PER-222: BriefLayout reports when a story detail is open so the
+              BriefLayout reports when a story detail is open so the
               page can collapse to that single story.
-              PER-223: when a HISTORY-pager story is open instead, collapse the
+              When a HISTORY-pager story is open instead, collapse the
               current edition away too so only the focused story remains.
-              PER-241: filteredBrief has articles narrowed by activeFilter. */}
+              filteredBrief has articles narrowed by activeFilter. */}
           {!historyStoryOpen && (
             <BriefLayout
               brief={filteredBrief}
@@ -606,11 +606,11 @@ export default function AppPage() {
               onDetailOpenChange={setTodayStoryOpen}
             />
           )}
-          {/* PER-219 (AC6): previous editions, paged 3 at a time from the
+          {/* Previous editions, paged 3 at a time from the
               companion's rolling history, with "Load older briefs" + "Manage
-              interests" at the bottom. PER-222: hidden when a CURRENT-edition
+              interests" at the bottom. Hidden when a CURRENT-edition
               story is open so nothing from the feed shows below it.
-              PER-223: when a story is opened FROM the pager, it stays mounted
+              When a story is opened FROM the pager, it stays mounted
               (it holds the open story) and collapses internally to that one
               section, reporting up via onDetailOpenChange. */}
           {!todayStoryOpen && (
@@ -640,10 +640,10 @@ export default function AppPage() {
   );
 }
 
-// PER-219 (AC3/AC4): the Scout wordmark (top-left logo slot) and the profile
+// The Scout wordmark (top-left logo slot) and the profile
 // menu both live in AppNav. The feed view threads its Run-now wiring through so
 // the action shows inside the profile menu; other states omit it.
-// PER-241: also threads interest filter props through to AppNav.
+// Also threads interest filter props through to AppNav.
 function Shell({
   children,
   onRunNow,

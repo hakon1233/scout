@@ -8,11 +8,11 @@ import type { Brief } from "@/lib/types";
 type Props = {
   brief: Brief;
   name: string;
-  // PER-219: header override. The current edition uses the owner label ("Your
+  // Header override. The current edition uses the owner label ("Your
   // brief" / "<name>'s brief"); historical editions in the pager pass
   // "Daily brief" so each past brief reads "Daily brief — <date>".
   heading?: string;
-  // PER-222: bubble up when a single-story detail opens/closes. The page uses it
+  // Bubble up when a single-story detail opens/closes. The page uses it
   // to hide its own siblings (banners, history pager); we use it to drop this
   // brief's "Your brief — <date>" header so the focused view is ONLY the story.
   onDetailOpenChange?: (open: boolean) => void;
@@ -34,15 +34,15 @@ export function BriefLayout({
   );
   const dateLabel = formatDate(brief.generatedAt);
 
-  // No founder name set ⇒ fall back to "Your brief" rather than rendering the
-  // empty-possessive "'s brief" (PER-186 defect 2). The possessive only reads
+  // No owner name set ⇒ fall back to "Your brief" rather than rendering the
+  // empty-possessive "'s brief". The possessive only reads
   // right when there's actually a name to own it.
   const trimmedName = name.trim();
   const ownerLabel = trimmedName ? `${trimmedName}'s brief` : "Your brief";
   const title =
     heading ?? (brief.kind === "weekly" ? "Weekly brief" : ownerLabel);
 
-  // PER-219: a deliberately bare header — title + date and NOTHING else. The
+  // A deliberately bare header — title + date and NOTHING else. The
   // old "Generated … · time" caption and the "Searched N topics · X articles"
   // banner (whose counts were the source of the cosmetic counter bug) are gone,
   // so the reader drops straight from the title into the headlines. The inline
@@ -54,8 +54,8 @@ export function BriefLayout({
       aria-label={`${title} — ${dateLabel}`}
       className="flex flex-col gap-6"
     >
-      {/* PER-222: in single-story mode the brief header is part of "the feed"
-          the founder doesn't want to see — the detail carries its own headline
+      {/* In single-story mode the brief header is part of "the feed"
+          the reader doesn't want to see — the detail carries its own headline
           and meta. Hide it so only the story remains. */}
       {!detailOpen && (
         <header className="measure-prose flex flex-col gap-1">

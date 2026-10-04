@@ -145,7 +145,7 @@ test("transcriptMessages keeps an unconfirmed rewrite actionable after an unrela
   assert.equal(rewriteCard?.rewriteResolved, undefined);
 });
 
-test("appliedChangeMessage surfaces a confirmed rewrite as an undoable action card (AIR-611)", () => {
+test("appliedChangeMessage surfaces a confirmed rewrite as an undoable action card", () => {
   const turn: ChatTurn = {
     id: "turn_apply",
     created_at: "2026-07-12T12:00:00.000Z",
@@ -170,7 +170,7 @@ test("appliedChangeMessage surfaces a confirmed rewrite as an undoable action ca
   assert.equal(msg.prev?.int_ai, "# AI\n\nOld.");
 });
 
-test("appliedChangeMessage carries the pre-delete doc so undo can re-create it verbatim (AIR-611)", () => {
+test("appliedChangeMessage carries the pre-delete doc so undo can re-create it verbatim", () => {
   const turn: ChatTurn = {
     id: "turn_del",
     created_at: "2026-07-12T12:01:00.000Z",

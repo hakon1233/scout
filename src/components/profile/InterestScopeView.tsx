@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/ui";
 import { LazyMarkdown } from "./LazyMarkdown";
 import type { DocCardModel } from "./InterestDocCard";
 
-// PER-236 fix 2: the single-interest "Research scope" detail rendered INSIDE
+// The single-interest "Research scope" detail rendered INSIDE
 // the interests workbench's left pane, so the chat column on the right stays
 // mounted (live transcript, streaming, focus state all preserved) while the
 // reader drills into one doc. Mirrors the standalone

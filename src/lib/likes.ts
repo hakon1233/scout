@@ -5,10 +5,10 @@ import * as React from "react";
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 import { canonicalUrl } from "@scout/agent/brief-document";
 
-// PER-249: device-local "liked stories" store. A brand-new localStorage store,
+// Device-local "liked stories" store. A brand-new localStorage store,
 // fully separate from the interests store and from every companion endpoint.
 //
-// HARD SAFETY (PER-249): this feature makes NO network calls at all — so it
+// HARD SAFETY: this feature makes NO network calls at all — so it
 // physically cannot reach the destructive replace-all `POST /v0/interests`.
 // Likes are pure client state for v1; the constraint is satisfied by
 // construction, not by discipline. No account/sync in v1.

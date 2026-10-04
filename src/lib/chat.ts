@@ -1,18 +1,18 @@
 "use client";
 
-// Browser client for the companion's conversational interest manager
-// (POST/GET /v0/chat — PER-172 / C4). ONE chat manages the WHOLE interest
-// collection: a turn can create a new interest (+ its intent doc), refine/rename
-// an existing one's doc, or delete one. The turn is async (kick → poll, exactly
-// like briefs) so the UI never blocks on the ~claude round-trip.
+// Browser client for the companion's conversational interest manager (POST/GET
+// /v0/chat). ONE chat manages the WHOLE interest collection: a turn can create
+// a new interest (+ its intent doc), refine/rename an existing one's doc, or
+// delete one. The turn is async (kick → poll, exactly like briefs) so the UI
+// never blocks on the ~claude round-trip.
 //
-// The contract that makes C5 honest (PER-139 no-dead-control): a `ready` turn's
-// `changes` are ALREADY durable on disk before the poll sees them, so the FE
-// fires its "Updated" beat only on a confirmed write — never optimistically.
-// The TWO structured exceptions are `pending_delete` (PER-230) and
-// `pending_rewrite` (PER-235): proposals the companion explicitly did NOT
-// apply, with their own deterministic confirm routes — so the confirm cards
-// the FE renders for them are real controls, not dead ones.
+// The contract that keeps the chat UI honest (no dead controls): a `ready`
+// turn's `changes` are ALREADY durable on disk before the poll sees them, so
+// the FE fires its "Updated" beat only on a confirmed write — never
+// optimistically. The TWO structured exceptions are `pending_delete` and
+// `pending_rewrite`: proposals the companion explicitly did NOT apply, with
+// their own deterministic confirm routes — so the confirm cards the FE renders
+// for them are real controls, not dead ones.
 
 import { companionFetch, companionJson } from "./companion";
 import { PATHS, type ChatTurn } from "@scout/agent/contract";
@@ -55,7 +55,7 @@ export async function pollChatTurn(
 ): Promise<ChatTurn> {
   const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
   const interval = opts.intervalMs ?? 1200;
-  // GET /v0/chat?since= filters by created_at server-side (AIR-639): without
+  // GET /v0/chat?since= filters by created_at server-side: without
   // it every tick re-transfers the WHOLE persisted transcript just to check
   // this one turn's status, which only gets worse as chat history grows.
   // The companion is loopback (same clock as this tab), so a generous 30s
@@ -87,12 +87,13 @@ export async function pollChatTurn(
   throw new Error("Timed out waiting for Scout to reply.");
 }
 
-// Abort the in-flight chat turn server-side (PER-232). Stop must cancel the
+// Abort the in-flight chat turn server-side. Stop must cancel the
 // OPERATION, not just our poll — the companion is kick→poll, so dropping the
 // fetch alone left the model edit to complete and persist ~14s later. This
 // tells the companion to kill the model child and write the turn as stopped
-// with NO changes applied. Best-effort: errors are swallowed (the worst case
-// is the pre-PER-232 behavior, and the caller has already stopped the UI).
+// with NO changes applied. Best-effort: errors are swallowed (the worst case is
+// a server-side turn that still completes, and the caller has already stopped
+// the UI).
 export async function stopChatTurn(
   token: string,
   turnId?: string,
@@ -111,7 +112,7 @@ export async function stopChatTurn(
   }
 }
 
-// Confirm a gated delete (PER-230): the deterministic [Delete] press. POSTs the
+// Confirm a gated delete: the deterministic [Delete] press. POSTs the
 // interestId to the companion, which removes the interest + its doc and returns
 // a `ready` turn whose `changes` carry the applied delete. No model round-trip,
 // so this resolves fast. Throws human-readable errors on 404 (already gone) /
@@ -137,7 +138,7 @@ export async function confirmDeleteInterest(
   return body.turn;
 }
 
-// Confirm a gated rewrite (PER-235): the deterministic [Apply] press. POSTs the
+// Confirm a gated rewrite: the deterministic [Apply] press. POSTs the
 // interestId to the companion, which writes its STORED proposed doc (the client
 // never sends the doc) and returns a `ready` turn whose `changes` carry the
 // applied update — so the caller routes it through the same confirmed-write
@@ -176,7 +177,7 @@ export async function runChatTurn(
 ): Promise<ChatTurn> {
   const turnId = await kickChatTurn(message, token);
   // Hand the turn id to the caller as soon as the kick lands, so a Stop can
-  // target this exact turn server-side (PER-232).
+  // target this exact turn server-side.
   opts.onKick?.(turnId);
   return pollChatTurn(turnId, token, opts);
 }

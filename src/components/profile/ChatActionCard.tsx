@@ -4,15 +4,15 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { ChatChange, PendingRewrite } from "@scout/agent/contract";
 import { lineDiff, type DiffLine } from "@/lib/chat-diff";
 
-// One inline action card under a Scout turn (PER-228 chunk 5). It is the visible
-// proof a turn moved a doc — the PER-139 no-dead-control contract.
+// One inline action card under a Scout turn. It is the visible proof a turn
+// moved a doc — the no-dead-control contract.
 //
 // IMPORTANT — honesty over the wireframe: a turn's `changes[]` are ALREADY
 // durable on disk by the time the FE sees them (see src/lib/chat.ts), so for
 // those there is no real "Apply/Discard" to gate — every action card renders as
 // Applied, and the only honest reversible affordance is Undo (a reversing
 // instruction sent as a normal turn). The TWO real propose/pending channels are
-// `pending_delete` (PER-230) and `pending_rewrite` (PER-235): the companion
+// `pending_delete` and `pending_rewrite`: the companion
 // explicitly did NOT apply those, and each has a deterministic confirm route —
 // so ChatDeleteConfirm's [Delete]/[Cancel] and ChatRewriteProposal's
 // [Apply]/[Discard] below are real controls, not dead ones.
@@ -135,10 +135,10 @@ export function ChatActionCard({
 }
 
 // How a rewrite proposal card was resolved, persisted on the message so the
-// card locks after the choice (PER-235). Undefined = still awaiting a choice.
+// card locks after the choice. Undefined = still awaiting a choice.
 export type RewriteResolution = "applied" | "discarded" | undefined;
 
-// Confirm-gated rewrite proposal (PER-235): the companion proposed a full
+// Confirm-gated rewrite proposal: the companion proposed a full
 // replacement doc but did NOT write it. Renders the diff between the doc the
 // FE last saw and the proposal, with real [Apply]/[Discard] controls — Apply
 // hits the deterministic /v0/chat/confirm-rewrite route; Discard is FE-local

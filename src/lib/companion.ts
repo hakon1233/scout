@@ -12,7 +12,7 @@ import {
 } from "@scout/agent/contract";
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 
-// Dev/diagnostic trace for the browser→loopback transport (AIR-626). Every fetch
+// Dev/diagnostic trace for the browser→loopback transport. Every fetch
 // helper below degrades to a falsy/empty fallback on failure so the UI stays
 // usable — but that also made a genuine "my brief silently stopped updating"
 // report undiagnosable from the console: the transport could go fully dark while
@@ -36,7 +36,7 @@ const TOKEN_KEY = "scout.companion.token";
 
 let cachedBase: string | null = null;
 
-// In-flight coalescing for the cached-base re-ping (AIR-617), mirroring
+// In-flight coalescing for the cached-base re-ping, mirroring
 // isServedFromCompanion's pattern below. fetchRunFailure's poll tick runs
 // `Promise.all([pollBriefsRaw, fetchSchedule])`, and both independently call
 // companionFetch() → discoverCompanion() in the same tick — without this, each
@@ -80,7 +80,7 @@ export function saveCompanionToken(token: string): void {
 // should be retried on the next call rather than latched off.
 let servedFromCompanionConfirmed = false;
 
-// In-flight coalescing for the same-origin probe (AIR-204). The /app mount
+// In-flight coalescing for the same-origin probe. The /app mount
 // fires several effects in the same tick that each call this (directly or via
 // bootstrapCompanionToken / fetchCompanionInterests / discoverCompanion). Before
 // the first /healthz resolves none of them is yet `confirmed`, so each would
@@ -99,8 +99,8 @@ let servedProbeInFlight: Promise<boolean> | null = null;
 // It is correctly false on the public marketing host (github.io), which serves
 // /app/ but has no /healthz — there we fall back to the loopback port sweep.
 //
-// PER-124: previously a hardcoded localhost/127.0.0.1 regex, which excluded
-// *.ts.net and broke token bootstrap + same-origin API on the Tailscale origin.
+// Not a hardcoded localhost/127.0.0.1 regex, which would exclude
+// *.ts.net and break token bootstrap + same-origin API on the Tailscale origin.
 export async function isServedFromCompanion(): Promise<boolean> {
   if (!isClient()) return false;
   if (servedFromCompanionConfirmed) return true;
@@ -114,7 +114,7 @@ export async function isServedFromCompanion(): Promise<boolean> {
       return res.ok;
     } catch {
       // Silent by design: a negative probe is the expected result on the
-      // marketing host (no /healthz). See logCompanionError's note (AIR-626).
+      // marketing host (no /healthz). See logCompanionError's note.
       return false;
     } finally {
       servedProbeInFlight = null;
@@ -127,7 +127,7 @@ export async function isServedFromCompanion(): Promise<boolean> {
 // interests recovery read from the same endpoint.
 type CompanionConfig = { token?: string | null; interests?: unknown };
 
-// Coalesced read of GET /v0/config (AIR-204). The /app mount fires multiple
+// Coalesced read of GET /v0/config. The /app mount fires multiple
 // effects that each need the companion config — bootstrapCompanionToken twice
 // (poll + brief-adoption) and fetchCompanionInterests once or twice (adopt +
 // reconcile). Each previously issued its own identical same-origin request on
@@ -179,7 +179,7 @@ export async function bootstrapCompanionToken(): Promise<string> {
   // returning the raw cfg.token instead would, for a padded token, return a value
   // that differs from what's stored — a `Bearer abc ` header with trailing space
   // that can fail server-side auth — and re-save it on every bootstrap because the
-  // trimmed store never equals the padded cfg value (AIR-107).
+  // trimmed store never equals the padded cfg value.
   const fromCfg = cfg?.token?.trim();
   if (fromCfg && fromCfg !== existing) {
     saveCompanionToken(fromCfg);
@@ -193,7 +193,7 @@ export async function bootstrapCompanionToken(): Promise<string> {
 // on every POST /v0/interests so its scheduler can run headless — so a browser
 // without locally-saved settings (cleared storage, a different profile, or a
 // different origin than the one that did first-run setup) can still recover the
-// user's interests and render a usable brief instead of the setup form (PER-157).
+// user's interests and render a usable brief instead of the setup form.
 // Returns [] when not served same-origin or /v0/config is unreachable/empty.
 export async function fetchCompanionInterests(): Promise<string[]> {
   const cfg = await fetchCompanionConfig();
@@ -211,7 +211,7 @@ async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
     return res.ok;
   } catch {
     // Silent by design: the loopback port sweep misses most ports on every run —
-    // logging each would be noise, not signal (AIR-626).
+    // logging each would be noise, not signal.
     return false;
   }
 }
@@ -311,7 +311,7 @@ export async function companionJson<T>(
 export async function postInterests(
   interests: string[],
   token: string,
-  // Focused-retry (PER-154): when set, the companion re-researches ONLY these
+  // Focused-retry: when set, the companion re-researches ONLY these
   // topics and merges them into the prior brief instead of regenerating it all.
   retryTopics?: string[],
 ): Promise<{ brief_id: string; status: string }> {
@@ -376,11 +376,11 @@ function adaptBrief(b: WireBrief): AppBrief {
 
 // Shared by fetchLatestBrief and fetchRunFailure so both can derive the newest
 // ready brief from an already-fetched raw list instead of each issuing their own
-// /v0/briefs request (AIR-605). Kept cheap: pick the winner on the raw
+// /v0/briefs request. Kept cheap: pick the winner on the raw
 // `generated_at` field first, then run adaptBrief (a full markdown regex parse)
-// only on that one, not on every ready brief every poll tick (AIR-617).
+// only on that one, not on every ready brief every poll tick.
 //
-// NOTE (AIR-644): the `?since=` list both callers pass only ever holds the
+// NOTE: the `?since=` list both callers pass only ever holds the
 // single `last_brief` slot — briefs.ts filters `?since=` to that one slot, never
 // the ready-brief history — so `raw` here is ≤1 element. On a failed/pending slot
 // it therefore carries NO ready brief; fetchRunFailure falls back to
@@ -413,18 +413,18 @@ export async function fetchLatestBrief(
   }
 }
 
-// AIR-644: resolve the "last successful brief" for the run-failure banner's
+// Resolve the "last successful brief" for the run-failure banner's
 // "Showing your last good brief from <date>" clause. `pollBriefsRaw(?since=)`
 // returns only the single `last_brief` slot, so on a failed/pending run
 // `slotReady` is null even though ready briefs still exist in history. In that
 // (uncommon, unhealthy) case only, fall back to one page of ready-brief history.
 // `fetchHistoryNewest` is invoked lazily so the healthy path — slot already
-// ready — stays a single request and doesn't undo the AIR-605/AIR-617 poll-dedup.
+// ready — stays a single request and doesn't undo the poll-dedup.
 export async function resolveLastSuccessBrief(
   slotReady: AppBrief | null,
   fetchHistoryNewest: () => Promise<AppBrief | null>,
 ): Promise<AppBrief | null> {
-  // BUG-PER-288: ephemeral QA runs intentionally occupy last_brief so their
+  // Ephemeral test runs intentionally occupy last_brief so their
   // initiator can poll the result, but they are not feed editions. Real history
   // already excludes them at the runner, making it the safe fallback.
   if (slotReady && !slotReady.ephemeral) return slotReady;
@@ -457,7 +457,7 @@ export async function updateSchedule(
   });
 }
 
-// Page the companion's rolling brief history, newest-first (PER-219). Backs the
+// Page the companion's rolling brief history, newest-first. Backs the
 // feed's "previous briefs" pager: the current brief is shown at the top of the
 // page, so the pager starts at offset 1 to skip it. Returns the adapted (parsed)
 // ready briefs in this page plus the server's total ready-brief count so the
@@ -523,7 +523,7 @@ export async function refreshBriefViaCompanion(
     sinceTs?: string;
     timeoutMs?: number;
     signal?: AbortSignal;
-    // Focused-retry (PER-154): re-research only these topics, merge into the
+    // Focused-retry: re-research only these topics, merge into the
     // prior brief. Must be a subset of `interests`.
     retryTopics?: string[];
     // Called once the companion accepts the run, with how long we will wait.
@@ -580,7 +580,7 @@ export async function generateWeeklyBrief(token: string): Promise<AppBrief> {
     timeoutMs: 10_000,
     failure: "Couldn't generate weekly brief",
   });
-  // Trust-boundary guard (mirrors the pollBriefsRaw fix, AIR-670): a 2xx with a
+  // Trust-boundary guard (mirrors the pollBriefsRaw guard): a 2xx with a
   // malformed/empty `{}` body (no `brief`) must not reach adaptBrief, which
   // immediately dereferences `.summary_md`/`.id` and would throw a raw
   // "Cannot read properties of undefined" TypeError — surfaced to the user as a

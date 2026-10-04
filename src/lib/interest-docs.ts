@@ -8,10 +8,10 @@ import {
 } from "./companion";
 import { isClient } from "./safe-storage";
 
-// Per-interest "intent doc" metadata (PER-155 C1/C4). The intent doc is the
+// Per-interest "intent doc" metadata. The intent doc is the
 // chat-managed markdown that steers an interest's research session; this module
 // only carries the *metadata* the profile landing needs — whether a doc exists
-// and when it last changed — not the doc body itself (that's the C5 editor).
+// and when it last changed — not the doc body itself (that's the doc editor).
 //
 // C1 (rich interest model + per-interest `.md` store) and C4 (`/v0/chat`) are
 // not landed yet, so the live companion has no doc endpoint. This loader is
@@ -31,10 +31,10 @@ export type InterestDocMeta = {
 
 export type InterestWithDoc = Interest & { doc: InterestDocMeta };
 
-// Stable per-interest key used for the C5 editor deep-link and the future
+// Stable per-interest key used for the doc editor deep-link and the future
 // `interests/<id>.md` store. Prefers the interest's own id; falls back to a
-// slug of the topic so a companion-adopted interest (topic-only, no id — see
-// PER-157) still gets a deterministic, shareable URL.
+// slug of the topic so a companion-adopted interest (topic-only, no id) still
+// gets a deterministic, shareable URL.
 export function interestKey(i: Interest): string {
   const id = i.id?.trim();
   if (id) return id;

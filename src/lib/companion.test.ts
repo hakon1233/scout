@@ -1,16 +1,16 @@
-// Unit tests for parseArticlesFromMarkdown (PER-271, audit finding H3).
+// Unit tests for parseArticlesFromMarkdown.
 //
 // This ~100-line regex parser turns the companion's GFM brief markdown into
 // the Article[] that drives the entire feed. Before this file it was only
 // exercised indirectly through e2e/zero-prompt.spec.ts (which needs a full
 // packed companion + browser). These tests pin the parser's behavior directly
 // against the documented regressions:
-//   - PER-211: citation + handpicked source image capture.
-//   - PER-214: in-depth blockquote body, separate from the short feed blurb.
-//   - PER-216: balanced-paren CDN/Webflow URLs (`...(13).png`) must not be
+//   - citation + handpicked source image capture.
+//   - in-depth blockquote body, separate from the short feed blurb.
+//   - balanced-paren CDN/Webflow URLs (`...(13).png`) must not be
 //     truncated at the first `)`.
 // Plus the undated-bullet and missing/empty/covered coverage-classification
-// cases called out in the issue.
+// cases.
 //
 // Run with: pnpm test (root) or tsx --test src/lib/companion.test.ts
 
@@ -110,15 +110,15 @@ test("article ids are sequential per brief across topics and stories", () => {
   );
 });
 
-// AIR-644: fetchRunFailure sources the "last good brief from <date>" timestamp
+// fetchRunFailure sources the "last good brief from <date>" timestamp
 // via resolveLastSuccessBrief. The single last_brief slot carries no ready brief
 // on a failed/pending run, so it must fall back to the ready-brief history —
-// but only then, to keep the healthy poll tick a single request (AIR-605/617).
+// but only then, to keep the healthy poll tick a single request.
 function readyBrief(id: string, generatedAt: string): Brief {
   return { id, generatedAt, interests: [], articles: [], markdown: "" };
 }
 
-test("AIR-644: a ready slot is returned as the last success WITHOUT fetching history", async () => {
+test("a ready slot is returned as the last success without fetching history", async () => {
   const slot = readyBrief("today", "2026-07-11T09:00:00.000Z");
   let historyCalls = 0;
   const result = await resolveLastSuccessBrief(slot, async () => {
@@ -133,7 +133,7 @@ test("AIR-644: a ready slot is returned as the last success WITHOUT fetching his
   );
 });
 
-test("PER-288: an ephemeral ready slot falls back to the newest real brief", async () => {
+test("an ephemeral ready slot falls back to the newest real brief", async () => {
   const ephemeral = {
     ...readyBrief("qa-run", "2026-07-16T19:06:41.414Z"),
     ephemeral: true,
@@ -150,7 +150,7 @@ test("PER-288: an ephemeral ready slot falls back to the newest real brief", asy
   assert.equal(result, historic);
 });
 
-test("AIR-644: a failed/pending slot falls back to the newest ready brief from history", async () => {
+test("a failed/pending slot falls back to the newest ready brief from history", async () => {
   const historic = readyBrief("last-good", "2026-07-10T09:00:00.000Z");
   let historyCalls = 0;
   const result = await resolveLastSuccessBrief(null, async () => {
@@ -162,7 +162,7 @@ test("AIR-644: a failed/pending slot falls back to the newest ready brief from h
   assert.equal(result?.generatedAt, "2026-07-10T09:00:00.000Z");
 });
 
-test("AIR-644: a failed slot with no ready history yields null (no last-success clause)", async () => {
+test("a failed slot with no ready history yields null (no last-success clause)", async () => {
   const result = await resolveLastSuccessBrief(null, async () => null);
   assert.equal(result, null);
 });

@@ -89,7 +89,7 @@ export function loadSettings(): Settings | null {
     storage.getItem(SETTINGS_KEY),
   );
   if (!isSettings(raw)) return null;
-  // Migration (PER-133): the BYO-key path was removed (PER-109), so old stored
+  // Migration: the BYO-key path was removed, so old stored
   // settings may still carry `anthropicKey`/`exaKey`. Drop them on read so the
   // in-memory shape matches the current `Settings` type. The next save persists
   // the slimmed object. No-op for users who never stored keys.

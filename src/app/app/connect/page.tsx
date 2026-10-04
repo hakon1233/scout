@@ -22,8 +22,7 @@ type GenerateState = "idle" | "posting" | "polling" | "done" | "error";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 // Sourced from packages/agent/package.json via next.config.ts, not
 // hand-duplicated here — the deploy names the packed tarball after that same
-// version, so a stale hardcode used to silently 404 this URL on a bump
-// (PER-275).
+// version, so a stale hardcode used to silently 404 this URL on a bump.
 const AGENT_VERSION = process.env.NEXT_PUBLIC_AGENT_VERSION;
 const TARBALL_PATH = `${BASE_PATH}/agent/scout-agent-${AGENT_VERSION}.tgz`;
 // Sensible absolute default for SSR/export; overwritten with the real origin
@@ -169,11 +168,11 @@ export default function ConnectPage() {
 
   // While the first ping is in flight we don't yet know which state to show.
   // Render a neutral placeholder rather than flashing the walkthrough and then
-  // collapsing it (Doherty / perceived-performance — PER-140 spec §5).
+  // collapsing it (Doherty / perceived-performance).
   const resolving = status === "idle" || status === "checking";
 
   // A companion that answers the ping is *reachable*, but it isn't *paired*
-  // until a token is saved (AIR-406). Reserve the green "Connected" success
+  // until a token is saved. Reserve the green "Connected" success
   // language for the paired state; until then show an amber "reachable but
   // pairing still needed" line so the status doesn't contradict the install/
   // pair walkthrough rendered below it.
@@ -560,7 +559,7 @@ function CmdBlock({
   copied: string | null;
   onCopy: (text: string, key: string) => void;
 }) {
-  // Header row keeps COPY out of the command's text lane entirely (PER-166) —
+  // Header row keeps COPY out of the command's text lane entirely —
   // no absolute overlay overlapping the first line. The <pre> wraps long
   // unbreakable tokens (the install URL) instead of overflowing: `pre-wrap`
   // preserves the real newline between the two commands, `overflow-wrap:anywhere`

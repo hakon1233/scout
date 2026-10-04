@@ -1,11 +1,11 @@
-// Unit tests for coverageBuckets (PER-271, audit finding H3).
+// Unit tests for coverageBuckets.
 //
 // coverageBuckets classifies each requested topic into "missing" (the model
-// dropped the section — actionable, Retry can recover it) vs "empty" (a
-// section existed but had no fresh news today — honest, not an error, not
-// retryable), per PER-154. It prefers the companion's authoritative `topics`
-// field and falls back to the legacy `failedTopics` list for briefs cached
-// before PER-154.
+// dropped the section — actionable, Retry can recover it) vs "empty" (a section
+// existed but had no fresh news today — honest, not an error, not retryable).
+// It prefers the companion's authoritative `topics` field and falls back to the
+// legacy `failedTopics` list for briefs cached before the companion reported
+// coverage.
 //
 // Run with: pnpm test (root) or tsx --test src/app/app/page.test.ts
 
@@ -82,7 +82,7 @@ test("an empty topics array is treated as absent — falls back to failedTopics,
   assert.deepEqual(coverageBuckets(brief), { missing: ["Markets"], empty: [] });
 });
 
-test("topics present takes priority over failedTopics even when failedTopics is also set (post-PER-154 brief)", () => {
+test("topics present takes priority over failedTopics even when failedTopics is also set (companion-coverage brief)", () => {
   const brief = baseBrief({
     topics: [{ topic: "Markets", status: "empty" }],
     // Stale legacy field a client might still be carrying — must be ignored

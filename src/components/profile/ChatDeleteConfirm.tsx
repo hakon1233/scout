@@ -4,11 +4,11 @@ import { useEffect, useId, useRef } from "react";
 
 import type { PendingDelete } from "@scout/agent/contract";
 
-// The confirm-gated delete card (PER-230). Delete is the ONE destructive op, so
+// The confirm-gated delete card. Delete is the ONE destructive op, so
 // it is the ONLY one behind a confirmation. A turn that resolved to a delete does
 // NOTHING to the store — it surfaces this card. The interest is removed only when
 // the user presses [Delete]; [Cancel] keeps it. This honest gate sits BEFORE the
-// destructive request, so create/update stay auto-apply (CEO decision on PER-230).
+// destructive request, so create/update stay auto-apply by design.
 export type DeleteResolution = "deleted" | "cancelled" | undefined;
 
 export function ChatDeleteConfirm({

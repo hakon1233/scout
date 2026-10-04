@@ -12,7 +12,7 @@ const ICON_CLASSES =
   "inline-flex size-9 items-center justify-center rounded-pill border border-border-default bg-surface text-muted transition hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page";
 
 export function AppNav({
-  // PER-219 (AC3): Run-now moved off the feed body into the profile menu. The
+  // Run-now lives in the profile menu, not the feed body. The
   // feed page passes its existing run-now wiring (a full, persisting run over the
   // saved interest list — never ephemeral, never mutating the saved set). Omitted
   // on routes that have no brief to run (Settings/Chat/etc.), where the menu
@@ -20,7 +20,7 @@ export function AppNav({
   onRunNow,
   onWeeklyBrief,
   running = false,
-  // PER-241: feed filter by interest/topic. Only shown when interests are
+  // Feed filter by interest/topic. Only shown when interests are
   // provided. Filtering is read-only and client-side; never mutates saved state.
   interests,
   activeFilter,
@@ -55,15 +55,15 @@ export function AppNav({
   );
 }
 
-// PER-225: the chosen logo — concept #2 "Trail Monogram" — in the top-left logo
-// slot PER-219 reserved. The mark is the founder-picked Trail Monogram badge:
-// an "S" drawn as a scouting trail ending in a signal-red node (#9a3b2e, the
-// brand Direction-A signal red). It's inlined as pure SVG paths, so it carries
-// no font dependency and renders identically everywhere. The badge is a fixed-
-// colour app-icon tile (same mark as the favicon), paired with the live Fraunces
-// "Scout" wordmark — identical to every masthead/title in the editorial UI, so
-// it stays theme-adaptive (light/dark) and consistent with the rest of the type.
-// Doubles as the home link (back to the feed) from any /app/* route.
+// The logo — the "Trail Monogram" — in the top-left logo slot. The mark is the
+// Trail Monogram badge: an "S" drawn as a scouting trail ending in a signal-red
+// node (#9a3b2e, the brand Direction-A signal red). It's inlined as pure SVG
+// paths, so it carries no font dependency and renders identically everywhere.
+// The badge is a fixed-colour app-icon tile (same mark as the favicon), paired
+// with the live Fraunces "Scout" wordmark — identical to every masthead/title
+// in the editorial UI, so it stays theme-adaptive (light/dark) and consistent
+// with the rest of the type. Doubles as the home link (back to the feed) from
+// any /app/* route.
 function ScoutWordmark() {
   return (
     <Link
@@ -105,11 +105,11 @@ function TrailMonogram() {
   );
 }
 
-// PER-249: top-bar entry point to the Liked feed (CEO-locked: the heart in the
-// top bar opens the saved-stories view, NOT the profile menu). A plain Link to
-// the real `/app/liked/` export route — present on every /app/* screen so saved
-// stories are always one tap away. The per-story heart toggles like state; this
-// one navigates.
+// Top-bar entry point to the Liked feed (the heart in the top bar opens the
+// saved-stories view, NOT the profile menu). A plain Link to the real
+// `/app/liked/` export route — present on every /app/* screen so saved stories
+// are always one tap away. The per-story heart toggles like state; this one
+// navigates.
 function LikedNavLink() {
   return (
     <Link
@@ -136,7 +136,7 @@ function LikedNavLink() {
 
 // Shared disclosure-popover state for the nav's two dropdowns (FeedFilter and
 // ProfileMenu). Owns open state, the trigger/container refs, and the
-// outside-click + Escape-to-close-and-return-focus wiring (AIR-407) — the exact
+// outside-click + Escape-to-close-and-return-focus wiring — the exact
 // block that previously lived, byte-identical, in both components and had to be
 // hand-edited in both when the focus-return behavior was added. Positioning
 // (FeedFilter's menuStyle) stays local to each consumer.
@@ -157,7 +157,7 @@ function useDisclosure() {
     }
     function onKeyDown(e: KeyboardEvent) {
       // Escape closes and returns focus to the trigger so keyboard users land
-      // back where they opened from (AIR-407).
+      // back where they opened from.
       if (e.key === "Escape") {
         setOpen(false);
         buttonRef.current?.focus();
@@ -174,7 +174,7 @@ function useDisclosure() {
   return { open, setOpen, containerRef, buttonRef };
 }
 
-// PER-241: funnel-icon filter button + dropdown. Reads interests; never writes.
+// Funnel-icon filter button + dropdown. Reads interests; never writes.
 function FeedFilter({
   interests,
   activeFilter,
@@ -186,12 +186,12 @@ function FeedFilter({
 }) {
   const { open, setOpen, containerRef, buttonRef } = useDisclosure();
   const isFiltered = activeFilter !== null;
-  // PER-262: the menu's horizontal offset from its trigger drifts every time a
-  // sibling icon is added/removed from the nav (see PER-249, which inserted the
-  // Liked icon between this button and the profile menu and pushed the trigger
-  // far enough left that the old `absolute right-0` + viewport-width menu spilled
-  // off the left edge). Measuring the trigger's real position and clamping to the
-  // viewport removes that coupling so future header changes can't regress it again.
+  // The menu's horizontal offset from its trigger drifts every time a sibling
+  // icon is added/removed from the nav (adding the Liked icon between this
+  // button and the profile menu pushed the trigger far enough left that the old
+  // `absolute right-0` + viewport-width menu spilled off the left edge).
+  // Measuring the trigger's real position and clamping to the viewport removes
+  // that coupling so future header changes can't regress it again.
   const [menuStyle, setMenuStyle] = React.useState<React.CSSProperties | null>(
     null,
   );
@@ -363,7 +363,7 @@ function ProfileMenu({
           aria-label="Settings"
           className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border-default bg-surface p-3 shadow-lg"
         >
-          {/* PER-219 (AC3): Run-now lives here now. Fires the feed's full,
+          {/* Run-now lives here. Fires the feed's full,
               persisting run over the saved interest list — the saved interests
               are never altered by running. Hidden on routes that pass no handler. */}
           {onRunNow && (

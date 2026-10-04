@@ -7,8 +7,8 @@ import { FeedImage, faviconFor, formatDate } from "@/components/FeedView";
 import { EmptyState } from "@/components/ui";
 import { useLikedStories, type LikedStory } from "@/lib/likes";
 
-// PER-249: the dedicated "Liked" feed — every story the reader saved, newest
-// first. Reached from the top-bar heart (CEO-locked entry point). A real static
+// The dedicated "Liked" feed — every story the reader saved, newest
+// first. Reached from the top-bar heart. A real static
 // export route (`/app/liked/`), same shape as /app/interests/.
 //
 // This view is 100% device-local: it reads `scout.likes.v1` from localStorage

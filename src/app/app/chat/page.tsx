@@ -4,10 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-// The standalone chat page was consolidated into /app/interests (PER-228
-// follow-up): the interest page now hosts the full-height chat in its right
-// pane. Keep this route as a redirect so old nav entries and deep links
-// (including ?focus=…) keep working.
+// The standalone chat page was consolidated into /app/interests: the interest
+// page now hosts the full-height chat in its right pane. Keep this route as a
+// redirect so old nav entries and deep links (including ?focus=…) keep working.
 export default function ChatRedirectPage() {
   const router = useRouter();
 

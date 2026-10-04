@@ -1,11 +1,11 @@
 import type { Article, Brief } from "./types";
 
-// Per-interest "news found per run" (PER-191 AC2). The companion persists only
-// the latest brief server-side, but the browser keeps the latest + previous
-// edition (scout.lastBrief.v1 / scout.prevBrief.v1 — see storage.ts). Each
-// brief's `articles[]` already carry their parsed interest + ISO `publishedAt`
-// (PER-176/177), so a run history is just those briefs grouped by interest,
-// newest run first — no new store, no re-parsing.
+// Per-interest "news found per run". The companion persists only the latest
+// brief server-side, but the browser keeps the latest + previous edition
+// (scout.lastBrief.v1 / scout.prevBrief.v1 — see storage.ts). Each brief's
+// `articles[]` already carry their parsed interest + ISO `publishedAt`, so a
+// run history is just those briefs grouped by interest, newest run first — no
+// new store, no re-parsing.
 
 export type RunStories = {
   // The brief/run id, used as a stable React key.

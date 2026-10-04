@@ -10,7 +10,7 @@ import { SkillSection } from "@/components/skills/SkillSection";
 import { useProfileWorkbench } from "@/components/profile/useProfileWorkbench";
 import { ARTICLE_ASSEMBLY_SKILLS, RESEARCH_SKILLS } from "@/lib/skills";
 
-// The consolidated interest workbench (PER-228 → PER-233 flip): the LEFT pane
+// The consolidated interest workbench: the LEFT pane
 // is the BIG primary view — interest docs AND the Skills setup (the same
 // engine-honest sections as /app/skills) — and the chat is a NARROW clamped
 // column on the RIGHT (~360–420px, full height, composer pinned to its
@@ -21,7 +21,7 @@ export default function InterestsPage() {
   const workbench = useProfileWorkbench();
   const [tab, setTab] = useState<"chat" | "docs">("chat");
 
-  // PER-236 fix 2: drilling into one interest doc swaps ONLY the left pane to
+  // Drilling into one interest doc swaps ONLY the left pane to
   // the scope view — the chat column stays mounted, so the live transcript,
   // streaming state, and focus survive the drill-in. URL carries `?id=` (the
   // companion serves only the `/app/` shell, so this is in-page state synced
@@ -195,7 +195,7 @@ function PrimaryPane({
 }) {
   const { hydrated, cards, docCount, focusKey, setFocusKey } = workbench;
 
-  // Single-doc drill-in (PER-236 fix 2): the scope view replaces the card
+  // Single-doc drill-in: the scope view replaces the card
   // list + skills in THIS pane only; the chat aside is untouched. Wait for
   // hydration before declaring an id "not found".
   if (selectedKey !== null) {

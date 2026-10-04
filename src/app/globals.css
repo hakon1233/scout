@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
-  Scout design tokens (PER-9)
+  Scout design tokens
 
   Two-layer model:
     1. Primitive ramp values (zinc, red, etc.) live below and feed
@@ -52,9 +52,8 @@
   --blue-950: #172554;
 
   /*
-    Direction A — Editorial / "Private Wire Service" (PER-114).
+    Direction A — Editorial / "Private Wire Service".
     Warm-paper canvas, ink type, signal-red dateline accent, editorial serif.
-    Founder pick, May 2026.
   */
   --paper: #f6f2ea;
   --paper-2: #efe9dd;
@@ -77,7 +76,7 @@
     Raised/selected fill — one warm step deeper than surface-muted, used for
     the active run-scope pill, the primary "Run now" menu item, and chip hover.
     Sits between paper-2 (#efe9dd) and line (#d8d0c1) so a filled element reads
-    as pressed/selected against both page and card. (AIR-201)
+    as pressed/selected against both page and card.
   */
   --bg-surface-strong: #e8dfcd;
   --border-default: var(--line);
@@ -95,7 +94,7 @@
   /*
     Info banners are neutral status notices (companion hint, example-brief,
     "searched N topics"), not alarms — so they use a warm recessed parchment,
-    NOT the cold --accent-deep blue (PER-130). Signal-red stays reserved for
+    NOT the cold --accent-deep blue. Signal-red stays reserved for
     datelines/accents and danger, so info reads calm and doesn't manufacture
     urgency. Warm-ink fg on parchment clears WCAG AA for body-sm text.
   */
@@ -146,7 +145,7 @@
   --accent-bg: #f1ece1;
   --accent-fg: #1c1a17;
   --accent-bg-hover: #ffffff;
-  /* PER-264: lightened from #c4553f (3.89:1 on --bg-surface, fails AA) to
+  /* Lightened from #c4553f (3.89:1 on --bg-surface, fails AA) to
      4.85:1 against #1d1a14, keeping the same warm brick-red hue family. */
   --accent-signal: #d2694c;
   --accent-deep: #7da7bd;
@@ -155,7 +154,7 @@
   --danger-fg: #e6a99c;
   --danger-border: #5a342b;
   /* Warm "ink room" info — recessed parchment-dark + warm-tan text, matching
-       the PAIR COMPANION link. Replaces the cold teal #16242b/#9fc4d4 (PER-130). */
+       the PAIR COMPANION link. Replaces the cold teal #16242b/#9fc4d4. */
   --info-bg: #221d14;
   --info-fg: var(--text-secondary);
   --info-border: #463c2c;
@@ -268,7 +267,7 @@ body {
 }
 
 /*
-  PER-19 a11y baseline focus ring. Catches primitives that don't opt into
+  A11y baseline focus ring. Catches primitives that don't opt into
   their own focus-visible utilities (Field, raw <a>, <summary>, …) so every
   keyboard-focused interactive meets WCAG 2.4.7 / 1.4.11. Components with
   bespoke focus styling override via their own focus-visible utilities.
@@ -363,7 +362,7 @@ body {
 }
 
 /*
-  Skeleton + shimmer (PER-14)
+  Skeleton + shimmer
 
   Wrapped in @media (prefers-reduced-motion: no-preference) so users with the
   reduce-motion OS preference see a static muted block instead of animation.
@@ -398,7 +397,7 @@ body {
     animation: scout-shimmer-sweep 1.4s ease-in-out infinite;
   }
 }
-/* Streaming caret blink for the chat (PER-228 chunk 3). Gated behind
+/* Streaming caret blink for the chat. Gated behind
    motion-safe at the call site, and the global reduce-motion rule clamps it. */
 @keyframes scout-caret {
   50% {
@@ -415,7 +414,7 @@ body {
   }
 }
 
-/* Docs-rail card flash-highlight (PER-230 AC6). Fired the instant a chat turn
+/* Docs-rail card flash-highlight. Fired the instant a chat turn
    confirms a durable write to this interest's doc — the visible proof the
    conversation moved the card. A brief accent ring + tint that settles back to
    the resting border. Gated motion-safe at the call site; the global

@@ -1,4 +1,4 @@
-// Tiny line diff for the chat action cards (PER-228 chunk 5). Not a full LCS —
+// Tiny line diff for the chat action cards. Not a full LCS —
 // it trims the common prefix/suffix and renders the changed middle as removed-
 // then-added lines. Good enough to show "what this change did" in a doc card
 // without pulling in a diff library. Capped so a full-doc rewrite doesn't render

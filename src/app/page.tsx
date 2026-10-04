@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PairedEntryRedirect } from "@/components/PairedEntryRedirect";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
-// Direction A — Editorial / "Private Wire Service" (PER-114, founder pick).
+// Direction A — Editorial / "Private Wire Service".
 // Masthead → hero (with sample brief filed alongside) → how-it-works →
 // closing → colophon footer. Warm-paper canvas, ink type, signal-red dateline.
 

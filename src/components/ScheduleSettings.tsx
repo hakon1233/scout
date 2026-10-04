@@ -10,10 +10,10 @@ import {
 } from "@/lib/companion";
 import type { ScheduleView } from "@scout/agent/contract";
 
-// Settings UI for the recurring schedule (PER-152). Reads/writes the companion's
-// GET|PUT /v0/schedule contract (PER-151): an enable toggle + time-of-day picker,
+// Settings UI for the recurring schedule. Reads/writes the companion's
+// GET|PUT /v0/schedule contract: an enable toggle + time-of-day picker,
 // the last/next-run legibility row, and an honest reboot caveat. Every control
-// drives a real backend write — no setting that saves nothing (PER-139).
+// drives a real backend write — no setting that saves nothing.
 
 type LoadState =
   | { kind: "loading" }
@@ -272,7 +272,7 @@ export function ScheduleSettings() {
         </Banner>
       )}
 
-      {/* Reboot caveat — honest, calm, only when scheduling is on (PER-139). */}
+      {/* Reboot caveat — honest, calm, only when scheduling is on. */}
       {schedule.enabled && !schedule.reboot_durable && (
         <p className="text-caption text-muted">
           Scheduled runs only happen while the companion is running. After a

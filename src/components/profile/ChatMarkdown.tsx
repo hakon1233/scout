@@ -3,7 +3,7 @@
 import { memo, useState } from "react";
 import { LazyMarkdown } from "./LazyMarkdown";
 
-// Sanitized markdown for the chat transcript (PER-228 chunk 4). Raw HTML is
+// Sanitized markdown for the chat transcript. Raw HTML is
 // stripped by rehype-sanitize — assistant text is rendered as full-column
 // editorial prose (Newsreader 17px/1.6), code/tool output in JetBrains Mono
 // with a copy button, long blocks collapsible. Inline code stays quiet.
@@ -117,7 +117,7 @@ const COMPONENTS = {
 // `.scout-md` type rules (same surface BriefView uses) so headings/lists/quotes
 // match the rest of the editorial UI.
 //
-// Memoized (AIR-617): ChatDock re-renders on every typewriter tick while a
+// Memoized: ChatDock re-renders on every typewriter tick while a
 // reply streams in (`streamLen` ticks every 24ms — see useProfileWorkbench's
 // `startStream`), which re-executes `messages.map(...)` for the whole
 // transcript. Without this boundary every already-rendered message re-parsed

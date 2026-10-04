@@ -18,7 +18,7 @@ export function classifyError(err: unknown): ClassifiedError {
   // network keyword test below — so companion fetch timeouts used to fall
   // through to "unknown" and miss the network banner. A
   // timeout IS a network condition, but it wasn't user-cancelled, so it gets its
-  // own message rather than "Cancelled." (AIR-107).
+  // own message rather than "Cancelled."
   if (e?.name === "TimeoutError") {
     return {
       kind: "network",

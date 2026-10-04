@@ -3,7 +3,7 @@
 import * as React from "react";
 import { likeKey, toggleLike, useIsLiked, type LikeInput } from "@/lib/likes";
 
-// PER-249: the per-story like/save control. Used on every feed card, in the
+// The per-story like/save control. Used on every feed card, in the
 // single-story detail, and in the Liked feed itself (where it unlikes). It's a
 // real <button> with `aria-pressed` so it announces as a toggle to screen
 // readers; the heart fill + editorial signal colour carry the state visually.

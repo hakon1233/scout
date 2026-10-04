@@ -11,7 +11,7 @@ const STORAGE_KEY = "scout.theme";
 // `storage` event only fires in OTHER tabs, so two toggles in the SAME document
 // (e.g. the settings page body control + the one in AppNav's profile menu, or the
 // landing page's desktop/mobile pair) would otherwise show a stale selection /
-// wrong `aria-checked` after one of them changes the theme (AIR-527).
+// wrong `aria-checked` after one of them changes the theme.
 const THEME_EVENT = "scout:theme-change";
 
 function applyTheme(theme: Theme) {
@@ -80,7 +80,7 @@ export function ThemeToggle({
     return () => mq.removeEventListener("change", onChange);
   }, [theme]);
 
-  // Order matches the founder ask: Light / Dark / System.
+  // Order: Light / Dark / System.
   const options: { value: Theme; label: string; icon: React.ReactNode }[] = [
     { value: "light", label: "Light", icon: <SunIcon /> },
     { value: "dark", label: "Dark", icon: <MoonIcon /> },
@@ -88,7 +88,7 @@ export function ThemeToggle({
   ];
 
   if (showLabels) {
-    // Labeled segmented control for the settings panel (PER-189): full-width,
+    // Labeled segmented control for the settings panel: full-width,
     // icon + text so the three choices read clearly inside the menu.
     return (
       <div
@@ -212,7 +212,7 @@ function SystemIcon() {
  * Blocking theme-resolution script. MUST be rendered inside <head>, before the
  * render-blocking stylesheet and before <body> is parsed, so the correct theme
  * class is on <html> at first paint — no flash of the light/warm-paper default
- * before the dark editorial theme settles (FOUC, PER-131). Also sets
+ * before the dark editorial theme settles (FOUC). Also sets
  * color-scheme so UA surfaces (scrollbars, form controls) paint in the right
  * mode immediately.
  */
