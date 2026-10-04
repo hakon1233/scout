@@ -1,0 +1,18 @@
+{
+  "message": "For AI agents, only open-source releases, no funding news.",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    },
+    {
+      "id": "int_fusion",
+      "topic": "Fusion energy"
+    }
+  ],
+  "output": "{\"reply\": \"Narrowed AI agents to open-source releases.\", \"changes\": [{\"op\": \"update\", \"interestId\": \"int_ai\", \"doc\": \"# Open-source AI agents\\n\\nOnly open-source agent releases and tooling. Ignore funding rounds.\"}]}",
+  "expect": {
+    "applied": ["update:Open-source AI agents"]
+  },
+  "expectFail": []
+}

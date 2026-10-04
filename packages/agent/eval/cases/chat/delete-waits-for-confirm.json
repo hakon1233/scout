@@ -1,0 +1,19 @@
+{
+  "message": "Drop fusion, I'm not reading it.",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    },
+    {
+      "id": "int_fusion",
+      "topic": "Fusion energy"
+    }
+  ],
+  "output": "{\"reply\": \"Want me to remove Fusion energy? Confirm below.\", \"changes\": [{\"op\": \"delete\", \"interestId\": \"int_fusion\"}]}",
+  "expect": {
+    "applied": [],
+    "pendingDelete": "Fusion energy"
+  },
+  "expectFail": []
+}

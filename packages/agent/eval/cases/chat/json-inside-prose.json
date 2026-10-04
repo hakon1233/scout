@@ -1,0 +1,18 @@
+{
+  "message": "What do you track for fusion?",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    },
+    {
+      "id": "int_fusion",
+      "topic": "Fusion energy"
+    }
+  ],
+  "output": "Here is the result:\n```json\n{\"reply\": \"Fusion energy: reactor milestones and funding.\", \"changes\": []}\n```",
+  "expect": {
+    "applied": []
+  },
+  "expectFail": []
+}

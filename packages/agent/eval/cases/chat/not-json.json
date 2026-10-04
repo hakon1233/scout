@@ -1,0 +1,18 @@
+{
+  "message": "Add climate tech.",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    },
+    {
+      "id": "int_fusion",
+      "topic": "Fusion energy"
+    }
+  ],
+  "output": "Sure! I've added climate tech to your interests.",
+  "expect": {
+    "applied": []
+  },
+  "expectFail": ["json-object"]
+}

@@ -1,0 +1,18 @@
+{
+  "message": "Also follow Norwegian football, mainly Eliteserien results.",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    },
+    {
+      "id": "int_fusion",
+      "topic": "Fusion energy"
+    }
+  ],
+  "output": "{\"reply\": \"Added Norwegian football, focused on Eliteserien results.\", \"changes\": [{\"op\": \"create\", \"topic\": \"Norwegian football\", \"doc\": \"# Norwegian football\\n\\nEliteserien results and transfer news. Skip lower divisions.\"}]}",
+  "expect": {
+    "applied": ["create:Norwegian football"]
+  },
+  "expectFail": []
+}

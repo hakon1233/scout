@@ -23,7 +23,8 @@
     "release:agent": "node scripts/release-agent.mjs build",
     "deploy:agent": "node scripts/release-agent.mjs deploy",
     "check:tarball-dist": "node scripts/check-tarball-dist.mjs",
-    "test:e2e": "playwright test --config e2e/playwright.config.ts"
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "eval": "tsx packages/agent/eval/run.ts"
   },
   "dependencies": {
     "next": "16.3.8",

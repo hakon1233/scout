@@ -1,0 +1,18 @@
+{
+  "message": "Rename the agents topic to Agent tooling.",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    },
+    {
+      "id": "int_fusion",
+      "topic": "Fusion energy"
+    }
+  ],
+  "output": "{\"reply\": \"Renamed it.\", \"changes\": [{\"op\": \"update\", \"interestId\": \"int_made_up\", \"topic\": \"Agent tooling\"}]}",
+  "expect": {
+    "applied": []
+  },
+  "expectFail": ["owned-ids"]
+}
