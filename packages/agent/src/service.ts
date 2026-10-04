@@ -284,6 +284,35 @@ function composePath(nodeDir: string, claude: string | null): string {
   return [...new Set(parts)].join(":");
 }
 
+// Every launchctl call that changes launchd state goes through here, and it
+// fails closed: it refuses under a test runner, while the plist path is
+// overridden, and for any plist other than the real user's canonical one
+// (os.userInfo ignores a faked HOME). A test that forgets its bootstrap seam
+// therefore cannot reach the user's real `ing.scout.agent` job.
+export async function launchctl(args: string[]): Promise<{ stdout: string }> {
+  const blocked = launchctlBlockedReason(args);
+  if (blocked) {
+    throw new Error(`Refusing to run launchctl ${args[0] ?? ""}: ${blocked}`);
+  }
+  return await execFileP("launchctl", args);
+}
+
+function launchctlBlockedReason(args: string[]): string | null {
+  if (process.env.NODE_TEST_CONTEXT) return "running under a test runner";
+  if (process.env.SCOUT_LAUNCH_AGENT_PLIST) {
+    return "the LaunchAgent plist path is overridden (SCOUT_LAUNCH_AGENT_PLIST)";
+  }
+  const canonical = path.join(
+    launchAgentsDir(os.userInfo().homedir),
+    `${LAUNCH_AGENT_LABEL}.plist`,
+  );
+  const plistArg = args.find((a) => a.endsWith(".plist"));
+  if (plistArg !== undefined && path.resolve(plistArg) !== canonical) {
+    return `${plistArg} is not the canonical LaunchAgent plist ${canonical}`;
+  }
+  return null;
+}
+
 async function launchctlDomainTarget(): Promise<string> {
   const uid = typeof process.getuid === "function" ? process.getuid() : 0;
   return `gui/${uid}`;
@@ -392,12 +421,11 @@ async function bootstrapLaunchAgent(
 ): Promise<{ bootstrapped: boolean; note: string }> {
   const domain = await launchctlDomainTarget();
   try {
-    await execFileP("launchctl", [
-      "bootout",
-      `${domain}/${LAUNCH_AGENT_LABEL}`,
-    ]).catch(() => undefined);
-    await execFileP("launchctl", ["bootstrap", domain, plist]);
-    await execFileP("launchctl", [
+    await launchctl(["bootout", `${domain}/${LAUNCH_AGENT_LABEL}`]).catch(
+      () => undefined,
+    );
+    await launchctl(["bootstrap", domain, plist]);
+    await launchctl([
       "kickstart",
       "-k",
       `${domain}/${LAUNCH_AGENT_LABEL}`,
@@ -409,7 +437,7 @@ async function bootstrapLaunchAgent(
   } catch (err) {
     // Fall back to the legacy load API for older macOS.
     try {
-      await execFileP("launchctl", ["load", "-w", plist]);
+      await launchctl(["load", "-w", plist]);
       return {
         bootstrapped: true,
         note: "LaunchAgent loaded (legacy launchctl load).",
@@ -466,12 +494,11 @@ export async function uninstallService(opts?: {
   const home = opts?.home ?? os.homedir();
   const plist = plistPath(home);
   const domain = await launchctlDomainTarget();
-  await execFileP("launchctl", [
-    "bootout",
-    `${domain}/${LAUNCH_AGENT_LABEL}`,
-  ]).catch(() => undefined);
+  await launchctl(["bootout", `${domain}/${LAUNCH_AGENT_LABEL}`]).catch(
+    () => undefined,
+  );
   // Legacy unload fallback (harmless if bootout already handled it).
-  await execFileP("launchctl", ["unload", "-w", plist]).catch(() => undefined);
+  await launchctl(["unload", "-w", plist]).catch(() => undefined);
   let removed = false;
   try {
     await fs.rm(plist, { force: true });

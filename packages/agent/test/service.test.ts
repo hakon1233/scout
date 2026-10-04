@@ -11,6 +11,7 @@ import {
   LAUNCH_AGENT_LABEL,
   buildLaunchAgentPlist,
   isServiceInstalled,
+  launchctl,
   plistPath,
 } from "../src/service.js";
 
@@ -106,5 +107,21 @@ test("isServiceInstalled tracks plist validity, not mere presence", async () => 
     if (prev === undefined) delete process.env.SCOUT_LAUNCH_AGENT_PLIST;
     else process.env.SCOUT_LAUNCH_AGENT_PLIST = prev;
     await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("launchctl refuses to run while the plist path is overridden for tests", async () => {
+  // A test that forgets the bootstrap seam must not reach the real launchd
+  // job: with the override set, every mutating launchctl call is refused.
+  const previous = process.env.SCOUT_LAUNCH_AGENT_PLIST;
+  process.env.SCOUT_LAUNCH_AGENT_PLIST = path.join(os.tmpdir(), "x.plist");
+  try {
+    await assert.rejects(
+      launchctl(["bootout", "gui/0/scout-test-label-that-does-not-exist"]),
+      /Refusing to run launchctl/,
+    );
+  } finally {
+    if (previous === undefined) delete process.env.SCOUT_LAUNCH_AGENT_PLIST;
+    else process.env.SCOUT_LAUNCH_AGENT_PLIST = previous;
   }
 });
