@@ -102,10 +102,12 @@ async function fsyncDir(dir: string): Promise<void> {
   }
 }
 
-// Read a JSON file through `parse`. Resolves undefined when the file is missing
-// or unreadable. When the bytes won't parse (or `parse` throws), the file is
-// first renamed to `<file>.corrupt-<ms>.bak`, so the next write starts fresh
-// without destroying what it held, then undefined.
+// Read a JSON file through `parse`. Resolves undefined when the file is
+// missing. When the bytes won't parse (or `parse` throws), the file is first
+// renamed to `<file>.corrupt-<ms>.bak`, so the next write starts fresh without
+// destroying what it held, then undefined. Any other read error rejects: the
+// file is still there, and a caller that went on with nothing would overwrite
+// it.
 export async function readJsonFile<T>(
   file: string,
   parse: (value: unknown) => T,
@@ -114,10 +116,8 @@ export async function readJsonFile<T>(
   try {
     raw = await fs.readFile(file, "utf8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.error(`[scout] ${file} could not be read:`, err);
-    }
-    return undefined;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
   }
   try {
     return parse(JSON.parse(raw));

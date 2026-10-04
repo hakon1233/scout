@@ -263,3 +263,19 @@ test("a failed update does not block the next one", async () => {
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
+
+test("a state file that exists but can't be read is never replaced", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-unreadable-"));
+  try {
+    // A directory where state.json should be: readFile fails with EISDIR.
+    const file = path.join(tmp, "state.json");
+    await fs.mkdir(file);
+    await assert.rejects(loadState(file));
+    await assert.rejects(
+      updateState(file, (s) => ({ ...s, pairing_token: "new" })),
+    );
+    assert.ok((await fs.stat(file)).isDirectory());
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
