@@ -13,11 +13,7 @@ import type {
   Interest,
   ScheduleRunStatus,
 } from "./contract.js";
-import {
-  CONFIG_DIR,
-  assertNotRealStateUnderTest,
-  atomicWriteFile,
-} from "./persistence.js";
+import { CONFIG_DIR, atomicWriteFile, readJsonFile } from "./persistence.js";
 
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
 
@@ -185,57 +181,18 @@ export function normalizeTimeOfDay(raw: unknown): string | null {
 }
 
 export async function loadState(file = STATE_FILE): Promise<State> {
-  let raw: string;
-  try {
-    raw = await fs.readFile(file, "utf8");
-  } catch {
-    // No state yet (ENOENT) is the normal first-run case, and a transient read
-    // blip leaves the file untouched on disk. Either way there is nothing to
-    // parse and nothing worth preserving — start fresh.
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(raw) as State;
-    // Normalize interests to the rich {id, topic} shape on every load so the
-    // rest of the system never sees the legacy `string[]`. Migration is pure and
-    // lossless (see migrateInterests); the canonicalized ids are persisted on the
-    // next save. Leave `interests` absent (not []) when it was absent, so the
-    // "no interests stored yet" path stays distinguishable.
+  const state = await readJsonFile(file, (value) => {
+    const parsed = value as State;
+    // Normalize interests to the {id, topic} shape on every load so the rest of
+    // the system never sees the legacy `string[]`; the canonical ids are saved
+    // on the next write. Absent stays absent, so "no interests yet" is still
+    // distinguishable from [].
     if (parsed.interests !== undefined) {
       parsed.interests = migrateInterests(parsed.interests);
     }
     return parsed;
-  } catch {
-    // The file exists and was readable but holds corrupt/unusable JSON. Returning
-    // {} here is the dangerous case: the very next saveState would overwrite this
-    // file, permanently destroying the founder's interests, briefs, and pairing
-    // token. Move the corrupt bytes aside first so the state stays recoverable,
-    // THEN start fresh. Symmetric with readChatTranscript's corrupt-transcript
-    // handling — state.json is the more valuable file and deserves at least the
-    // same protection. Atomic saveState (below) prevents self-inflicted torn
-    // writes, but external corruption (manual edit, disk fault, a restore that
-    // truncates, a pre-atomic version) can still leave a present-but-corrupt file.
-    await preserveCorruptState(file);
-    return {};
-  }
-}
-
-async function preserveCorruptState(file: string): Promise<void> {
-  try {
-    const backup = `${file}.corrupt-${Date.now()}.bak`;
-    assertNotRealStateUnderTest(file);
-    await fs.rename(file, backup);
-    console.error(
-      `[state] ${file} was corrupt; preserved at ${backup} and started fresh`,
-    );
-  } catch (err) {
-    // Best-effort — if the backup itself fails we still start fresh, matching the
-    // pre-existing contract. Log so the (now unrecoverable) corruption is visible.
-    console.error(
-      `[state] ${file} was corrupt and could not be backed up:`,
-      err,
-    );
-  }
+  });
+  return state ?? {};
 }
 
 // List the .corrupt-*.bak recovery files preserveCorruptState left beside the

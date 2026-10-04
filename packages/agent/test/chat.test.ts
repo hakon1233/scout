@@ -1378,7 +1378,7 @@ test("CAR-146: a non-ENOENT transcript read failure logs and returns []", async 
   assert.equal(calls.length, 1);
   assert.match(
     String(calls[0][0]),
-    /^\[chat\] transcript .* could not be read:/,
+    /^\[scout\] .*transcript\.json could not be read:/,
   );
   assert.equal((calls[0][1] as NodeJS.ErrnoException).code, "ENOTDIR");
 });
