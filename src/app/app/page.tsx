@@ -16,13 +16,12 @@ import {
   bootstrapCompanionToken,
   fetchCompanionInterests,
   fetchLatestBrief,
-  fetchRunFailure,
   generateWeeklyBrief,
   loadCompanionToken,
   pingCompanion,
   refreshBriefViaCompanion,
-  type RunFailure,
 } from "@/lib/companion";
+import { fetchRunFailure, type RunFailure } from "@/lib/run-failure";
 import { formatDate } from "@/lib/format-date";
 import { classifyError, type ClassifiedError } from "@/lib/errors";
 import {
