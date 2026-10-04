@@ -31,7 +31,7 @@ function run(action, { stateDir, guardDir }, runId) {
     encoding: "utf8",
     env: {
       ...process.env,
-      PAPERCLIP_RUN_ID: runId,
+      SCOUT_RUN_ID: runId,
       SCOUT_LIVE_GUARD_DIR: guardDir,
       SCOUT_STATE_DIR: stateDir,
     },

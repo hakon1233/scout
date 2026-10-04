@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { promises as fs, realpathSync } from "node:fs";
+import { existsSync, promises as fs, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -69,12 +69,15 @@ export function assertExternalReleaseRoot(repoRoot, releaseRoot) {
   ) {
     throw new Error("Release root must be outside the source workspace.");
   }
-  const paperclipWorkspace = `${path.sep}.paperclip${path.sep}instances${path.sep}`;
-  if (
-    releases.includes(paperclipWorkspace) &&
-    releases.includes(`${path.sep}workspaces${path.sep}`)
-  ) {
-    throw new Error("Release root must not be inside a Paperclip workspace.");
+  // Nor inside any other checkout: a pull or build there would rewrite what
+  // the live companion runs.
+  for (let dir = releases; ; dir = path.dirname(dir)) {
+    if (existsSync(path.join(dir, ".git"))) {
+      throw new Error(
+        `Release root must not be inside a git checkout (${dir}).`,
+      );
+    }
+    if (path.dirname(dir) === dir) break;
   }
 }
 

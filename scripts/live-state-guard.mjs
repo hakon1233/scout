@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 const action = process.argv[2];
-const runId = process.env.PAPERCLIP_RUN_ID?.trim();
+const runId = process.env.SCOUT_RUN_ID?.trim();
 const stateDir = path.resolve(
   process.env.SCOUT_STATE_DIR ?? path.join(os.homedir(), ".config", "scout"),
 );
@@ -15,7 +15,7 @@ const guardDir = path.resolve(
 
 if (!runId || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runId)) {
   fail(
-    "PAPERCLIP_RUN_ID must be set to a safe run identifier before touching the live origin",
+    "SCOUT_RUN_ID must be set to a safe run identifier before touching the live origin",
   );
 }
 if (action !== "snapshot" && action !== "check") {
@@ -48,7 +48,7 @@ try {
     const changes = diffManifests(before.files, after);
     if (changes.length > 0) {
       console.error(
-        `Scout live-state guard detected founder-visible state changes for run ${runId}:`,
+        `Scout live-state guard detected user-visible state changes for run ${runId}:`,
       );
       for (const change of changes) console.error(change);
       process.exitCode = 1;

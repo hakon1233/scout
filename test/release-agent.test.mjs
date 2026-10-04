@@ -304,14 +304,6 @@ test("release roots default to macOS Application Support and refuse workspace pa
     () => assertExternalReleaseRoot("/work/scout", "/work/scout/releases"),
     /outside/i,
   );
-  assert.throws(
-    () =>
-      assertExternalReleaseRoot(
-        "/work/scout",
-        "/Users/scout/.paperclip/instances/default/workspaces/other/releases",
-      ),
-    /workspace/i,
-  );
   assert.doesNotThrow(() =>
     assertExternalReleaseRoot(
       "/work/scout",
@@ -325,6 +317,13 @@ test("release roots default to macOS Application Support and refuse workspace pa
   await fs.mkdir(repo);
   await fs.symlink(repo, alias);
   t.after(() => fs.rm(tmp, { recursive: true, force: true }));
+  const otherCheckout = path.join(tmp, "other-checkout");
+  await fs.mkdir(path.join(otherCheckout, ".git"), { recursive: true });
+  assert.throws(
+    () =>
+      assertExternalReleaseRoot(repo, path.join(otherCheckout, "releases")),
+    /inside a git checkout/i,
+  );
   assert.throws(
     () => assertExternalReleaseRoot(repo, path.join(alias, "releases")),
     /outside/i,
