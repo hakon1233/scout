@@ -163,3 +163,52 @@ test("createWeeklyBriefFromHistory reports no source material instead of inventi
   assert.equal(weekly.kind, "weekly");
   assert.match(weekly.summary_md ?? "", /No eligible daily stories/);
 });
+
+// The same feature-complete brief the web app's parser is pinned on. The
+// expected digest is recorded from the current implementation.
+const FULL_BRIEF =
+  [
+    "Intro prose with a [loose citation](https://example.com/loose).",
+    "",
+    "# Your brief",
+    "",
+    "## AI agents",
+    "_Nothing notable in the last week — showing older items._",
+    "- `2026-09-30` — **OpenAI** ships a new [agents SDK](https://example.com/inline) for tools.",
+    "  [example.com — Agents SDK released](https://example.com/agents?utm_source=x)",
+    "  ![source image](https://cdn.example.com/img%20(13).png)",
+    "  > Lead paragraph about the SDK.",
+    "  >",
+    "  > Second paragraph with a [body link](https://example.com/body-only).",
+    "- `undated` — An undated item.",
+    "  [other.org — Undated piece](https://other.org/undated/)",
+    "* `2026-09-28` — Star bullet with two sources.",
+    "  [a.com — First](https://a.com/1) and [b.com — Second](https://b.com/2)",
+    "- No date marker at all.",
+    "  ![source image](https://cdn.example.com/only-image.png)",
+    "",
+    "## Climate tech",
+    "_no fresh news_",
+    "",
+    "## Climate tech",
+    "- `2026-09-29` – en dash story.",
+    "  [c.org — Repeat heading](https://c.org/x)",
+  ].join("\n") + "\n";
+
+test("the weekly digest of a feature-complete brief matches the recorded markdown", () => {
+  const weekly = createWeeklyBriefFromHistory(
+    [
+      {
+        id: "b1",
+        generated_at: "2026-09-30T08:00:00.000Z",
+        status: "ready",
+        summary_md: FULL_BRIEF,
+      },
+    ],
+    new Date("2026-10-01T12:00:00.000Z"),
+  );
+  assert.equal(
+    weekly.summary_md,
+    "# Weekly brief\n\n## Top stories this week\n- `2026-09-30` — **OpenAI** ships a new [agents SDK](https://example.com/inline) for tools.\n  [example.com — Agents SDK released](https://example.com/agents?utm_source=x)\n  ![source image](https://cdn.example.com/img%20(13).png)\n  > Lead paragraph about the SDK.\n  >\n  > Second paragraph with a [body link](https://example.com/body-only).\n  _From AI agents_\n\n- `undated` — An undated item.\n  [other.org — Undated piece](https://other.org/undated/)\n  _From AI agents_\n\n* `2026-09-28` — Star bullet with two sources.\n  [a.com — First](https://a.com/1) and [b.com — Second](https://b.com/2)\n  _From AI agents_\n\n- No date marker at all.\n  ![source image](https://cdn.example.com/only-image.png)\n  _From AI agents_\n\n- `2026-09-29` – en dash story.\n  [c.org — Repeat heading](https://c.org/x)\n  _From Climate tech_",
+  );
+});
