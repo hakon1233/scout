@@ -126,6 +126,11 @@ export function createServer(deps: ServerDeps = {}): http.Server {
   }
 
   return http.createServer((req, res) => {
+    // No other page may frame Scout (it holds the pairing token and has
+    // destructive buttons), and browsers must trust our content types.
+    res.setHeader("x-frame-options", "DENY");
+    res.setHeader("content-security-policy", "frame-ancestors 'none'");
+    res.setHeader("x-content-type-options", "nosniff");
     const origin = req.headers.origin as string | undefined;
     const cors = corsHeaders(origin);
 
@@ -286,18 +291,13 @@ export function createServer(deps: ServerDeps = {}): http.Server {
 
         json(res, 404, { error: "not found" }, cors);
       } catch (err) {
-        // Last-resort handler for any throw escaping a /v0 route. Without this
-        // log the 500 is the *only* signal and it goes to the client, never to
-        // stderr — so "my brief/chat failed with a 500" is undiagnosable from
-        // the companion logs. Mirror the [runner]/[chat]/[state] convention so
-        // ops/QA can correlate the failing request. The String(err) leak in the
-        // response body is a separate, riskier concern tracked elsewhere; this
-        // change is additive observability only and leaves the body unchanged.
+        // Last-resort handler for any throw escaping a route: the detail goes
+        // to the companion's log, never to the client.
         console.error(
           `[server] unhandled request error: ${req.method} ${url.pathname}:`,
           err,
         );
-        json(res, 500, { error: String(err) }, cors);
+        json(res, 500, { error: "internal error" }, cors);
       }
     })();
   });

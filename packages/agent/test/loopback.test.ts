@@ -1036,3 +1036,31 @@ test("unknown route → styled 404.html, not raw JSON", async () => {
     await fs.rm(webroot, { recursive: true, force: true });
   }
 });
+
+test("every response forbids framing and content sniffing", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-headers-"));
+  const stateFile = path.join(tmp, "state.json");
+  await saveState({ pairing_token: newPairingToken() }, stateFile);
+  const { server, port } = await startServer(0, { stateFile });
+  try {
+    for (const p of [
+      "/healthz",
+      "/v0/version",
+      "/v0/briefs",
+      "/no-such-path",
+    ]) {
+      const res = await fetch(`http://127.0.0.1:${port}${p}`);
+      await res.arrayBuffer();
+      assert.equal(res.headers.get("x-frame-options"), "DENY", p);
+      assert.equal(
+        res.headers.get("content-security-policy"),
+        "frame-ancestors 'none'",
+        p,
+      );
+      assert.equal(res.headers.get("x-content-type-options"), "nosniff", p);
+    }
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
