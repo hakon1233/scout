@@ -14,7 +14,7 @@ code, tests and comments.
 
 ## Commands
 
-- `pnpm check`: typecheck, lint, unit and contract tests, build. Run it before every commit.
+- `pnpm check`: format check, typecheck, lint, unit and contract tests, build. Run it before every commit.
 - `pnpm test:e2e`: Playwright against a companion built from source.
 - `pnpm demo`: the whole app on <http://127.0.0.1:47899/app/>, offline. Use it to try a
   change by hand.

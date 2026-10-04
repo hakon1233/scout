@@ -79,7 +79,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (code map and invarian
 ## Checks
 
 ```bash
-pnpm check       # typecheck, lint, unit + contract tests, build
+pnpm check       # format, typecheck, lint, unit + contract tests, build
 pnpm test:e2e    # Playwright against a companion built from source (stub claude)
 pnpm eval        # score recorded model outputs against the prompts' rules
 ```
