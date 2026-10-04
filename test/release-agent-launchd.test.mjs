@@ -86,14 +86,19 @@ http.createServer((req, res) => {
 //
 // Its plist is hand-rolled on purpose: what this exercises is the `current`
 // symlink flip and the rollback of a failing release through REAL launchd, on a
-// unique temporary label (ing.scout.agent.per301.<pid>), port and state dir, so
-// it can never touch the user's job. The legacy->current transition, which
-// must drive the real installService, is covered in release-agent.test.mjs
+// unique temporary label (ing.scout.agent.test.<pid>), port and state dir, so
+// it can never touch the user's job. It still loads a real launchd job, so it
+// runs only when asked: SCOUT_LAUNCHD_TEST=1 pnpm test. The legacy->current
+// transition, which must drive the real installService, is covered in
+// release-agent.test.mjs
 // ("migrateToReleases ...") — a hand-rolled plist would prove nothing there.
 
 test(
   "macOS launchd spike switches A to B through stable current and rolls failed C back to B",
-  { skip: process.platform !== "darwin" },
+  {
+    skip:
+      process.platform !== "darwin" || process.env.SCOUT_LAUNCHD_TEST !== "1",
+  },
   async (t) => {
     const root = await fs.mkdtemp(
       path.join(os.tmpdir(), "scout-launchd-release-"),
@@ -102,7 +107,7 @@ test(
     const stateFile = path.join(root, "state", "started-sha");
     const logFile = path.join(root, "launchd.log");
     const plist = path.join(root, "agent.plist");
-    const label = `ing.scout.agent.per301.${process.pid}`;
+    const label = `ing.scout.agent.test.${process.pid}`;
     const domain = `gui/${process.getuid()}`;
     const target = `${domain}/${label}`;
     const port = await freePort();
