@@ -308,6 +308,19 @@ export async function companionJson<T>(
   return (await res.json()) as T;
 }
 
+// Whether the companion accepts `token`, checked with one authenticated read
+// before the token is saved.
+export async function verifyCompanionToken(
+  token: string,
+): Promise<"ok" | "rejected" | "unreachable"> {
+  try {
+    const res = await companionFetch(PATHS.schedule, { token });
+    return res.status === 401 ? "rejected" : "ok";
+  } catch {
+    return "unreachable";
+  }
+}
+
 export async function postInterests(
   interests: string[],
   token: string,

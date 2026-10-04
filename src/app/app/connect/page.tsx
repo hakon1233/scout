@@ -10,6 +10,7 @@ import {
   pingCompanion,
   refreshBriefViaCompanion,
   saveCompanionToken,
+  verifyCompanionToken,
 } from "@/lib/companion";
 import { loadSettings, saveLastBrief } from "@/lib/storage";
 
@@ -37,6 +38,7 @@ export default function ConnectPage() {
   // escape hatch doesn't flip `setupComplete`. Starts false so the first client
   // render matches the SSR/static export (no localStorage).
   const [hasSavedToken, setHasSavedToken] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
   const [hasInterests, setHasInterests] = useState(false);
   // Resolve the tarball URL against the actual origin this page is served from,
   // so the copied command is correct regardless of the deploy host. Must START
@@ -90,9 +92,20 @@ export default function ConnectPage() {
     };
   }, [check]);
 
-  const handleSaveToken = useCallback(() => {
-    saveCompanionToken(token);
-    setHasSavedToken(Boolean(token.trim()));
+  // Save a pasted token only if the companion accepts it. When no companion
+  // answers yet, keep it: it is checked by every call once one runs.
+  const handleSaveToken = useCallback(async () => {
+    const value = token.trim();
+    if (!value) return;
+    setTokenError(null);
+    if ((await verifyCompanionToken(value)) === "rejected") {
+      setTokenError(
+        "That token doesn't match this companion. Run `scout-agent pair` and paste the token it prints.",
+      );
+      return;
+    }
+    saveCompanionToken(value);
+    setHasSavedToken(true);
   }, [token]);
 
   const copy = useCallback((text: string, key: string) => {
@@ -417,6 +430,9 @@ export default function ConnectPage() {
                       Save
                     </Button>
                   </div>
+                  {tokenError && (
+                    <p className="text-sm text-danger">{tokenError}</p>
+                  )}
                 </div>
               </div>
             </details>
@@ -460,6 +476,9 @@ export default function ConnectPage() {
                   Save
                 </Button>
               </div>
+              {tokenError && (
+                <p className="text-sm text-danger">{tokenError}</p>
+              )}
             </section>
 
             {/* Step 2 */}

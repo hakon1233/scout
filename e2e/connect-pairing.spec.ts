@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
@@ -189,34 +191,40 @@ async function gotoConnectedWithoutConfig(
   });
 }
 
-test("a wrong manually-pasted token is accepted with no server-side validation, flips to a false 'You're all set', and auto-redirects into the app", async ({
+test("a pasted token the companion rejects is not saved and shows why", async ({
   page,
 }) => {
   await gotoConnectedWithoutConfig(page);
 
-  // Sanity: genuinely on the walkthrough, not already past the check.
-  await expect(page.getByText("You're all set")).toHaveCount(0);
-
-  const tokenField = page.getByPlaceholder("Paste pairing token here");
-  const wrongToken = "definitely-the-wrong-token";
-  await tokenField.fill(wrongToken);
+  await page
+    .getByPlaceholder("Paste pairing token here")
+    .fill("definitely-the-wrong-token");
   await page.getByRole("button", { name: "Save" }).click();
 
-  // handleSaveToken flips hasSavedToken on Boolean(token.trim()) alone — no
-  // fetch, no comparison against the companion's real pairing_token
-  // (server.ts's timingSafeTokenEqual is never consulted here). Combined with
-  // a genuinely-reachable /healthz, that's sufficient for setupComplete to
-  // declare success for a token nobody has verified, and its effect fires
-  // router.replace("/app/") in the same render — the "You're all set" banner
-  // is real but genuinely transient (not asserted directly here: under load
-  // the redirect can beat a second locator's poll to the punch, which isn't
-  // itself a bug). The stable, load-bearing proof is the redirect actually
-  // firing off an unverified token, not a screenshot of the banner mid-flight.
-  await expect(page).toHaveURL(`${ORIGIN}/app/`);
+  await expect(page.getByText(/doesn.t match this companion/)).toBeVisible();
+  await expect(page.getByText("You're all set")).toHaveCount(0);
+  await expect(page).toHaveURL(`${ORIGIN}/app/connect/`);
+  expect(
+    await page.evaluate((k) => window.localStorage.getItem(k), TOKEN_KEY),
+  ).toBeNull();
+});
 
-  // What's persisted really is the wrong value, not a UI-only glitch a real
-  // write would have caught.
+test("a pasted token the companion accepts is saved and opens the app", async ({
+  page,
+}) => {
+  await gotoConnectedWithoutConfig(page);
+  const { pairing_token } = JSON.parse(
+    readFileSync(
+      path.join(__dirname, ".artifact/home/.config/scout/state.json"),
+      "utf8",
+    ),
+  ) as { pairing_token: string };
+
+  await page.getByPlaceholder("Paste pairing token here").fill(pairing_token);
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(page).toHaveURL(`${ORIGIN}/app/`);
   await expect
     .poll(() => page.evaluate((k) => window.localStorage.getItem(k), TOKEN_KEY))
-    .toBe(wrongToken);
+    .toBe(pairing_token);
 });

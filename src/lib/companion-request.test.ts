@@ -3,7 +3,11 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { companionFetch, companionJson } from "./companion";
+import {
+  companionFetch,
+  companionJson,
+  verifyCompanionToken,
+} from "./companion";
 
 const origin = "http://scout.test";
 Object.defineProperty(globalThis, "window", {
@@ -82,4 +86,23 @@ test("a refusal throws the status's own message, else the companion's hint or er
   await assert.rejects(refuse(500, {}), {
     message: "Couldn't send that message (500).",
   });
+});
+
+test("a token check says whether the companion accepts the token", async () => {
+  serve(
+    ({ init }) =>
+      new Response(null, {
+        status:
+          (init.headers as Record<string, string>).authorization ===
+          "Bearer good"
+            ? 200
+            : 401,
+      }),
+  );
+  assert.equal(await verifyCompanionToken("good"), "ok");
+  assert.equal(await verifyCompanionToken("bad"), "rejected");
+  globalThis.fetch = async () => {
+    throw new TypeError("fetch failed");
+  };
+  assert.equal(await verifyCompanionToken("good"), "unreachable");
 });
