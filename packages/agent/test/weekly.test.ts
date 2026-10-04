@@ -195,6 +195,8 @@ const FULL_BRIEF =
     "  [c.org — Repeat heading](https://c.org/x)",
   ].join("\n") + "\n";
 
+// The image-only story is left out: it has no citation, so the feed (one
+// article per citation) could never show it, yet it took a weekly slot.
 test("the weekly digest of a feature-complete brief matches the recorded markdown", () => {
   const weekly = createWeeklyBriefFromHistory(
     [
@@ -209,6 +211,6 @@ test("the weekly digest of a feature-complete brief matches the recorded markdow
   );
   assert.equal(
     weekly.summary_md,
-    "# Weekly brief\n\n## Top stories this week\n- `2026-09-30` — **OpenAI** ships a new [agents SDK](https://example.com/inline) for tools.\n  [example.com — Agents SDK released](https://example.com/agents?utm_source=x)\n  ![source image](https://cdn.example.com/img%20(13).png)\n  > Lead paragraph about the SDK.\n  >\n  > Second paragraph with a [body link](https://example.com/body-only).\n  _From AI agents_\n\n- `undated` — An undated item.\n  [other.org — Undated piece](https://other.org/undated/)\n  _From AI agents_\n\n* `2026-09-28` — Star bullet with two sources.\n  [a.com — First](https://a.com/1) and [b.com — Second](https://b.com/2)\n  _From AI agents_\n\n- No date marker at all.\n  ![source image](https://cdn.example.com/only-image.png)\n  _From AI agents_\n\n- `2026-09-29` – en dash story.\n  [c.org — Repeat heading](https://c.org/x)\n  _From Climate tech_",
+    "# Weekly brief\n\n## Top stories this week\n- `2026-09-30` — **OpenAI** ships a new [agents SDK](https://example.com/inline) for tools.\n  [example.com — Agents SDK released](https://example.com/agents?utm_source=x)\n  ![source image](https://cdn.example.com/img%20(13).png)\n  > Lead paragraph about the SDK.\n  >\n  > Second paragraph with a [body link](https://example.com/body-only).\n  _From AI agents_\n\n- `undated` — An undated item.\n  [other.org — Undated piece](https://other.org/undated/)\n  _From AI agents_\n\n* `2026-09-28` — Star bullet with two sources.\n  [a.com — First](https://a.com/1) and [b.com — Second](https://b.com/2)\n  _From AI agents_\n\n- `2026-09-29` – en dash story.\n  [c.org — Repeat heading](https://c.org/x)\n  _From Climate tech_",
   );
 });

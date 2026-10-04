@@ -13,17 +13,17 @@ type WeeklyStory = {
   sourceRank: number;
 };
 
-// Every story with a source URL, keyed on its first citation (or its image).
+// Every story with a citation, keyed on its first citation's URL. A story
+// without one is skipped: the feed shows one article per citation, so it
+// would take a slot and never be seen.
 function extractStories(brief: Brief): WeeklyStory[] {
   const stories: WeeklyStory[] = [];
   for (const entry of parseBrief(brief.summary_md ?? "").entries) {
-    if (entry.kind !== "story") continue;
-    const url = entry.links[0]?.url ?? entry.image;
-    if (!url) continue;
+    if (entry.kind !== "story" || entry.links.length === 0) continue;
     stories.push({
       topic: entry.topic ?? "Top stories",
       block: entry.raw,
-      url,
+      url: entry.links[0].url,
       publishedAt: entry.date,
       sourceGeneratedAt: brief.generated_at,
       sourceRank: stories.length,
