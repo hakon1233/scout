@@ -29,10 +29,8 @@ Two tiers of what's here:
   `NEXT_PUBLIC_SUPABASE_*` client env belong to the original hosted-Supabase
   design. The current local companion pairs with a **local Bearer token**, not
   the `companion-token` Supabase JWT, so whether any of this is still required
-  for a given deployment is an open question tracked by the repo decommission
-  audit (see [`docs/audits/2026-07-07-repo-audit.md`](../docs/audits/2026-07-07-repo-audit.md),
-  item F10). **Do not delete these files blindly** — confirm the deployment
-  target first.
+  for a given deployment is an open question. **Do not delete these files
+  blindly** — confirm the deployment target first.
 
 ## Layout
 
