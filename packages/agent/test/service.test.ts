@@ -13,6 +13,7 @@ import {
   isServiceInstalled,
   launchctl,
   plistPath,
+  stableNodePath,
 } from "../src/service.js";
 
 test("buildLaunchAgentPlist emits RunAtLoad + KeepAlive and the run argv", () => {
@@ -108,6 +109,27 @@ test("isServiceInstalled tracks plist validity, not mere presence", async () => 
     else process.env.SCOUT_LAUNCH_AGENT_PLIST = prev;
     await fs.rm(tmp, { recursive: true, force: true });
   }
+});
+
+test("stableNodePath swaps a Homebrew Cellar node for its version-free opt link", () => {
+  // `brew upgrade` deletes the versioned Cellar dir, which would leave launchd
+  // pointing at a node that no longer exists.
+  const exists = (p: string) => p === "/opt/homebrew/opt/node@22/bin/node";
+  assert.equal(
+    stableNodePath("/opt/homebrew/Cellar/node@22/22.23.1/bin/node", exists),
+    "/opt/homebrew/opt/node@22/bin/node",
+  );
+});
+
+test("stableNodePath keeps the node path when there is no stable link", () => {
+  assert.equal(
+    stableNodePath("/opt/homebrew/Cellar/node/24.1.0/bin/node", () => false),
+    "/opt/homebrew/Cellar/node/24.1.0/bin/node",
+  );
+  assert.equal(
+    stableNodePath("/Users/x/.nvm/versions/node/v22.1.0/bin/node", () => true),
+    "/Users/x/.nvm/versions/node/v22.1.0/bin/node",
+  );
 });
 
 test("launchctl refuses to run while the plist path is overridden for tests", async () => {

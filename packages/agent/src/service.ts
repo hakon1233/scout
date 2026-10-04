@@ -253,6 +253,19 @@ ${programArgs}
 `;
 }
 
+// Homebrew runs node from a versioned Cellar dir that `brew upgrade` deletes.
+// Pin launchd to the formula's version-free `opt` link instead, when it
+// exists, so an upgrade does not leave the job pointing at a missing binary.
+export function stableNodePath(
+  execPath: string,
+  exists: (p: string) => boolean = existsSync,
+): string {
+  const m = execPath.match(/^(.*)\/Cellar\/([^/]+)\/[^/]+\/bin\/node$/);
+  if (!m) return execPath;
+  const optPath = `${m[1]}/opt/${m[2]}/bin/node`;
+  return exists(optPath) ? optPath : execPath;
+}
+
 // Best-effort: directory containing the `claude` CLI, so we can guarantee it's
 // on the LaunchAgent PATH. Returns null if `claude` isn't resolvable.
 async function claudeDir(): Promise<string | null> {
@@ -373,7 +386,7 @@ export async function installService(opts?: {
     );
   }
   const home = opts?.home ?? os.homedir();
-  const nodePath = process.execPath;
+  const nodePath = stableNodePath(process.execPath);
   // The compiled CLI entry. When invoked via the global `scout-agent` shim,
   // process.argv[1] resolves (through the symlink) to dist/cli.js.
   const scriptPath = opts?.scriptPath
