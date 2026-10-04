@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// PER-249: the like/save feature and its dedicated Liked feed. Mirrors
+// The like/save feature and its dedicated Liked feed. Mirrors
 // feed-filter-theme.spec.ts: blocks non-loopback, seeds localStorage via
-// addInitScript, and asserts the Scout dark tokens (the founder reads in dark
-// mode) alongside the behavioural acceptance criteria — persistence across
-// reload, the top-bar entry point, unlike-in-place, and the empty state.
+// addInitScript, and asserts the Scout dark tokens (dark mode is the primary
+// reading mode) alongside the behavioural acceptance criteria — persistence
+// across reload, the top-bar entry point, unlike-in-place, and the empty state.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
@@ -71,7 +71,7 @@ test("liked feed renders saved stories with dark theme tokens", async ({
   ).toBeVisible();
 
   // The topic chip uses the dark editorial signal red — #d2694c
-  // (rgb(210,105,76)) after PER-264 lightened it from #c4553f for WCAG AA.
+  // (rgb(210,105,76)), lightened from #c4553f for WCAG AA.
   await expect(page.getByText("Energy", { exact: true })).toHaveCSS(
     "color",
     "rgb(210, 105, 76)",

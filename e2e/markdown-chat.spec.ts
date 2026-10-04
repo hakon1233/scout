@@ -42,7 +42,7 @@ test("chat renders user and assistant markdown safely", async ({ page }) => {
   await expect(
     page.locator("strong", { hasText: "assistant emphasis" }),
   ).toBeVisible();
-  // Since the PER-228 redesign, user messages render as PLAIN text in a
+  // User messages render as PLAIN text in a
   // faint-tint block — markdown is NOT interpreted (the literal `**` markers
   // stay visible), which also keeps any user-pasted HTML inert.
   await expect(page.getByText("Track **user emphasis**")).toBeVisible();
@@ -69,7 +69,7 @@ test("user message text remains legible on its faint-tint block", async ({
 }) => {
   await page.goto(`${ORIGIN}/app/interests?mock=markdown`);
 
-  // Post-PER-228 design: the user message is plain text inside a
+  // The user message is plain text inside a
   // bg-surface-muted block. Assert WCAG AA contrast on the live tokens.
   const styles = await page
     .getByText("Track **user emphasis**")

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// PER-119 — headless E2E that boots the BUILT/packed @scout/agent artifact and
+// Headless E2E that boots the BUILT/packed @scout/agent artifact and
 // proves the zero-prompt first-run core loop end-to-end, deterministically and
 // offline:
 //
@@ -12,7 +12,7 @@ import { PORT } from "./port";
 //      shows and Generate becomes enabled on its own.
 //   3. A brief renders in-app with citations and no preamble leak (the stub
 //      claude emits a leading "I have enough…" line that stripBriefPreamble
-//      must remove — PER-113 #1).
+//      must remove).
 //   4. /v0/config is same-origin-guarded: same-origin → 200, cross-origin → 403.
 //
 // Determinism/offline: the claude shell-out is stubbed (SCOUT_CLAUDE_BIN), and
@@ -47,7 +47,7 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   await blockNonLoopback(page);
 
   // Seed the interest set before the app boots. The in-page keyword setup form
-  // was removed in PER-188 — interests are now set via the chat-driven profile,
+  // was removed — interests are now set via the chat-driven profile,
   // which a hermetic stub run can't drive. Seeding localStorage (the exact shape
   // saveSettings writes) reproduces the post-setup precondition directly, so the
   // test exercises the part that matters here: the zero-prompt run + feed render.
@@ -70,15 +70,15 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   // (shown only when !companionReady) must be gone — if same-origin
   // auto-adoption regressed, this banner/link would reappear and the user would
   // be forced through /app/connect to paste a token. This toHaveCount(0) also
-  // gates on the companion becoming ready before we fire the run (PER-219 moved
-  // Run-now into the profile menu, so its disabled-state no longer encodes
+  // gates on the companion becoming ready before we fire the run (Run-now
+  // lives in the profile menu, so its disabled-state no longer encodes
   // readiness — the pairing prompt's disappearance is the readiness signal now).
   await expect(page.getByRole("link", { name: /Pair companion/i })).toHaveCount(
     0,
   );
   await expect(page.getByText(/scout-agent run/)).toHaveCount(0);
 
-  // Run-now lives in the profile menu now (PER-219 AC3). Open it and fire the run.
+  // Run-now lives in the profile menu. Open it and fire the run.
   await page.getByRole("button", { name: "Open settings" }).click();
   const generate = page.getByRole("button", { name: "Run now" });
   await expect(generate).toBeEnabled({ timeout: 15_000 });
@@ -86,7 +86,7 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   // Generate and wait for the brief to render in-app.
   await generate.click();
 
-  // The brief now renders as a news feed (PER-211): the stub's `## AI safety`
+  // The brief renders as a news feed: the stub's `## AI safety`
   // topic becomes a feed card whose headline is the citation title ("Alignment
   // update", from `[example.com — Alignment update](url)`). The card is a button.
   // `.first()` scopes to the CURRENT edition (above the BriefHistory pager): the
@@ -99,11 +99,11 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
 
   // The handpicked source image (the stub's `![source image](…)` line, pointed
   // at the companion's own loopback asset) parses and renders on the card —
-  // proving the PER-211 image path end-to-end (capture contract → parser →
+  // proving the image path end-to-end (capture contract → parser →
   // FeedImage), not just the text fallback.
   await expect(card.locator('img[src*="icon-192.png"]')).toBeVisible();
 
-  // The feed stays SHORT (PER-214): the in-depth blockquote body must NOT leak
+  // The feed stays SHORT: the in-depth blockquote body must NOT leak
   // onto the feed card — depth appears only after a click.
   await expect(page.locator("body")).not.toContainText(
     "need replication on larger models",
@@ -118,14 +118,14 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   ).toBeVisible();
   await expect(page.locator('img[src*="icon-192.png"]').first()).toBeVisible();
 
-  // The in-depth body (PER-214): the stub's `> …` blockquote paragraphs parse
+  // The in-depth body: the stub's `> …` blockquote paragraphs parse
   // into Article.body and render ONLY in this detail view, not on the feed card.
   // Prove a sentence that lives solely in the blockquote is now visible here.
   await expect(page.locator("body")).toContainText(
     "need replication on larger models",
   );
 
-  // PER-256: the click-through body leads with a short bold summary paragraph,
+  // The click-through body leads with a short bold summary paragraph,
   // followed by normal-weight deeper paragraphs.
   const leadParagraph = page.locator("article p", {
     hasText: "The lab reported a measurable drop",
@@ -139,7 +139,7 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   await expect(deeperParagraph).toHaveCSS("color", "rgb(111, 104, 93)");
   await expect(page.locator("body")).not.toContainText("#8a7f6e");
 
-  // PER-256 layout guard: the richer detail body must not introduce horizontal
+  // Layout guard: the richer detail body must not introduce horizontal
   // overflow on the requested desktop and mobile widths, in light or dark mode.
   await expectNoHorizontalOverflow(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -147,7 +147,7 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   await page.evaluate(() => document.documentElement.classList.add("dark"));
   await expectNoHorizontalOverflow(page);
 
-  // PER-236 fix 1: the body's inline markdown renders as REAL elements — the
+  // The body's inline markdown renders as REAL elements — the
   // stub's `**measurable drop**` becomes a <strong>, its backticked
   // `eval-harness` becomes a <code> chip — and no literal asterisks/backticks
   // survive into the visible text.
@@ -161,7 +161,7 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   await expect(page.locator("body")).not.toContainText("`eval-harness`");
 
   // No preamble leak: the stub's leading "I have enough to write the brief now."
-  // line must be stripped before render (PER-113 #1).
+  // line must be stripped before render.
   await expect(page.locator("body")).not.toContainText(
     "I have enough to write the brief",
   );
@@ -198,7 +198,7 @@ test("/v0/config is same-origin guarded: 200 same-origin, 403 cross-origin", asy
   expect((cfg.token ?? "").length).toBeGreaterThan(0);
 
   // Cross-origin (a non-loopback Origin) → 403. This is the guard that keeps a
-  // malicious web page from reading the local pairing token (PER-110).
+  // malicious web page from reading the local pairing token.
   const cross = await request.get(`${ORIGIN}/v0/config`, {
     headers: { origin: "http://evil.example.com" },
   });

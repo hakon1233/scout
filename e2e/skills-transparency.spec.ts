@@ -50,7 +50,7 @@ const ASSEMBLY = {
   ],
 };
 
-// AIR-340: the in-development /app/skills transparency page (PER-212) had no e2e
+// The in-development /app/skills transparency page had no e2e
 // coverage. It renders the engine's REAL skill strings parsed into titled group
 // cards — its whole value is being honest to source, so the regressions that
 // matter are "a group silently disappears" or "a card renders with no bullets"

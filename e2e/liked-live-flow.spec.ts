@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-229 (Browser QA pass) — end-to-end like flow driven entirely through the
+// End-to-end like flow driven entirely through the
 // real UI, against a freshly GENERATED brief.
 //
 // The existing liked-feed.spec.ts seeds `scout.likes.v1` directly and asserts
@@ -45,7 +45,7 @@ test("like a freshly-generated story → it appears in the Liked feed, persists,
   await blockNonLoopback(page);
 
   // Same precondition as zero-prompt.spec: the in-page keyword setup form is
-  // gone (PER-188), so seed the post-setup interest set directly in the exact
+  // gone, so seed the post-setup interest set directly in the exact
   // shape saveSettings writes. This test is about the like flow, not setup.
   await page.addInitScript(() => {
     window.localStorage.setItem(
@@ -65,7 +65,7 @@ test("like a freshly-generated story → it appears in the Liked feed, persists,
     0,
   );
 
-  // Fire the run from the profile menu (PER-219) and wait for the feed card.
+  // Fire the run from the profile menu and wait for the feed card.
   await page.getByRole("button", { name: "Open settings" }).click();
   const runNow = page.getByRole("button", { name: "Run now" });
   await expect(runNow).toBeEnabled({ timeout: 15_000 });
@@ -100,7 +100,7 @@ test("like a freshly-generated story → it appears in the Liked feed, persists,
     card.getByRole("button", { name: "Remove from liked stories" }),
   ).toHaveAttribute("aria-pressed", "true");
 
-  // Navigate to the Liked feed via the real CEO-locked top-bar heart (the only
+  // Navigate to the Liked feed via the real top-bar heart (the only
   // sanctioned entry point), not a raw goto.
   await page.getByRole("link", { name: "Liked stories" }).click();
   await expect(page).toHaveURL(/\/app\/liked\/?$/);

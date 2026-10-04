@@ -19,7 +19,7 @@ test.describe("responsive interest workbench", () => {
     await expect(page.getByLabel("Chat with Scout")).toBeVisible();
     await expect(page.getByLabel("Message Scout")).toBeVisible();
 
-    // The flip (PER-233): chat is the narrow clamped column on the RIGHT;
+    // Chat is the narrow clamped column on the RIGHT;
     // the interests+skills pane owns the majority of the width on the left.
     const chatBox = await page.getByLabel("Chat with Scout").boundingBox();
     expect(chatBox).not.toBeNull();
@@ -62,7 +62,7 @@ test.describe("responsive interest workbench", () => {
     await expect(page.getByLabel("Chat with Scout")).toBeVisible();
   });
 
-  // PER-236 fix 2: drilling into a single interest doc must NOT lose the chat.
+  // Drilling into a single interest doc must NOT lose the chat.
   // The scope view replaces only the left pane; the chat column stays mounted.
   test("desktop: opening an interest doc keeps the chat visible", async ({
     page,

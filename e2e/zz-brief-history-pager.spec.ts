@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// The "previous briefs" pager (src/components/BriefHistory.tsx, PER-219 AC6)
+// The "previous briefs" pager (src/components/BriefHistory.tsx)
 // pages the companion's rolling history 3-at-a-time via GET
 // /v0/briefs?limit=&offset= and has its own single-story isolation mode
-// (PER-223: drilling into a HISTORY edition's story hides every other
+// (drilling into a HISTORY edition's story hides every other
 // edition and the pager footer). No existing spec drives any of this —
 // weekly-brief.spec.ts and liked-live-flow.spec.ts only ever generate ONE or
 // TWO editions in passing, never enough to exercise "Load older briefs" or
@@ -65,7 +65,7 @@ async function runDailyBrief(page: Page) {
   ).toBeVisible({ timeout: 30_000 });
 }
 
-test("brief history pager: pagination and single-story isolation (PER-219 AC6, PER-223)", async ({
+test("brief history pager: pagination and single-story isolation", async ({
   page,
 }, testInfo) => {
   test.setTimeout(120_000);
@@ -121,7 +121,7 @@ test("brief history pager: pagination and single-story isolation (PER-219 AC6, P
   });
 
   // Drill into a HISTORY edition's story (nth(1) = never the current
-  // edition, which is always nth(0)) — PER-223 single-story isolation.
+  // edition, which is always nth(0)) — single-story isolation.
   await openButtons.nth(1).click();
 
   await expect(

@@ -2,16 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
 // The Undo affordance on an auto-applied CREATE card, driven end-to-end against
-// the REAL companion /v0/chat + confirm routes (PER-139 no-dead-control / PER-228
-// chunk 5 / PER-230). chat-actions.spec already proves the create card RENDERS an
-// "Applied" beat with an Undo button and that the doc lands in the rail — but it
-// only asserts the Undo control is *visible*, never that it is *live*. A visible
-// control that does nothing is exactly the dead-control failure PER-139 forbids,
-// so this spec presses it and follows the whole reversal through to the rail.
+// the REAL companion /v0/chat + confirm routes. chat-actions.spec already
+// proves the create card RENDERS an "Applied" beat with an Undo button and that
+// the doc lands in the rail — but it only asserts the Undo control is
+// *visible*, never that it is *live*. A visible control that does nothing is
+// exactly the dead-control failure the UI forbids, so this spec presses it and
+// follows the whole reversal through to the rail.
 //
 // The honest reversal channel (useProfileWorkbench.undo) is NOT a magic server
 // rollback: undoing a create sends a normal "Delete the interest you just
-// created" turn. Because deletes are confirm-gated (PER-230), that reversing turn
+// created" turn. Because deletes are confirm-gated, that reversing turn
 // surfaces a fresh [Delete]/[Cancel] card — pressing Delete hits the
 // deterministic confirm-delete route and removes the interest for good. So the
 // full live path is: Applied+Undo → "Undo sent" → Confirm delete card → Delete →
@@ -49,15 +49,14 @@ test("chat Undo on a created interest is a live control: reverses through the co
   // across the whole suite (single companion instance, no per-spec reset), so
   // an unscoped `getByRole("button", {name:"Undo"})` becomes ambiguous once
   // enough other specs have left their own un-reversed "Applied"+Undo cards in
-  // history — exactly the AIR-528 finding, just one un-scoped locator short of
-  // tripping over it here too.
+  // history. Scoping the locator keeps this spec from tripping over that.
   const createReply = page
     .locator(".group\\/msg", { hasText: `Created · ${TOPIC}` })
     .first();
   const undo = createReply.getByRole("button", { name: "Undo", exact: true });
   await expect(undo).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(`Created · ${TOPIC}`)).toBeVisible();
-  // The doc actually landed in the interest rail (confirmed write, PER-139).
+  // The doc actually landed in the interest rail (confirmed write).
   const railLink = page.getByRole("link", { name: `Interest: ${TOPIC}` });
   await expect(railLink).toBeVisible();
 
@@ -69,7 +68,7 @@ test("chat Undo on a created interest is a live control: reverses through the co
   await expect(page.getByText("Asked Scout to reverse this")).toBeVisible();
 
   // The reversing turn is a normal "delete that interest" turn, so deletes being
-  // confirm-gated (PER-230) it surfaces a fresh confirm card for THIS topic — not
+  // confirm-gated it surfaces a fresh confirm card for THIS topic — not
   // a silent rollback. Asserting the topic guards against the reversal targeting
   // the wrong interest.
   const confirm = page.getByRole("alertdialog").last();

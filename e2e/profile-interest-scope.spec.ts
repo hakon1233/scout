@@ -47,7 +47,7 @@ test.describe("standalone interest scope page", () => {
 
     // The standalone chrome — distinct from the workbench drill-in.
     await expect(page.getByRole("link", { name: "← Interests" })).toBeVisible();
-    // AIR-441 renamed the chrome label "Interest scope" → "Assignment"; it is the
+    // The chrome label is "Assignment" (formerly "Interest scope"); it is the
     // first of the two "Assignment" labels (chrome, then the header eyebrow).
     await expect(
       page.getByText("Assignment", { exact: true }).first(),

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-267 — headless E2E for the "Weekly brief" profile-menu flow (POST
+// Headless E2E for the "Weekly brief" profile-menu flow (POST
 // /v0/weekly-brief). The weekly brief is assembled ENTIRELY from the
 // companion's rolling daily-brief history (packages/agent/src/weekly.ts) — no
 // `claude` shell-out — so it runs fully offline and deterministically, from the
@@ -70,7 +70,7 @@ test("weekly brief assembles the week's daily stories, de-duplicated, under a We
   await blockNonLoopback(page);
 
   // Seed the post-setup precondition directly (the in-page setup form was
-  // removed in PER-188; interests are chat-driven, which a hermetic stub run
+  // removed; interests are chat-driven, which a hermetic stub run
   // can't drive). Same shape saveSettings writes — see zero-prompt.spec.
   await page.addInitScript(() => {
     window.localStorage.setItem(
@@ -118,7 +118,7 @@ test("weekly brief assembles the week's daily stories, de-duplicated, under a We
     "Weekly brief",
   );
 
-  // The on-demand success confirmation (PER-150) — a fresh brief actually
+  // The on-demand success confirmation — a fresh brief actually
   // landed, not a silent swap.
   await expect(page.getByText("Fresh brief delivered")).toBeVisible();
 

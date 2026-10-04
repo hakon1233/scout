@@ -10,7 +10,7 @@ import { PORT } from "./port";
 //
 //   1. the install command points at THIS serving origin's tarball, not the
 //      hardcoded github.io default — i.e. the documented post-mount origin swap
-//      (PER-166 / React #418 hydration-safe rewrite) really happened;
+//      (the React #418 hydration-safe rewrite) really happened;
 //   2. that advertised tarball is genuinely served (HEAD → 200), so the copied
 //      `npm i -g <url>` is not a dangling link — this guards the version-drift
 //      regression where the page's `scout-agent-0.3.0.tgz` constant and the
@@ -189,7 +189,7 @@ async function gotoConnectedWithoutConfig(
   });
 }
 
-test("a wrong manually-pasted token is accepted with no server-side validation, flips to a false 'You're all set', and auto-redirects into the app (AIR-674)", async ({
+test("a wrong manually-pasted token is accepted with no server-side validation, flips to a false 'You're all set', and auto-redirects into the app", async ({
   page,
 }) => {
   await gotoConnectedWithoutConfig(page);

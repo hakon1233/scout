@@ -1,13 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// The chat action-card state machine (PER-228 chunk 5 / PER-230 / PER-235),
+// The chat action-card state machine,
 // driven end-to-end against the REAL companion /v0/chat + confirm routes — not a
 // FE `?mock=` seed. The stub `claude` (e2e/fixtures/stub-claude.mjs) answers the
 // chat prompt with structured `{reply, changes}` JSON keyed off the user's
 // wording, so each op is reachable by phrasing alone, exactly as the real model
 // would pick it. We assert the three honest channels the no-dead-control
-// contract (PER-139) promises:
+// contract promises:
 //
 //   1. create  → auto-applied: an "Applied" card with a real Undo, and the doc
 //                lands in the interest rail.
@@ -49,7 +49,7 @@ test("chat action cards: create applies, rewrite + delete are confirm-gated", as
   await expect(undo).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(`Created · ${TOPIC}`)).toBeVisible();
   await expect(page.getByText(`# ${TOPIC}`)).toBeVisible();
-  // The doc actually landed in the interest rail (confirmed write, PER-139).
+  // The doc actually landed in the interest rail (confirmed write).
   await expect(
     page.getByRole("link", { name: `Interest: ${TOPIC}` }),
   ).toBeVisible();

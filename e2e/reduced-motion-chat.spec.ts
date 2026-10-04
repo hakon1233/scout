@@ -3,7 +3,7 @@ import { PORT } from "./port";
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
-// AIR-512: the "Scroll to latest" pill scrolls the transcript from JavaScript
+// The "Scroll to latest" pill scrolls the transcript from JavaScript
 // (`scrollTo({ behavior })`). The global reduced-motion CSS clamps CSS
 // transitions but cannot reach JS-driven scrolling, so ChatDock must pick the
 // behavior from `prefers-reduced-motion` itself: "auto" for reduced-motion

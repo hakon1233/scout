@@ -1,13 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// Chat Stop / abort mid-turn (PER-228 chunk 3, fixed in PER-232), driven
-// end-to-end against the REAL companion /v0/chat + /v0/chat/stop routes. This is
-// the no-dead-control contract's hardest case: the companion is kick→poll, so
-// aborting only the client poll is NOT enough — the server-side model edit would
-// still complete and persist ~14s later (the original AC3/AC5 regression). A
-// correct Stop must abort the SERVER turn: kill the child, land the turn
-// `failed` with NO changes applied.
+// Chat Stop / abort mid-turn, driven end-to-end against the REAL companion
+// /v0/chat + /v0/chat/stop routes. This is the no-dead-control contract's
+// hardest case: the companion is kick→poll, so aborting only the client poll is
+// NOT enough — the server-side model edit would still complete and persist ~14s
+// later. A correct Stop must abort the SERVER turn: kill the child, land the
+// turn `failed` with NO changes applied.
 //
 // We make the turn deterministically abortable with a stub stall: the message
 // carries the `__STALL_FOR_STOP__` sentinel, so e2e/fixtures/stub-claude.mjs
@@ -84,7 +83,7 @@ test("chat Stop aborts the in-flight turn server-side: no change persists", asyn
   await expect(page.getByText(`Created · ${TOPIC}`)).toHaveCount(0);
   expect(await interestLinkCount(page)).toBe(0);
 
-  // ── The PER-232 proof: wait PAST the stall, then reload from the server ────
+  // ── The proof: wait PAST the stall, then reload from the server ────────────
   // If Stop only cancelled the client poll (the old bug), the held child would
   // have flushed its create after the stall and the companion would have
   // persisted it — a server reload would then surface the interest. We wait

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-399: the main-feed single-story flow (PER-222/223) — the app's highest-
+// The main-feed single-story flow — the app's highest-
 // traffic interaction and, until now, the one with no e2e coverage. Opening a
 // story from the current edition must collapse ALL surrounding page chrome
 // (brief header, coverage/companion banners, the history pager, the sibling
@@ -120,7 +120,7 @@ test("opening a story collapses the feed to that single story", async ({
   // Open the lead story.
   await page.getByRole("heading", { name: LEAD_HEADLINE }).click();
 
-  // Single-story mode (PER-222): the focused story carries its own headline +
+  // Single-story mode: the focused story carries its own headline +
   // source link and a way back…
   await expect(
     page.getByRole("button", { name: "← Back to feed" }),
@@ -176,7 +176,7 @@ test("the browser Back button closes the story detail (popstate)", async ({
   await page.goto(`${ORIGIN}/app/`);
 
   // openDetail() pushes one history entry, so browser Back pops it and the
-  // popstate listener closes the detail in-place (PER-206/209) — no route change,
+  // popstate listener closes the detail in-place — no route change,
   // we stay on /app/.
   await page.getByRole("heading", { name: LEAD_HEADLINE }).click();
   await expect(

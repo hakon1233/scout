@@ -14,16 +14,16 @@
 //
 // The canned brief INTENTIONALLY leads with a conversational preamble line
 // before the `# Your brief` H1. research.ts:stripBriefPreamble must strip it,
-// so the E2E asserts the preamble never reaches the rendered DOM (PER-113 #1).
+// so the E2E asserts the preamble never reaches the rendered DOM.
 // It also carries a `## topic` heading and a `[domain — Title](url)` citation
-// so the app's parser produces articles + a Sources panel (PER-106).
+// so the app's parser produces articles + a Sources panel.
 
 // Accumulate the prompt piped on stdin. The brief path drains + ignores the
 // content, but the chat path (emit → emitChat) needs it to detect the chat
 // marker and parse the user's message — so it must be captured into a
-// module-scoped string. Referencing an undefined `stdin` in emit() was exactly
-// the AIR-642 crash (`ReferenceError: stdin is not defined`) that reds every e2e
-// `claude` shell-out (brief AND chat) the moment stdin closes.
+// module-scoped string. Referencing an undefined `stdin` in emit() crashes
+// (`ReferenceError: stdin is not defined`) and reds every e2e `claude`
+// shell-out (brief AND chat) the moment stdin closes.
 let stdin = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
@@ -39,7 +39,7 @@ process.stdin.on("data", (chunk) => {
 const PORT = process.env.SCOUT_E2E_PORT;
 const SOURCE_IMAGE = `http://127.0.0.1:${PORT}/icon-192.png`;
 
-// ── Chat branch (PER-172 / PER-228 / PER-230 / PER-235) ────────────────────
+// ── Chat branch ────────────────────────────────────────────────────────────
 // The companion's chat.ts shells out to `claude` the SAME way research.ts does
 // (prompt on stdin, JSON expected back). So this one stub serves BOTH paths; we
 // disambiguate on the chat prompt's stable lead line (buildChatPrompt) and, for
@@ -51,19 +51,19 @@ const SOURCE_IMAGE = `http://127.0.0.1:${PORT}/icon-192.png`;
 // phrasing alone, mirroring how the real model picks the op (see chat.ts Rules).
 const CHAT_MARKER = "Scout's interest assistant";
 
-// PER-232 Stop/abort e2e hook. When the user's chat message carries this
+// Stop/abort e2e hook. When the user's chat message carries this
 // sentinel, the chat branch HOLDS its response for SCOUT_STUB_STALL_MS instead
 // of answering immediately. That gives a spec a deterministic in-flight window
 // to press Stop. The companion kills this child (SIGTERM) when the turn is
 // aborted, so the held response never lands and no change persists — exactly
-// the PER-232 contract. Without an abort the stall elapses and the (default
+// the Stop contract. Without an abort the stall elapses and the (default
 // create) op WOULD persist, so a spec that waits past the stall and still finds
 // nothing written has proven the server-side turn — not just the client poll —
 // was cancelled. Sentinel-gated so it never slows the other chat specs.
 const STALL_MARKER = "__STALL_FOR_STOP__";
 const STALL_MS = Number(process.env.SCOUT_STUB_STALL_MS ?? 4000);
 
-// AIR-528 chat-retry e2e hook. When the user's chat message carries this
+// Chat-retry e2e hook. When the user's chat message carries this
 // sentinel, the chat branch exits nonzero instead of writing JSON — the same
 // failure shape a real `claude` crash/timeout produces. chat.ts's chatComplete
 // rejects on a nonzero exit, so the companion lands the turn `status: "failed"`
@@ -106,17 +106,17 @@ function parseInterestSnapshots(prompt) {
   return out;
 }
 
-// AIR-691: resolve which interest(s) a delete/rewrite message targets by
+// Resolve which interest(s) a delete/rewrite message targets by
 // matching the topic(s) the user actually named, instead of always grabbing
 // the first snapshot entry. A real model reads the topic list in the prompt
 // and picks the id(s) the user meant; a stub that always answers with the
 // first id would mask any real product bug that only shows up once a spec
-// targets a NON-first interest (confirmed real gap — see AIR-691 filing).
+// targets a NON-first interest.
 // Sorted longest-topic-first so one topic name being a substring of another
 // (e.g. "AI" inside "AI safety") can't mis-resolve, then restored to snapshot
 // order. Falls back to the first snapshot when the message names no topic at
-// all — this is what every pre-existing spec's generic phrasing ("delete that
-// interest for good") relies on, so that exact prior behavior is preserved.
+// all — the generic phrasing other specs use ("delete that interest for good")
+// relies on that.
 function resolveTargetIds(message, snapshots) {
   const lower = message.toLowerCase();
   const matched = [...snapshots]
@@ -141,7 +141,7 @@ function topicFromMessage(message) {
 }
 
 function emitChat(prompt) {
-  // AIR-528: simulate a real model/CLI failure — no stdout JSON, nonzero exit —
+  // Simulate a real model/CLI failure — no stdout JSON, nonzero exit —
   // before any op detection, so a spec can drive a deterministic `failed` turn.
   // Scoped to THIS turn's message (see rawUserMessage) — checking the raw
   // `prompt` would also match the marker echoed back in later turns' "Recent
@@ -158,7 +158,7 @@ function emitChat(prompt) {
   let out;
 
   if (/\b(rewrite|start over|from scratch)\b/i.test(message) && firstId) {
-    // Confirm-gated full rewrite (PER-235): propose the WHOLE doc, do NOT claim
+    // Confirm-gated full rewrite: propose the WHOLE doc, do NOT claim
     // it's done. chat.ts collects this into pending_rewrite.
     out = {
       reply:
@@ -182,8 +182,8 @@ function emitChat(prompt) {
     /\b(delete|remove|drop|get rid of|stop tracking)\b/i.test(message) &&
     targetIds.length > 0
   ) {
-    // Confirm-gated delete (PER-230): propose, phrase as pending — the interest
-    // stays alive until the user presses [Delete]. AIR-691: a compound message
+    // Confirm-gated delete: propose, phrase as pending — the interest
+    // stays alive until the user presses [Delete]. A compound message
     // naming MULTIPLE topics ("delete X and Y") resolves to one delete change
     // per named topic, mirroring how a real model would emit one `delete` op
     // per interest the user asked to remove in the same turn — this is what
@@ -226,7 +226,7 @@ function emitChat(prompt) {
     process.stdout.write(JSON.stringify(out));
     process.exit(0);
   };
-  // PER-232: hold the answer so a Stop can land mid-flight. The pending timer
+  // Hold the answer so a Stop can land mid-flight. The pending timer
   // keeps this child alive; a SIGTERM from the companion's abort tears it down
   // before writeOut fires, so nothing is ever emitted or persisted.
   if (prompt.includes(STALL_MARKER)) {
@@ -248,7 +248,7 @@ function emit() {
   emitted = true;
   if (stdin.includes(CHAT_MARKER)) return emitChat(stdin);
   const brief = [
-    // Preamble that MUST be stripped before render (PER-113 #1).
+    // Preamble that MUST be stripped before render.
     "I have enough to write the brief now.",
     "",
     "# Your brief",
@@ -257,12 +257,13 @@ function emit() {
     "- A research lab published new alignment results this week.",
     "  [example.com — Alignment update](https://example.com/alignment)",
     `  ![source image](${SOURCE_IMAGE})`,
-    // In-depth body blockquote (PER-214): the few concise paragraphs the detail
+    // In-depth body blockquote: the few concise paragraphs the detail
     // view renders on click. The feed card stays short (just the bullet above);
     // this depth must appear ONLY after the card is opened.
     // Body carries inline markdown (**bold** + `code`) on purpose: real briefs
-    // use both heavily, and PER-236 asserts the detail view renders them as
-    // real <strong>/<code> elements instead of literal asterisks/backticks.
+    // use both heavily, and zero-prompt.spec asserts the detail view renders
+    // them as real <strong>/<code> elements instead of literal
+    // asterisks/backticks.
     "  > The lab reported a **measurable drop** in deceptive behavior under its new training regime, and published the `eval-harness` alongside.",
     "  >",
     "  > Independent researchers called the methodology promising but said the",

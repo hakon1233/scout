@@ -1,11 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// The chat Retry affordance after a genuinely FAILED turn (AIR-528, gap flagged
-// after AIR-462), driven end-to-end against the REAL companion /v0/chat route —
-// not a FE `?mock=` seed. The stub `claude` (e2e/fixtures/stub-claude.mjs) exits
-// nonzero on the `__FAIL_CHAT_TURN__` sentinel, the same shape a real model/CLI
-// crash produces, so the companion lands the turn `status: "failed"` with a real
+// The chat Retry affordance after a genuinely FAILED turn, driven end-to-end
+// against the REAL companion /v0/chat route — not a FE `?mock=` seed. The stub
+// `claude` (e2e/fixtures/stub-claude.mjs) exits nonzero on the
+// `__FAIL_CHAT_TURN__` sentinel, the same shape a real model/CLI crash
+// produces, so the companion lands the turn `status: "failed"` with a real
 // `error_msg` (packages/agent/src/chat.ts:808) — no mocking of the FE's own
 // error handling.
 //
@@ -75,7 +75,7 @@ test("a failed chat turn has no live retry: the only reachable Retry re-runs the
   await expect(banner).toBeVisible();
   await expect(banner).toContainText("claude exited 1");
 
-  // The failure did NOT append a scout reply: the founder's "you" bubble is the
+  // The failure did NOT append a scout reply: the user's "you" bubble is the
   // LAST thing in the transcript, full stop — proven structurally (the last
   // direct child of the log is our failed bubble), not by counting Retry
   // buttons. A global count is the wrong tool here: the chat transcript is
@@ -104,7 +104,7 @@ test("a failed chat turn has no live retry: the only reachable Retry re-runs the
   // Proof it fired the WRONG turn AND destroyed the failed one: retry()
   // truncates messages to `slice(0, idx)` before re-dispatching, so pressing
   // Retry on the create doesn't just re-run it — it deletes every message
-  // after it, including the founder's failed attempt and its error banner.
+  // after it, including the user's failed attempt and its error banner.
   // The failed bubble is now gone entirely, with no trace it ever happened —
   // and the chat log shows exactly one "Created · TOPIC" card again, which
   // LOOKS like a clean replace.
@@ -139,7 +139,7 @@ test("a failed chat turn has no live retry: the only reachable Retry re-runs the
   // This Retry DOES target the right turn (the sentinel-carrying wire text is
   // preserved verbatim) — pressing it re-dispatches the same doomed message and
   // fails again identically, proving retry() is correctly wired post-reload;
-  // the only gap is that a founder needs the reload to reach it at all.
+  // the only gap is that a user needs the reload to reach it at all.
   await failedRetry.click();
   await expect(banner).toBeVisible({ timeout: 30_000 });
   await expect(banner).toContainText("claude exited 1");

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// CAR-111 regression: the Liked feed must survive a CORRUPTED likes store in
+// Regression: the Liked feed must survive a CORRUPTED likes store in
 // localStorage by degrading to the empty state, never crashing the render.
 //
 // The shipped bug: a stored `{ "likes": null }` slipped past the old
@@ -43,7 +43,8 @@ async function blockNonLoopback(page: import("@playwright/test").Page) {
 // stores it) that a corrupted/legacy store could realistically hold. None of
 // these should reach render as a live store — all must degrade to EMPTY.
 const CORRUPT_VARIANTS: { name: string; raw: string }[] = [
-  // The exact CAR-111 payload: typeof null === "object" defeats a bare guard.
+  // The exact payload that broke it: typeof null === "object" defeats a bare
+  // guard.
   { name: "likes is null", raw: JSON.stringify({ version: 1, likes: null }) },
   // likes present but a primitive — Object.values()/`key in` would still throw
   // or misbehave on a non-object; must be rejected.
@@ -64,7 +65,7 @@ for (const variant of CORRUPT_VARIANTS) {
     await blockNonLoopback(page);
 
     // Capture any uncaught exception thrown during render — the precise failure
-    // mode CAR-111 fixed. A regression would surface here as a pageerror.
+    // mode this guards. A regression would surface here as a pageerror.
     const pageErrors: string[] = [];
     page.on("pageerror", (err) => pageErrors.push(err.message));
 

@@ -3,7 +3,7 @@ import { PORT } from "./port";
 
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
-// Headless E2E for the zero-prompt first-run core loop (PER-119). The webServer
+// Headless E2E for the zero-prompt first-run core loop. The webServer
 // builds + packs + boots the @scout/agent artifact and serves the app from its
 // own loopback origin; tests assert the no-paste auto-adoption, brief render,
 // and the same-origin/cross-origin /v0/config guard. One command, fully offline.

@@ -3,7 +3,7 @@ import { PORT } from "./port";
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
-// The interest workbench drill-in (PER-236 fix 2) syncs the open doc to the URL
+// The interest workbench drill-in syncs the open doc to the URL
 // as `?id=` and restores it from the URL on mount. responsive-chat.spec.ts
 // already covers the *click* drill-in and the on-screen "← Interests" button.
 // This spec covers the two adjacent paths it does not exercise:

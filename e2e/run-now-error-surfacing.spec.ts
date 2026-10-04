@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-679 (Browser QA pass) — `classifyError` (src/lib/errors.ts) and
+// `classifyError` (src/lib/errors.ts) and
 // `ErrorBanner` (src/components/ErrorBanner.tsx) exist specifically to tell a
 // real companion rejection apart from a network/reachability failure, and to
 // surface the companion's own message instead of a generic one. That pairing
@@ -18,7 +18,7 @@ import { PORT } from "./port";
 //
 // The companion's two real structured-rejection shapes for POST /v0/interests
 // are already unit/contract-tested server-side (packages/agent/test/contract.test.ts):
-// the single-flight "brief in progress" 409, and the PER-240 wipe-guard 409
+// the single-flight "brief in progress" 409, and the wipe-guard 409
 // (dropping a currently-saved topic without confirm_replace). What's untested
 // is whether the BROWSER actually renders those real shapes correctly instead
 // of collapsing them to "Could not reach Scout." We fulfil the POST with the
@@ -100,7 +100,7 @@ test("Run now's wipe-guard rejection tells the user to pass confirm_replace, a c
   await seedPairedSession(page);
 
   // The exact body handlePostInterests sends when this browser's saved-interest
-  // snapshot is missing a topic the companion currently has saved (PER-240) —
+  // snapshot is missing a topic the companion currently has saved —
   // realistic whenever the companion has been paired from more than one
   // browser/device (the Connect page's own "Set Scout up on another machine"
   // section documents this as a supported setup) and this browser's local copy
@@ -123,13 +123,13 @@ test("Run now's wipe-guard rejection tells the user to pass confirm_replace, a c
   await clickRunNow(page);
 
   // postInterests prefers `err.hint` over `err.error`, so the RAW API
-  // instruction — not the founder-facing "replace would drop saved interests"
+  // instruction — not the user-facing "replace would drop saved interests"
   // summary — is what actually reaches the screen.
   const banner = page.getByText(/Pass confirm_replace:true/);
   await expect(banner).toBeVisible();
 
   // The no-dead-control contract this codebase otherwise holds itself to
-  // (PER-139, explicitly named in chat-actions.spec.ts) is broken here: the
+  // (explicitly named in chat-actions.spec.ts) is broken here: the
   // banner's own copy names a `confirm_replace` escape hatch, but no control on
   // this page can send it. "Try again" is the ONLY affordance, and it just
   // re-fires the identical request — proven by pressing it and observing the

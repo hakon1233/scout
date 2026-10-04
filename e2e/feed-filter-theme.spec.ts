@@ -64,8 +64,8 @@ test("feed filter uses dark theme tokens for its button and menu", async ({
     "background-color",
     "rgb(36, 32, 26)",
   );
-  // Dark-mode --accent-signal is #d2694c (rgb(210,105,76)); PER-264 lightened
-  // it from #c4553f to reach WCAG AA contrast (see src/app/globals.css).
+  // Dark-mode --accent-signal is #d2694c (rgb(210,105,76)); it was lightened
+  // from #c4553f to reach WCAG AA contrast (see src/app/globals.css).
   await expect(activeFilter).toHaveCSS("border-color", "rgb(210, 105, 76)");
   await expect(activeFilter).toHaveCSS("color", "rgb(210, 105, 76)");
 });
@@ -146,12 +146,11 @@ test("feed filter topic labels use available dropdown space before ellipsis", as
   expect(metrics.clientWidth).toBeGreaterThanOrEqual(metrics.scrollWidth);
 });
 
-// PER-262 regression: PER-249 inserted the Liked icon between the filter
-// trigger and the profile menu, which pushed the trigger left of where the
-// old `absolute right-0` + viewport-width menu assumed it sat — the menu
-// then spilled off the left edge on mobile widths. Assert full containment
-// at a spread of common mobile widths so a future header change can't quietly
-// break this positioning math again.
+// Regression: inserting the Liked icon between the filter trigger and the
+// profile menu pushed the trigger left of where the old `absolute right-0` +
+// viewport-width menu assumed it sat — the menu then spilled off the left edge
+// on mobile widths. Assert full containment at a spread of common mobile widths
+// so a future header change can't quietly break this positioning math again.
 for (const width of [360, 390, 430]) {
   test(`feed filter menu stays fully within the ${width}px viewport`, async ({
     page,

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-414: the like/save ROUND-TRIP from the main feed — the genuine user
+// The like/save ROUND-TRIP from the main feed — the genuine user
 // journey that, until now, had no e2e coverage. liked-feed.spec.ts seeds the
 // likes store directly via addInitScript and only exercises the /app/liked
 // page in isolation; it never clicks the heart on a real feed card. This spec

@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// Settings → "Scheduled briefs" (PER-152) end-to-end against the REAL packed
+// Settings → "Scheduled briefs" end-to-end against the REAL packed
 // companion. The committed suite already proves same-origin auto-adopt for the
 // brief loop (zero-prompt.spec) and the theme control on Settings
 // (feed-filter-theme covers tokens, not Settings), but the schedule controls —
 // the only Settings surface that drives real backend writes (GET|PUT
-// /v0/schedule) — were untested. This locks in the PER-139 contract: "no
+// /v0/schedule) — were untested. This locks in the contract: "no
 // setting that saves nothing." Every assertion that the DOM reflects a changed
 // value is, by construction, a wait for a successful companion round-trip,
 // because both controls are CONTROLLED by the schedule the server echoes back

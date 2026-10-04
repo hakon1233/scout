@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-743 (Bug hunt & fix pass): pressing "Run now" WHILE a single-story detail
+// Pressing "Run now" WHILE a single-story detail
 // is open must still surface the run's progress panel + skeleton.
 //
-// The single-story collapse (PER-222/223) hides all page chrome behind
+// The single-story collapse hides all page chrome behind
 // `storyOpen = todayStoryOpen || historyStoryOpen`. But starting a run unmounts
 // the open-story feed (the feed block swaps to `BriefSkeleton` when
 // `showSkeleton` is true), and the unmounting `FeedView` never emits

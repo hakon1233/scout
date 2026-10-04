@@ -1,12 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-283 — Settings → Theme toggle (Light / Dark / System), driven headless.
+// Settings → Theme toggle (Light / Dark / System), driven headless.
 //
 // Why this matters: the theme control is the one Settings surface a user touches
 // every visit, and its contract is split across TWO code paths that must agree:
 //   1. ThemeBootstrap — a blocking <head> script that paints the stored theme at
-//      first byte (no FOUC, PER-131) AND sets <html>.style.colorScheme so UA
+//      first byte (no FOUC) AND sets <html>.style.colorScheme so UA
 //      surfaces (scrollbars, the native time <input> on Settings) match.
 //   2. applyTheme (ThemeToggle.tsx) — the runtime click handler.
 // Nothing proved (a) a Dark pick survives a reload with `.dark` already on

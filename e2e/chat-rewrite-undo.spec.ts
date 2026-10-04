@@ -2,23 +2,23 @@ import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
 // Does a CONFIRMED rewrite get the same live Undo affordance a create does
-// (PER-139 no-dead-control)? chat-actions.spec proves the [Apply]/[Discard]
+// (no dead controls)? chat-actions.spec proves the [Apply]/[Discard]
 // proposal card is a real control (Apply hits the deterministic confirm-rewrite
 // route and the card locks to "Applied"). chat-undo.spec proves the CREATE op's
 // Undo is live. This spec presses the gap they leave: after pressing Apply, can
-// the founder still reverse the rewrite in-app?
+// the user still reverse the rewrite in-app?
 //
-// AIR-611 fix (src/components/profile/useProfileWorkbench.ts): `dispatch()` (the
-// live-turn path) attaches BOTH `changes` and a `prev` doc snapshot to the new
-// scout message, which is what lets ChatDock render a `ChatActionCard` with a real
-// Undo button (ChatActionCard.tsx). `confirmRewrite()` receives the exact same
-// shape back from the server (confirmRewriteTurn emits `changes: [{op:"update",
-// ...}]`, packages/agent/src/chat.ts) and now, via `appliedChangeMessage()`,
-// appends it as its own action card — so a confirmed rewrite renders the same live
-// Undo a create does. Before the fix it only fed the change through
-// `applyChanges()` to update the rail and dropped the `changes`/`prev` on the
-// floor, so no Undo ever appeared until a page reload re-projected the same
-// confirm turn through transcriptMessages().
+// How it works (src/components/profile/useProfileWorkbench.ts): `dispatch()`
+// (the live-turn path) attaches BOTH `changes` and a `prev` doc snapshot to the
+// new scout message, which is what lets ChatDock render a `ChatActionCard` with
+// a real Undo button (ChatActionCard.tsx). `confirmRewrite()` receives the
+// exact same shape back from the server (confirmRewriteTurn emits `changes:
+// [{op:"update", ...}]`, packages/agent/src/chat.ts) and, via
+// `appliedChangeMessage()`, appends it as its own action card — so a confirmed
+// rewrite renders the same live Undo a create does. Without that it would only
+// feed the change through `applyChanges()` to update the rail and drop the
+// `changes`/`prev` on the floor, so no Undo would appear until a page reload
+// re-projected the same confirm turn through transcriptMessages().
 //
 // Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
 
@@ -33,7 +33,7 @@ async function sendMessage(page: Page, text: string) {
   await page.getByRole("button", { name: "Send" }).click();
 }
 
-test("chat rewrite Apply surfaces a live Undo, same as create (AIR-611)", async ({
+test("chat rewrite Apply surfaces a live Undo, same as create", async ({
   page,
 }) => {
   await page.goto(`${ORIGIN}/app/interests/`);
@@ -75,7 +75,7 @@ test("chat rewrite Apply surfaces a live Undo, same as create (AIR-611)", async 
   await expect(rewriteReply.getByRole("button", { name: "Apply" })).toHaveCount(0);
   await expect(rewriteReply.getByRole("button", { name: "Discard" })).toHaveCount(0);
 
-  // ── THE FIX (AIR-611) — Apply now surfaces the same live Undo a create gets ─
+  // ── Apply surfaces the same live Undo a create gets ───────────────────────
   // The proposal card itself still just locks to "Applied" — it is the confirm
   // gate, not the reversal affordance — so it carries no Undo of its own.
   await expect(
@@ -85,8 +85,7 @@ test("chat rewrite Apply surfaces a live Undo, same as create (AIR-611)", async 
   // action card (the exact shape dispatch() gives a live turn and a reload gives
   // a hydrated one), so a real Undo button renders for the confirmed rewrite —
   // the same ChatActionCard + undo channel chat-undo.spec proves is live for a
-  // create. Before AIR-611 the turn's `changes` were dropped on the floor and no
-  // Undo ever appeared without a page reload.
+  // create.
   const appliedCard = page
     .locator(".group\\/msg", { hasText: `Updated · ${TOPIC}` })
     .first();
@@ -121,7 +120,7 @@ test("chat rewrite Apply surfaces a live Undo, same as create (AIR-611)", async 
   // un-deleted leftover here would silently hijack targeting in every spec
   // that runs after this one (confirmed: leaving this out made
   // chat-undo.spec's confirm-delete card target the wrong topic). The chat
-  // column stays mounted even inside the drilled-in doc view (PER-236 fix 2),
+  // column stays mounted even inside the drilled-in doc view,
   // so no navigation is needed to reach the composer.
   await sendMessage(page, "Delete that interest for good");
   const confirmDelete = page.getByRole("alertdialog").last();

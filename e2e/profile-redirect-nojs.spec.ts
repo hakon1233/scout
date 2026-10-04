@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-254 (Browser QA pass) — the no-JS half of `/app/profile/`'s
+// The no-JS half of `/app/profile/`'s
 // progressive-enhancement redirect. profile-redirect.spec.ts already covers
 // the with-JS `router.replace` path (and the Back-button non-trap); this
 // spec is the other half: the statically-exported HTML still renders a

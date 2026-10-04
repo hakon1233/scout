@@ -3,7 +3,7 @@ import { PORT } from "./port";
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
-// The legacy `/app/chat` route (PER-228 follow-up) is a "Chat moved" stub:
+// The legacy `/app/chat` route is a "Chat moved" stub:
 // it mounts, then `router.replace(`/app/interests${window.location.search}`)`
 // immediately forwards the user on, carrying the FULL query string along
 // (not just a fixed target like profile-redirect.spec.ts's /app/profile ->

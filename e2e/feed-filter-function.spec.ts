@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-217 (/qa-live) — functional coverage for the PER-241 feed filter.
+// Functional coverage for the feed filter.
 //
 // feed-filter-theme.spec asserts only the funnel button/menu CSS tokens; it
 // never proves the filter actually *narrows the feed*. The filter is pure

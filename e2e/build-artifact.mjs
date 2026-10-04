@@ -1,6 +1,6 @@
 // Build the SHIPPED @scout/agent artifact the way a user would receive it, then
 // unpack it into e2e/.artifact/package/ so the E2E runs the *packed tarball* —
-// not packages/agent/src/. This is the PER-111 lesson made executable: "done in
+// not packages/agent/src/. This is the lesson made executable: "done in
 // code ≠ shipped in the tarball." If a file the companion needs at runtime
 // (dist/*, webroot/*) is missing from package.json `files`, this step still
 // succeeds but the companion fails to boot/serve — and the E2E catches it.

@@ -1,13 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// QA-live (AIR-160): browser coverage for the Settings → "Scheduled briefs"
-// flow (PER-152). This was the last key user flow with a real backend write
-// (PUT /v0/schedule) and no headless test. It drives the live companion
-// endpoint through the actual UI controls — the enable switch and the
-// time-of-day picker — and proves the writes persist across a reload, then
-// asserts the server-side contract (auth + validation + same-origin guard)
-// directly against /v0/schedule.
+// Browser coverage for the Settings → "Scheduled briefs" flow. This was the
+// last key user flow with a real backend write (PUT /v0/schedule) and no
+// headless test. It drives the live companion endpoint through the actual UI
+// controls — the enable switch and the time-of-day picker — and proves the
+// writes persist across a reload, then asserts the server-side contract (auth +
+// validation + same-origin guard) directly against /v0/schedule.
 //
 // Offline/deterministic like the rest of the suite: same-origin token
 // auto-adoption (no paste), the claude shell-out stubbed, every non-loopback

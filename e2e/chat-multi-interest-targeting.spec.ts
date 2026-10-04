@@ -1,18 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// AIR-691: every prior confirm-gated (delete/rewrite) spec has only ever had
-// ONE interest alive at a time, so they all incidentally target "the first
-// (and only) id in the snapshot" — never proving the FE correctly threads a
-// SPECIFIC, non-first interestId through the confirm flow. Flagged as an open
-// gap by three prior /qa-live passes (AIR-528, AIR-604, AIR-667) and never
-// picked up. stub-claude.mjs (this pass) now resolves a delete/rewrite's
-// target by matching the topic the user actually NAMED against the snapshot,
-// instead of always answering with snapshots[0] — mirroring how a real model
-// reads the topic list. That upgrade is what makes both specs below possible;
-// every pre-existing spec's generic phrasing ("delete that interest for
-// good", no topic named) still falls back to the first snapshot exactly as
-// before, so nothing else in the suite changes behavior.
+// Every other confirm-gated (delete/rewrite) spec has only ONE interest alive
+// at a time, so they all incidentally target "the first (and only) id in the
+// snapshot" — never proving the FE correctly threads a SPECIFIC, non-first
+// interestId through the confirm flow. stub-claude.mjs resolves a
+// delete/rewrite's target by matching the topic the user actually NAMED
+// against the snapshot, instead of always answering with snapshots[0] —
+// mirroring how a real model reads the topic list. That is what makes both
+// specs below possible; generic phrasing ("delete that interest for good", no
+// topic named) still falls back to the first snapshot.
 //
 // Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
 
@@ -92,7 +89,7 @@ test("chat delete targets the SPECIFIC interest named, not always the first in t
   await expect(firstRail).toBeHidden({ timeout: 30_000 });
 });
 
-test("a single turn naming two deletions only ever surfaces one confirm card — the other silently never happens (AIR-691)", async ({
+test("a single turn naming two deletions only ever surfaces one confirm card — the other silently never happens", async ({
   page,
 }) => {
   const A = "Quantum computing";
@@ -125,7 +122,7 @@ test("a single turn naming two deletions only ever surfaces one confirm card —
   await sendMessage(page, `Please delete ${A} and ${B}`);
 
   // The assistant's own reply (streamed into the transcript) claims BOTH are
-  // pending — this is the text a founder actually reads.
+  // pending — this is the text a user actually reads.
   await expect(
     page.getByText(`Delete ${A} and ${B}?`, { exact: false }),
   ).toBeVisible({ timeout: 30_000 });
@@ -152,7 +149,7 @@ test("a single turn naming two deletions only ever surfaces one confirm card —
   await expect(railA).toBeHidden({ timeout: 30_000 });
 
   // The SECOND requested deletion never happened — no card, no error, no
-  // trace anywhere in the transcript. The interest the founder explicitly
+  // trace anywhere in the transcript. The interest the user explicitly
   // asked to remove in the same breath as A is still fully alive.
   await expect(railB).toBeVisible();
 
