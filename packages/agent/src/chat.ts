@@ -1,4 +1,4 @@
-// Conversational interest manager (PER-172 / C4).
+// Conversational interest manager.
 //
 // ONE chat manages the WHOLE set of interest docs. A single turn can:
 //   - create a new interest (+ its `<id>.md` intent doc),
@@ -17,7 +17,7 @@
 // never invent an `int_…` id, nor write an arbitrary `<id>.md`), persists via the
 // docs.ts / state.ts helpers, and only then flips the turn to `ready`. That keeps
 // the change set machine-readable AND makes the doc edit observable in the same
-// turn (CEO contract e81f2c2a) — and a created/deleted interest also lands in
+// turn — and a created/deleted interest also lands in
 // `state.interests`, which a model editing files alone could never accomplish.
 
 import type { spawn } from "node:child_process";
@@ -42,7 +42,7 @@ export type ChatDeps = {
   chatTranscriptFile?: string;
   claudeBin?: string;
   spawnFn?: typeof spawn;
-  // Per-turn hard timeout in ms (AIR-540), threaded to chatComplete. Tests set
+  // Per-turn hard timeout in ms, threaded to chatComplete. Tests set
   // it tiny to drive the hung-child kill path through the in-flight guard.
   timeoutMs?: number;
   // Fired when a turn finishes (ready or failed). Tests await this.
@@ -64,7 +64,7 @@ export type ChatOutcome =
 // clobber each other's edits.
 let chatInFlight = false;
 
-// PER-232: Stop must abort the SERVER-side turn, not just the client poll. The
+// Stop must abort the SERVER-side turn, not just the client poll. The
 // architecture is kick→poll (no SSE), so the client dropping its fetch is
 // invisible here — without this, the in-flight `claude` edit completed and was
 // persisted ~14s after the user pressed Stop. We hold one AbortController per
@@ -78,7 +78,7 @@ let currentTurnAbort: { turnId: string; controller: AbortController } | null =
 // the FE recognizes a stop locally anyway and suppresses the error bubble.
 const CHAT_STOPPED_MSG = "Stopped — no changes were applied.";
 
-// Abort the in-flight chat turn (PER-232). With a turnId, only aborts when it
+// Abort the in-flight chat turn. With a turnId, only aborts when it
 // matches the in-flight turn (a stale Stop can't kill a newer turn); without
 // one, aborts whatever is in flight. Returns whether a turn was aborted.
 export function stopChatTurn(turnId?: string): boolean {
@@ -156,7 +156,7 @@ export type ConfirmDeleteOutcome =
   | { ok: false; reason: "not_found" }
   | { ok: false; reason: "in_flight" };
 
-// Confirm-gated delete (PER-230): the deterministic, no-model path that actually
+// Confirm-gated delete: the deterministic, no-model path that actually
 // removes an interest after the user presses [Delete]. It writes a `ready` turn
 // (with the delete in `changes`) to the same slot + transcript a model turn would,
 // so the FE applies it through the exact same confirmed-write seam (flash + the
@@ -235,7 +235,7 @@ export type ConfirmRewriteOutcome =
   | { ok: false; reason: "not_found" }
   | { ok: false; reason: "in_flight" };
 
-// Confirm-gated rewrite (PER-235): the deterministic, no-model path that writes
+// Confirm-gated rewrite: the deterministic, no-model path that writes
 // the STORED proposed doc after the user presses [Apply]. The proposal lives on
 // the persisted turn (`last_chat.pending_rewrite`) — the client sends only the
 // interestId, never the doc, so a tampered or stale client can't write arbitrary
@@ -323,10 +323,9 @@ async function runChatTurn(
       signal: abort.signal,
       timeoutMs: deps.timeoutMs,
     });
-    // PER-232: last abort gate BEFORE anything persists. Even if the model
-    // round-trip outraced the Stop (or the killed child still flushed output),
-    // a stopped turn must commit nothing — this is AC3/AC5's "no uncommitted
-    // change is written".
+    // Last abort gate BEFORE anything persists. Even if the model round-trip
+    // outraced the Stop (or the killed child still flushed output), a stopped
+    // turn must commit nothing — no uncommitted change is written.
     abort.signal.throwIfAborted();
     // Apply against the freshly-loaded interest list so the change set is durable
     // on disk BEFORE the turn flips to `ready` (observable-in-same-response).

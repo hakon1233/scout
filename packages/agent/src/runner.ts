@@ -1,9 +1,9 @@
 // Shared brief-run path used by BOTH the on-demand HTTP endpoint
-// (POST /v0/interests) and the in-process scheduler (PER-151). Centralizing it
+// (POST /v0/interests) and the in-process scheduler. Centralizing it
 // here means the schedule does not fork the run logic — it kicks the exact same
 // synthesis the "Run now" button does.
 //
-// Concurrency safety (PER-151 requirement): we must NEVER launch overlapping
+// Concurrency safety: we must NEVER launch overlapping
 // runs. The companion holds exactly one brief slot (last_brief, last-writer-
 // wins). Two guards enforce single-flight:
 //   1. An in-memory `runInFlight` boolean, shared across the HTTP server and the
@@ -45,7 +45,7 @@ export type RunDeps = {
   claudeBin?: string;
   // Spawn override for tests; production uses node:child_process spawn.
   spawnFn?: typeof spawn;
-  // Where per-interest intent docs live (C2/PER-171). Defaults to the
+  // Where per-interest intent docs live. Defaults to the
   // `interests/` dir beside the state file, which in production resolves to
   // `~/.config/scout/interests` (=== docs.ts INTERESTS_DIR) and in tests
   // automatically lands in the tmp dir alongside the tmp stateFile, so the lazy
@@ -62,12 +62,12 @@ export type RunDeps = {
 export type RunSource = "on_demand" | "scheduled";
 
 // Distil the per-session error messages from a wholesale-failed run into ONE
-// short, honest, user-facing reason (PER-259 item 1). When EVERY topic's session
-// fails and there's no base brief, the founder needs to know WHY — a Claude
-// usage/session-limit exhaustion at 07:00 (the PER-258 root cause) reads very
-// differently from a crashed CLI or a network timeout, and drives whether a
-// retry (item 3) can even help. Pure so runner.test.ts pins the mapping without
-// spawning anything. The inputs come from research.ts's reject messages:
+// short, honest, user-facing reason. When EVERY topic's session fails and
+// there's no base brief, the user needs to know WHY — a Claude
+// usage/session-limit exhaustion at 07:00 reads very differently from a crashed
+// CLI or a network timeout, and drives whether a scheduled retry can even help.
+// Pure so runner.test.ts pins the mapping without spawning anything. The inputs
+// come from research.ts's reject messages:
 //   - usage/rate limit   → "claude exited N: …limit…"
 //   - per-session timeout → 'claude session for "X" timed out after Nms'
 //   - spawn failure       → "failed to spawn 'claude' — …"
@@ -97,13 +97,13 @@ export function summarizeSessionFailures(errors: string[]): string {
 }
 
 export type RunOptions = {
-  // Focused-retry path (PER-154): research ONLY this subset of `interests`
+  // Focused-retry path: research ONLY this subset of `interests`
   // instead of the whole list, then merge the fresh sections into the prior
   // brief's markdown (preserving the topics that already worked) before
   // recomputing coverage over the full interest list. Must be a subset of
   // `interests`. When absent/empty, a normal full-brief run happens.
   retryTopics?: string[];
-  // Run-selector path (C6/PER-173): research ONLY this subset of `interests`
+  // Run-selector path: research ONLY this subset of `interests`
   // and produce a FRESH brief containing just those sections — distinct from
   // `retryTopics`, which merges a subset into a prior brief. Coverage is then
   // computed over the SELECTED set (not the full list), so a one-interest run
@@ -113,14 +113,14 @@ export type RunOptions = {
   // when `retryTopics` is set (a retry already carries its own subset) or when
   // it covers the whole list (that's just a normal full run).
   selectedTopics?: string[];
-  // Ephemeral / dry-run path (PER-218). Research the supplied `interests` and
-  // produce a brief WITHOUT mutating the founder's saved config: the persisted
+  // Ephemeral / dry-run path. Research the supplied `interests` and
+  // produce a brief WITHOUT mutating the user's saved config: the persisted
   // `state.interests` is left exactly as-is, and the lazy intent-doc backfill is
   // redirected to a throwaway temp dir so no real `interests/<id>.md` is created
   // or overwritten. This is the ONLY safe way for QA/automation to trigger test
   // runs with an arbitrary topic set: a normal POST /v0/interests persists its
   // `interests` body as the new saved list, so a reduced/test payload would
-  // otherwise clobber the founder's authored interests (the PER-218 incident).
+  // otherwise clobber the user's authored interests.
   // The transient `last_brief` slot is still written (callers poll it for the
   // result); briefs are derived, not authored, and regenerate on the next run.
   ephemeral?: boolean;
@@ -141,7 +141,7 @@ export function isRunInFlight(): boolean {
 
 // How long a persisted `pending` brief may survive WITHOUT this process actively
 // running it before we treat it as an abandoned/crashed run and reclaim the slot
-// (PER-181). Background: within a live process, `runInFlight === true` for the
+// Background: within a live process, `runInFlight === true` for the
 // entire lifetime of a real run, so a second request is correctly blocked. The
 // ONLY way to see a persisted `pending` while `runInFlight === false` is a
 // process that died between writing the pending slot and finishing synthesis
@@ -188,7 +188,7 @@ export async function startRun(
     };
   }
   // A persisted `pending` blocks a new run too — UNLESS it's stale, meaning the
-  // process that wrote it died mid-run (PER-181). A stale pending is reclaimed:
+  // process that wrote it died mid-run. A stale pending is reclaimed:
   // we fall through and overwrite it with a fresh run rather than wedging
   // forever on a brief no live process will ever finish.
   if (
@@ -225,7 +225,7 @@ export async function startRun(
   }
   const retrySet = new Set(retryTopics);
 
-  // Run-selector subset (C6/PER-173). Only honored when this isn't a retry and
+  // Run-selector subset. Only honored when this isn't a retry and
   // the selection is a STRICT subset of the interest list; a selection equal to
   // (or a superset of) the full list collapses to a normal full run. We narrow
   // to topics actually in the current list so a stale/foreign topic can't sneak
@@ -266,8 +266,8 @@ export async function startRun(
     ephemeral: ephemeral || undefined,
   };
   // Persist interests alongside the pending slot so a later scheduled fire has
-  // something to research even with no browser attached. An EPHEMERAL run (PER-218)
-  // must never touch the founder's saved config, so we re-persist the existing
+  // something to research even with no browser attached. An EPHEMERAL run
+  // must never touch the user's saved config, so we re-persist the existing
   // `state.interests` verbatim (leaving it absent if it was absent) instead of the
   // run's topic set — a test/QA payload can research arbitrary topics without
   // shrinking or replacing the saved list.
@@ -319,11 +319,10 @@ export async function startRun(
 type SynthesisPlan = {
   // The interests to actually research this run, each in its own per-interest
   // session carrying its intent doc (subset on retry/selected, all else).
-  // (C2/PER-171, C6/PER-173)
   researchInterests: Interest[];
   // The interests the assembled brief reports coverage over. The full list for a
   // full run or retry; the selected subset for a run-selector subset run
-  // (C6/PER-173) so coverage is honest about exactly what was asked to run.
+  // so coverage is honest about exactly what was asked to run.
   coverageInterests: Interest[];
   // On retry: the prior brief markdown to merge fresh sections into.
   baseMarkdown?: string;
@@ -343,21 +342,21 @@ async function runSynthesis(
   let brief: Brief;
   try {
     // Run each interest in its OWN headless `claude` session, carrying that
-    // interest's intent doc (C2/PER-171) — the invariant the whole epic turns
-    // on. Sequential, not concurrent: the synth child runs at niceness 10
-    // specifically so it can't starve the loopback server (PER-101), and firing
-    // several at once would defeat that. A session that throws or yields nothing
-    // contributes no section → assembleBrief omits the topic → computeCoverage
-    // reports it "missing" (which PER-154's focused retry can recover).
+    // interest's intent doc. Sequential, not concurrent: the synth child runs
+    // at niceness 10 specifically so it can't starve the loopback server, and
+    // firing several at once would defeat that. A session that throws or yields
+    // nothing contributes no section → assembleBrief omits the topic →
+    // computeCoverage reports it "missing" (which the focused retry can
+    // recover).
     const sections: Array<{ topic: string; section: string | null }> = [];
     // Snapshot the intent doc that scoped each researched topic, keyed by topic
-    // (PER-187). We capture the EXACT `doc` string handed to researchAndSynthesize
+    // We capture the EXACT `doc` string handed to researchAndSynthesize
     // so the brief can later show the reader what the section was based on, even
     // if they edit the doc afterwards. Keyed by topic so a backfilled default and
     // a real doc are treated identically.
     const basisByTopic = new Map<string, string>();
     // Per-session failure messages, collected so a wholesale failure can report
-    // an honest REASON to the founder (PER-259 item 1) — "Claude usage limit
+    // an honest REASON to the user — "Claude usage limit
     // reached" reads very differently from "the CLI isn't installed". Kept
     // in-memory only; never persisted per-topic (the aggregate reason is what the
     // UI shows). Safe to hold: research.ts never forwards the OAuth token into
@@ -437,7 +436,7 @@ async function runSynthesis(
       plan.baseMarkdown && plan.retryTopics
         ? mergeBriefSections(plan.baseMarkdown, patch, plan.retryTopics)
         : patch;
-    // Code-enforce the freshness cutoff before the brief is saved (PER-250): drop
+    // Code-enforce the freshness cutoff before the brief is saved: drop
     // ordinary stories older than ~30 days that the model emitted in defiance of
     // SEARCH_SKILLS. Topics whose intent doc explicitly asks for background /
     // evergreen / historical context are exempt. Runs over the full assembled
@@ -456,7 +455,7 @@ async function runSynthesis(
       generated_at: new Date().toISOString(),
       status: "ready",
       kind: "daily",
-      // BUG-PER-288: preserve QA provenance through the ready slot so feed
+      // Preserve ephemeral provenance through the ready slot so feed
       // clients can reject this pollable result and fall back to real history.
       ephemeral: isEphemeral || undefined,
       summary_md: summary,
@@ -488,9 +487,9 @@ async function runSynthesis(
             brief.status === "failed" ? brief.error_msg : undefined,
         };
       }
-      // Roll the brief history (PER-219). A READY brief from a NON-ephemeral run is
+      // Roll the brief history. A READY brief from a NON-ephemeral run is
       // pushed newest-first and capped; pending/failed briefs and ephemeral/QA runs
-      // (which must never mutate saved state, PER-218 — detected via the throwaway
+      // (which must never mutate saved state — detected via the throwaway
       // interests dir) leave the history untouched. Seed the history with the brief
       // being replaced the first time we append, so an existing companion that
       // upgraded into this feature immediately has one "previous edition" to show
@@ -511,7 +510,7 @@ async function runSynthesis(
       return { ...fresh, last_brief: brief, briefs, schedule };
     });
   } finally {
-    // An ephemeral run's intent docs live in a throwaway dir (PER-218) — remove it
+    // An ephemeral run's intent docs live in a throwaway dir — remove it
     // so its default backfills never accumulate. Best-effort: a failed cleanup
     // must not wedge the run.
     if (deps.ephemeralDir) {

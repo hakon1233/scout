@@ -1,4 +1,4 @@
-// Generic filesystem persistence seam for the loopback companion (CAR-244).
+// Generic filesystem persistence seam for the loopback companion.
 //
 // Everything the companion persists lives under `~/.config/scout` as owner-only
 // files the user can inspect or delete — state.json, the chat transcript, and
@@ -39,7 +39,7 @@ export function assertNotRealStateUnderTest(file: string): void {
 // the target. rename(2) is atomic on POSIX, so a crash mid-write can never
 // leave a torn or truncated file — a reader that catches the parse error and
 // returns a default would otherwise silently wipe whatever the file held. The
-// fsync before the rename matters for POWER LOSS (PER-272): without it the
+// fsync before the rename matters for POWER LOSS: without it the
 // kernel may commit the rename to disk before the temp file's data blocks,
 // and a badly-timed cut leaves the target pointing at an empty/partial file —
 // exactly the torn state the rename was supposed to prevent. (On macOS
@@ -75,7 +75,7 @@ export async function atomicWriteFile(
     // swallow lets uniquely-named `.tmp` orphans accumulate in the config dir
     // (every failed save adds one) with zero signal. Log at warn so the leak is
     // observable; still re-throw the original write error below. Mirrors the
-    // ephemeral-dir cleanup treatment in runner.ts (CAR-225).
+    // ephemeral-dir cleanup treatment in runner.ts.
     await fs.rm(tmp, { force: true }).catch((rmErr) => {
       console.warn(`[persistence] temp cleanup failed for ${tmp}:`, rmErr);
     });

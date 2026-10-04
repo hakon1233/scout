@@ -1,4 +1,4 @@
-// Route-dispatch types for the PER-274 server decomposition.
+// Route-dispatch types for the /v0 router.
 //
 // The `auth` discriminant is the load-bearing part: the ROUTER (server.ts)
 // enforces it before any handler runs, so no /v0 route can drift on auth.

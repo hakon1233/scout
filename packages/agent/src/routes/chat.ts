@@ -1,8 +1,7 @@
-// /v0/chat* — the conversational interest manager's five routes
-// (PER-172 / C4, confirm seams PER-230/PER-235, stop PER-232).
-// Moved out of server.ts in the PER-274 split; behavior unchanged. The
-// model-facing logic lives in ../chat.ts — these handlers only validate the
-// wire payloads and translate outcomes to status codes.
+// /v0/chat* — the conversational interest manager's five routes (turn, poll,
+// stop, and the delete/rewrite confirm seams). The model-facing logic lives in
+// ../chat.ts — these handlers only validate the wire payloads and translate
+// outcomes to status codes.
 
 import {
   confirmDeleteTurn,
@@ -15,10 +14,10 @@ import { json, jsonBodyParseError, parseJsonBody } from "../http-util.js";
 import type { AuthedRequestContext, ServerContext } from "./types.js";
 
 // A single chat message. Generous enough for a paragraph of intent, bounded so an
-// oversized turn can't be forwarded into the (model-priced) chat prompt. (PER-172)
+// oversized turn can't be forwarded into the (model-priced) chat prompt.
 export const MAX_CHAT_MESSAGE_LEN = 4000;
 
-// Kick one chat turn over the interest collection (PER-172 / C4). Async
+// Kick one chat turn over the interest collection. Async
 // kick + poll, exactly like POST /v0/interests: we persist a `pending`
 // turn and fire the (model-priced) round-trip fire-and-forget, returning
 // 202 immediately. The caller polls GET /v0/chat?since= for the reply +
@@ -58,13 +57,12 @@ export async function handlePostChat(
   json(res, 202, { turn_id: outcome.turnId, status: "pending" }, cors);
 }
 
-// Abort the in-flight chat turn (PER-232). Stop in the UI must cancel
-// the SERVER-side operation, not just the client poll — without this
-// the in-flight model edit completed and persisted ~14s after Stop
-// (AC3/AC5 fail). Kills the `claude` child and gates the change-apply,
-// so the turn lands `failed` ("Stopped — no changes were applied.")
-// with NO write to any interest doc. `turn_id` is optional: when given
-// it must match the in-flight turn (a stale Stop can't kill a newer
+// Abort the in-flight chat turn. Stop in the UI must cancel the SERVER-side
+// operation, not just the client poll — without this the in-flight model edit
+// completed and persisted ~14s after Stop. Kills the `claude` child and gates
+// the change-apply, so the turn lands `failed` ("Stopped — no changes were
+// applied.") with NO write to any interest doc. `turn_id` is optional: when
+// given it must match the in-flight turn (a stale Stop can't kill a newer
 // turn); without it, whatever is in flight is stopped (single-flight).
 export async function handlePostChatStop({
   req,
@@ -79,7 +77,7 @@ export async function handlePostChatStop({
   json(res, 200, { stopped }, cors);
 }
 
-// Confirm a gated delete (PER-230). The destructive op is the ONLY one
+// Confirm a gated delete. The destructive op is the ONLY one
 // behind a confirmation: a model turn that resolved to a delete returns
 // a `pending_delete` proposal (the interest stays alive); the FE renders
 // a [Delete]/[Cancel] card and calls this route ONLY when the user presses
@@ -105,7 +103,7 @@ export async function handlePostChatConfirmDelete(
   json(res, 200, { turn: outcome.turn }, cors);
 }
 
-// Confirm a gated full rewrite (PER-235). Mirrors confirm-delete: a model
+// Confirm a gated full rewrite. Mirrors confirm-delete: a model
 // turn that resolved to a from-scratch rewrite returns a `pending_rewrite`
 // proposal (the doc on disk is untouched); the FE renders an [Apply]/
 // [Discard] diff card and calls this route ONLY when the user presses
@@ -132,12 +130,12 @@ export async function handlePostChatConfirmRewrite(
   json(res, 200, { turn: outcome.turn }, cors);
 }
 
-// Poll the latest chat turn (PER-172). Mirrors GET /v0/briefs: returns the
+// Poll the latest chat turn. Mirrors GET /v0/briefs: returns the
 // single held turn when it's newer than `since` (its reply + applied
 // changes once `ready`), else []. The FE polls this until `status` flips
 // off `pending`, then renders the reply and re-`GET /v0/interests` (or
 // applies `changes` in place) — the "Updated" beat fires on the confirmed
-// change set, never a hopeful guess (PER-139).
+// change set, never a hopeful guess.
 export async function handleGetChat(
   { res, url, cors, state }: AuthedRequestContext,
   sc: ServerContext,

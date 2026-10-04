@@ -1,5 +1,4 @@
-// /v0/schedule — recurring-run config read/write for the Settings UI
-// (PER-152). Moved out of server.ts in the PER-274 split; behavior unchanged.
+// /v0/schedule — recurring-run config read/write for the Settings UI.
 
 import {
   loadState,
@@ -29,7 +28,7 @@ function scheduleView(cfg: ScheduleConfig): ScheduleView {
 }
 
 // Read the persisted recurring-schedule config + last/next-run telemetry
-// for the Settings UI (PER-152). Materializes the default schedule on
+// for the Settings UI. Materializes the default schedule on
 // first read so the UI always has something concrete to render.
 export async function handleGetSchedule(
   { res, cors, state }: AuthedRequestContext,

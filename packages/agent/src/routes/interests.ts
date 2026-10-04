@@ -1,8 +1,7 @@
-// /v0/interests — the interest list's three verbs (PER-274 split; behavior
-// unchanged): GET rich list w/ doc metadata (PER-169), PUT persist-only save
-// (PER-160), POST run+persist (the product's core "Run now" path). The
-// validation + wipe-guard helpers live here because these routes are their
-// only callers — both verbs must apply the exact same rules.
+// /v0/interests — the interest list's three verbs: GET rich list w/ doc
+// metadata, PUT persist-only save, POST run+persist (the product's core "Run
+// now" path). The validation + wipe-guard helpers live here because these
+// routes are their only callers — both verbs must apply the exact same rules.
 
 import {
   loadState,
@@ -23,9 +22,8 @@ type InterestParse =
 
 // Clean → dedupe (case-insensitively, keeping first casing) → enforce the
 // 1..MAX_INTERESTS count and per-interest length budget. Shared by POST /v0/interests
-// (which also kicks a synthesis run) and PUT /v0/interests (persist-only,
-// PER-160) so both apply the exact same rules. (Dedupe rationale: PER-126;
-// length cap: PER-137.)
+// (which also kicks a synthesis run) and PUT /v0/interests (persist-only) so
+// both apply the exact same rules.
 function parseInterestsPayload(raw: unknown): InterestParse {
   if (Array.isArray(raw) && raw.some((s) => typeof s !== "string")) {
     return {
@@ -61,13 +59,13 @@ function parseInterestsPayload(raw: unknown): InterestParse {
   return { ok: true, interests };
 }
 
-// Wipe guard (PER-240): which currently-saved topics an incoming interests list
+// Wipe guard: which currently-saved topics an incoming interests list
 // would silently drop. Both interest writes (PUT persist-only, POST run+persist)
 // are replace-all — a "safe-looking" subset payload from any authed client used
-// to atomically destroy the founder's saved set (the 2026-06-11 incident: a
-// one-topic QA payload wiped 5 real interests). A write that drops anything now
-// requires an explicit `confirm_replace: true` token, mirroring the PER-230
-// confirm-delete seam. Case-insensitive to match parseInterestsPayload's dedupe
+// to atomically destroy the user's saved set (a one-topic test payload once
+// wiped 5 real interests). A write that drops anything now requires an
+// explicit `confirm_replace: true` token, mirroring the chat confirm-delete
+// seam. Case-insensitive to match parseInterestsPayload's dedupe
 // and reconcileInterests' id-preserving match.
 function droppedTopics(
   saved: State["interests"],
@@ -89,12 +87,12 @@ function wipeGuardError(dropped: string[]) {
   };
 }
 
-// Rich interest list with per-interest intent-doc metadata (PER-169).
+// Rich interest list with per-interest intent-doc metadata.
 // Unlike /v0/config (which flattens to topic strings for back-compat),
 // this is the authoritative shape the profile view consumes: each entry
 // is {id, topic, hasDoc, docUpdatedAt}. `hasDoc`/`docUpdatedAt` are read
 // straight from the doc store (docs.ts) so they can never drift from the
-// actual `<id>.md` files. Field names match what C3/PER-170's
+// actual `<id>.md` files. Field names match what the web app's
 // fetchInterestDocMeta() already consumes, so the profile doc-indicator
 // lights up on real data with no FE change.
 export async function handleGetInterests(
@@ -120,7 +118,7 @@ export async function handleGetInterests(
   json(res, 200, { interests: withMeta }, cors);
 }
 
-// Persist-only interests save (PER-160). The profile/edit view PUTs the
+// Persist-only interests save. The profile/edit view PUTs the
 // user's interests so the edit sticks in state.json on its own —
 // distinct from POST below, which ALSO kicks a (~5-min) synthesis run.
 // The scheduler reuses whatever is persisted here on its next fire.
@@ -181,17 +179,17 @@ export async function handlePostInterests(
   // run never detaches intent docs from their current interest ids.
   const fresh = await loadState(sc.stateFile);
 
-  // Ephemeral / dry-run trigger (PER-218): research the supplied topics
-  // and produce a brief WITHOUT persisting them as the founder's saved
+  // Ephemeral / dry-run trigger: research the supplied topics
+  // and produce a brief WITHOUT persisting them as the user's saved
   // interests or touching the real intent-doc store. This is the path QA
   // and automation MUST use to fire test runs.
   const ephemeral = parsed.ephemeral === true;
 
-  // Wipe guard (PER-240): a non-ephemeral POST persists its `interests`
+  // Wipe guard: a non-ephemeral POST persists its `interests`
   // body as the new saved list (replace-all). If that would drop any
   // currently-saved topic, refuse unless explicitly confirmed — this is
   // exactly the incident path (a one-topic test payload silently wiped
-  // the founder's 5 saved interests). Ephemeral runs skip the guard
+  // the user's 5 saved interests). Ephemeral runs skip the guard
   // because they persist nothing.
   if (!ephemeral) {
     const dropped = droppedTopics(fresh.interests, topics);
@@ -220,12 +218,12 @@ export async function handlePostInterests(
         )
       : [];
 
-  // Optional focused-retry payload (PER-154): re-research ONLY these
+  // Optional focused-retry payload: re-research ONLY these
   // topics and merge the fresh sections into the prior brief, instead of
   // regenerating the whole brief.
   const retryTopics = intersectTopics(parsed.retry_topics);
 
-  // Optional run-selector payload (C6/PER-173): research ONLY this subset
+  // Optional run-selector payload: research ONLY this subset
   // and produce a FRESH brief over just those topics. The full interest
   // list is STILL persisted by startRun (the scheduler's source of
   // truth) — a partial run never shrinks the saved set. Ignored by the
@@ -234,7 +232,7 @@ export async function handlePostInterests(
 
   // One brief slot, last-writer-wins. The shared runner enforces single-
   // flight (in-memory guard + persisted pending check) so an on-demand
-  // kick and a scheduled fire can never overlap (PER-151). It also
+  // kick and a scheduled fire can never overlap. It also
   // persists the interests so the scheduler can reuse them.
   const outcome = await startRun(
     interests,
@@ -251,7 +249,7 @@ export async function handlePostInterests(
   if (!outcome.started) {
     // A retry asked for but there's no prior brief to merge into → tell
     // the client to fall back to a full run rather than silently doing
-    // nothing (no dead controls, PER-139/PER-154).
+    // nothing (no dead controls).
     if (outcome.reason === "no_base_brief") {
       return json(
         res,

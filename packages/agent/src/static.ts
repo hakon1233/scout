@@ -123,7 +123,7 @@ export async function resolveStatic(
 // route, or null. The Next export uses `trailingSlash: true`, so GitHub Pages
 // 301s `/app/connect` → `/app/connect/`. The companion's file server would
 // otherwise serve the page directly at the non-canonical URL (200), a cosmetic
-// origin mismatch (PER-127). Only redirects when the directory's index.html
+// origin mismatch. Only redirects when the directory's index.html
 // actually exists, so genuinely-missing routes still fall through to the SPA
 // fallback / 404 instead of bouncing to a slashed dead-end.
 export async function trailingSlashRedirect(
@@ -147,7 +147,7 @@ export async function trailingSlashRedirect(
 
 // SPA fallback: serve the `/app/` shell for an unmatched, extensionless
 // navigation under `/app` so a deep-link or refresh of an in-app view
-// (e.g. /app/settings) lands on the app instead of a hard 404 (PER-127).
+// (e.g. /app/settings) lands on the app instead of a hard 404.
 // In-app views like settings are panels rendered at `/app/`, not real export
 // routes, so there is no `/app/settings/index.html` to serve. Extensionless +
 // `/app`-scoped is deliberate: asset misses (have extensions) and unknown

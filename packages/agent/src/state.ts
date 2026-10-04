@@ -17,7 +17,7 @@ import { CONFIG_DIR, atomicWriteFile, readJsonFile } from "./persistence.js";
 
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
 
-// Persisted recurring-schedule config for the in-process scheduler (PER-151).
+// Persisted recurring-schedule config for the in-process scheduler.
 // `enabled` + `time_of_day` are user-writable (Settings UI / PUT /v0/schedule);
 // the `last_run_*` / `next_run_at` fields are telemetry the scheduler maintains
 // so the UI can show "last produced a brief at …" / "next fire …".
@@ -37,7 +37,7 @@ export type ScheduleConfig = {
   next_run_at?: string;
 };
 
-// How many ready briefs to retain in the rolling history (PER-219). Each brief
+// How many ready briefs to retain in the rolling history. Each brief
 // is a few KB of markdown, so 30 keeps the state file small while giving the
 // feed plenty of "previous editions" to page through 3 at a time.
 export const BRIEF_HISTORY_CAP = 30;
@@ -45,23 +45,23 @@ export const BRIEF_HISTORY_CAP = 30;
 export type State = {
   pairing_token?: string;
   last_brief?: Brief;
-  // Rolling history of READY briefs, newest-first (PER-219). Distinct from
+  // Rolling history of READY briefs, newest-first. Distinct from
   // `last_brief`, which is the single last-writer-wins slot the poller watches
   // (and may be pending/failed). The feed pages this list 3 at a time via
   // GET /v0/briefs?limit=&offset= to show previous editions under their own
   // "Daily brief — <date>" headers. Appended on every ready synthesis (see
   // runner.ts runSynthesis), capped at BRIEF_HISTORY_CAP, and never written by
-  // an ephemeral/QA run (which must leave saved state untouched, PER-218).
+  // an ephemeral/QA run (which must leave saved state untouched).
   briefs?: Brief[];
   // Last interests the user submitted, persisted so the scheduler can run an
   // autonomous brief without the browser in the loop. Updated on every
-  // POST/PUT /v0/interests. Stored as rich {id, topic} objects (PER-169); a
+  // POST/PUT /v0/interests. Stored as rich {id, topic} objects; a
   // legacy `string[]` on disk is migrated to this shape on load — see
   // `migrateInterests` / `loadState`.
   interests?: Interest[];
   schedule?: ScheduleConfig;
   // Single chat-turn slot (last-writer-wins), mirroring `last_brief`. The chat
-  // that manages the interest collection (PER-172) kicks a turn here and polls
+  // that manages the interest collection kicks a turn here and polls
   // it to `ready`. One slot is enough: the UI shows the latest turn's reply +
   // applied changes; the durable record of WHAT changed lives in the docs/state
   // the turn already wrote.
@@ -78,7 +78,7 @@ export function newInterestId(): string {
 // the topic so that re-loading an unpersisted legacy state.json yields the SAME
 // id every time (a random id would drift on each load until the first save,
 // which would make GET /v0/interests and any future doc path non-stable). Once a
-// save lands, the id is canonicalized into the persisted {id, topic}. (PER-169)
+// save lands, the id is canonicalized into the persisted {id, topic}.
 export function legacyInterestId(topic: string): string {
   const h = crypto
     .createHash("sha256")
@@ -131,7 +131,7 @@ export function interestTopics(interests: Interest[] | undefined): string[] {
 // Reconcile a validated, ordered list of topic strings (what the FE sends over
 // the wire — it has no ids yet) against the existing rich interests, preserving
 // each existing topic's id so its intent doc stays attached across reorder / add
-// / remove. New topics get a fresh random id. Pure + filesystem-free. (PER-169)
+// / remove. New topics get a fresh random id. Pure + filesystem-free.
 export function reconcileInterests(
   existing: Interest[] | undefined,
   topics: string[],
@@ -152,11 +152,11 @@ export function reconcileInterests(
 export const DEFAULT_TIME_OF_DAY = "07:00";
 
 // The schedule we materialize on first load when none is persisted. We default
-// `enabled: true` because the whole feature IS the founder's opt-in ("schedule
-// a run for the research") and the goal is briefs "without the founder doing
+// `enabled: true` because the whole feature IS the user's opt-in ("schedule
+// a run for the research") and the goal is briefs "without the user doing
 // anything". The run is still gated on interests existing — a fire with no
 // stored interests records a "skipped" telemetry entry and spawns nothing — so
-// nothing is spent until the app has been used at least once. The UI (PER-152)
+// nothing is spent until the app has been used at least once. The UI
 // exposes the toggle to turn it off.
 export function defaultSchedule(): ScheduleConfig {
   return { enabled: true, time_of_day: DEFAULT_TIME_OF_DAY };
@@ -194,7 +194,7 @@ export async function loadState(file = STATE_FILE): Promise<State> {
 // state file, oldest first (names embed a ms timestamp, so lexical sort is
 // chronological). preserveCorruptState is only console-loud, which no one
 // watches for a launchd-managed companion — after a recovery the app just
-// looks freshly unpaired with no explanation. /healthz folds this in (PER-272)
+// looks freshly unpaired with no explanation. /healthz folds this in
 // so the recovery is visible wherever the companion's health already is.
 export async function listCorruptStateBackups(
   file = STATE_FILE,
@@ -241,7 +241,7 @@ export async function saveState(
   file = STATE_FILE,
 ): Promise<void> {
   // loadState falls back to {} on a torn parse, which would silently wipe the
-  // founder's interests, briefs, and pairing token — so this write must be atomic
+  // user's interests, briefs, and pairing token — so this write must be atomic
   // (and loadState backs the corrupt file up before falling back, as a last net).
   await atomicWriteFile(file, JSON.stringify(state, null, 2));
 }

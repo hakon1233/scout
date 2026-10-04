@@ -1,4 +1,4 @@
-// /v0/config — same-origin bootstrap (PER-274 split; behavior unchanged).
+// /v0/config — same-origin bootstrap.
 //
 // Hands the served UI its pairing token so the user never has to copy/paste
 // it. When the page is served from this companion (http://127.0.0.1:47821/),
@@ -32,9 +32,9 @@ export async function handleGetConfig(
       // localStorage was cleared / is a different profile / a different
       // origin than the one that did first-run setup can still render the
       // brief + a working "Run now" instead of dead-ending on the setup
-      // form (PER-157). Same-origin gated like the token above. Mapped to
+      // form. Same-origin gated like the token above. Mapped to
       // topic strings for back-compat — the rich {id, topic} model lives
-      // behind GET /v0/interests (PER-169); this endpoint's `interests`
+      // behind GET /v0/interests; this endpoint's `interests`
       // contract stays a plain string[].
       interests: interestTopics(state.interests),
     },

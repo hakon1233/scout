@@ -16,10 +16,10 @@ export type ChatOptions = {
   // Spawn override for tests — injects a stub `claude` without the real binary
   // or network, exactly like ResearchOptions.spawnFn.
   spawnFn?: typeof spawn;
-  // Abort signal (PER-232): when fired, the `claude` child is killed and the
+  // Abort signal: when fired, the `claude` child is killed and the
   // round-trip rejects, so the turn can land as stopped WITHOUT applying changes.
   signal?: AbortSignal;
-  // Per-turn hard timeout in ms (AIR-540). Defaults to SCOUT_SESSION_TIMEOUT_MS
+  // Per-turn hard timeout in ms. Defaults to SCOUT_SESSION_TIMEOUT_MS
   // env or 4 min; tests set it tiny to drive the kill path without waiting.
   timeoutMs?: number;
 };

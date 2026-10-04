@@ -1,12 +1,12 @@
 // The shared "skills folder" — the single, canonical set of rules for HOW
-// Scout searches for news. It is injected verbatim into EVERY research session:
-// today's single multi-topic session (research.ts) and, later, C2's per-interest
-// sessions. The per-interest doc says WHAT to look for; this fragment says HOW.
-// They compose — never copy-paste this text anywhere, import SEARCH_SKILLS.
+// Scout searches for news. It is injected verbatim into EVERY per-interest
+// research session (research.ts). The per-interest doc says WHAT to look for;
+// this fragment says HOW. They compose — never copy-paste this text anywhere,
+// import SEARCH_SKILLS.
 //
-// Origin: PER-176 (founder pain — runs surfaced months-old stories with no
-// dates). These rules make recency a hard constraint and make every item carry
-// a parseable publish date so the UI can render and sort by it.
+// Origin: runs surfaced months-old stories with no dates. These rules make
+// recency a hard constraint and make every item carry a parseable publish date
+// so the UI can render and sort by it.
 //
 // The date convention below is a CONTRACT with the renderer: each story bullet
 // begins with its publish date as an ISO date in backticks (or `undated`). The
@@ -15,24 +15,24 @@
 // wire format here, update that parser and BriefView together.
 //
 // The optional SOURCE IMAGE line (`![source image](URL)`) is ALSO part of that
-// contract (PER-211): the parser reads it into Article.imageUrl to render the
+// contract: the parser reads it into Article.imageUrl to render the
 // news-feed card's main image. It must sit on its own line under the citation so
 // it stays a markdown image (the parser skips `!`-prefixed links so an image
 // URL is never mistaken for a citation).
 //
 // The optional IN-DEPTH BODY (an indented `> …` blockquote under the citation/
-// image) is the third part of that contract (PER-214): the parser reads those
+// image) is the third part of that contract: the parser reads those
 // blockquote lines into Article.body — the few concise paragraphs the detail
 // view renders on click. Its first paragraph is the bold lead summary; later
 // paragraphs carry deeper insight. It must be plain prose (no links/images) so
 // it never collides with the citation or source-image parse, and the feed
 // bullet's one-sentence summary stays the SHORT card blurb.
 //
-// PER-265: the founder found detail-view bodies shallow across EVERY topic, not
-// just broad ones — so the fix is a straight quality/length bump to this one
-// rule (3-5 substantive paragraphs, each required to add a concrete detail),
-// not a topic-breadth branch. Applies uniformly; there is deliberately no
-// "general vs specific topic" distinction anywhere in these rules.
+// Detail-view bodies came out shallow across EVERY topic, not just broad ones —
+// so the fix is a straight quality/length bump to this one rule (3-5
+// substantive paragraphs, each required to add a concrete detail), not a
+// topic-breadth branch. Applies uniformly; there is deliberately no "general vs
+// specific topic" distinction anywhere in these rules.
 
 export const STORY_DATE_RE = /`(\d{4}-\d{2}-\d{2}|undated)`/;
 

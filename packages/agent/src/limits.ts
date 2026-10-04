@@ -16,7 +16,7 @@
 export const MAX_INTERESTS = 15;
 
 /**
- * Per-interest length bound (PER-137). The count and the body cap bound the
+ * Per-interest length bound. The count and the body cap bound the
  * other two dimensions; this one stops a single oversized topic being
  * forwarded into the (expensive, ~5-min) Claude synthesis prompt.
  */

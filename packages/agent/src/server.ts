@@ -1,12 +1,11 @@
 // Loopback HTTP server — the ROUTER. Binds to 127.0.0.1 only; never exposed
 // to LAN.
 //
-// Since the PER-274 decomposition (audit finding H2) this file owns only the
-// cross-cutting request pipeline, in this order:
+// This file owns only the cross-cutting request pipeline, in this order:
 //   OPTIONS preflight (CORS + classic-PNA) → /healthz liveness →
-//   /v0 origin-deny gate (PER-135) → auth per the route's declared kind →
+//   /v0 origin-deny gate → auth per the route's declared kind →
 //   exact-match dispatch via routes/index.ts → static UI fallback →
-//   405-with-Allow on known paths (PER-136) → styled/JSON 404 (PER-144/148) →
+//   405-with-Allow on known paths → styled/JSON 404 →
 //   logged 500 catch-all.
 // Route BODIES live in routes/*.ts (one module per resource, registered in the
 // routes/index.ts dispatch table); shared request plumbing (CORS policy, JSON
@@ -68,7 +67,7 @@ export type ServerDeps = {
   // Static UI root; defaults to the bundled webroot. Injected for tests.
   webroot?: string;
   // Invoked after PUT /v0/schedule persists a config change, so the running
-  // scheduler can re-arm its timer immediately (PER-151). No-op when absent.
+  // scheduler can re-arm its timer immediately. No-op when absent.
   onScheduleChanged?: () => void | Promise<void>;
   // Per-interest intent-doc directory; defaults to `interests/` beside the state
   // file (in production CONFIG_DIR/interests === docs.ts INTERESTS_DIR). Injected
@@ -76,9 +75,9 @@ export type ServerDeps = {
   // hermetic doc store instead of the real home dir.
   interestsDir?: string;
   // The chat turn is async (kick + poll like briefs); tests wait on this to know
-  // when a turn has finished applying its changes. (PER-172)
+  // when a turn has finished applying its changes.
   onChatDone?: (turn: ChatTurn) => void;
-  // Build provenance JSON (PER-239); defaults to dist/build-info.json baked by
+  // Build provenance JSON; defaults to dist/build-info.json baked by
   // scripts/write-build-info.mjs. Injected for tests.
   buildInfoFile?: string;
 };
@@ -92,7 +91,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
   // test automatically gets a tmp doc dir (the lazy backfill in startRun's
   // synthesis never touches the real ~/.config/scout). In production stateFile
   // is CONFIG_DIR/state.json, so this resolves to CONFIG_DIR/interests ===
-  // docs.ts INTERESTS_DIR — exact parity. (C2/PER-171)
+  // docs.ts INTERESTS_DIR — exact parity.
   const interestsDir =
     deps.interestsDir ?? path.join(path.dirname(stateFile), "interests");
   const buildInfoFile = deps.buildInfoFile ?? DEFAULT_BUILD_INFO_FILE;
@@ -105,7 +104,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
     spawnFn,
     onChatDone: deps.onChatDone,
   };
-  // Resolved dependencies handed to every route handler (PER-274). Defaulting
+  // Resolved dependencies handed to every route handler. Defaulting
   // happens above, exactly once — handlers never see raw ServerDeps.
   const ctx: ServerContext = {
     stateFile,
@@ -143,7 +142,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
       // echo `Access-Control-Allow-Private-Network: true` or they deny it.
       // We honor that here for origins we already allow via CORS.
       //
-      // IMPORTANT (verified on Chrome 148, 2026-05-30, PER-107): newer
+      // IMPORTANT (verified on Chrome 148, 2026-05-30): newer
       // Chrome replaced classic PNA with the *Local Network Access* (LNA)
       // model, which gates public→loopback behind a real USER PERMISSION
       // ("Allow local network"). In that model the request is blocked
@@ -177,17 +176,16 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         // Uniform cross-origin deny gate for the whole /v0/* surface. A browser
         // Origin that isn't in the CORS allowlist is rejected with 403 before
         // any route handler runs, so /v0/config, /v0/briefs and /v0/interests
-        // all share one origin-deny posture. (PER-135)
+        // all share one origin-deny posture.
         if (url.pathname.startsWith("/v0/") && isOriginDenied(origin)) {
           return json(res, 403, { error: "forbidden" }, cors);
         }
 
-        // Exact-match /v0 dispatch (PER-274). The router applies each route's
+        // Exact-match /v0 dispatch. The router applies each route's
         // declared auth kind BEFORE its handler runs — one uniform auth seam
         // for the entire surface, so no route can drift on it. Unknown paths
         // and known-path/wrong-method requests fall through to the
-        // static/405/404 chain below, keeping those contracts (PER-136,
-        // PER-144/148) untouched.
+        // static/405/404 chain below, keeping those contracts untouched.
         const route = V0_ROUTES[url.pathname]?.[req.method ?? ""];
         if (route) {
           if (
@@ -227,7 +225,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
             return;
           }
           // Static export, then SPA fallback to the /app/ shell for unmatched
-          // in-app deep-links/refreshes so they don't hard-404 (PER-127).
+          // in-app deep-links/refreshes so they don't hard-404.
           const hit =
             (await resolveStatic(url.pathname, webroot)) ??
             (await resolveAppShellFallback(url.pathname, webroot));
@@ -246,7 +244,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         }
 
         // Known route, unsupported method → 405 + Allow (REST-correct), so it's
-        // distinguishable from a genuinely unknown path's 404. (PER-136)
+        // distinguishable from a genuinely unknown path's 404.
         const allowed = V0_ROUTE_METHODS[url.pathname];
         if (allowed) {
           return json(
@@ -265,7 +263,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
         // who could be a human. Asset misses (e.g. /app/missing.js — a path
         // with a file extension) and explicit JSON API clients
         // (Accept: application/json without text/html) still get the
-        // machine-readable JSON 404. (PER-144, broadened by PER-148)
+        // machine-readable JSON 404.
         if (req.method === "GET" || req.method === "HEAD") {
           const accept = (req.headers.accept as string | undefined) ?? "";
           const wantsJsonOnly =

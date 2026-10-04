@@ -1,4 +1,4 @@
-// Per-interest intent-doc store (PER-169).
+// Per-interest intent-doc store.
 //
 // Each interest (see `Interest` in state.ts) can have one prose "intent doc"
 // that spells out *exactly* what the user wants from that topic — the captured
@@ -79,16 +79,16 @@ export async function deleteInterestDoc(
   }
 }
 
-// A deterministic default intent doc synthesized from a topic string (C2/PER-171).
+// A deterministic default intent doc synthesized from a topic string.
 //
 // The six live interests predate the doc store, so most ids have no `.md` yet.
 // Rather than research with an empty doc — which would make the per-interest
 // session indistinguishable from the old topic-only one — we backfill a seed
 // doc the first time a docless interest is researched. This is intentionally a
-// pure string template, NOT an LLM call: C2 must stay deterministic + unit-
-// testable, and real intent refinement is the chat flow's job (C4/C5). The seed
-// is plain prose the user can later edit; editing it changes the next run's
-// prompt (the PER-139 no-dead-control invariant the whole epic turns on).
+// pure string template, NOT an LLM call: the seed must stay deterministic +
+// unit-testable, and real intent refinement is the chat flow's job. The seed is
+// plain prose the user can later edit; editing it changes the next run's prompt
+// (no dead controls).
 export function defaultInterestDoc(topic: string): string {
   const t = topic.trim();
   // NB: this text is fed to interestWantsEvergreen (coverage.ts) as the interest's
@@ -96,9 +96,9 @@ export function defaultInterestDoc(topic: string): string {
   // this default MUST NOT contain any EVERGREEN_RE trigger word (evergreen,
   // background, historical/history, retrospective, timeline, explainer, primer,
   // deep-dive, long-read) — a false positive there disables the >30-day freshness
-  // cutoff (PER-250) for every default-doc interest, exactly the founder's
-  // months-old-stories bug. Keep the "skip old context" intent, worded around
-  // those words. coverage.test.ts pins this invariant (AIR-527).
+  // cutoff for every default-doc interest, bringing back months-old stories.
+  // Keep the "skip old context" intent, worded around those words.
+  // coverage.test.ts pins this invariant.
   return [
     `# ${t}`,
     "",
@@ -112,7 +112,7 @@ export function defaultInterestDoc(topic: string): string {
 
 // Return an interest's intent doc, lazily backfilling + PERSISTING a deterministic
 // default (defaultInterestDoc) the first time a topic is researched without one
-// (C2/PER-171). After this resolves, a doc file always exists on disk for `id`,
+// After this resolves, a doc file always exists on disk for `id`,
 // so the hard invariant holds even for interests that predate the doc store:
 // the doc the research prompt injects is the same bytes a user would see and
 // edit. An empty/whitespace-only file is treated as "no doc" and reseeded.
@@ -132,7 +132,7 @@ export async function ensureInterestDoc(
 // straight from the filesystem so it can never drift from the actual file. The
 // file is the single source of truth for `hasDoc` / `updatedAt` — we deliberately
 // do NOT mirror these into state.json. `updatedAt` is the doc's mtime as an ISO
-// string. (Feeds GET /v0/interests → the profile doc-indicator, PER-169/PER-170.)
+// string. (Feeds GET /v0/interests → the profile doc-indicator.)
 export type InterestDocMeta = { hasDoc: boolean; updatedAt?: string };
 
 export async function interestDocMeta(

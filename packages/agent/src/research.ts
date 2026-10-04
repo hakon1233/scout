@@ -51,7 +51,7 @@ export async function researchAndSynthesize(
 //
 // Even with "No preamble" in the prompt, the headless `claude` run sometimes
 // emits a meta sentence first — e.g. "I have enough to write the brief." —
-// which then leaks into the rendered brief (PER-113 #1). The brief itself is
+// which then leaks into the rendered brief. The brief itself is
 // required to start with the `# Your brief` H1, so the robust fix is: if any
 // markdown heading exists, drop everything before the first one. Fallback for
 // the (rare) headingless case: drop a single leading non-bullet paragraph.
@@ -75,14 +75,14 @@ export function stripBriefPreamble(raw: string): string {
   return text;
 }
 
-// Build the prompt for ONE interest's research session (C2/PER-171). Composition
+// Build the prompt for ONE interest's research session. Composition
 // order is fixed and load-bearing: shared search skills (HOW to research) →
 // the interest's intent doc VERBATIM (WHAT to research) → today's date (the
 // recency anchor). The two layers compose — the skills are the canonical,
 // version-controlled rules imported from search-skills.ts (never copied), the
 // doc is this interest's captured intent. The doc MUST appear verbatim: if
-// editing a doc doesn't change the next run's prompt, the control is dead
-// (PER-139). research.test.ts pins that invariant.
+// editing a doc doesn't change the next run's prompt, the control is dead.
+// research.test.ts pins that invariant.
 export function buildResearchPrompt(
   interest: ResearchInterest,
   now: Date = new Date(),

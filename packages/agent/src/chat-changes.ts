@@ -23,15 +23,15 @@ import { newInterestId } from "./state.js";
 // delete naming an id we don't hold is dropped (so the model can never write an
 // arbitrary `<id>.md`), and a create past MAX_INTERESTS is dropped. The applied
 // list — never the model's raw proposal — is what we return to the client, so the
-// FE only ever sees confirmed writes (PER-139).
+// FE only ever sees confirmed writes.
 //
-// PER-230: delete is the one DESTRUCTIVE op, so it is confirm-gated. A model
+// Delete is the one DESTRUCTIVE op, so it is confirm-gated. A model
 // `delete` is NOT applied here; it is collected into `pendingDeletes` and surfaced
 // to the FE as a [Delete]/[Cancel] proposal. The interest stays alive until the
 // user explicitly confirms via applyConfirmedDelete. create/update remain
-// auto-apply (CEO decision on PER-230 — do not gate those).
+// auto-apply by design — do not gate those.
 //
-// PER-235: a full from-scratch `rewrite` replaces the ENTIRE doc, so it is gated
+// A full from-scratch `rewrite` replaces the ENTIRE doc, so it is gated
 // the same way: collected into `pendingRewrites` (with the FULL proposed doc),
 // NOT written. The doc on disk stays byte-identical until the user presses
 // [Apply], which routes through applyConfirmedRewrite.
@@ -82,7 +82,7 @@ export async function applyChatChanges(
       if (idx === -1) continue; // never touch an id we don't own
       const doc = typeof ch.doc === "string" ? ch.doc : "";
       if (!doc.trim()) continue; // a rewrite without a full doc is meaningless
-      // Confirm-gated (PER-235): propose with the FULL doc, do NOT write. Dedup
+      // Confirm-gated: propose with the FULL doc, do NOT write. Dedup
       // so a model that lists the same id twice still surfaces one card.
       if (!pendingRewrites.some((p) => p.interestId === id)) {
         pendingRewrites.push({
@@ -106,7 +106,7 @@ export async function applyChatChanges(
   return { interests, applied, pendingDeletes, pendingRewrites };
 }
 
-// Perform a confirmed delete (PER-230): the deterministic removal that runs only
+// Perform a confirmed delete: the deterministic removal that runs only
 // after the user presses [Delete] on the confirm card. No model involved — we
 // validate the id is one we hold, splice it out, and delete its doc. Returns the
 // applied delete change (for the FE to render + flash) or null if the interest is

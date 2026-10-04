@@ -1,5 +1,4 @@
-// /v0/briefs + /v0/weekly-brief — brief reads and the weekly digest
-// (PER-274 split; behavior unchanged).
+// /v0/briefs + /v0/weekly-brief — brief reads and the weekly digest.
 
 import { json } from "../http-util.js";
 import { isRunInFlight } from "../runner.js";
@@ -12,7 +11,7 @@ export async function handleGetBriefs({
   cors,
   state,
 }: AuthedRequestContext): Promise<void> {
-  // Paginated history view (PER-219): when `limit` or `offset` is present,
+  // Paginated history view: when `limit` or `offset` is present,
   // page over the rolling ready-brief history (newest-first) instead of
   // the single last_brief. The feed uses this to render previous editions
   // 3 at a time. Response carries `total` so the client knows when to hide

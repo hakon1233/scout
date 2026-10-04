@@ -1,4 +1,4 @@
-// Per-topic coverage detection + section merge for the brief engine (PER-154).
+// Per-topic coverage detection + section merge for the brief engine.
 //
 // The whole brief is produced by ONE `claude` call that emits a single markdown
 // document with `## <topic>` sections. The web app used to decide which topics
@@ -7,7 +7,7 @@
 // moment the model title-cased or rephrased a heading — "ai" → "## AI",
 // "openai" → "## OpenAI", "claude code" → "## Claude Code" — flagging covered
 // topics as empty, and a Retry just re-ran the same prompt and reproduced the
-// same casing, so it never recovered (the founder's exact bug report).
+// same casing, so it never recovered.
 //
 // The companion now owns coverage detection authoritatively, with NORMALIZED
 // matching (case / punctuation / whitespace insensitive), and distinguishes
@@ -94,7 +94,7 @@ export function computeCoverage(
 }
 
 // Extract ONE topic's section from a single per-interest research session's
-// output and re-emit it under the CANONICAL `## <topic>` heading (C2/PER-171).
+// output and re-emit it under the CANONICAL `## <topic>` heading.
 //
 // Per-interest sessions each research one topic and are asked for exactly one
 // `## <topic>` section, but a headless `claude` run is free to title-case the
@@ -104,7 +104,7 @@ export function computeCoverage(
 // actually asked for, so the assembled brief is coherent and coverage matching
 // is exact. Returns null when the session produced no usable section body — the
 // assembler then omits the topic entirely, which computeCoverage reports as
-// "missing" (and PER-154's focused retry can recover).
+// "missing" (and the focused retry can recover).
 export function extractTopicSection(
   sessionMarkdown: string,
   topic: string,
@@ -119,7 +119,7 @@ export function extractTopicSection(
     body = pre.trim();
   }
   if (!body) return null;
-  // C7 (PER-186): the model is *asked* to emit stories newest-first but only
+  // The model is *asked* to emit stories newest-first but only
   // does so intermittently. Enforce the order deterministically at the single
   // per-topic emit point so every assembled section is strictly newest-first.
   return `## ${topic}\n${sortSectionStoriesNewestFirst(body)}\n`;
@@ -132,7 +132,7 @@ export function extractTopicSection(
 const STORY_BULLET_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`/;
 
 // Sort one section body's story bullets strictly newest-first by their leading
-// ISO date (C7/PER-186). Each story — its bullet line plus any continuation
+// ISO date. Each story — its bullet line plus any continuation
 // lines up to the next bullet — moves as one block, so the citation stays with
 // its story. Lines BEFORE the first story bullet (an intro line, the
 // `_Nothing notable…_` / `_no fresh news_` note) are preserved verbatim at the
@@ -172,15 +172,14 @@ export function sortSectionStoriesNewestFirst(body: string): string {
   return [...head, ...sorted.flatMap((b) => b.lines)].join("\n");
 }
 
-// ─── Freshness validator (PER-250) ──────────────────────────────────────────
+// ─── Freshness validator ────────────────────────────────────────────────────
 //
 // SEARCH_SKILLS forbids the model from emitting ordinary news older than ~30
 // days, but that rule is PROMPT-enforced only: if the model includes a stale
 // article anyway, assembly used to accept it as long as it had the right story
-// shape. PER-247 confirmed this is the genuine freshness defect the founder hit
-// (briefs surfacing months-old stories). This validator CODE-enforces the cutoff
-// deterministically over the assembled brief, just before it is saved, so
-// months-old ordinary news can no longer slip through.
+// shape, so briefs surfaced months-old stories. This validator CODE-enforces
+// the cutoff deterministically over the assembled brief, just before it is
+// saved, so months-old ordinary news can no longer slip through.
 
 // Ordinary news older than this many days is dropped. "~30 days" in the search
 // rules; we treat strictly-older-than-30-days as stale.
@@ -193,20 +192,20 @@ const EVERGREEN_RE =
   /\b(evergreen|background|historical|history|retrospective|timeline|explainer|primer|deep[ -]dive|long[ -]read)\b/i;
 
 // Does this interest explicitly ask for background / evergreen / historical
-// context? Checked against BOTH the topic wording and its intent doc (PER-250).
+// context? Checked against BOTH the topic wording and its intent doc.
 export function interestWantsEvergreen(topic: string, doc: string): boolean {
   return EVERGREEN_RE.test(topic) || EVERGREEN_RE.test(doc);
 }
 
 // Drop ordinary stories older than `cutoffDays` from ONE section block's raw
 // markdown (its `## heading` line plus body). Undated stories are kept as-is
-// (we never had a date to judge them by — PER-250 keeps undated handling
-// unchanged). Stories with an unparseable date marker are also kept rather than
-// silently lost. When EVERY story in the section is dropped, the section body is
-// replaced with the `_no fresh news_` marker so computeCoverage reports the
-// topic as an honest "empty" (nothing fresh) state instead of leaving a dangling
-// intro line — and any "showing older items" note, now false, is removed with
-// it. Returns the block byte-identical when nothing is dropped.
+// (we never had a date to judge them by). Stories with an unparseable date
+// marker are also kept rather than silently lost. When EVERY story in the
+// section is dropped, the section body is replaced with the `_no fresh news_`
+// marker so computeCoverage reports the topic as an honest "empty" (nothing
+// fresh) state instead of leaving a dangling intro line — and any "showing
+// older items" note, now false, is removed with it. Returns the block
+// byte-identical when nothing is dropped.
 function filterStaleStoriesFromBlock(
   raw: string,
   nowMs: number,
@@ -254,7 +253,7 @@ function filterStaleStoriesFromBlock(
 }
 
 // Code-enforce the staleness cutoff across a whole assembled brief just before it
-// is saved (PER-250). Each `## topic` section is filtered independently: a topic
+// is saved. Each `## topic` section is filtered independently: a topic
 // whose normalized key is in `evergreenKeys` is left untouched (it opted into
 // older content); every other section has its ordinary stories older than
 // `cutoffDays` dropped. The preamble (`# Your brief`) and section order are
@@ -278,7 +277,7 @@ export function enforceBriefFreshness(
   return pre + rebuilt.join("");
 }
 
-// Assemble per-interest sections into one brief (C2/PER-171). Each entry is a
+// Assemble per-interest sections into one brief. Each entry is a
 // requested interest's topic plus the section extractTopicSection produced for
 // it (or null when its session yielded nothing usable). Order follows the
 // requested-interest order. Topics with a null section are OMITTED — the brief

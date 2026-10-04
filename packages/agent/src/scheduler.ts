@@ -1,11 +1,11 @@
-// In-process scheduler (PER-151). While the companion process is alive it fires
+// In-process scheduler. While the companion process is alive it fires
 // the shared brief-run path (runner.ts) on a recurring daily schedule, so the
-// founder gets a fresh brief at a configured time without doing anything.
+// user gets a fresh brief at a configured time without doing anything.
 //
 // Reboot caveat (surfaced, not swallowed): `scout-agent run` (nohup) is NOT
 // reboot-durable. This timer only exists while the process lives; after a Mac
-// mini reboot the founder must re-run `scout-agent run`. GET /v0/schedule
-// exposes `reboot_durable: false` so the Settings UI (PER-152) can warn. A
+// mini reboot the user must re-run `scout-agent run`. GET /v0/schedule
+// exposes `reboot_durable: false` so the Settings UI can warn. A
 // launchd login item / durable `serve` is an optional follow-up, not built here.
 
 import {
@@ -27,14 +27,13 @@ import {
 // schedules are always well under that, but clamp defensively.
 const MAX_TIMER_MS = 2_147_483_647;
 
-// PER-259 item 3: automatically RETRY a failed scheduled run a few times, spaced
-// out, before giving up for the day. The PER-258 outage was a transient Claude
-// usage/session-limit at exactly 07:00 that killed the WHOLE day's brief with no
-// self-heal — the founder saw a silent stop. Re-running ~45 min later a handful
-// of times rides over that limit window (which typically clears within an hour)
-// without any founder intervention, and would have prevented most of PER-258
-// outright. Like the schedule itself this lives in-process (not reboot-durable) —
-// an accepted limit; a durable LaunchAgent (PER-153) is the reboot story.
+// Automatically RETRY a failed scheduled run a few times, spaced out, before
+// giving up for the day. A transient Claude usage/session-limit at exactly 07:00
+// can kill the WHOLE day's brief with no self-heal — the user sees a silent
+// stop. Re-running ~45 min later a handful of times rides over that limit window
+// (which typically clears within an hour) without any user intervention. Like
+// the schedule itself this lives in-process (not reboot-durable) — an accepted
+// limit; a durable LaunchAgent is the reboot story.
 const RETRY_DELAY_MS = 45 * 60 * 1000; // 45 min between attempts
 const MAX_SCHEDULED_RETRIES = 3; // up to 3 retries → 4 attempts total (~07:00–09:15)
 
@@ -55,8 +54,8 @@ export function nextFireAt(timeOfDay: string, from: Date): Date | null {
   // of a second, stricter regex. Previously this required exactly `HH:MM` while
   // normalizeTimeOfDay accepts `H:MM` and zero-pads — so a `"7:00"` reaching the
   // scheduler by any path that skipped normalization (a hand-edited/legacy
-  // state.json) parsed as null here and silently disabled the schedule (AIR-188
-  // L1). One validator → no drift.
+  // state.json) parsed as null here and silently disabled the schedule. One
+  // validator → no drift.
   const normalized = normalizeTimeOfDay(timeOfDay);
   if (!normalized) return null;
   const [hh, mm] = normalized.split(":").map(Number);
@@ -74,7 +73,7 @@ export class Scheduler {
   private readonly deps: RunDeps;
   // Injectable clock for tests; defaults to real time.
   private readonly now: () => Date;
-  // Retry/backoff state for a failed scheduled run (PER-259 item 3).
+  // Retry/backoff state for a failed scheduled run.
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private retryCount = 0;
   private readonly retryDelayMs: number;
@@ -116,7 +115,7 @@ export class Scheduler {
   // one (or none, if disabled). Persists the computed next_run_at so the UI can
   // show it. This is the single writer of schedule.next_run_at.
   //
-  // TOTAL — never rejects (PER-280). On 2026-07-04 the 05:00Z fire's re-arm hit
+  // TOTAL — never rejects. On 2026-07-04 the 05:00Z fire's re-arm hit
   // ENOSPC in saveState below; the exception escaped AFTER stop() had cleared
   // the old timer and BEFORE a new one was armed, so the scheduler died silently
   // inside a healthy 13-day-old process and no daily brief ran for 12 days.
@@ -166,7 +165,7 @@ export class Scheduler {
     // "my scheduled brief silently never ran" report is diagnosable from stderr.
     // Matches the runner.ts:279 / chat.ts:708 catch pattern.
     //
-    // Clear-before-arm (AIR-471): `stop()` at the top of reschedule() nulls the
+    // Clear-before-arm: `stop()` at the top of reschedule() nulls the
     // timer, but re-arming happens here AFTER two awaits (loadState/saveState).
     // Two overlapping reschedule() calls (a fire()'s re-arm racing an
     // onScheduleChanged PUT) each pass their stop() before either arms, then both
@@ -187,7 +186,7 @@ export class Scheduler {
     this.timer.unref?.();
 
     // Persist next_run_at for the Settings UI only AFTER the timer is armed,
-    // and never let a failed write disarm the schedule (PER-280, see header).
+    // and never let a failed write disarm the schedule (see header).
     // fire() awaits this whole method before kicking the run, so `schedule`
     // writes remain sequential (reschedule → startRun → completion) and the
     // two writers still can't clobber each other's fields.
@@ -226,7 +225,7 @@ export class Scheduler {
   }
 
   // Kick one scheduled run through the shared path. `isRetry` distinguishes the
-  // automatic backoff re-runs (PER-259 item 3) from the daily fire: a retry of a
+  // automatic backoff re-runs from the daily fire: a retry of a
   // PARTIAL failure re-researches only the dropped topics and merges into the
   // ready base, while a retry of a WHOLESALE failure (no base brief) re-runs the
   // full list. The outcome is observed via a wrapped onSynthesisDone (see
@@ -240,7 +239,7 @@ export class Scheduler {
       const missing = missingTopics(state.last_brief);
       // Only a ready-but-partial brief has a base to merge a focused retry into.
       // A fully-failed prior run yields no missing topics here, so this stays a
-      // full re-run — which is exactly what recovers the PER-258 total failure.
+      // full re-run — which is exactly what recovers a total failure.
       if (state.last_brief?.status === "ready" && missing.length > 0) {
         opts.retryTopics = missing;
       }
@@ -269,7 +268,7 @@ export class Scheduler {
   }
 
   // Wrap the caller's onSynthesisDone so we ALSO observe every scheduled run's
-  // outcome and arm a backoff retry when it failed (PER-259 item 3). runSynthesis
+  // outcome and arm a backoff retry when it failed. runSynthesis
   // invokes this AFTER clearing the in-flight guard, so an armed retry can start
   // a fresh run cleanly.
   private retryAwareDeps(): RunDeps {

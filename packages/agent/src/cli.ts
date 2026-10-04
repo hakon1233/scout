@@ -5,13 +5,13 @@
 //   pair          Generate and store a local pairing token. No paste needed:
 //                 `scout-agent run` serves the Scout UI from this loopback
 //                 origin, so the browser auto-adopts the token same-origin
-//                 (PER-110). Reuses an existing token if one is stored; pass
+//                 Reuses an existing token if one is stored; pass
 //                 --force (alias --reset) to mint a fresh token and invalidate
 //                 the old one.
 //   run (default) Start the loopback HTTP server on 127.0.0.1.
 //   status        Print pairing + last-brief state.
 //   install-service    Install a macOS launchd LaunchAgent so the companion
-//                      starts at login/boot and respawns if it exits (PER-153).
+//                      starts at login/boot and respawns if it exits.
 //                      Makes the schedule reboot-durable.
 //   uninstall-service  Remove the LaunchAgent (companion no longer reboot-durable).
 //   service-status     Print whether the LaunchAgent is installed + loaded.
@@ -81,8 +81,8 @@ async function cmdRun(portArg?: string): Promise<void> {
     process.exit(1);
   }
   // Materialize the default schedule on first run so the in-process scheduler
-  // has concrete config to resume after a restart (PER-151). Existing config is
-  // left untouched so a founder's enable/disable + time choice survives restart.
+  // has concrete config to resume after a restart. Existing config is left
+  // untouched so the user's enable/disable + time choice survives restart.
   await updateState(STATE_FILE, (s) =>
     s.schedule ? s : { ...s, schedule: defaultSchedule() },
   );

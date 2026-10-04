@@ -1,13 +1,13 @@
-// Reboot-durable companion via a macOS launchd LaunchAgent (PER-153).
+// Reboot-durable companion via a macOS launchd LaunchAgent.
 //
 // The nohup `scout-agent run` companion dies on logout/reboot, so the in-process
-// scheduler (PER-151) silently stops firing until the founder re-runs it. This
+// scheduler silently stops firing until the user re-runs it. This
 // module installs a per-user LaunchAgent at
 // `~/Library/LaunchAgents/ing.scout.agent.plist` with `RunAtLoad` + `KeepAlive`,
 // so launchd starts `scout-agent run` at login/boot and respawns it if it exits.
 //
 // Once installed, GET /v0/schedule reports `reboot_durable:true` and the Settings
-// UI (PER-152) drops its reboot caveat automatically (it gates on
+// UI drops its reboot caveat automatically (it gates on
 // `!reboot_durable`). Uninstall removes the plist and the claim drops back.
 //
 // Design note: durability is detected by the canonical plist's presence. Both
@@ -174,7 +174,7 @@ export async function readExistingService(
 
   // The live plist carries NO --port, while restartLaunchAgent always passes
   // one. Reproducing `undefined` rather than defaulting is what keeps a stray
-  // SCOUT_AGENT_PORT from moving the founder off 47821.
+  // SCOUT_AGENT_PORT from moving the user off 47821.
   const portAt = programArguments.indexOf("--port");
   const parsedPort =
     portAt >= 0 ? Number.parseInt(programArguments[portAt + 1] ?? "", 10) : NaN;
@@ -335,8 +335,8 @@ const RELEASE_SHA_DIR = /^[0-9a-f]{40}$/;
 
 // A plist pinned inside releases/<sha>/ LOOKS migrated and permanently defeats
 // the release design: every later deploy flips the `current` symlink while
-// launchd keeps re-launching the frozen SHA, which is the two-answers problem
-// PER-299 was opened to eliminate, made durable.
+// launchd keeps re-launching the frozen SHA, so the deployed release and the
+// running one permanently give two different answers.
 //
 // This is exactly what the `realpath(process.argv[1])` default produces once a
 // release is active, because realpath dereferences `current`. The check is on
@@ -376,7 +376,7 @@ export async function installService(opts?: {
   scriptPath?: string;
   extraEnv?: Record<string, string>;
   // Seam so tests can drive the real plist-writing logic without letting
-  // `launchctl bootout ing.scout.agent` reach the founder's running job.
+  // `launchctl bootout ing.scout.agent` reach the user's running job.
   // Production callers leave it unset.
   bootstrap?: BootstrapFn;
 }): Promise<InstallResult> {
@@ -412,7 +412,7 @@ export async function installService(opts?: {
 
   // Copy the prior plist BEFORE the first byte is written. This is the one
   // non-atomic step in a system whose entire selling point is atomicity, and
-  // it runs at the moment of maximum risk on the founder's only instance.
+  // it runs at the moment of maximum risk on the user's only instance.
   const priorXml = await fs.readFile(plist, "utf8").catch(() => null);
   if (priorXml !== null) {
     await atomicWriteFile(backupPlistPath(home), priorXml, 0o644);

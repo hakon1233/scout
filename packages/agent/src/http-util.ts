@@ -1,4 +1,4 @@
-// Shared HTTP plumbing for the loopback server (PER-274 / H2 decomposition).
+// Shared HTTP plumbing for the loopback server.
 // Everything request-shaped that more than one route needs lives here — CORS
 // origin policy, JSON responses, and the size-guarded body reader — so no route
 // module can quietly re-implement (and drift on) limits or origin handling.
@@ -161,13 +161,13 @@ async function readBody(
     total += buf.length;
     if (total > maxBytes) {
       // Stop buffering and tear down the connection so we never hold the whole
-      // oversized payload in memory. CAVEAT (AIR-640): req.destroy() also kills
-      // the shared socket, so on the streaming path (chunked / absent /
+      // oversized payload in memory. CAVEAT: req.destroy() also kills the
+      // shared socket, so on the streaming path (chunked / absent /
       // under-declared content-length) the caller's 413 can't reach the client —
-      // it gets an ECONNRESET instead. Memory protection is intact; the
-      // response-correctness fix is tracked in AIR-640. An accurately-declared
-      // oversized body never reaches here: parseJsonBody fast-rejects it with a
-      // clean 413 (socket intact) before readBody runs.
+      // it gets an ECONNRESET instead. Memory protection is intact; the lost
+      // 413 is a known gap. An accurately-declared oversized body never reaches
+      // here: parseJsonBody fast-rejects it with a clean 413 (socket intact)
+      // before readBody runs.
       req.destroy();
       throw new BodyTooLargeError();
     }
@@ -182,8 +182,8 @@ export type JsonBodyParse<T> =
 
 // Read, size-guard, and JSON-parse a request body in one step. Consolidates the
 // content-length pre-reject + readBody + BodyTooLargeError + JSON.parse(body ||
-// "{}") dance that every mutating /v0 route had copy-pasted verbatim (7 copies
-// across PER-160…PER-235, a classic drift hazard). The content-length
+// "{}") dance that every mutating /v0 route had copy-pasted verbatim (7 copies,
+// a classic drift hazard). The content-length
 // fast-reject is now applied uniformly — readBody already enforces the cap, so
 // adding it to the routes that lacked it only rejects an oversized declared body
 // a little sooner.
