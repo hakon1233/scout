@@ -1,4 +1,7 @@
 import test from "node:test";
+import { EventEmitter } from "node:events";
+import { Writable } from "node:stream";
+import type { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -213,4 +216,74 @@ test("the weekly digest of a feature-complete brief matches the recorded markdow
     weekly.summary_md,
     "# Weekly brief\n\n## Top stories this week\n- `2026-09-30` — **OpenAI** ships a new [agents SDK](https://example.com/inline) for tools.\n  [example.com — Agents SDK released](https://example.com/agents?utm_source=x)\n  ![source image](https://cdn.example.com/img%20(13).png)\n  > Lead paragraph about the SDK.\n  >\n  > Second paragraph with a [body link](https://example.com/body-only).\n  _From AI agents_\n\n- `undated` — An undated item.\n  [other.org — Undated piece](https://other.org/undated/)\n  _From AI agents_\n\n* `2026-09-28` — Star bullet with two sources.\n  [a.com — First](https://a.com/1) and [b.com — Second](https://b.com/2)\n  _From AI agents_\n\n- `2026-09-29` – en dash story.\n  [c.org — Repeat heading](https://c.org/x)\n  _From Climate tech_",
   );
+});
+
+test("POST /v0/weekly-brief answers 409 while a run is in flight and leaves its slot alone", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-weekly-"));
+  const stateFile = path.join(tmp, "state.json");
+  const token = newPairingToken();
+  await saveState(
+    { pairing_token: token, interests: [{ id: "int_ai", topic: "AI" }] },
+    stateFile,
+  );
+
+  // A research child that answers only when released.
+  let respond = () => {};
+  let markSpawned = () => {};
+  const spawned = new Promise<void>((r) => (markSpawned = r));
+  const spawnFn = (() => {
+    const child = new EventEmitter() as EventEmitter & {
+      stdin: Writable;
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      pid?: number;
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = new Writable({ write: (_c, _e, cb) => cb() });
+    respond = () => {
+      child.stdout.emit(
+        "data",
+        Buffer.from(
+          "## AI\n- `2026-06-15` — A story.\n  [a.com — A](https://a.com/a)\n",
+        ),
+      );
+      child.emit("close", 0);
+    };
+    markSpawned();
+    return child;
+  }) as unknown as typeof spawn;
+  let synthesized = () => {};
+  const done = new Promise<void>((r) => (synthesized = r));
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn,
+    onSynthesisDone: () => synthesized(),
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const run = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ interests: ["AI"] }),
+    });
+    assert.equal(run.status, 202);
+    const { brief_id } = (await run.json()) as { brief_id: string };
+
+    const weekly = await fetch(`http://127.0.0.1:${port}/v0/weekly-brief`, {
+      method: "POST",
+      headers: auth,
+    });
+    assert.equal(weekly.status, 409);
+    const slot = (await loadState(stateFile)).last_brief;
+    assert.equal(slot?.id, brief_id);
+    assert.equal(slot?.status, "pending");
+  } finally {
+    await spawned;
+    respond();
+    await done;
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
 });

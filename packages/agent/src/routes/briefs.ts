@@ -2,6 +2,7 @@
 // (PER-274 split; behavior unchanged).
 
 import { json } from "../http-util.js";
+import { isRunInFlight } from "../runner.js";
 import { createAndPersistWeeklyBrief } from "../weekly.js";
 import type { AuthedRequestContext, ServerContext } from "./types.js";
 
@@ -45,6 +46,11 @@ export async function handlePostWeeklyBrief(
   { res, cors }: AuthedRequestContext,
   sc: ServerContext,
 ): Promise<void> {
+  // The weekly brief takes the same slot a run reports into, so it waits for
+  // the run, like a second Run now does.
+  if (isRunInFlight()) {
+    return json(res, 409, { error: "brief in progress" }, cors);
+  }
   const brief = await createAndPersistWeeklyBrief(sc.stateFile);
   json(res, 201, { brief }, cors);
 }
