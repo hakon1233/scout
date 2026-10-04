@@ -317,7 +317,8 @@ export async function verifyCompanionToken(
 ): Promise<"ok" | "rejected" | "unreachable"> {
   try {
     const res = await companionFetch(PATHS.schedule, { token });
-    return res.status === 401 ? "rejected" : "ok";
+    if (res.ok) return "ok";
+    return res.status === 401 ? "rejected" : "unreachable";
   } catch {
     return "unreachable";
   }

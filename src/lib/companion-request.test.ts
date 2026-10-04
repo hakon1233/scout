@@ -101,6 +101,9 @@ test("a token check says whether the companion accepts the token", async () => {
   );
   assert.equal(await verifyCompanionToken("good"), "ok");
   assert.equal(await verifyCompanionToken("bad"), "rejected");
+  serve(() => new Response(null, { status: 403 }));
+  // A refusal other than 401 says nothing about the token.
+  assert.equal(await verifyCompanionToken("good"), "unreachable");
   globalThis.fetch = async () => {
     throw new TypeError("fetch failed");
   };
