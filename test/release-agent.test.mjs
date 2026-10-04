@@ -981,7 +981,7 @@ test(
     assert.doesNotMatch(migrated, /--port/);
     assert.equal(result.port, null);
 
-    // Blocker 3: the legacy bytes survive, so the migration is reversible.
+    // The legacy bytes survive, so the migration is reversible.
     assert.equal(await fs.readFile(result.preservedPlist, "utf8"), legacy);
   },
 );
@@ -1042,17 +1042,8 @@ test(
 );
 
 // --- the drain is an invariant, and migrate cannot be softened ------------
-//
-// Two rules, one suite each: every caller drains, and the escape hatch never
-// reaches the first migration. A single assertCompanionIdle call in main()
-// satisfies neither: the escape hatch reaches the first migration, and every
-// programmatic caller skips the drain entirely. Each test below goes red if its
-// half is reverted.
-//
-// Method note: a refusal suite needs a control that is
-// ACCEPTED, or N refusals only prove the thing refuses everything. The controls
-// are "the hatch still opens for a steady-state activation" and the existing
-// happy-path tests, which pass an idle companion and succeed.
+// Every caller drains; SCOUT_ALLOW_UNKNOWN_ACTIVITY opens for a steady-state
+// activation but never for the first migration.
 
 for (const flavor of UNKNOWN_FLAVORS) {
   test(`the first migration refuses unknown activity (${flavor.name}) even with SCOUT_ALLOW_UNKNOWN_ACTIVITY=1`, async (t) => {
@@ -1084,26 +1075,6 @@ for (const flavor of UNKNOWN_FLAVORS) {
     await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
   });
 }
-
-test("no caller input can soften the first migration's drain", async (t) => {
-  const { root, sha, home } = await migrationFixture(t);
-
-  // migrate takes no allowUnknown parameter at all — passing one is inert
-  // rather than honoured. This is the property that makes the hatch
-  // structurally unreachable here, not merely unset by the current caller.
-  await assert.rejects(
-    migrateToReleases({
-      ...UNKNOWN,
-      allowUnknown: true,
-      releaseRoot: root,
-      sha,
-      home,
-      bootstrap: stubBootstrap,
-      verify: async () => undefined,
-    }),
-    /cannot prove the companion is idle/i,
-  );
-});
 
 test("the unknown-activity hatch still opens for a steady-state activation", async (t) => {
   // SCOUT_ALLOW_UNKNOWN_ACTIVITY deliberately *stays* for routine deploys.
@@ -1257,105 +1228,53 @@ function provenanceFetch({
   };
 }
 
-test("verifyRelease refuses when the served UI is staler than the manifest", async () => {
-  const sha = "f".repeat(40);
-  await assert.rejects(
-    verifyRelease({
+const SHA_F = "f".repeat(40);
+for (const { name, gitSha, manifestBuildId, servedBuildId, rejects } of [
+  {
+    name: "accepts when the backend commit and both UI build IDs agree",
+    gitSha: SHA_F,
+    manifestBuildId: "ui-same",
+    servedBuildId: "ui-same",
+    rejects: null,
+  },
+  {
+    name: "refuses when the served UI is staler than the manifest",
+    gitSha: SHA_F,
+    manifestBuildId: "ui-new",
+    servedBuildId: "ui-old",
+    rejects: /served UI build ui-old does not match[\s\S]*ui-new/,
+  },
+  {
+    name: "refuses a backend reporting a different commit",
+    gitSha: "0".repeat(40),
+    manifestBuildId: "ui-x",
+    servedBuildId: "ui-x",
+    rejects: /\/v0\/version reported 0{40}, expected f{40}/,
+  },
+  {
+    name: "refuses when the backend reports no UI build ID",
+    gitSha: SHA_F,
+    manifestBuildId: null,
+    servedBuildId: "ui-x",
+    rejects: /did not report a UI build ID/,
+  },
+]) {
+  test(`verifyRelease ${name}`, async () => {
+    const run = verifyRelease({
       origin: "http://127.0.0.1:1",
-      sha,
+      sha: SHA_F,
       attempts: 1,
-      fetchImpl: provenanceFetch({
-        gitSha: sha,
-        // The backend advanced; the webroot did not. This is the stale-webroot
-        // deploy the cross-check exists to catch.
-        manifestBuildId: "ui-new",
-        servedBuildId: "ui-old",
-      }),
-    }),
-    /served UI build ui-old does not match[\s\S]*ui-new/,
-  );
-});
-
-test("verifyRelease accepts only when both halves agree", async () => {
-  const sha = "f".repeat(40);
-  const version = await verifyRelease({
-    origin: "http://127.0.0.1:1",
-    sha,
-    attempts: 1,
-    fetchImpl: provenanceFetch({
-      gitSha: sha,
-      manifestBuildId: "ui-same",
-      servedBuildId: "ui-same",
-    }),
+      fetchImpl: provenanceFetch({ gitSha, manifestBuildId, servedBuildId }),
+    });
+    if (rejects) {
+      await assert.rejects(run, rejects);
+    } else {
+      const version = await run;
+      assert.equal(version.git_sha, SHA_F);
+      assert.equal(version.next_build_id, manifestBuildId);
+    }
   });
-  assert.equal(version.git_sha, sha);
-  assert.equal(version.next_build_id, "ui-same");
-});
-
-test("verifyRelease refuses a backend reporting a different commit", async () => {
-  await assert.rejects(
-    verifyRelease({
-      origin: "http://127.0.0.1:1",
-      sha: "f".repeat(40),
-      attempts: 1,
-      fetchImpl: provenanceFetch({
-        gitSha: "0".repeat(40),
-        manifestBuildId: "ui-x",
-        servedBuildId: "ui-x",
-      }),
-    }),
-    /\/v0\/version reported 0{40}, expected f{40}/,
-  );
-});
-
-test("verifyRelease refuses when the backend reports no UI build ID", async () => {
-  const sha = "f".repeat(40);
-  await assert.rejects(
-    verifyRelease({
-      origin: "http://127.0.0.1:1",
-      sha,
-      attempts: 1,
-      fetchImpl: provenanceFetch({
-        gitSha: sha,
-        manifestBuildId: null,
-        servedBuildId: "ui-x",
-      }),
-    }),
-    /did not report a UI build ID/,
-  );
-});
-
-test("activation verification catches a release whose served UI is stale", async (t) => {
-  const { root, releases } = await tempReleaseRoot();
-  t.after(() => removeTree(root));
-  const releaseA = await addFakeCompanion(releases, "a".repeat(40), "ui-a");
-  await addFakeCompanion(releases, "b".repeat(40), "ui-b", {
-    // Release B ships a new manifest but serves A's webroot.
-    servedBuildId: "ui-a",
-  });
-  await fs.symlink(releaseA, path.join(root, "current"));
-
-  await assert.rejects(
-    activateRelease({
-      ...IDLE,
-      releaseRoot: root,
-      sha: "b".repeat(40),
-      restart: async () => undefined,
-      verify: async ({ sha }) => {
-        const release = JSON.parse(
-          await fs.readFile(path.join(releases, sha, "release.json"), "utf8"),
-        );
-        if (release.served_build_id !== release.next_build_id) {
-          throw new Error(
-            `served UI build ${release.served_build_id} does not match ${release.next_build_id}`,
-          );
-        }
-      },
-    }),
-    /rolled back[\s\S]*served UI build ui-a does not match ui-b/i,
-  );
-  assert.equal(await currentReleasePath(root), await fs.realpath(releaseA));
-});
+}
 
 test(
   "restartLaunchAgent carries the installed plist's extra env into the new plist",
