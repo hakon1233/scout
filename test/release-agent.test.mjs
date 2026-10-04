@@ -708,6 +708,12 @@ test("restartLaunchAgent installs launchd against the stable current CLI path", 
   await fs.writeFile(
     path.join(currentDist, "service.js"),
     `import { promises as fs } from "node:fs";
+export async function readExistingService() {
+  return null;
+}
+export function droppedEnvKeys() {
+  return [];
+}
 export async function installService(opts) {
   await fs.writeFile(${JSON.stringify(callFile)}, JSON.stringify(opts));
   return { bootstrapped: true };
@@ -726,6 +732,7 @@ export async function installService(opts) {
     home: "/tmp/scout-home",
     port: 47899,
     scriptPath: path.join(root, "current", "dist", "cli.js"),
+    extraEnv: {},
   });
 });
 
@@ -1347,3 +1354,32 @@ test("activation verification catches a release whose served UI is stale", async
   );
   assert.equal(await currentReleasePath(root), await fs.realpath(releaseA));
 });
+
+test(
+  "restartLaunchAgent carries the installed plist's extra env into the new plist",
+  { skip: process.platform !== "darwin" && "launchd is macOS-only" },
+  async (t) => {
+    // A deploy regenerates the plist from scratch. The live job carries
+    // SCOUT_SESSION_TIMEOUT_MS=900000; dropping it would silently cut research
+    // and chat timeouts back to the 4-minute default.
+    const { root, sha, home, plist } = await migrationFixture(t);
+    await fs.symlink(
+      path.join(root, "releases", sha),
+      path.join(root, "current"),
+    );
+
+    await restartLaunchAgent({
+      releaseRoot: root,
+      home,
+      port: 47899,
+      bootstrap: stubBootstrap,
+    });
+
+    const written = await fs.readFile(plist, "utf8");
+    assert.match(written, /current\/dist\/cli\.js/);
+    assert.match(
+      written,
+      /<key>SCOUT_SESSION_TIMEOUT_MS<\/key>\s*<string>900000<\/string>/,
+    );
+  },
+);

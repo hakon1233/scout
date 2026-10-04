@@ -536,15 +536,28 @@ export async function restartLaunchAgent({
   releaseRoot,
   home = os.homedir(),
   port,
+  // Test seam only: keeps launchctl away from the real job.
+  bootstrap,
 }) {
   const currentDist = path.join(releaseRoot, "current", "dist");
   const serviceUrl = pathToFileURL(path.join(currentDist, "service.js"));
   serviceUrl.searchParams.set("activation", `${Date.now()}-${Math.random()}`);
-  const { installService } = await import(serviceUrl.href);
+  const { installService, readExistingService, droppedEnvKeys } = await import(
+    serviceUrl.href
+  );
+  // The plist is regenerated from scratch, so carry every extra variable the
+  // installed job has (e.g. SCOUT_SESSION_TIMEOUT_MS) or it is dropped silently.
+  const existing = await readExistingService(home);
+  const extraEnv = {};
+  for (const key of existing ? droppedEnvKeys(existing.environment) : []) {
+    extraEnv[key] = existing.environment[key];
+  }
   const result = await installService({
     home,
     port,
     scriptPath: path.join(currentDist, "cli.js"),
+    extraEnv,
+    bootstrap,
   });
   if (!result.bootstrapped) {
     throw new Error(result.note || "LaunchAgent did not bootstrap.");
