@@ -50,9 +50,6 @@ next-env.d.ts
 # commit it, or it drifts from source (PER-113 #3)
 /public/agent/*.tgz
 
-# supabase local dev artifacts
-/supabase/.branches
-/supabase/.temp
 
 # e2e (PER-119): packed-artifact extract, hermetic HOME, screenshots/traces
 /e2e/.artifact

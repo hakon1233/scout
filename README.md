@@ -25,12 +25,9 @@ Browser (static Next.js on GitHub Pages)
    │
    │  shells out to the reader's own Claude Code CLI
    ▼
-claude CLI ── authenticates from its own keychain
-   ├── ranking       (Haiku 4.5)
-   ├── synthesis     (Opus 4.7)
-   └── web research  (the CLI's built-in WebSearch / WebFetch)
-
-Supabase ── Postgres + Auth for interests and saved briefs, protected by RLS
+claude CLI ── authenticates from its own keychain, uses its default model
+   └── one research + synthesis session per interest,
+       limited to the built-in WebSearch / WebFetch tools
 ```
 
 The consequences are the point:
@@ -38,7 +35,8 @@ The consequences are the point:
 - **No inference bill and no key custody.** Each reader brings their own CLI auth, so
   the hosted part stays a static site with zero running cost.
 - **Article content never reaches a server I control.** Research and synthesis happen
-  on the reader's machine; only their interests and saved briefs go to Supabase.
+  on the reader's machine, and interests and briefs are stored there too
+  (`~/.config/scout`).
 - **The trust boundary moves to the loopback port**, which becomes the thing worth
   securing. `packages/agent` pins the origin, requires a pairing token, and is covered
   by tests for origin-spoofing (including suffix attacks such as
@@ -53,7 +51,6 @@ consumer convenience for zero marginal cost and strong data locality.
 |------|------------------|
 | `src/` | Next.js App Router UI, static-exported |
 | `packages/agent/` | The loopback companion — its own package, separately versioned |
-| `supabase/` | Schema and RLS policies |
 | `e2e/` | Playwright end-to-end suite |
 
 ## Running it
@@ -63,7 +60,6 @@ consumer convenience for zero marginal cost and strong data locality.
 ```bash
 corepack enable              # use the pinned pnpm version
 pnpm install                 # non-interactive; approved native builds run automatically
-cp .env.example .env.local   # fill in Supabase keys
 pnpm dev
 ```
 
@@ -96,9 +92,9 @@ quota and no network. CI runs it on every push and pull request.
 
 ## Environment variables
 
-See `.env.example`. The client needs only `NEXT_PUBLIC_SUPABASE_URL` and
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`. Anthropic and web-search credentials are **not**
-required anywhere in this repository.
+The web app needs none. The companion reads a few optional overrides, listed in
+`.env.example`. Anthropic and web-search credentials are **not** required anywhere
+in this repository.
 
 ## Deployment
 
