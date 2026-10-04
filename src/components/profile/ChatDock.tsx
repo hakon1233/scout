@@ -282,14 +282,18 @@ export function ChatDock({
                   {!isStreaming && (
                     <div className="mt-1.5 flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/msg:opacity-100">
                       <CopyMessage text={m.text} />
-                      <button
-                        type="button"
-                        onClick={() => onRetry(m.id)}
-                        disabled={sending}
-                        className="rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] text-muted transition-colors hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-40"
-                      >
-                        Retry
-                      </button>
+                      {/* Only a failed turn can be re-run: one that changed
+                          something would apply its changes twice. */}
+                      {m.failed && (
+                        <button
+                          type="button"
+                          onClick={() => onRetry(m.id)}
+                          disabled={sending}
+                          className="rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] text-muted transition-colors hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-40"
+                        >
+                          Retry
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

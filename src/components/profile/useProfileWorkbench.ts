@@ -427,7 +427,19 @@ export function useProfileWorkbench() {
           // to false): a stop-then-immediately-send would otherwise let the just-
           // aborted request's rejection surface a spurious error.
           if (controller.signal.aborted || abortedRef.current) return;
-          setError(e instanceof Error ? e.message : "Something went wrong.");
+          // The same failed reply a reload shows, with its own Retry.
+          const reason =
+            e instanceof Error ? e.message : "something went wrong.";
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: nextMsgId(),
+              role: "scout",
+              text: `I couldn't finish that turn: ${reason}`,
+              ts: new Date().toISOString(),
+              failed: true,
+            },
+          ]);
         } finally {
           clearAbortable(controller);
           // Only THIS dispatch may clear `sending` — and only if it wasn't
