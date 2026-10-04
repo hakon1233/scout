@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-283 — Settings → Theme toggle (Light / Dark / System), driven headless.
 //
@@ -12,7 +13,6 @@ import { expect, test, type Page } from "@playwright/test";
 // <html> before React mounts, or (b) that "System" actually tracks the OS
 // preference live. Fully offline: no companion calls, no network, no keys.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 async function blockNonLoopback(page: Page) {

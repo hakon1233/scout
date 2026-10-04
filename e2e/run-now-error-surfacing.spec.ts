@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-679 (Browser QA pass) — `classifyError` (src/lib/errors.ts) and
 // `ErrorBanner` (src/components/ErrorBanner.tsx) exist specifically to tell a
@@ -30,7 +31,6 @@ import { expect, test, type Page } from "@playwright/test";
 // playwright.config's webServer) and reachable, but the one POST under test is
 // intercepted so no `claude` shell-out and no real synthesis run happens.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 async function seedPairedSession(page: Page) {

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 // The legacy `/app/chat` route (PER-228 follow-up) is a "Chat moved" stub:

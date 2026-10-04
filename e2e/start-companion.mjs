@@ -1,6 +1,6 @@
 // Playwright webServer entrypoint: build the packed @scout/agent artifact, pair
 // it in a hermetic HOME, and run the loopback companion serving the Scout UI
-// from its own origin (http://127.0.0.1:47821/app/). Everything here is offline
+// from its own origin (http://127.0.0.1:$SCOUT_E2E_PORT/app/). Everything here is offline
 // and deterministic:
 //
 //   - The `claude` shell-out is redirected to e2e/fixtures/stub-claude.mjs via
@@ -20,7 +20,14 @@ import { fileURLToPath } from "node:url";
 import { buildArtifact } from "./build-artifact.mjs";
 
 const E2E_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
+// Required, and never 47821 (the default companion port, where a real
+// companion may be serving). playwright.config.ts passes it in.
+const PORT = process.env.SCOUT_E2E_PORT;
+if (!PORT || PORT === "47821") {
+  throw new Error(
+    "Set SCOUT_E2E_PORT to a free port other than 47821, e.g. SCOUT_E2E_PORT=47899",
+  );
+}
 const STUB_CLAUDE = path.join(E2E_DIR, "fixtures", "stub-claude.mjs");
 
 const { cliEntry } = buildArtifact();

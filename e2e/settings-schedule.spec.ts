@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // Settings → "Scheduled briefs" (PER-152) end-to-end against the REAL packed
 // companion. The committed suite already proves same-origin auto-adopt for the
@@ -17,7 +18,6 @@ import { expect, test } from "@playwright/test";
 // Offline/deterministic: served same-origin from the loopback companion the
 // webServer boots; no Anthropic/Exa key, no network, no Apify.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 // Same belt-and-suspenders offline guard the rest of the suite uses: abort any

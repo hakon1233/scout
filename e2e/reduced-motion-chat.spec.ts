@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 // AIR-512: the "Scroll to latest" pill scrolls the transcript from JavaScript

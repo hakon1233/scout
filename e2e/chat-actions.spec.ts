@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
 // The chat action-card state machine (PER-228 chunk 5 / PER-230 / PER-235),
 // driven end-to-end against the REAL companion /v0/chat + confirm routes — not a
@@ -19,7 +20,6 @@ import { expect, test, type Page } from "@playwright/test";
 //
 // Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const TOPIC = "Rust async runtimes";
 

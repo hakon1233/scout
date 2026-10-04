@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-399: the main-feed single-story flow (PER-222/223) — the app's highest-
 // traffic interaction and, until now, the one with no e2e coverage. Opening a
@@ -10,7 +11,6 @@ import { expect, test } from "@playwright/test";
 // brief is seeded into localStorage (scout.lastBrief.v1) so no companion run and
 // no paid scrape is involved.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 const SETTINGS_KEY = "scout.settings.v1";

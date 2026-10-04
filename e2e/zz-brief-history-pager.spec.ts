@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
 // The "previous briefs" pager (src/components/BriefHistory.tsx, PER-219 AC6)
 // pages the companion's rolling history 3-at-a-time via GET
@@ -33,7 +34,6 @@ import { expect, test, type Page } from "@playwright/test";
 // (never a hardcoded absolute count), so it holds regardless of what ran
 // before it.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 async function blockNonLoopback(page: Page) {

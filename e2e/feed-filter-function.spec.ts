@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-217 (/qa-live) — functional coverage for the PER-241 feed filter.
 //
@@ -25,7 +26,6 @@ import { expect, test } from "@playwright/test";
 // unchecked parse; a missing `markdown` + a bogus `status: "ok"` made
 // loadLastBrief() start returning null, so the feed rendered no cards at all.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 function rawBrief(

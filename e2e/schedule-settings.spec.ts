@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // QA-live (AIR-160): browser coverage for the Settings → "Scheduled briefs"
 // flow (PER-152). This was the last key user flow with a real backend write
@@ -18,7 +19,6 @@ import { expect, test } from "@playwright/test";
 // sends INVALID writes (rejected before any mutation) so neither test leaks
 // schedule state into the other regardless of order.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 async function blockNonLoopback(page: import("@playwright/test").Page) {

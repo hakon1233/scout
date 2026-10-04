@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // Unpaired first-run walkthrough on /app/connect/ (State B) — the public,
 // github.io-style entry point a brand-new user hits before any companion is
@@ -21,7 +22,6 @@ import { expect, test } from "@playwright/test";
 // All offline: we force the unpaired state by 404-ing the companion's /healthz
 // and /v0/config probes, exactly like navigation-history's unpaired test.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const TARBALL_PATH = "/agent/scout-agent-0.3.0.tgz";
 const TOKEN_KEY = "scout.companion.token";
@@ -47,16 +47,22 @@ async function blockNonLoopback(page: import("@playwright/test").Page) {
 // auto-adopted and the page settles on State B instead of redirecting to /app/.
 async function gotoUnpairedConnect(page: import("@playwright/test").Page) {
   await blockNonLoopback(page);
+  // The serving origin's own /healthz too: the e2e port is usually not in the
+  // sweep, and a live same-origin /healthz would mark the page as paired.
+  const healthOrigins = [ORIGIN];
   for (const port of COMPANION_PORT_SWEEP) {
     for (const host of ["127.0.0.1", "localhost"]) {
-      await page.route(`http://${host}:${port}/healthz`, (route) =>
-        route.fulfill({
-          status: 404,
-          contentType: "application/json",
-          body: JSON.stringify({ ok: false }),
-        }),
-      );
+      healthOrigins.push(`http://${host}:${port}`);
     }
+  }
+  for (const origin of healthOrigins) {
+    await page.route(`${origin}/healthz`, (route) =>
+      route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false }),
+      }),
+    );
   }
   await page.route(`${ORIGIN}/v0/config`, (route) =>
     route.fulfill({

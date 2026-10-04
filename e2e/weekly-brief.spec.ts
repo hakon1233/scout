@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-267 — headless E2E for the "Weekly brief" profile-menu flow (POST
 // /v0/weekly-brief). The weekly brief is assembled ENTIRELY from the
@@ -29,7 +30,6 @@ import { expect, test } from "@playwright/test";
 // (SCOUT_CLAUDE_BIN); the weekly assembly is pure history aggregation; and every
 // non-loopback request is blocked below. No Anthropic/Exa key, no quota, no net.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 // Belt-and-suspenders offline guard (mirrors zero-prompt.spec): abort any

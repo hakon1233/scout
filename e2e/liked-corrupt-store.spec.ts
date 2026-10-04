@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // CAR-111 regression: the Liked feed must survive a CORRUPTED likes store in
 // localStorage by degrading to the empty state, never crashing the render.
@@ -18,7 +19,6 @@ import { expect, test } from "@playwright/test";
 //
 // Mirrors liked-feed.spec.ts: blocks non-loopback, seeds via addInitScript.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 const LIKES_KEY = "scout.likes.v1";

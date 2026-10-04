@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-414: the like/save ROUND-TRIP from the main feed — the genuine user
 // journey that, until now, had no e2e coverage. liked-feed.spec.ts seeds the
@@ -14,7 +15,6 @@ import { expect, test } from "@playwright/test";
 // no companion run and NO paid scrape is involved. The likes store is NOT
 // seeded for the round-trip — the UI click is what must write it.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 const SETTINGS_KEY = "scout.settings.v1";

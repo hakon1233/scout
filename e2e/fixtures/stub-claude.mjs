@@ -34,9 +34,9 @@ process.stdin.on("data", (chunk) => {
 // actually loads under the E2E offline guard (which aborts every non-loopback
 // request). The companion serves /icon-192.png from its static webroot, so the
 // `![source image](…)` line below exercises the real image parse → render path
-// (PER-211) without a network dependency. Port mirrors playwright.config's
-// SCOUT_E2E_PORT default; the stub inherits the companion's env.
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
+// without a network dependency. The stub inherits SCOUT_E2E_PORT from the
+// companion's env (start-companion.mjs requires it).
+const PORT = process.env.SCOUT_E2E_PORT;
 const SOURCE_IMAGE = `http://127.0.0.1:${PORT}/icon-192.png`;
 
 // ── Chat branch (PER-172 / PER-228 / PER-230 / PER-235) ────────────────────

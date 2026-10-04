@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
+import { PORT } from "./port";
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 // Headless E2E for the zero-prompt first-run core loop (PER-119). The webServer
@@ -33,12 +33,14 @@ export default defineConfig({
     // cwd defaults to this config's directory (e2e/), so the path is relative
     // to it. start-companion.mjs derives the repo root from its own location.
     command: "node start-companion.mjs",
+    // start-companion.mjs and the stub `claude` read the port from here.
+    env: { ...process.env, SCOUT_E2E_PORT: PORT },
     url: `${BASE_URL}/healthz`,
     // First run builds the Next.js static export + compiles + packs the tarball,
     // which is slow on a cold cache — give it room.
     timeout: 240_000,
     // Never reuse an already-listening server: a globally-installed
-    // `scout-agent` (or a prior dev instance) squatting on 47821 would be
+    // `scout-agent` (or a prior dev instance) squatting on the port would be
     // reused instead of OUR freshly-packed, stub-wired artifact — the test
     // would then silently exercise the wrong binary with real `claude` and no
     // stub. Always boot our own; fail loudly if the port is occupied.

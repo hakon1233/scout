@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
 // The Undo affordance on an auto-applied CREATE card, driven end-to-end against
 // the REAL companion /v0/chat + confirm routes (PER-139 no-dead-control / PER-228
@@ -21,7 +22,6 @@ import { expect, test, type Page } from "@playwright/test";
 // confirm-gated delete op keyed off the first snapshot id — no network, no
 // Anthropic/Exa key, no quota.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const TOPIC = "GPU kernel scheduling";
 

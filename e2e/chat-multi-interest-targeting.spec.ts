@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-691: every prior confirm-gated (delete/rewrite) spec has only ever had
 // ONE interest alive at a time, so they all incidentally target "the first
@@ -15,7 +16,6 @@ import { expect, test, type Page } from "@playwright/test";
 //
 // Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 async function sendMessage(page: Page, text: string) {

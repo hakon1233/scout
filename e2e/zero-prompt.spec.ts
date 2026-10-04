@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // PER-119 — headless E2E that boots the BUILT/packed @scout/agent artifact and
 // proves the zero-prompt first-run core loop end-to-end, deterministically and
@@ -18,7 +19,6 @@ import { expect, test } from "@playwright/test";
 // every non-loopback request is blocked below, so the suite needs no real
 // Anthropic/Exa key, no quota, and no network.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 // Belt-and-suspenders offline guard: abort any request that isn't to the

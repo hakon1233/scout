@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-743 (Bug hunt & fix pass): pressing "Run now" WHILE a single-story detail
 // is open must still surface the run's progress panel + skeleton.
@@ -18,7 +19,6 @@ import { expect, test, type Page } from "@playwright/test";
 // synthesis runs — neither the real `claude` nor the e2e stub, and no paid
 // scrape is reachable.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 const SETTINGS = {

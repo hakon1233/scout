@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // PER-249: the like/save feature and its dedicated Liked feed. Mirrors
 // feed-filter-theme.spec.ts: blocks non-loopback, seeds localStorage via
@@ -6,7 +7,6 @@ import { expect, test } from "@playwright/test";
 // mode) alongside the behavioural acceptance criteria — persistence across
 // reload, the top-bar entry point, unlike-in-place, and the empty state.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 const LIKES_KEY = "scout.likes.v1";

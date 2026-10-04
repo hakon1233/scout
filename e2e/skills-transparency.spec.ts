@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 // Block any non-loopback request so the suite stays fully offline (matches the

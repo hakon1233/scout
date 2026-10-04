@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PORT } from "./port";
 
 // The chat Retry affordance after a genuinely FAILED turn (AIR-528, gap flagged
 // after AIR-462), driven end-to-end against the REAL companion /v0/chat route —
@@ -34,7 +35,6 @@ import { expect, test, type Page } from "@playwright/test";
 //
 // Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const TOPIC = "Baltic offshore wind permitting";
 const FAIL_MARKER = "__FAIL_CHAT_TURN__";

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-229 (Browser QA pass) — end-to-end like flow driven entirely through the
 // real UI, against a freshly GENERATED brief.
@@ -16,7 +17,6 @@ import { expect, test } from "@playwright/test";
 //   run brief → like a card → top-bar heart → story appears in Liked →
 //   survives reload → unlike in place → empty state → survives reload.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 // Belt-and-suspenders offline guard (same shape as the sibling specs): abort any

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PORT } from "./port";
 
 // AIR-254 (Browser QA pass) — the no-JS half of `/app/profile/`'s
 // progressive-enhancement redirect. profile-redirect.spec.ts already covers
@@ -14,7 +15,6 @@ import { expect, test } from "@playwright/test";
 //
 // Fully offline against the served static export; no companion data, no scrape.
 
-const PORT = process.env.SCOUT_E2E_PORT ?? "47821";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 async function blockNonLoopback(page: import("@playwright/test").Page) {
