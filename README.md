@@ -1,119 +1,107 @@
 # Scout
 
-A personalised news reader. Set your interests, and a set of agents fetch, rank and
-synthesise a short brief containing only the stories you care about.
+A personal news brief that researches on your own machine. You list what you follow;
+Scout runs one research session per interest through your own Claude Code CLI and
+gives you a short, dated brief with a source on every story. There is no server and no
+API key.
 
-**Live:** <https://hakon1233.github.io/scout/>
+![The Scout feed showing the example brief: dated stories grouped by topic, each with its source](docs/screenshot.png)
 
-## The idea worth stealing
+**Live UI:** <https://hakon1233.github.io/scout/> (it needs the companion below to
+show your own brief).
 
-An AI product normally means a server holding an API key and paying per token. Scout
-does not have one. There is no server-side Anthropic key anywhere in this repository,
-and no third-party search provider.
+## Try it in two minutes, offline
 
-Instead the site is a **static export** on GitHub Pages, and inference runs on the
-reader's own machine:
-
-```
-Browser (static Next.js on GitHub Pages)
-   │
-   │  fetch() to 127.0.0.1:47821, authorised by a pairing token
-   ▼
-@scout/agent — loopback companion on the reader's machine
-   │
-   │  shells out to the reader's own Claude Code CLI
-   ▼
-claude CLI ── authenticates from its own keychain, uses its default model
-   └── one research + synthesis session per interest,
-       limited to the built-in WebSearch / WebFetch tools
-```
-
-The consequences are the point:
-
-- **No inference bill and no key custody.** Each reader brings their own CLI auth, so
-  the hosted part stays a static site with zero running cost.
-- **Article content never reaches a server I control.** Research and synthesis happen
-  on the reader's machine, and interests and briefs are stored there too
-  (`~/.config/scout`).
-- **The trust boundary moves to the loopback port**, which becomes the thing worth
-  securing. `packages/agent` pins the origin, requires a pairing token, and is covered
-  by tests for origin-spoofing (including suffix attacks such as
-  `https://host.tailnet.ts.net.evil.com`) and for token handling.
-
-The cost is honest: the reader must install and run a companion process, so this trades
-consumer convenience for zero marginal cost and strong data locality.
-
-## Layout
-
-| Path | What lives there |
-|------|------------------|
-| `src/` | Next.js App Router UI, static-exported |
-| `packages/agent/` | The loopback companion — its own package, separately versioned |
-| `e2e/` | Playwright end-to-end suite |
-
-## Running it
-
-**Prerequisites:** Node 22 and pnpm 11, pinned via `packageManager` in `package.json`.
+You need Node 22 and pnpm 11 (`corepack enable` picks up the pinned version).
 
 ```bash
-corepack enable              # use the pinned pnpm version
-pnpm install                 # non-interactive; approved native builds run automatically
-pnpm dev
+pnpm install
+pnpm demo
 ```
 
-In a second terminal, build and run the companion:
-
-```bash
-pnpm -F @scout/agent build
-node packages/agent/dist/cli.js pair   # prints a pairing token
-node packages/agent/dist/cli.js run    # serves on 127.0.0.1:47821
-```
-
-Open <http://localhost:3000>, go to **Connect**, paste the pairing token, and pick
+The first run builds the companion, which takes a minute or two. Then open
+<http://127.0.0.1:47899/app/>. This runs the real companion with a stub in place of
+`claude`, in a throwaway home directory, so it needs no account and makes no network
+calls. Add interests, run a brief, open stories, and ask the chat to change your
 interests.
 
-> **pnpm 11 notes:** dependency `overrides` live in `pnpm-workspace.yaml`, not
-> `package.json`. Native dependencies that run install scripts (`esbuild`, `sharp`,
-> `unrs-resolver`) are pre-approved via `allowBuilds`, so install never stops
-> with `ERR_PNPM_IGNORED_BUILDS`. Use `pnpm install --frozen-lockfile` for an install that matches the lockfile.
+## Run it for real
 
-## Tests
+Install and sign in to [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
+then:
 
 ```bash
-pnpm check       # typecheck, lint, tests and build — run before a commit
-pnpm test        # 234 tests — hermetic @scout/agent unit + /v0 API contract suite
-pnpm test:e2e    # Playwright
-pnpm typecheck   # tsc --noEmit
+pnpm build:agent                       # builds the companion with the web app inside
+node packages/agent/dist/cli.js pair   # creates a local pairing token
+node packages/agent/dist/cli.js run    # serves Scout on http://127.0.0.1:47821
 ```
 
-The unit suite mocks the `claude` shell-out, so it runs fully offline with no model
-quota and no network. Checks run locally with `pnpm check`; there is no hosted CI.
+Open <http://127.0.0.1:47821/app/>. The page and the companion share one origin, so the
+browser picks up the pairing token by itself; nothing to paste. Your interests, briefs and chat live in
+`~/.config/scout/`. On macOS, `node packages/agent/dist/cli.js install-service` keeps
+the companion running so the daily brief fires after a reboot.
 
-## Environment variables
+## How it works
 
-The web app needs none. The companion reads a few optional overrides, listed in
-`.env.example`. Anthropic and web-search credentials are **not** required anywhere
-in this repository.
+```
+browser ──HTTP + pairing token──▶ companion on 127.0.0.1 ──▶ your claude CLI
+                                  (packages/agent)              WebSearch, WebFetch
+```
 
-## Deployment
+- **The web app** (`src/`) is a static Next.js export. It is served from GitHub Pages or
+  from the companion itself, and it talks only to the companion.
+- **The companion** (`packages/agent/`) is a small Node server with no runtime
+  dependencies. It stores your interests and briefs. For each run it starts a `claude`
+  session per interest, with web search and fetch only. It then assembles a brief,
+  drops stale stories and records which topics came back empty.
+- **The chat** edits your interests and the short "intent doc" each one carries. The
+  model only proposes changes as JSON. The companion checks them, and holds deletes
+  and full rewrites until you confirm.
 
-The hosted UI is the static export on GitHub Pages, built by
-`.github/workflows/deploy.yml` (run by hand; nothing deploys on push). `next.config.ts` derives `basePath` from
-`GITHUB_REPOSITORY` at build time, so the site works under `/<repo>/` without
-hardcoding it.
+The trust boundary is the loopback port. The companion checks the Host header and the
+origin, needs a pairing token on every data route, and starts `claude` with a fixed tool
+list. See [SECURITY.md](SECURITY.md).
 
-The companion deploys separately to a single host. Releases are read-only and named by
-their full Git SHA, staged under `~/Library/Application Support/Scout/agent/releases/`.
-`pnpm deploy:agent` refuses dirty or unpushed source, waits until both brief and chat
-activity are idle, switches the `current` symlink atomically, and restores the previous
-release if readiness or provenance checks fail. `GET /v0/version` is the single answer
-to "what is live?" — `git_sha` covers the whole immutable artifact, and `next_build_id`
-must match the served `/scout-build.json` marker.
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (code map and invariants) and
+[docs/adr/](docs/adr/) (three decisions worth recording). Domain terms are defined in
+[CONTEXT.md](CONTEXT.md).
 
-## Contributing
+## Tech choices
 
-See [`AGENTS.md`](AGENTS.md) for the contributor guide — Next.js version caveats and the
-test conventions to follow before touching `packages/agent/src/*` or `/v0/*` behaviour.
+| Choice                                                     | Why                                                                                                                                                      |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The reader's own `claude` CLI, not an API key              | No inference bill and no key custody; articles and interests never reach a server we run ([ADR 0001](docs/adr/0001-inference-on-the-readers-machine.md)) |
+| Next.js static export                                      | One build serves GitHub Pages and the companion's own origin ([ADR 0002](docs/adr/0002-one-static-export-two-origins.md))                                |
+| `node:http` and zero runtime dependencies in the companion | It runs on the reader's machine with their CLI's sign-in; less code to trust                                                                             |
+| JSON and markdown files under `~/.config/scout`            | One reader, one machine; the files stay readable and easy to delete. Writes are atomic and go through one queue                                          |
+| `node:test` + Playwright, with a stub `claude`             | Every test runs offline with no model quota                                                                                                              |
+
+## Checks
+
+```bash
+pnpm check       # typecheck, lint, unit + contract tests, build
+pnpm test:e2e    # Playwright against a companion built from source (stub claude)
+pnpm eval        # score recorded model outputs against the prompts' rules
+```
+
+Checks run locally; there is no hosted CI. `pnpm test` runs about 330 unit and HTTP
+contract tests; the e2e suite has 79 specs.
+
+## Status
+
+A personal project, in use by its author. Built and tested on macOS (the launchd
+service is macOS-only; the rest is plain Node). The companion is released with
+`scripts/release-agent.mjs` as immutable, commit-named builds
+([ADR 0003](docs/adr/0003-immutable-companion-releases.md)).
+
+## How this was built
+
+Scout was built by one developer working with AI coding agents (Claude Code). The
+developer chose the architecture: no server, research on the reader's machine,
+loopback trust. They also made the product decisions, and they reviewed and used
+the product. Agents wrote most of the code and tests against those decisions.
+The preparation for publication was also agent-driven: security review, module
+restructuring, test cleanup and these docs, each change approved by the developer.
 
 ## Licence
 
