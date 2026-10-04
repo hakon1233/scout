@@ -1,13 +1,11 @@
 name: Test & Deploy to GitHub Pages
 
-# Every push to main runs the full guard suite FIRST; the Pages deploy only
-# happens if it's green (PER-120). A red unit/contract (PER-118), E2E (PER-119),
-# or tarball-vs-dist drift (PER-111/PER-120) check blocks the deploy outright —
-# this is what ends the manual-dogfood era: tests now gate what ships.
+# Manual only: GitHub Actions is turned off for this repository and checks run
+# locally (`pnpm check`). Kept as the record of how the hosted UI is built:
+# the full test suite runs first, and the Pages deploy only happens if it is
+# green.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
