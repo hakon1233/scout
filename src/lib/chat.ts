@@ -44,10 +44,10 @@ export async function kickChatTurn(
   return body.turn_id;
 }
 
-// Poll GET /v0/chat until the latest turn flips off `pending`, then resolve with
-// the ready turn (reply + the change set it actually applied). A `ready` turn's
-// changes are already persisted, so the caller can treat them as confirmed
-// writes. Throws on a failed turn or if the deadline passes.
+// Poll GET /v0/chat until the turn flips off `pending`, then resolve with it:
+// `ready` (its changes are already persisted, so the caller can treat them as
+// confirmed writes) or `failed` (the companion ran it and gave up; nothing was
+// applied). Throws when the poll itself gives up: the turn may still finish.
 export async function pollChatTurn(
   turnId: string,
   token: string,
@@ -73,16 +73,12 @@ export async function pollChatTurn(
       );
       if (!res.ok) continue;
       const json = (await res.json()) as { turns?: ChatTurn[] };
-      // The slot holds one turn; match by id, else take whatever's latest.
-      turn = json.turns?.find((t) => t.id === turnId) ?? json.turns?.[0];
+      turn = json.turns?.find((t) => t.id === turnId);
     } catch {
       continue; // transient poll error — keep waiting until the deadline
     }
     if (!turn) continue;
-    if (turn.status === "ready") return turn;
-    if (turn.status === "failed") {
-      throw new Error(turn.error_msg ?? "Scout couldn't process that message.");
-    }
+    if (turn.status !== "pending") return turn;
   }
   throw new Error("Timed out waiting for Scout to reply.");
 }

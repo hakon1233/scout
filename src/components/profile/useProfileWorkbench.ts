@@ -377,6 +377,21 @@ export function useProfileWorkbench() {
               if (stopRequestedRef.current) void stopChatTurn(token, id);
             },
           });
+          if (turn.status === "failed") {
+            // The companion ran the turn and applied nothing: the same failed
+            // reply a reload shows, with its own Retry.
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: nextMsgId(),
+                role: "scout",
+                text: `I couldn't finish that turn: ${turn.error_msg ?? "something went wrong."}`,
+                ts: turn.created_at,
+                failed: true,
+              },
+            ]);
+            return;
+          }
           const replyAt = new Date().toISOString();
           const changes =
             turn.changes && turn.changes.length > 0 ? turn.changes : undefined;
@@ -427,19 +442,9 @@ export function useProfileWorkbench() {
           // to false): a stop-then-immediately-send would otherwise let the just-
           // aborted request's rejection surface a spurious error.
           if (controller.signal.aborted || abortedRef.current) return;
-          // The same failed reply a reload shows, with its own Retry.
-          const reason =
-            e instanceof Error ? e.message : "something went wrong.";
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: nextMsgId(),
-              role: "scout",
-              text: `I couldn't finish that turn: ${reason}`,
-              ts: new Date().toISOString(),
-              failed: true,
-            },
-          ]);
+          // Not a failed turn: the request or the poll failed, and the turn
+          // may still finish on the companion. No Retry, so it can't run twice.
+          setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
           clearAbortable(controller);
           // Only THIS dispatch may clear `sending` — and only if it wasn't

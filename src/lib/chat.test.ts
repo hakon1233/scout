@@ -92,3 +92,30 @@ test("pollChatTurn passes a since= filter so the poll doesn't re-fetch the whole
     "since should be a timestamp before now",
   );
 });
+
+test("pollChatTurn hands back a turn the companion failed, unlike a poll that gives up", async () => {
+  installWindow();
+  globalThis.fetch = async (input) => {
+    if (String(input) === `${origin}/healthz`) {
+      return new Response(null, { status: 200 });
+    }
+    return Response.json({
+      turns: [
+        { ...readyTurn(), id: "turn_old" },
+        { ...readyTurn(), id: "turn_f", status: "failed", error_msg: "boom" },
+      ],
+    });
+  };
+  const turn = await pollChatTurn("turn_f", "tok", { intervalMs: 1 });
+  assert.equal(turn.id, "turn_f");
+  assert.equal(turn.status, "failed");
+
+  globalThis.fetch = async (input) =>
+    String(input) === `${origin}/healthz`
+      ? new Response(null, { status: 200 })
+      : Response.json({ turns: [] });
+  await assert.rejects(
+    pollChatTurn("turn_gone", "tok", { intervalMs: 1, timeoutMs: 20 }),
+    /Timed out/,
+  );
+});
