@@ -1,22 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// Browser coverage for the Settings → "Scheduled briefs" flow. This was the
-// last key user flow with a real backend write (PUT /v0/schedule) and no
-// headless test. It drives the live companion endpoint through the actual UI
-// controls — the enable switch and the time-of-day picker — and proves the
-// writes persist across a reload, then asserts the server-side contract (auth +
-// validation + same-origin guard) directly against /v0/schedule.
-//
-// Offline/deterministic like the rest of the suite: same-origin token
-// auto-adoption (no paste), the claude shell-out stubbed, every non-loopback
-// request blocked. The scheduler's default is { enabled: true,
-// time_of_day: "07:00" } (state.ts defaultSchedule), materialized on first read.
-//
-// State hygiene: tests share one companion process (workers:1), so the UI test
-// restores the default (on / 07:00) before it ends, and the contract test only
-// sends INVALID writes (rejected before any mutation) so neither test leaks
-// schedule state into the other regardless of order.
+// Settings → "Scheduled briefs": the enable switch and time picker write
+// through PUT /v0/schedule and persist across a reload.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
@@ -71,6 +57,9 @@ test("Settings schedule: toggle + time-of-day write through the live companion a
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await expect(time).toBeDisabled();
   await expect(page.getByText("Off", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Next run").locator("xpath=following-sibling::*[1]"),
+  ).toHaveText("—");
 
   // Persistence, not just session state: a full reload re-reads /v0/schedule and
   // the disabled state survives.
@@ -104,61 +93,4 @@ test("Settings schedule: toggle + time-of-day write through the live companion a
   // Restore the default so this test leaves no schedule drift for siblings.
   await time.fill("07:00");
   await expect(time).toHaveValue("07:00");
-});
-
-test("/v0/schedule contract: auth required, input validated, cross-origin denied", async ({
-  request,
-}) => {
-  // Same-origin GET /v0/config hands back the loopback pairing token (the same
-  // bootstrap the browser does), which authorizes the schedule endpoint.
-  const cfg = await request.get(`${ORIGIN}/v0/config`, {
-    headers: { origin: ORIGIN },
-  });
-  expect(cfg.status()).toBe(200);
-  const token = ((await cfg.json()) as { token?: string }).token ?? "";
-  expect(token.length).toBeGreaterThan(0);
-
-  // No bearer → 401 (the endpoint is not readable without the pairing token).
-  const noAuth = await request.get(`${ORIGIN}/v0/schedule`, {
-    headers: { origin: ORIGIN },
-  });
-  expect(noAuth.status()).toBe(401);
-
-  // Authed GET → 200 with the documented ScheduleView shape.
-  const ok = await request.get(`${ORIGIN}/v0/schedule`, {
-    headers: { origin: ORIGIN, authorization: `Bearer ${token}` },
-  });
-  expect(ok.status()).toBe(200);
-  const view = (await ok.json()) as Record<string, unknown>;
-  expect(typeof view.enabled).toBe("boolean");
-  expect(typeof view.time_of_day).toBe("string");
-  expect("next_run_at" in view).toBe(true);
-  expect("reboot_durable" in view).toBe(true);
-
-  // Malformed writes are rejected (400) before any mutation — these guard the
-  // documented PUT validation and keep this test non-mutating.
-  const badTime = await request.put(`${ORIGIN}/v0/schedule`, {
-    headers: { origin: ORIGIN, authorization: `Bearer ${token}` },
-    data: { time_of_day: "9am" },
-  });
-  expect(badTime.status()).toBe(400);
-
-  const badEnabled = await request.put(`${ORIGIN}/v0/schedule`, {
-    headers: { origin: ORIGIN, authorization: `Bearer ${token}` },
-    data: { enabled: "yes" },
-  });
-  expect(badEnabled.status()).toBe(400);
-
-  // Cross-origin PUT is denied by the same-origin guard (403) — a hostile web
-  // page must not be able to reprogram the local companion's schedule. The
-  // guard runs ahead of auth, so even a valid token over a foreign Origin is
-  // rejected.
-  const crossOrigin = await request.put(`${ORIGIN}/v0/schedule`, {
-    headers: {
-      origin: "http://evil.example.com",
-      authorization: `Bearer ${token}`,
-    },
-    data: { enabled: false },
-  });
-  expect(crossOrigin.status()).toBe(403);
 });

@@ -1,23 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// Headless E2E that boots the BUILT/packed @scout/agent artifact and
-// proves the zero-prompt first-run core loop end-to-end, deterministically and
-// offline:
-//
-//   1. The companion (started by playwright.config webServer) serves the app
-//      from its own loopback origin http://127.0.0.1:47821/app/.
-//   2. Loading /app/ requires NO token-paste step — the token is auto-adopted
-//      same-origin via GET /v0/config, so the "Pair companion" prompt never
-//      shows and Generate becomes enabled on its own.
-//   3. A brief renders in-app with citations and no preamble leak (the stub
-//      claude emits a leading "I have enough…" line that stripBriefPreamble
-//      must remove).
-//   4. /v0/config is same-origin-guarded: same-origin → 200, cross-origin → 403.
-//
-// Determinism/offline: the claude shell-out is stubbed (SCOUT_CLAUDE_BIN), and
-// every non-loopback request is blocked below, so the suite needs no real
-// Anthropic/Exa key, no quota, and no network.
+// First run with no token paste: the app adopts the companion's token
+// same-origin and renders a cited brief with the model's preamble stripped.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
@@ -184,23 +169,3 @@ async function expectNoHorizontalOverflow(
   );
   expect(overflow).toBeLessThanOrEqual(1);
 }
-
-test("/v0/config is same-origin guarded: 200 same-origin, 403 cross-origin", async ({
-  request,
-}) => {
-  // Same-origin (Origin header matches the loopback origin) → 200 + token.
-  const same = await request.get(`${ORIGIN}/v0/config`, {
-    headers: { origin: ORIGIN },
-  });
-  expect(same.status()).toBe(200);
-  const cfg = (await same.json()) as { token?: string };
-  expect(typeof cfg.token).toBe("string");
-  expect((cfg.token ?? "").length).toBeGreaterThan(0);
-
-  // Cross-origin (a non-loopback Origin) → 403. This is the guard that keeps a
-  // malicious web page from reading the local pairing token.
-  const cross = await request.get(`${ORIGIN}/v0/config`, {
-    headers: { origin: "http://evil.example.com" },
-  });
-  expect(cross.status()).toBe(403);
-});

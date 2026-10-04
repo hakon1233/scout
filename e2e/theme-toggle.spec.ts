@@ -1,17 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// Settings → Theme toggle (Light / Dark / System), driven headless.
-//
-// Why this matters: the theme control is the one Settings surface a user touches
-// every visit, and its contract is split across TWO code paths that must agree:
-//   1. ThemeBootstrap — a blocking <head> script that paints the stored theme at
-//      first byte (no FOUC) AND sets <html>.style.colorScheme so UA
-//      surfaces (scrollbars, the native time <input> on Settings) match.
-//   2. applyTheme (ThemeToggle.tsx) — the runtime click handler.
-// Nothing proved (a) a Dark pick survives a reload with `.dark` already on
-// <html> before React mounts, or (b) that "System" actually tracks the OS
-// preference live. Fully offline: no companion calls, no network, no keys.
+// Settings → Theme (Light / Dark / System): a pick persists and paints before
+// React mounts, and System follows the OS preference live.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
@@ -54,6 +45,8 @@ test.describe("settings · theme toggle", () => {
     await expect(
       themeGroup(page).getByRole("radio", { name: "Dark" }),
     ).toHaveAttribute("aria-checked", "true");
+    // The runtime switch keeps color-scheme in sync for UA surfaces too.
+    await expect(html).toHaveJSProperty("style.colorScheme", "dark");
 
     // Reload with waitUntil:commit so we observe the document as soon as the
     // blocking <head> bootstrap has run — BEFORE the React bundle hydrates.
@@ -92,15 +85,5 @@ test.describe("settings · theme toggle", () => {
 
     await page.emulateMedia({ colorScheme: "light" });
     await expect(html).not.toHaveClass(/dark/);
-  });
-
-  test("runtime Light→Dark switch keeps color-scheme in sync for UA surfaces", async ({
-    page,
-  }) => {
-    await page.goto(`${ORIGIN}/app/settings/`);
-    const html = page.locator("html");
-    await themeGroup(page).getByRole("radio", { name: "Dark" }).click();
-    await expect(html).toHaveClass(/dark/);
-    await expect(html).toHaveJSProperty("style.colorScheme", "dark");
   });
 });

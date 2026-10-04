@@ -1,18 +1,28 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
-// The interest workbench drill-in syncs the open doc to the URL
-// as `?id=` and restores it from the URL on mount. responsive-chat.spec.ts
-// already covers the *click* drill-in and the on-screen "← Interests" button.
-// This spec covers the two adjacent paths it does not exercise:
-//   1. arriving directly at `?id=` (URL → state hydration on first load — the
-//      shareable/refresh case), and
-//   2. the *browser* Back button (real popstate), not the on-screen control.
-// Both run fully offline against the mock seed (id=ai-policy → "AI policy &
-// regulation"); no companion data, no paid scrape.
-test.describe("interest doc deep-link + browser back", () => {
+// The interest workbench syncs the open doc to `?id=`: a deep link opens it on
+// first load, and browser Back or the on-screen Close returns to the card list.
+
+async function blockNonLoopback(page: Page) {
+  await page.route("**/*", (route) => {
+    const url = route.request().url();
+    if (
+      url.startsWith("http://127.0.0.1") ||
+      url.startsWith("http://localhost")
+    ) {
+      return route.continue();
+    }
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      return route.continue(); // data:, blob:, about: — harmless
+    }
+    return route.abort();
+  });
+}
+
+test.describe("interest doc deep-link, Back and Close", () => {
   test("deep-linking ?id= renders the scope view on first load, chat intact", async ({
     page,
   }) => {
@@ -76,5 +86,35 @@ test.describe("interest doc deep-link + browser back", () => {
 
     // Chat stays mounted across the back navigation.
     await expect(page.getByLabel("Chat with Scout")).toBeVisible();
+  });
+
+  test("deep-link into a doc, then click on-screen Close (not browser Back)", async ({
+    page,
+  }) => {
+    await blockNonLoopback(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await page.goto(`${ORIGIN}/app/interests/?mock=1&id=ai-policy`);
+    await expect(
+      page.getByRole("heading", { name: "AI policy & regulation" }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/id=ai-policy/);
+
+    await page.getByRole("button", { name: "← Interests" }).click();
+
+    // The replaceState branch cleared the id and restored the card list —
+    // the OTHER query params (here `mock=1`) survive since it edits the URL
+    // object rather than replacing the whole query string.
+    await expect(
+      page.getByRole("heading", { name: "Skills setup" }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/mock=1/);
+    await expect(page).not.toHaveURL(/id=ai-policy/);
+
+    // Because Close used replaceState (not pushState), there is no extra
+    // history entry for this page to consume — a real browser Back from here
+    // leaves the app entirely rather than "un-closing" the doc.
+    await page.goBack();
+    await expect(page).not.toHaveURL(/\/app\/interests\//);
   });
 });

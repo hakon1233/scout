@@ -1,26 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// Does a CONFIRMED rewrite get the same live Undo affordance a create does
-// (no dead controls)? chat-actions.spec proves the [Apply]/[Discard]
-// proposal card is a real control (Apply hits the deterministic confirm-rewrite
-// route and the card locks to "Applied"). chat-undo.spec proves the CREATE op's
-// Undo is live. This spec presses the gap they leave: after pressing Apply, can
-// the user still reverse the rewrite in-app?
-//
-// How it works (src/components/profile/useProfileWorkbench.ts): `dispatch()`
-// (the live-turn path) attaches BOTH `changes` and a `prev` doc snapshot to the
-// new scout message, which is what lets ChatDock render a `ChatActionCard` with
-// a real Undo button (ChatActionCard.tsx). `confirmRewrite()` receives the
-// exact same shape back from the server (confirmRewriteTurn emits `changes:
-// [{op:"update", ...}]`, packages/agent/src/chat.ts) and, via
-// `appliedChangeMessage()`, appends it as its own action card — so a confirmed
-// rewrite renders the same live Undo a create does. Without that it would only
-// feed the change through `applyChanges()` to update the rail and drop the
-// `changes`/`prev` on the floor, so no Undo would appear until a page reload
-// re-projected the same confirm turn through transcriptMessages().
-//
-// Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
+// A confirmed chat rewrite gets the same live Undo card a create does, and the
+// rewrite is durable in the interest's doc.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const TOPIC = "Fusion reactor permitting";
@@ -106,8 +88,8 @@ test("chat rewrite Apply surfaces a live Undo, same as create", async ({
 
   // ── CONFIRM THE DATA ACTUALLY CHANGED (this is not a no-op UI gap) ────────
   // Open the interest's own doc scope page and check the body now reflects the
-  // rewrite, not the original create doc — the change is real and durable, it
-  // is just unreachable through any chat Undo.
+  // rewrite, not the original create doc — the change is real and durable, so
+  // the Undo above has a real change to reverse.
   await railLink.click();
   // Scoped to the doc-body container: the chat transcript above still shows
   // the SAME text (as its diff/reply), so an unscoped locator would be

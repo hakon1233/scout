@@ -1,35 +1,22 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PORT } from "./port";
 
-// The "previous briefs" pager (src/components/BriefHistory.tsx)
-// pages the companion's rolling history 3-at-a-time via GET
-// /v0/briefs?limit=&offset= and has its own single-story isolation mode
-// (drilling into a HISTORY edition's story hides every other
-// edition and the pager footer). No existing spec drives any of this —
-// weekly-brief.spec.ts and liked-live-flow.spec.ts only ever generate ONE or
-// TWO editions in passing, never enough to exercise "Load older briefs" or
-// the isolation mode. This spec builds up 5 MORE editions (offset math
-// needs more than PAGE_SIZE=3 history items to ever show the button)
-// entirely through the real "Run now" UI control against the offline stub,
-// then drives the pager itself.
-//
-// Offline/deterministic like the rest of the suite: same-origin token
-// auto-adoption (no paste), the claude shell-out stubbed, every non-loopback
-// request blocked.
+// The "previous briefs" pager: "Load older briefs" pages the history 3 at a
+// time, and opening a history story isolates it. Briefs are built via "Run now".
 //
 // `zz-` prefix is deliberate, not cosmetic: PUT /v0/interests rejects an
 // empty list by design (min 1 interest — packages/agent/src/routes/
 // interests.ts), so once this spec posts a real interest to the shared
 // companion (workers:1 — one companion process for the whole suite) there is
 // no way to hand it back pristine for a spec that runs after. Every other
-// spec that posts real interests (liked-live-flow/weekly-brief/zero-prompt)
+// spec that posts real interests (weekly-brief/zero-prompt)
 // already relies on the same implicit ordering constraint by sorting late
 // alphabetically; a handful of earlier specs (e.g. chat-actions.spec.ts)
 // depend on an interest-free companion and would silently adopt whatever
 // this spec leaves behind otherwise. This filename sorts after all of them.
 //
 // Running last also means the companion may ALREADY hold history from
-// weekly-brief/liked-live-flow/zero-prompt by the time this test starts —
+// weekly-brief/zero-prompt by the time this test starts —
 // every assertion below is written relative to whatever's already there
 // (never a hardcoded absolute count), so it holds regardless of what ran
 // before it.

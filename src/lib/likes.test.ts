@@ -3,12 +3,8 @@ import test from "node:test";
 
 import { isLiked, likeKey, toggleLike } from "./likes";
 
-// Regression tests for the device-local likes store's write/read cache
-// coherence. The store keeps a raw-string cache so useSyncExternalStore sees a
-// referentially-stable snapshot; the invariant is that a swallowed persist
-// (Safari private mode / QuotaExceededError) must NOT undo the optimistic like
-// — safe-storage.ts promises "the in-memory cache still reflects the toggle for
-// this session; it just won't survive a reload."
+// The device-local likes store: likes persist, a swallowed persist still holds
+// for the session, and a corrupt stored value reads as an empty store.
 
 const LIKES_KEY = "scout.likes.v1";
 
@@ -137,3 +133,31 @@ test("malformed liked-story entries are ignored instead of reading as liked", ()
     restore();
   }
 });
+
+for (const { name, raw } of [
+  { name: "likes is null", raw: JSON.stringify({ version: 1, likes: null }) },
+  {
+    name: "likes is a string",
+    raw: JSON.stringify({ version: 1, likes: "oops" }),
+  },
+  { name: "the whole store is null", raw: "null" },
+  { name: "the store is not JSON", raw: "{not valid json" },
+]) {
+  test(`a corrupt store (${name}) reads as empty and the next like replaces it`, () => {
+    const { backing, restore } = installStorage({ failWrites: false });
+    const url = `https://example.com/corrupt-${encodeURIComponent(name)}`;
+    try {
+      backing.set(LIKES_KEY, raw);
+      assert.equal(isLiked(likeKey(url)), false);
+
+      assert.equal(
+        toggleLike({ url, headline: "H", source: "example.com", topic: "AI" }),
+        true,
+      );
+      const stored = JSON.parse(backing.get(LIKES_KEY) as string);
+      assert.deepEqual(Object.keys(stored.likes), [likeKey(url)]);
+    } finally {
+      restore();
+    }
+  });
+}

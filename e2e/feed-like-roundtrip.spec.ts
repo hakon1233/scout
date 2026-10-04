@@ -1,19 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// The like/save ROUND-TRIP from the main feed — the genuine user
-// journey that, until now, had no e2e coverage. liked-feed.spec.ts seeds the
-// likes store directly via addInitScript and only exercises the /app/liked
-// page in isolation; it never clicks the heart on a real feed card. This spec
-// closes that gap end-to-end: it renders the actual feed, clicks the LikeButton
-// on a story card (the real `toggleLike` write path), then proves the saved
-// story surfaces in the Liked feed, persists across a full reload, and — the
-// reverse direction — that unliking from the feed clears it again.
-//
-// Drives the real exported app served by the packed @scout/agent artifact,
-// fully offline: the brief is seeded into localStorage (scout.lastBrief.v1) so
-// no companion run and NO paid scrape is involved. The likes store is NOT
-// seeded for the round-trip — the UI click is what must write it.
+// Liking a story on the feed puts it in the Liked feed, it survives a reload,
+// and unliking from the feed card or the Liked page clears it.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
@@ -105,6 +94,36 @@ async function seedFeed(page: import("@playwright/test").Page) {
   );
 }
 
+// Seed an existing like for the lead story, ONLY on first load: init scripts
+// re-run on every navigation and reload, so an unconditional seed would
+// resurrect an unliked story and defeat the check.
+async function seedLeadLike(page: import("@playwright/test").Page) {
+  await page.addInitScript(
+    ({ key, leadKey, headline }) => {
+      if (!window.localStorage.getItem(key)) {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 1,
+            likes: {
+              [leadKey]: {
+                key: leadKey,
+                url: leadKey,
+                headline,
+                source: "example.com",
+                topic: "Energy",
+                publishedAt: "2026-06-25T08:00:00.000Z",
+                likedAt: "2026-06-25T09:30:00.000Z",
+              },
+            },
+          }),
+        );
+      }
+    },
+    { key: LIKES_KEY, leadKey: LEAD_KEY, headline: LEAD_HEADLINE },
+  );
+}
+
 // The lead story's like control, scoped to its own card so the sibling card's
 // heart can never be clicked by accident.
 function leadHeart(
@@ -179,33 +198,7 @@ test("unliking from the feed card clears it from the Liked feed", async ({
 }) => {
   await blockNonLoopback(page);
   await seedFeed(page);
-  // Seed an existing like for the lead story, ONLY on first load (init scripts
-  // re-run on every navigation incl. the post-unlike visit to /app/liked — an
-  // unconditional seed would resurrect it and defeat the check).
-  await page.addInitScript(
-    ({ key, leadKey, headline }) => {
-      if (!window.localStorage.getItem(key)) {
-        window.localStorage.setItem(
-          key,
-          JSON.stringify({
-            version: 1,
-            likes: {
-              [leadKey]: {
-                key: leadKey,
-                url: leadKey,
-                headline,
-                source: "example.com",
-                topic: "Energy",
-                publishedAt: "2026-06-25T08:00:00.000Z",
-                likedAt: "2026-06-25T09:30:00.000Z",
-              },
-            },
-          }),
-        );
-      }
-    },
-    { key: LIKES_KEY, leadKey: LEAD_KEY, headline: LEAD_HEADLINE },
-  );
+  await seedLeadLike(page);
 
   await page.goto(`${ORIGIN}/app/`);
 
@@ -233,5 +226,30 @@ test("unliking from the feed card clears it from the Liked feed", async ({
   await expect(page.getByRole("heading", { name: LEAD_HEADLINE })).toHaveCount(
     0,
   );
+  await expect(page.getByText("No liked stories yet")).toBeVisible();
+});
+
+test("unliking on the Liked page removes the story and persists across reload", async ({
+  page,
+}) => {
+  await blockNonLoopback(page);
+  await seedLeadLike(page);
+
+  await page.goto(`${ORIGIN}/app/liked/`);
+  await page.getByRole("button", { name: "Remove from liked stories" }).click();
+
+  // Card disappears and the empty state takes over, in place.
+  await expect(page.getByRole("heading", { name: LEAD_HEADLINE })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("No liked stories yet")).toBeVisible();
+
+  const likes = await page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw).likes : null;
+  }, LIKES_KEY);
+  expect(likes).toEqual({});
+
+  await page.reload();
   await expect(page.getByText("No liked stories yet")).toBeVisible();
 });

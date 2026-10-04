@@ -411,6 +411,12 @@ test("PUT /v0/schedule validates, persists, and re-arms the scheduler", async ()
       body: JSON.stringify({ time_of_day: "99:99" }),
     });
     assert.equal(bad.status, 400);
+    const badEnabled = await fetch(`http://127.0.0.1:${port}/v0/schedule`, {
+      method: "PUT",
+      headers: auth,
+      body: JSON.stringify({ enabled: "yes" }),
+    });
+    assert.equal(badEnabled.status, 400);
 
     // Valid change → 200, persisted, and next_run_at recomputed by the re-arm.
     const ok = await fetch(`http://127.0.0.1:${port}/v0/schedule`, {

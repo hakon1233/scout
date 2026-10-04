@@ -1,22 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { PORT } from "./port";
 
-// Headless E2E for the "Weekly brief" profile-menu flow (POST
-// /v0/weekly-brief). The weekly brief is assembled ENTIRELY from the
-// companion's rolling daily-brief history (packages/agent/src/weekly.ts) — no
-// `claude` shell-out — so it runs fully offline and deterministically, from the
-// same canned daily story the stub yields.
-//
-// What this proves that the existing specs don't:
-//   1. The "Weekly brief" menuitem fires runWeekly → generateWeeklyBrief →
-//      POST /v0/weekly-brief → adaptBrief → render. No other spec exercises the
-//      weekly path; "Run now" (zero-prompt, liked-live-flow) only covers daily.
-//   2. The result renders as a `kind:"weekly"` brief: the current edition's
-//      header reads "Weekly brief — <date>" (BriefLayout's `kind:"weekly"` title
-//      branch), NOT the daily "Your brief — <date>".
-//   3. createWeeklyBriefFromHistory de-duplicates stories by URL across the
-//      week's daily runs: we generate the SAME canned story on two separate
-//      daily runs, yet it appears EXACTLY once in the assembled weekly edition.
+// "Weekly brief" from the profile menu: it renders as a weekly edition built
+// from the daily history, with a story repeated across days shown once.
 //
 // Single interest on purpose: the companion runs one research session per
 // interest and `extractTopicSection` keeps that session's FIRST `##` block

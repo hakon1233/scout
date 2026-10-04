@@ -3,19 +3,8 @@ import { PORT } from "./port";
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
-// The legacy `/app/profile` index is a "Profile moved" stub: it mounts, then
-// `router.replace("/app/settings")` immediately forwards the user on. The
-// existing suite covers the standalone `/app/profile/interest` scope page
-// (profile-interest-scope.spec.ts) but never the index redirect itself.
-//
-// Two user-facing guarantees this guards:
-//   1. landing on the old `/app/profile` URL (a stale bookmark/link) does not
-//      dead-end on the stub — it forwards to the live Settings page and that
-//      page actually renders, and
-//   2. it uses replace(), not push() — so the browser Back button does NOT
-//      bounce the user straight back onto /app/profile (a redirect back-trap),
-//      it returns to wherever they came from.
-// Fully offline against the served static export; no companion data, no scrape.
+// The legacy `/app/profile` index forwards to `/app/settings`; both legacy
+// redirects use replace(), so Back skips them.
 test.describe("legacy /app/profile redirect", () => {
   test("forwards to /app/settings and the Settings page renders", async ({
     page,
@@ -40,27 +29,24 @@ test.describe("legacy /app/profile redirect", () => {
       page.getByRole("heading", { name: "Choose a profile page" }),
     ).toBeHidden();
   });
+});
 
-  test("uses replace(), so browser Back does not re-trap on /app/profile", async ({
+for (const { from, to, trap } of [
+  { from: "/app/profile/", to: "/app/settings/", trap: /\/app\/profile\b/ },
+  { from: "/app/chat/", to: "/app/interests/", trap: /\/app\/chat\b/ },
+]) {
+  test(`legacy ${from} uses replace(), so browser Back does not re-trap on it`, async ({
     page,
   }) => {
-    // Arrive from the public landing route first so there is a real prior
-    // history entry to fall back to. For the paired companion the landing route
-    // itself resolves to the app home (/app/), so that is the entry Back
-    // returns to.
+    // For the paired companion the landing route resolves to the app home,
+    // which gives Back a real prior entry to return to.
     await page.goto(`${ORIGIN}/`);
     await expect(page).toHaveURL(`${ORIGIN}/app/`, { timeout: 15_000 });
-    await page.goto(`${ORIGIN}/app/profile/`);
+    await page.goto(`${ORIGIN}${from}`);
+    await expect(page).toHaveURL(`${ORIGIN}${to}`, { timeout: 15_000 });
 
-    await expect(page).toHaveURL(`${ORIGIN}/app/settings/`, {
-      timeout: 15_000,
-    });
-
-    // THE assertion: Back skips the stub entirely (replace consumed its entry)
-    // and returns to the app home — it does NOT bounce to /app/profile and
-    // re-fire the forward into a loop.
     await page.goBack();
-    await expect(page).not.toHaveURL(/\/app\/profile\b/);
+    await expect(page).not.toHaveURL(trap);
     await expect(page).toHaveURL(`${ORIGIN}/app/`, { timeout: 15_000 });
   });
-});
+}
