@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "demo": "SCOUT_E2E_PORT=${SCOUT_DEMO_PORT:-47899} node e2e/start-companion.mjs",
     "build": "NODE_ENV=production next build",
     "start": "npx --yes serve@14.2.6 out",
     "live-state-guard": "node scripts/live-state-guard.mjs",
