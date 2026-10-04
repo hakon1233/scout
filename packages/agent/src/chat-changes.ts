@@ -14,8 +14,14 @@ import {
   readInterestDoc,
   writeInterestDoc,
 } from "./docs.js";
-import { MAX_INTERESTS } from "./limits.js";
+import { MAX_INTEREST_LEN, MAX_INTERESTS } from "./limits.js";
 import { newInterestId } from "./state.js";
+
+// A topic the model proposed, held to the same length limit as the HTTP API;
+// "" when there is none.
+function proposedTopic(raw: unknown): string {
+  return typeof raw === "string" ? raw.trim().slice(0, MAX_INTEREST_LEN) : "";
+}
 
 // Apply the model's proposed changes to the doc store + interest list, returning
 // the new interest list and the change set that ACTUALLY landed (with concrete,
@@ -53,7 +59,7 @@ export async function applyChatChanges(
   for (const ch of proposed) {
     const op = ch.op;
     if (op === "create") {
-      const topic = typeof ch.topic === "string" ? ch.topic.trim() : "";
+      const topic = proposedTopic(ch.topic);
       if (!topic) continue;
       if (interests.length >= MAX_INTERESTS) continue;
       const id = newInterestId();
@@ -65,10 +71,7 @@ export async function applyChatChanges(
       const id = typeof ch.interestId === "string" ? ch.interestId : "";
       const idx = interests.findIndex((i) => i.id === id);
       if (idx === -1) continue; // never touch an id we don't own
-      const topic =
-        typeof ch.topic === "string" && ch.topic.trim()
-          ? ch.topic.trim()
-          : interests[idx].topic;
+      const topic = proposedTopic(ch.topic) || interests[idx].topic;
       const doc =
         typeof ch.doc === "string"
           ? ch.doc
