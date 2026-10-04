@@ -6,9 +6,9 @@
 // reasoned about (and unit-tested) in isolation. Keep it that way: if a helper
 // needs `window`, a timer, or a ref, it belongs in the hook, not here.
 
-import type { ChatChange, ChatTurn } from "@/lib/chat";
+import type { ChatChange, ChatTurn } from "@scout/agent/contract";
 import { type InterestDocMeta, interestKey } from "@/lib/interest-docs";
-import type { Interest } from "@/lib/types";
+import type { Interest } from "@scout/agent/contract";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 

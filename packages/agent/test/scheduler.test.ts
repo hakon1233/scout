@@ -20,15 +20,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
-import {
-  loadState,
-  saveState,
-  newPairingToken,
-  normalizeTimeOfDay,
-  defaultSchedule,
-  type Brief,
-  type State,
-} from "../src/state.js";
+import { loadState, saveState, newPairingToken, normalizeTimeOfDay, defaultSchedule, type State } from "../src/state.js";
+import type { Brief } from "../src/contract.js";
 import { Scheduler, nextFireAt } from "../src/scheduler.js";
 import { startServer } from "../src/server.js";
 

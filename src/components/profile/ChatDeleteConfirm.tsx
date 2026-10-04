@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef } from "react";
 
-import type { PendingDelete } from "@/lib/chat";
+import type { PendingDelete } from "@scout/agent/contract";
 
 // The confirm-gated delete card (PER-230). Delete is the ONE destructive op, so
 // it is the ONLY one behind a confirmation. A turn that resolved to a delete does

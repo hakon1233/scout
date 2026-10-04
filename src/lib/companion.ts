@@ -3,7 +3,12 @@
 // then fall back to a small known-port sweep so a user who started the
 // agent on a different port can still pair.
 
-import type { Brief as AppBrief, TopicBasis, TopicCoverage } from "./types";
+import type { Brief as AppBrief } from "./types";
+import {
+  PATHS,
+  type Brief as WireBrief,
+  type ScheduleView,
+} from "@scout/agent/contract";
 import { readErrorBody } from "./errors";
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 
@@ -107,7 +112,7 @@ export async function isServedFromCompanion(): Promise<boolean> {
   if (servedProbeInFlight) return servedProbeInFlight;
   servedProbeInFlight = (async () => {
     try {
-      const res = await fetch(`${window.location.origin}/healthz`, {
+      const res = await fetch(`${window.location.origin}${PATHS.health}`, {
         signal: AbortSignal.timeout(1500),
       });
       servedFromCompanionConfirmed = res.ok;
@@ -148,7 +153,7 @@ async function fetchCompanionConfig(): Promise<CompanionConfig | null> {
   configInFlight = (async () => {
     if (!(await isServedFromCompanion())) return null;
     try {
-      const res = await fetch(`${window.location.origin}/v0/config`, {
+      const res = await fetch(`${window.location.origin}${PATHS.config}`, {
         signal: AbortSignal.timeout(2000),
       });
       if (!res.ok) return null;
@@ -205,7 +210,7 @@ export async function fetchCompanionInterests(): Promise<string[]> {
 
 async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
   try {
-    const res = await fetch(`${baseFor(port)}/healthz`, {
+    const res = await fetch(`${baseFor(port)}${PATHS.health}`, {
       signal: AbortSignal.timeout(timeoutMs),
     });
     return res.ok;
@@ -276,7 +281,7 @@ export async function postInterests(
   if (retryTopics && retryTopics.length > 0) body.retry_topics = retryTopics;
   if (selectedTopics && selectedTopics.length > 0)
     body.selected_topics = selectedTopics;
-  const res = await fetch(`${base}/v0/interests`, {
+  const res = await fetch(`${base}${PATHS.interests}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -312,7 +317,7 @@ export async function saveInterests(
     interests,
   };
   if (confirmReplace) body.confirm_replace = true;
-  const res = await fetch(`${base}/v0/interests`, {
+  const res = await fetch(`${base}${PATHS.interests}`, {
     method: "PUT",
     headers: {
       "content-type": "application/json",
@@ -330,23 +335,6 @@ export async function saveInterests(
   return res.json() as Promise<{ interests: string[]; status: string }>;
 }
 
-type AgentBrief = {
-  id: string;
-  generated_at: string;
-  status: string;
-  ephemeral?: boolean;
-  kind?: "daily" | "weekly";
-  summary_md?: string;
-  error_msg?: string;
-  // Authoritative per-topic coverage (PER-154); present on briefs from a
-  // companion >= 0.3.x. Absent on older cached briefs — the UI then falls back
-  // to deriving status from the parsed headings.
-  topics?: TopicCoverage[];
-  // Per-topic snapshot of the intent doc that drove each section's research
-  // (PER-187). Present on briefs from a companion that supports it; absent on
-  // older cached briefs.
-  bases?: TopicBasis[];
-};
 
 // The companion no longer returns a structured `articles` list — the model
 // emits the brief markdown directly, with citations inline as `[domain — Title](url)`.
@@ -524,7 +512,7 @@ export function parseArticlesFromMarkdown(markdown: string, briefId: string) {
   return { articles, interests: [...interests] };
 }
 
-function adaptBrief(b: AgentBrief): AppBrief {
+function adaptBrief(b: WireBrief): AppBrief {
   const markdown = b.summary_md ?? "";
   const { articles, interests } = parseArticlesFromMarkdown(markdown, b.id);
   return {
@@ -551,7 +539,7 @@ function adaptBrief(b: AgentBrief): AppBrief {
 // the ready-brief history — so `raw` here is ≤1 element. On a failed/pending slot
 // it therefore carries NO ready brief; fetchRunFailure falls back to
 // fetchBriefHistory (via resolveLastSuccessBrief) for the true last success.
-function newestReadyBrief(raw: AgentBrief[]): AppBrief | null {
+function newestReadyBrief(raw: WireBrief[]): AppBrief | null {
   const ready = raw.filter((b) => b.status === "ready" && b.summary_md);
   if (ready.length === 0) return null;
   const newest = ready.reduce((newest, b) =>
@@ -752,26 +740,12 @@ export async function fetchRunFailure(
   }
 }
 
-// Recurring-schedule config + last/next-run telemetry the companion exposes at
-// GET|PUT /v0/schedule (PER-151). The Settings UI (PER-152) reads this to render
-// the schedule controls and the legibility row. `reboot_durable` is false for
-// the nohup `run` companion — the timer dies with the process.
-export type CompanionSchedule = {
-  enabled: boolean;
-  /** "HH:MM" 24h local time-of-day the scheduled run fires. */
-  time_of_day: string;
-  last_run_at: string | null;
-  last_run_status: "success" | "failed" | "skipped" | null;
-  last_run_note: string | null;
-  next_run_at: string | null;
-  reboot_durable: boolean;
-};
 
 // Read the persisted schedule config + run telemetry. Throws on an unreachable
 // companion or non-2xx so the caller can render a real error / "not paired" state.
-export async function fetchSchedule(token: string): Promise<CompanionSchedule> {
+export async function fetchSchedule(token: string): Promise<ScheduleView> {
   const base = await requireBase();
-  const res = await fetch(`${base}/v0/schedule`, {
+  const res = await fetch(`${base}${PATHS.schedule}`, {
     headers: { authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(5_000),
   });
@@ -779,7 +753,7 @@ export async function fetchSchedule(token: string): Promise<CompanionSchedule> {
     const err = await readErrorBody(res);
     throw new Error(err.error ?? `Couldn't read the schedule (${res.status}).`);
   }
-  return res.json() as Promise<CompanionSchedule>;
+  return res.json() as Promise<ScheduleView>;
 }
 
 // Write the schedule (enable/disable and/or time-of-day). The companion
@@ -789,9 +763,9 @@ export async function fetchSchedule(token: string): Promise<CompanionSchedule> {
 export async function updateSchedule(
   patch: { enabled?: boolean; time_of_day?: string },
   token: string,
-): Promise<CompanionSchedule> {
+): Promise<ScheduleView> {
   const base = await requireBase();
-  const res = await fetch(`${base}/v0/schedule`, {
+  const res = await fetch(`${base}${PATHS.schedule}`, {
     method: "PUT",
     headers: {
       "content-type": "application/json",
@@ -804,7 +778,7 @@ export async function updateSchedule(
     const err = await readErrorBody(res);
     throw new Error(err.error ?? `Couldn't save the schedule (${res.status}).`);
   }
-  return res.json() as Promise<CompanionSchedule>;
+  return res.json() as Promise<ScheduleView>;
 }
 
 // Page the companion's rolling brief history, newest-first (PER-219). Backs the
@@ -824,14 +798,14 @@ export async function fetchBriefHistory(
 ): Promise<{ briefs: AppBrief[]; total: number }> {
   try {
     const base = await requireBase();
-    const url = `${base}/v0/briefs?limit=${opts.limit}&offset=${opts.offset}`;
+    const url = `${base}${PATHS.briefs}?limit=${opts.limit}&offset=${opts.offset}`;
     const res = await fetch(url, {
       headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) return { briefs: [], total: 0 };
     const json = (await res.json()) as {
-      briefs: AgentBrief[];
+      briefs: WireBrief[];
       total?: number;
     };
     const briefs = (json.briefs ?? [])
@@ -847,15 +821,15 @@ export async function fetchBriefHistory(
 export async function pollBriefsRaw(
   sinceTs: string,
   token: string,
-): Promise<AgentBrief[]> {
+): Promise<WireBrief[]> {
   const base = await requireBase();
-  const url = `${base}/v0/briefs?since=${encodeURIComponent(sinceTs)}`;
+  const url = `${base}${PATHS.briefs}?since=${encodeURIComponent(sinceTs)}`;
   const res = await fetch(url, {
     headers: { authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(5_000),
   });
   if (!res.ok) return [];
-  const json = (await res.json()) as { briefs?: AgentBrief[] };
+  const json = (await res.json()) as { briefs?: WireBrief[] };
   // Trust-boundary guard: a malformed/empty `{}` body (no `briefs`) must not
   // hand callers `undefined` — every caller immediately `.filter`/`.reduce`s the
   // result, so a missing field would throw a TypeError surfaced as a confusing
@@ -942,7 +916,7 @@ export async function refreshBriefViaCompanion(
 // existing local history into one top-stories edition.
 export async function generateWeeklyBrief(token: string): Promise<AppBrief> {
   const base = await requireBase();
-  const res = await fetch(`${base}/v0/weekly-brief`, {
+  const res = await fetch(`${base}${PATHS.weeklyBrief}`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(10_000),
@@ -953,7 +927,7 @@ export async function generateWeeklyBrief(token: string): Promise<AppBrief> {
       err.error ?? `Couldn't generate weekly brief (${res.status}).`,
     );
   }
-  const json = (await res.json()) as { brief?: AgentBrief };
+  const json = (await res.json()) as { brief?: WireBrief };
   // Trust-boundary guard (mirrors the pollBriefsRaw fix, AIR-670): a 2xx with a
   // malformed/empty `{}` body (no `brief`) must not reach adaptBrief, which
   // immediately dereferences `.summary_md`/`.id` and would throw a raw

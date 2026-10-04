@@ -19,16 +19,8 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  loadState,
-  newBriefId,
-  saveState,
-  interestTopics,
-  BRIEF_HISTORY_CAP,
-  type Brief,
-  type Interest,
-  type ScheduleConfig,
-} from "./state.js";
+import { loadState, newBriefId, saveState, interestTopics, BRIEF_HISTORY_CAP, type ScheduleConfig } from "./state.js";
+import type { Brief, Interest } from "./contract.js";
 import { researchAndSynthesize } from "./research.js";
 import {
   computeCoverage,

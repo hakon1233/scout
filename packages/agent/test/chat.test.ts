@@ -15,13 +15,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
-import {
-  saveState,
-  loadState,
-  newPairingToken,
-  type ChatTurn,
-  type State,
-} from "../src/state.js";
+import { saveState, loadState, newPairingToken, type State } from "../src/state.js";
+import type { ChatTurn } from "../src/contract.js";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
 import {
   buildChatPrompt,

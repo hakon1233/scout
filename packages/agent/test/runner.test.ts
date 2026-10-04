@@ -19,12 +19,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
-import {
-  loadState,
-  saveState,
-  type Brief,
-  type Interest,
-} from "../src/state.js";
+import { loadState, saveState } from "../src/state.js";
+import type { Brief, Interest } from "../src/contract.js";
 import { startRun, summarizeSessionFailures } from "../src/runner.js";
 import { writeInterestDoc, defaultInterestDoc } from "../src/docs.js";
 

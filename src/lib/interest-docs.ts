@@ -1,6 +1,9 @@
 "use client";
 
-import type { Interest } from "./types";
+import {
+  PATHS,
+  type Interest,
+} from "@scout/agent/contract";
 import { isServedFromCompanion } from "./companion";
 import { isClient } from "./safe-storage";
 
@@ -81,7 +84,7 @@ export async function fetchInterestsFull(token: string): Promise<{
   if (!isClient()) return null;
   if (!(await isServedFromCompanion())) return null;
   try {
-    const res = await fetch(`${window.location.origin}/v0/interests`, {
+    const res = await fetch(`${window.location.origin}${PATHS.interests}`, {
       headers: token ? { authorization: `Bearer ${token}` } : undefined,
       signal: AbortSignal.timeout(2500),
     });

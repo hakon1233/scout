@@ -719,7 +719,7 @@ function Shell({
   onRunNow?: () => void;
   onWeeklyBrief?: () => void;
   running?: boolean;
-  interests?: import("@/lib/types").Interest[];
+  interests?: import("@scout/agent/contract").Interest[];
   activeFilter?: string | null;
   onFilterChange?: (topic: string | null) => void;
 }) {

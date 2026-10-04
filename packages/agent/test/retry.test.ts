@@ -21,12 +21,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
-import {
-  saveState,
-  newPairingToken,
-  type Brief,
-  type TopicCoverage,
-} from "../src/state.js";
+import { saveState, newPairingToken } from "../src/state.js";
+import type { Brief, TopicCoverage } from "../src/contract.js";
 import { startServer } from "../src/server.js";
 
 // A claude stub for the per-interest world (C2/PER-171): each session researches

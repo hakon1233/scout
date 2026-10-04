@@ -25,44 +25,45 @@ import {
   handlePostChatConfirmRewrite,
   handlePostChatStop,
 } from "./chat.js";
+import { PATHS } from "../contract.js";
 import type { V0RouteSpec } from "./types.js";
 
 export const V0_ROUTES: Record<
   string,
   Record<string, V0RouteSpec> | undefined
 > = {
-  "/v0/version": {
+  [PATHS.version]: {
     GET: { auth: "none", handle: handleVersion },
   },
-  "/v0/config": {
+  [PATHS.config]: {
     GET: { auth: "same_origin", handle: handleGetConfig },
   },
-  "/v0/interests": {
+  [PATHS.interests]: {
     GET: { auth: "bearer", handle: handleGetInterests },
     POST: { auth: "bearer", handle: handlePostInterests },
     PUT: { auth: "bearer", handle: handlePutInterests },
   },
-  "/v0/briefs": {
+  [PATHS.briefs]: {
     GET: { auth: "bearer", handle: handleGetBriefs },
   },
-  "/v0/weekly-brief": {
+  [PATHS.weeklyBrief]: {
     POST: { auth: "bearer", handle: handlePostWeeklyBrief },
   },
-  "/v0/schedule": {
+  [PATHS.schedule]: {
     GET: { auth: "bearer", handle: handleGetSchedule },
     PUT: { auth: "bearer", handle: handlePutSchedule },
   },
-  "/v0/chat": {
+  [PATHS.chat]: {
     GET: { auth: "bearer", handle: handleGetChat },
     POST: { auth: "bearer", handle: handlePostChat },
   },
-  "/v0/chat/stop": {
+  [PATHS.chatStop]: {
     POST: { auth: "bearer", handle: handlePostChatStop },
   },
-  "/v0/chat/confirm-delete": {
+  [PATHS.chatConfirmDelete]: {
     POST: { auth: "bearer", handle: handlePostChatConfirmDelete },
   },
-  "/v0/chat/confirm-rewrite": {
+  [PATHS.chatConfirmRewrite]: {
     POST: { auth: "bearer", handle: handlePostChatConfirmRewrite },
   },
 };

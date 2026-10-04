@@ -25,7 +25,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
-import { saveState, loadState, newPairingToken, type Brief } from "../src/state.js";
+import { saveState, loadState, newPairingToken } from "../src/state.js";
+import type { Brief } from "../src/contract.js";
 import { startServer } from "../src/server.js";
 import { MAX_INTERESTS } from "../src/limits.js";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ChatTurn } from "@/lib/chat";
+import type { ChatTurn } from "@scout/agent/contract";
 import type { ChatMessage } from "./ChatDock";
 import {
   appliedChangeMessage,

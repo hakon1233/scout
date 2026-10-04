@@ -14,13 +14,8 @@ import http from "node:http";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  saveState,
-  loadState,
-  newPairingToken,
-  type Brief,
-  type State,
-} from "../src/state.js";
+import { saveState, loadState, newPairingToken, type State } from "../src/state.js";
+import type { Brief } from "../src/contract.js";
 import { isSameOriginCaller, startServer } from "../src/server.js";
 import { MAX_INTERESTS } from "../src/limits.js";
 

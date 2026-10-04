@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@scout/agent/*": ["./packages/agent/src/*"]
     }
   },
   "include": [

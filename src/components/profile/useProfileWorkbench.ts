@@ -9,16 +9,8 @@ import {
   useAbortableController,
   useAbortableEffect,
 } from "@/hooks/useAbortableEffect";
-import {
-  confirmDeleteInterest,
-  confirmRewriteInterest,
-  fetchChatTranscript,
-  runChatTurn,
-  stopChatTurn,
-  type ChatChange,
-  type PendingDelete,
-  type PendingRewrite,
-} from "@/lib/chat";
+import { confirmDeleteInterest, confirmRewriteInterest, fetchChatTranscript, runChatTurn, stopChatTurn } from "@/lib/chat";
+import type { ChatChange, PendingDelete, PendingRewrite } from "@scout/agent/contract";
 import {
   fetchInterestsFull,
   type InterestDocMeta,
@@ -28,7 +20,7 @@ import {
 } from "@/lib/interest-docs";
 import { prefersReducedMotion } from "@/lib/motion";
 import { loadSettings } from "@/lib/storage";
-import type { Interest } from "@/lib/types";
+import type { Interest } from "@scout/agent/contract";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 import {

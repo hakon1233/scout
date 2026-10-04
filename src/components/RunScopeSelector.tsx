@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Interest } from "@/lib/types";
+import type { Interest } from "@scout/agent/contract";
 
 // Run-selector (C6/PER-173): pick one / several / all interests to run at trigger
 // time. The selection is a *transient* run-time choice — it never edits the saved

@@ -5,10 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Banner, Button, Card, Section, Toggle } from "@/components/ui";
 import {
   bootstrapCompanionToken,
-  type CompanionSchedule,
   fetchSchedule,
   updateSchedule,
 } from "@/lib/companion";
+import type { ScheduleView } from "@scout/agent/contract";
 
 // Settings UI for the recurring schedule (PER-152). Reads/writes the companion's
 // GET|PUT /v0/schedule contract (PER-151): an enable toggle + time-of-day picker,
@@ -18,7 +18,7 @@ import {
 type LoadState =
   | { kind: "loading" }
   | { kind: "unreachable" } // companion not paired / not running
-  | { kind: "ready"; schedule: CompanionSchedule };
+  | { kind: "ready"; schedule: ScheduleView };
 
 // "07:00" → "7:00 AM" in the viewer's locale, without inventing a date the user
 // would see. We anchor to a fixed throwaway day purely to format the clock time.
@@ -39,7 +39,7 @@ function formatTimestamp(iso: string): string {
 }
 
 const STATUS_TONE: Record<
-  NonNullable<CompanionSchedule["last_run_status"]>,
+  NonNullable<ScheduleView["last_run_status"]>,
   { label: string; cls: string }
 > = {
   success: { label: "Succeeded", cls: "text-success" },
@@ -47,7 +47,7 @@ const STATUS_TONE: Record<
   skipped: { label: "Skipped", cls: "text-warning" },
 };
 
-function LastRunRow({ schedule }: { schedule: CompanionSchedule }) {
+function LastRunRow({ schedule }: { schedule: ScheduleView }) {
   if (!schedule.last_run_at) {
     return (
       <div className="flex flex-col gap-0.5">
@@ -80,7 +80,7 @@ function LastRunRow({ schedule }: { schedule: CompanionSchedule }) {
   );
 }
 
-function NextRunRow({ schedule }: { schedule: CompanionSchedule }) {
+function NextRunRow({ schedule }: { schedule: ScheduleView }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-caption uppercase text-muted">Next run</span>

@@ -3,12 +3,8 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  loadState,
-  newPairingToken,
-  saveState,
-  type Brief,
-} from "../src/state.js";
+import { loadState, newPairingToken, saveState } from "../src/state.js";
+import type { Brief } from "../src/contract.js";
 import {
   buildWeeklyBrief,
   createWeeklyBriefFromHistory,

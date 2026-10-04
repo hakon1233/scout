@@ -25,13 +25,13 @@
 // `/app/skills` transparency page. When you change the assembly logic below,
 // update that constant too so the page stays honest about what the engine does.
 
-export type TopicStatus = "covered" | "empty" | "missing";
-export type TopicCoverage = { topic: string; status: TopicStatus };
 
 // Normalize a topic or heading for comparison: lowercase, then remove every
 // non-letter/digit. So "OpenAI", "open ai", "Open-AI" and "openai" all
 // collapse to the same key. This is deliberately aggressive: model headings
 // drift in casing, punctuation, and word spacing more often than in meaning.
+import type { TopicCoverage } from "./contract.js";
+
 export function normalizeTopic(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }

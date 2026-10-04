@@ -10,22 +10,8 @@ import {
 } from "../state.js";
 import { isServiceInstalled } from "../service.js";
 import { json, jsonBodyParseError, parseJsonBody } from "../http-util.js";
+import type { ScheduleView } from "../contract.js";
 import type { AuthedRequestContext, ServerContext } from "./types.js";
-
-// Shape GET /v0/schedule returns and PUT echoes back — the contract the
-// Settings UI (PER-152) consumes. `reboot_durable` is true once a launchd
-// LaunchAgent (PER-153) is installed: launchd then restarts the companion at
-// login/boot, so the scheduler survives a reboot. When false the UI warns the
-// founder to re-run `scout-agent run` after a reboot.
-export type ScheduleView = {
-  enabled: boolean;
-  time_of_day: string;
-  last_run_at: string | null;
-  last_run_status: ScheduleConfig["last_run_status"] | null;
-  last_run_note: string | null;
-  next_run_at: string | null;
-  reboot_durable: boolean;
-};
 
 function scheduleView(cfg: ScheduleConfig): ScheduleView {
   return {

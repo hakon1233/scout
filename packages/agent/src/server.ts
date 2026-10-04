@@ -26,13 +26,8 @@ import http from "node:http";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { URL } from "node:url";
-import {
-  loadState,
-  STATE_FILE,
-  type Brief,
-  type ChatTurn,
-  type State,
-} from "./state.js";
+import { loadState, STATE_FILE, type State } from "./state.js";
+import { PATHS, type Brief, type ChatTurn } from "./contract.js";
 import { defaultChatTranscriptFile, type ChatDeps } from "./chat.js";
 import { DEFAULT_BUILD_INFO_FILE } from "./build-info.js";
 import {
@@ -64,7 +59,6 @@ export {
 export { PKG_VERSION } from "./build-info.js";
 export { MAX_CHAT_MESSAGE_LEN } from "./routes/chat.js";
 export { MAX_INTEREST_LEN, MAX_INTERESTS } from "./routes/interests.js";
-export type { ScheduleView } from "./routes/schedule.js";
 
 export function defaultPort(raw: string | undefined): number {
   if (raw === undefined) return 47821;
@@ -186,7 +180,7 @@ export function createServer(deps: ServerDeps = {}): http.Server {
       try {
         // Liveness sits OUTSIDE the /v0 origin-deny gate below — it must
         // answer no matter who asks.
-        if (req.method === "GET" && url.pathname === "/healthz") {
+        if (req.method === "GET" && url.pathname === PATHS.health) {
           return await handleHealthz({ req, res, url, cors }, ctx);
         }
 

@@ -24,13 +24,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
-import {
-  loadState,
-  saveState,
-  newPairingToken,
-  type Brief,
-  type TopicCoverage,
-} from "../src/state.js";
+import { loadState, saveState, newPairingToken } from "../src/state.js";
+import type { Brief, TopicCoverage } from "../src/contract.js";
 import { startServer } from "../src/server.js";
 
 // Per-interest claude stub: each session researches ONE topic (named in the

@@ -17,7 +17,7 @@ import {
   type InterestDocMeta,
 } from "@/lib/interest-docs";
 import { loadSettings } from "@/lib/storage";
-import type { Interest } from "@/lib/types";
+import type { Interest } from "@scout/agent/contract";
 
 const MD = {
   h1: (p: React.HTMLAttributes<HTMLHeadingElement>) => (

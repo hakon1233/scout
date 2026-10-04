@@ -16,61 +16,15 @@
 
 import { discoverCompanion } from "./companion";
 import { readErrorBody } from "./errors";
+import {
+  PATHS,
+  type ChatTurn,
+} from "@scout/agent/contract";
 
-// One change a turn applied to the interest collection. `interestId` is always
-// the concrete (server-assigned, for create) id, so the FE can match it to a
-// rendered card or add/remove in place without guessing. Mirrors the agent's
-// ChatChange (packages/agent/src/state.ts).
-export type ChatChange = {
-  interestId: string;
-  op: "create" | "update" | "delete";
-  // Present for create/update; the (possibly renamed) topic. Absent on delete.
-  topic?: string;
-  // The full markdown doc as persisted, for create/update. Absent on delete.
-  doc?: string;
-};
-
-// A delete the turn resolved to but did NOT apply (PER-230 confirm-gated delete).
-// The interest is still alive; the FE renders a [Delete]/[Cancel] card and only
-// calls confirmDeleteInterest() when the user presses [Delete]. Mirrors the
-// agent's PendingDelete.
-export type PendingDelete = {
-  interestId: string;
-  topic: string;
-};
-
-// A full-doc rewrite the turn proposed but did NOT apply (PER-235 confirm-gated
-// rewrite). The doc on disk is untouched; the FE renders an [Apply]/[Discard]
-// diff card and only calls confirmRewriteInterest() when the user presses
-// [Apply]. `doc` is the complete proposed markdown — the server stores its own
-// copy and writes THAT on confirm (the client never sends the doc back).
-// Mirrors the agent's PendingRewrite.
-export type PendingRewrite = {
-  interestId: string;
-  topic: string;
-  doc: string;
-};
-
-// One chat turn held in the companion's single last-writer-wins slot. Mirrors
-// the agent's ChatTurn.
-export type ChatTurn = {
-  id: string;
-  created_at: string;
-  status: "pending" | "ready" | "failed";
-  message: string;
-  reply?: string;
-  changes?: ChatChange[];
-  // A delete awaiting [Delete]/[Cancel] confirmation (PER-230). Not yet applied.
-  pending_delete?: PendingDelete;
-  // A full rewrite awaiting [Apply]/[Discard] confirmation (PER-235). Not yet
-  // written — the doc on disk is unchanged until confirmRewriteInterest().
-  pending_rewrite?: PendingRewrite;
-  error_msg?: string;
-};
 
 export async function fetchChatTranscript(token: string): Promise<ChatTurn[]> {
   const base = await requireBase();
-  const res = await fetch(`${base}/v0/chat`, {
+  const res = await fetch(`${base}${PATHS.chat}`, {
     headers: { authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(5_000),
   });
@@ -96,7 +50,7 @@ export async function kickChatTurn(
   token: string,
 ): Promise<string> {
   const base = await requireBase();
-  const res = await fetch(`${base}/v0/chat`, {
+  const res = await fetch(`${base}${PATHS.chat}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -144,7 +98,7 @@ export async function pollChatTurn(
     let turn: ChatTurn | undefined;
     try {
       const res = await fetch(
-        `${base}/v0/chat?since=${encodeURIComponent(since)}`,
+        `${base}${PATHS.chat}?since=${encodeURIComponent(since)}`,
         {
           headers: { authorization: `Bearer ${token}` },
           signal: AbortSignal.timeout(5_000),
@@ -178,7 +132,7 @@ export async function stopChatTurn(
 ): Promise<boolean> {
   try {
     const base = await requireBase();
-    const res = await fetch(`${base}/v0/chat/stop`, {
+    const res = await fetch(`${base}${PATHS.chatStop}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -206,7 +160,7 @@ export async function confirmDeleteInterest(
   opts: { signal?: AbortSignal } = {},
 ): Promise<ChatTurn> {
   const base = await requireBase();
-  const res = await fetch(`${base}/v0/chat/confirm-delete`, {
+  const res = await fetch(`${base}${PATHS.chatConfirmDelete}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -246,7 +200,7 @@ export async function confirmRewriteInterest(
   opts: { signal?: AbortSignal } = {},
 ): Promise<ChatTurn> {
   const base = await requireBase();
-  const res = await fetch(`${base}/v0/chat/confirm-rewrite`, {
+  const res = await fetch(`${base}${PATHS.chatConfirmRewrite}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

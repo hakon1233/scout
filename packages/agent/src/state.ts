@@ -7,7 +7,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { TopicCoverage } from "./coverage.js";
+import type {
+  Brief,
+  ChatTurn,
+  Interest,
+  ScheduleRunStatus,
+} from "./contract.js";
 import {
   CONFIG_DIR,
   assertNotRealStateUnderTest,
@@ -21,116 +26,6 @@ export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
 // sites should import them from persistence.ts directly.
 export { CONFIG_DIR, atomicWriteFile };
 
-// A snapshot of the intent doc that drove ONE topic's research, captured at
-// synthesis time (PER-187). The whole point of the per-interest doc is that it
-// scopes WHAT the model looks for; this lets the brief show the reader the EXACT
-// doc text that produced a section — the actual bytes passed to
-// buildResearchPrompt for that run, not the doc as it stands now (which may have
-// since been edited). `topic` matches the `## <topic>` heading in summary_md.
-export type TopicBasis = {
-  topic: string;
-  doc: string;
-};
-
-export type Brief = {
-  id: string;
-  generated_at: string;
-  status: "pending" | "ready" | "failed";
-  // QA/dry-run output remains pollable through last_brief, but must never be
-  // presented as the user's real feed edition (PER-288).
-  ephemeral?: boolean;
-  // Distinguishes normal per-run editions from weekly digests. Older persisted
-  // briefs have no kind and are treated as daily by callers.
-  kind?: "daily" | "weekly";
-  summary_md?: string;
-  error_msg?: string;
-  // Per-topic coverage, computed by the companion over the FULL interest list
-  // when a brief lands (PER-154). Lets the UI honestly distinguish "no news
-  // today" (empty) from "the model dropped this topic" (missing) instead of
-  // reverse-parsing headings client-side with a brittle case-sensitive match.
-  topics?: TopicCoverage[];
-  // Per-topic snapshot of the intent doc used for this run (PER-187). Captured
-  // from the SAME doc store the research engine reads (ensureInterestDoc), so
-  // "What this is based on" in the brief shows the real basis for each section.
-  // Absent on older cached briefs and on pending/failed briefs.
-  bases?: TopicBasis[];
-};
-
-export type { TopicCoverage } from "./coverage.js";
-
-// One change a chat turn applied to the interest collection (PER-172 / C4). The
-// chat session manages the WHOLE set of interests, so a single turn can create a
-// new interest (+ its doc), refine an existing interest's doc/topic, or delete an
-// interest. `interestId` is always the concrete (server-assigned, for create) id
-// the change landed on, so the UI can re-`GET /v0/interests` or update in place
-// without guessing. This is the machine-readable change set the CEO contract
-// (comment e81f2c2a) requires alongside the assistant reply, and the seam where
-// C5's FE "Updated" beat fires only on a CONFIRMED write (PER-139 no-dead-control).
-export type ChatChange = {
-  interestId: string;
-  op: "create" | "update" | "delete";
-  // Present for create/update; the interest's (possibly renamed) topic.
-  topic?: string;
-  // The full markdown doc as persisted, for create/update. Absent on delete.
-  doc?: string;
-};
-
-// A delete the turn resolved to but did NOT apply (PER-230 confirm-gated delete).
-// Delete is the one destructive op, so it is the ONLY gated one: when a turn
-// resolves to removing an interest we surface this proposal instead of removing,
-// and the FE renders a [Delete]/[Cancel] card. The actual removal happens via
-// POST /v0/chat/confirm-delete only on an explicit [Delete] press. The gate sits
-// BEFORE the destructive write, so create/update stay auto-apply (CEO decision
-// on PER-230) — apply-before-stream is untouched for those.
-export type PendingDelete = {
-  interestId: string;
-  topic: string;
-};
-
-// A full-document rewrite the turn resolved to but did NOT apply (PER-235
-// confirm-gated rewrite). A from-scratch rewrite replaces the ENTIRE doc, so —
-// like delete — it is destructive enough to gate: the turn surfaces the FULL
-// proposed doc here instead of writing it, and the FE renders an [Apply]/
-// [Discard] proposal card with a diff. The actual write happens via
-// POST /v0/chat/confirm-rewrite only on an explicit [Apply] press, using THIS
-// stored doc (the server never trusts a doc echoed back by the client).
-// Incremental refinements stay auto-apply `update`s — only full rewrites gate.
-export type PendingRewrite = {
-  interestId: string;
-  topic: string;
-  // The complete proposed markdown document, verbatim — what confirm-rewrite
-  // will persist on [Apply]. Never a diff or fragment.
-  doc: string;
-};
-
-// One chat turn, held in a single last-writer-wins slot (`State.last_chat`) that
-// mirrors `last_brief`. A turn is kicked async (POST /v0/chat) and polled
-// (GET /v0/chat?since=) the same way briefs are, so the UI never blocks on the
-// ~claude round-trip. The `changes` are applied to the doc store + state BEFORE
-// the turn flips to `ready`, so a `ready` turn's change set is always already
-// durable on disk (the "observable in the same response" contract).
-export type ChatTurn = {
-  id: string;
-  created_at: string;
-  status: "pending" | "ready" | "failed";
-  // The user's message (echoed so a reconnecting poller has the full exchange).
-  message: string;
-  // The assistant's conversational reply (present once ready).
-  reply?: string;
-  // The change set actually applied this turn (present once ready; [] when the
-  // turn only answered a question without touching any doc). Deletes and full
-  // rewrites never appear here from a model turn — they are gated into
-  // `pending_delete` / `pending_rewrite`.
-  changes?: ChatChange[];
-  // A delete the turn resolved to but is waiting on user confirmation for
-  // (PER-230). Present at most once per turn; the interest is NOT yet removed.
-  pending_delete?: PendingDelete;
-  // A full rewrite the turn resolved to but is waiting on user confirmation
-  // for (PER-235). Present at most once per turn; the doc is NOT yet written.
-  pending_rewrite?: PendingRewrite;
-  error_msg?: string;
-};
-
 // Persisted recurring-schedule config for the in-process scheduler (PER-151).
 // `enabled` + `time_of_day` are user-writable (Settings UI / PUT /v0/schedule);
 // the `last_run_*` / `next_run_at` fields are telemetry the scheduler maintains
@@ -143,22 +38,12 @@ export type ScheduleConfig = {
   last_run_at?: string;
   // success → a brief was produced; failed → synthesis errored; skipped → the
   // fire couldn't run (a run was already in flight, or no interests stored yet).
-  last_run_status?: "success" | "failed" | "skipped";
+  last_run_status?: ScheduleRunStatus;
   // Human-readable reason when last_run_status is "failed" or "skipped".
   last_run_note?: string;
   // ISO timestamp the scheduler computed for the next fire (null/absent when
   // disabled). The single writer is the scheduler's reschedule().
   next_run_at?: string;
-};
-
-// A single interest the user tracks. The `topic` is the short headline the
-// research engine bullets into its prompt; the `id` is a stable, opaque handle
-// that anchors the per-interest intent doc stored at
-// `~/.config/scout/interests/<id>.md` (see docs.ts). The id survives reorders,
-// adds, and removes so a doc never silently detaches from its topic. (PER-169)
-export type Interest = {
-  id: string;
-  topic: string;
 };
 
 // How many ready briefs to retain in the rolling history (PER-219). Each brief

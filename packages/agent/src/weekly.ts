@@ -1,10 +1,5 @@
-import {
-  BRIEF_HISTORY_CAP,
-  loadState,
-  newBriefId,
-  saveState,
-  type Brief,
-} from "./state.js";
+import { BRIEF_HISTORY_CAP, loadState, newBriefId, saveState } from "./state.js";
+import type { Brief } from "./contract.js";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const WEEKLY_STORY_LIMIT = 10;

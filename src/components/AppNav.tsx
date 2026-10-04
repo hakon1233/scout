@@ -3,7 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import type { Interest } from "@/lib/types";
+import type { Interest } from "@scout/agent/contract";
 
 // Shared top nav for every `/app/*` route. Left: the Scout wordmark (logo slot +
 // home link). Right: the profile menu, which owns theme controls, a Run-now

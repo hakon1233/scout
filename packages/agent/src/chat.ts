@@ -23,17 +23,8 @@
 import type { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import {
-  loadState,
-  saveState,
-  newChatTurnId,
-  newInterestId,
-  type ChatChange,
-  type ChatTurn,
-  type Interest,
-  type PendingDelete,
-  type PendingRewrite,
-} from "./state.js";
+import { loadState, saveState, newChatTurnId, newInterestId } from "./state.js";
+import type { ChatChange, ChatTurn, Interest, PendingDelete, PendingRewrite } from "./contract.js";
 import {
   assertNotRealStateUnderTest,
   atomicWriteFile,

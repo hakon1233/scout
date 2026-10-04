@@ -8,13 +8,8 @@
 // exposes `reboot_durable: false` so the Settings UI (PER-152) can warn. A
 // launchd login item / durable `serve` is an optional follow-up, not built here.
 
-import {
-  defaultSchedule,
-  loadState,
-  normalizeTimeOfDay,
-  saveState,
-  type Brief,
-} from "./state.js";
+import { defaultSchedule, loadState, normalizeTimeOfDay, saveState } from "./state.js";
+import type { Brief } from "./contract.js";
 import {
   recordScheduledSkip,
   startRun,

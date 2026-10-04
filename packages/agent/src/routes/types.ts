@@ -8,7 +8,8 @@
 
 import type http from "node:http";
 import type { spawn } from "node:child_process";
-import type { Brief, State } from "../state.js";
+import type { State } from "../state.js";
+import type { Brief } from "../contract.js";
 import type { ChatDeps } from "../chat.js";
 
 // Per-server dependencies (ServerDeps with defaults applied), built once in

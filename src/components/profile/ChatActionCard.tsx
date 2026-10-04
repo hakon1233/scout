@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { ChatChange, PendingRewrite } from "@/lib/chat";
+import type { ChatChange, PendingRewrite } from "@scout/agent/contract";
 import { lineDiff, type DiffLine } from "@/lib/chat-diff";
 
 // One inline action card under a Scout turn (PER-228 chunk 5). It is the visible

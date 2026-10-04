@@ -1,4 +1,8 @@
-export type Interest = { id: string; topic: string };
+import type {
+  Interest,
+  TopicBasis,
+  TopicCoverage,
+} from "@scout/agent/contract";
 
 export type Article = {
   id: string;
@@ -28,23 +32,6 @@ export type Article = {
   // fabricated filler — grounded in the same sources as the rest of the item.
   body?: string;
 };
-
-// Per-topic coverage status the companion computes authoritatively over the
-// FULL requested-interest list (PER-154). Mirrors the agent's TopicCoverage.
-//   - "covered": real content with at least one citation.
-//   - "empty":   a section exists but the model found no fresh news today — an
-//                honest "nothing", NOT an error, and NOT something Retry fixes.
-//   - "missing": the model dropped/merged the topic entirely — the only state
-//                that warrants an automatic focused retry.
-export type TopicStatus = "covered" | "empty" | "missing";
-export type TopicCoverage = { topic: string; status: TopicStatus };
-
-// A snapshot of the intent doc that drove one topic's research, captured by the
-// companion at synthesis time (PER-187). Lets the brief show the reader exactly
-// what each section's research was based on — the doc text actually used for
-// that run. Mirrors the agent's TopicBasis. `topic` matches the `## <topic>`
-// heading in `markdown`.
-export type TopicBasis = { topic: string; doc: string };
 
 export type Brief = {
   id: string;
