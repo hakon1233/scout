@@ -1,11 +1,7 @@
 "use client";
 
 import { PATHS, type Interest } from "@scout/agent/contract";
-import {
-  companionFetch,
-  fetchCompanionInterests,
-  isServedFromCompanion,
-} from "./companion";
+import { companionFetch, fetchCompanionInterests } from "./companion";
 import { isClient } from "./safe-storage";
 
 // Per-interest "intent doc" metadata. The intent doc is the
@@ -63,16 +59,14 @@ function mergeInterests(local: Interest[], topics: string[]): Interest[] {
 
 // Fetch the FULL interest set from the authed GET /v0/interests — real stable
 // ids (so a chat change's `interestId` matches the rendered card), topics, and
-// doc metadata in one round-trip. Returns null when the companion isn't serving
-// us same-origin (public host / offline) so the caller can fall back to local
-// settings. `/v0/interests` is authed, so the pairing token is required — an
-// unauthenticated read 401s and the doc indicators silently never light up.
+// doc metadata in one round-trip. Works from any origin the companion allows.
+// Returns null without a pairing token, or when no companion answers, so the
+// caller can fall back to local settings.
 export async function fetchInterestsFull(token: string): Promise<{
   interests: Interest[];
   meta: Record<string, InterestDocMeta>;
 } | null> {
-  if (!isClient()) return null;
-  if (!(await isServedFromCompanion())) return null;
+  if (!isClient() || !token) return null;
   try {
     const res = await companionFetch(PATHS.interests, {
       token,
