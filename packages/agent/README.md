@@ -129,3 +129,7 @@ cannot reach a shell or your files. The model decides the queries, reads the
 pages it needs, and writes that interest's brief section to stdout. The chat
 child gets no tools at all. The companion assembles the sections and stores
 the result in `last_brief.summary_md`.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).
