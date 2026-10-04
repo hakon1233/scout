@@ -283,26 +283,28 @@ export async function companionFetch(
   });
 }
 
+// A refusal's JSON body, as far as the web app reads it.
+type RefusalBody = { error?: string; hint?: string; dropped?: unknown };
+
 // companionFetch for a JSON reply. A refusal throws an Error with the message
-// set for its status, else the companion's hint or error, else
-// "<failure> (<status>)."
+// set for its status (fixed, or chosen from the body), else the companion's
+// hint or error, else "<failure> (<status>)."
 export async function companionJson<T>(
   path: string,
   req: CompanionRequest & {
     failure: string;
-    messages?: Partial<Record<number, string>>;
+    messages?: Partial<
+      Record<number, string | ((body: RefusalBody) => string | undefined)>
+    >;
   },
 ): Promise<T> {
   const res = await companionFetch(path, req);
   if (!res.ok) {
-    const fixed = req.messages?.[res.status];
-    if (fixed) throw new Error(fixed);
-    const body = (await res.json().catch(() => ({}))) as {
-      error?: string;
-      hint?: string;
-    };
+    const body = (await res.json().catch(() => ({}))) as RefusalBody;
+    const message = req.messages?.[res.status];
+    const fixed = typeof message === "function" ? message(body) : message;
     throw new Error(
-      body.hint ?? body.error ?? `${req.failure} (${res.status}).`,
+      fixed ?? body.hint ?? body.error ?? `${req.failure} (${res.status}).`,
     );
   }
   return (await res.json()) as T;
@@ -336,6 +338,14 @@ export async function postInterests(
     body,
     timeoutMs: 10_000,
     failure: "Couldn't start the run",
+    messages: {
+      // The companion refuses a list that would drop an interest saved
+      // elsewhere (another browser, or the chat).
+      409: (refusal) =>
+        Array.isArray(refusal.dropped)
+          ? "Your interests changed somewhere else (another browser or the chat). Reload this page to get the current list, then run again."
+          : undefined,
+    },
   });
 }
 

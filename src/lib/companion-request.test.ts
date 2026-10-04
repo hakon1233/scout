@@ -106,3 +106,19 @@ test("a token check says whether the companion accepts the token", async () => {
   };
   assert.equal(await verifyCompanionToken("good"), "unreachable");
 });
+
+test("a refusal message can depend on the refusal's body", async () => {
+  serve(() =>
+    Response.json({ error: "x", dropped: ["Topic"] }, { status: 409 }),
+  );
+  await assert.rejects(
+    companionJson("/v0/interests", {
+      failure: "Couldn't start the run",
+      messages: {
+        409: (body) =>
+          Array.isArray(body.dropped) ? "Interests changed." : undefined,
+      },
+    }),
+    { message: "Interests changed." },
+  );
+});
