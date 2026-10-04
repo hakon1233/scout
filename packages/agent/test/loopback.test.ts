@@ -551,8 +551,8 @@ test("GET /v0/config hands the token to a same-origin caller, refuses cross-orig
     // for the browser, even though the companion may see the request over HTTP.
     assert.equal(
       isSameOriginCaller(
-        "https://mac-mini.tailnet.ts.net",
-        "mac-mini.tailnet.ts.net",
+        "https://mac-mini.example.net",
+        "mac-mini.example.net",
         undefined,
       ),
       true,
@@ -688,7 +688,7 @@ test("a hostile Origin is 403'd uniformly across all /v0/* routes", async () => 
 });
 
 // A user who reaches the companion through `tailscale serve`
-// (`https://<machine>.<tailnet>.ts.net:<port>`) opts that origin in with
+// (an HTTPS origin such as `https://<machine>.example.net:<port>`) opts it in with
 // SCOUT_ALLOWED_ORIGINS. Once configured, the run trigger and briefs work from
 // it; an unconfigured tailnet origin, or a look-alike, is refused.
 test("a configured tailnet origin reaches the run path; unconfigured ones are refused", async () => {
@@ -712,10 +712,10 @@ test("a configured tailnet origin reaches the run path; unconfigured ones are re
     claudeBin,
     onSynthesisDone: (b) => synthesisDone(b),
   });
-  const tailnetOrigin = "https://example-host.tailnet.ts.net:48721";
+  const tailnetOrigin = "https://example-host.example.net:48721";
   const previousAllowed = process.env.SCOUT_ALLOWED_ORIGINS;
   try {
-    // Not configured yet: a .ts.net origin gets no special trust.
+    // Not configured yet: a proxy origin gets no special trust.
     delete process.env.SCOUT_ALLOWED_ORIGINS;
     const unconfigured = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
       headers: { origin: tailnetOrigin, authorization: `Bearer ${token}` },
@@ -753,7 +753,7 @@ test("a configured tailnet origin reaches the run path; unconfigured ones are re
     // exactly, never as a suffix or wildcard.
     const evil = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
       headers: {
-        origin: "https://example-host.tailnet.ts.net.evil.com",
+        origin: "https://example-host.example.net.evil.com",
         authorization: `Bearer ${token}`,
       },
     });

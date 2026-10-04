@@ -66,7 +66,7 @@ export default function ConnectPage() {
   }, []);
 
   useEffect(() => {
-    // When served from the companion (same-origin — loopback or a ts.net proxy),
+    // When served from the companion (same-origin — loopback or an HTTPS proxy),
     // auto-adopt the pairing token from /v0/config so the user skips copy/paste.
     (async () => {
       const tok = await bootstrapCompanionToken();

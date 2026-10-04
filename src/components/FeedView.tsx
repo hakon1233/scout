@@ -291,7 +291,7 @@ export function FeedImage({
   // Remote, unknown-host source images — next/image needs preconfigured domains
   // we can't predict, so a plain <img> with graceful onError is correct here.
   // referrerPolicy="no-referrer" so referer-checking CDNs (Crunchbase etc.) that
-  // 403 a request carrying our ts.net origin still serve the image.
+  // 403 a request carrying our proxy origin still serve the image.
   return (
     // eslint-disable-next-line @next/next/no-img-element -- Arbitrary source images need no-referrer and graceful unknown-host fallback; next/image requires host policy we cannot predict.
     <img

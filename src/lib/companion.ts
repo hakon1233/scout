@@ -91,7 +91,7 @@ let servedProbeInFlight: Promise<boolean> | null = null;
 // True when the companion (or its TLS reverse proxy) is serving THIS page —
 // i.e. a same-origin GET /healthz succeeds. This is host-agnostic on purpose:
 // it is true for the loopback origin (http://127.0.0.1:47821/) AND for a
-// Tailscale origin (https://<host>.ts.net:<port>/) where `tailscale serve`
+// proxy origin (https://<host>:<port>/) where something like `tailscale serve`
 // proxies the same loopback companion. In all those cases the API is
 // same-origin, so there is no public→loopback transition and the browser's
 // Local Network Access / CORS prompt never fires.
@@ -99,8 +99,8 @@ let servedProbeInFlight: Promise<boolean> | null = null;
 // It is correctly false on the public marketing host (github.io), which serves
 // /app/ but has no /healthz — there we fall back to the loopback port sweep.
 //
-// Not a hardcoded localhost/127.0.0.1 regex, which would exclude
-// *.ts.net and break token bootstrap + same-origin API on the Tailscale origin.
+// Not a hardcoded localhost/127.0.0.1 regex, which would exclude a proxy
+// origin and break the token bootstrap and same-origin API there.
 export async function isServedFromCompanion(): Promise<boolean> {
   if (!isClient()) return false;
   if (servedFromCompanionConfirmed) return true;
@@ -219,7 +219,7 @@ async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
 // Returns the base URL of the live companion, or null. Caches the result
 // so subsequent calls in the same session skip the sweep.
 export async function discoverCompanion(): Promise<string | null> {
-  // Served same-origin from the companion (loopback OR a ts.net proxy)? Use this
+  // Served same-origin from the companion (loopback OR an HTTPS proxy)? Use this
   // exact origin — every API call is then same-origin (no CORS, no LNA prompt)
   // and we skip the loopback sweep. isServedFromCompanion() already confirmed it
   // via a same-origin /healthz probe, so no second fetch is needed here.

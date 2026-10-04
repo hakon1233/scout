@@ -14,9 +14,9 @@ import { MAX_BODY_BYTES } from "./limits.js";
 // are always allowed. Anything else, such as a `tailscale serve` URL or a
 // self-hosted UI, is opted into with SCOUT_ALLOWED_ORIGINS: a comma-separated
 // list of exact origins, e.g.
-//   SCOUT_ALLOWED_ORIGINS="https://my-mac.example-tailnet.ts.net:48721"
-// No wildcards: a pattern such as *.ts.net would also admit any public
-// Tailscale Funnel site.
+//   SCOUT_ALLOWED_ORIGINS="https://my-mac.example.net:48721"
+// No wildcards: a pattern covering a proxy's whole domain would also admit
+// other people's public sites on that domain (Tailscale Funnel, for one).
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const LOOPBACK_HOSTNAMES = ["localhost", "127.0.0.1", "::1"];
 // The static UI on GitHub Pages calls the reader's loopback companion.
