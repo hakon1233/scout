@@ -30,9 +30,11 @@ function scheduleView(cfg: ScheduleConfig): ScheduleView {
 // Read the persisted recurring-schedule config + last/next-run telemetry
 // for the Settings UI. Materializes the default schedule on
 // first read so the UI always has something concrete to render.
-export async function handleGetSchedule(
-  { res, cors, state }: AuthedRequestContext,
-): Promise<void> {
+export async function handleGetSchedule({
+  res,
+  cors,
+  state,
+}: AuthedRequestContext): Promise<void> {
   const cfg = state.schedule ?? defaultSchedule();
   json(res, 200, scheduleView(cfg), cors);
 }
@@ -59,7 +61,12 @@ export async function handlePutSchedule(
   if (parsed.time_of_day !== undefined) {
     const normalized = normalizeTimeOfDay(parsed.time_of_day);
     if (!normalized) {
-      return json(res, 400, { error: "time_of_day must be 'HH:MM' (24h)" }, cors);
+      return json(
+        res,
+        400,
+        { error: "time_of_day must be 'HH:MM' (24h)" },
+        cors,
+      );
     }
     timeOfDay = normalized;
   }

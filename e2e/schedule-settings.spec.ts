@@ -40,7 +40,9 @@ test("Settings schedule: toggle + time-of-day write through the live companion a
   page,
 }, testInfo) => {
   await blockNonLoopback(page);
-  await page.addInitScript(() => window.localStorage.setItem("scout.theme", "light"));
+  await page.addInitScript(() =>
+    window.localStorage.setItem("scout.theme", "light"),
+  );
 
   await page.goto(`${ORIGIN}/app/settings/`);
 

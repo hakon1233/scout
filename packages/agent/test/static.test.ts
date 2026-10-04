@@ -22,7 +22,9 @@ test("malformed percent-encoded paths are static misses, not thrown errors", asy
   try {
     await assert.doesNotReject(() => resolveStatic("/%E0%A4%A", root));
     await assert.doesNotReject(() => trailingSlashRedirect("/%E0%A4%A", root));
-    await assert.doesNotReject(() => resolveAppShellFallback("/app/%E0%A4%A", root));
+    await assert.doesNotReject(() =>
+      resolveAppShellFallback("/app/%E0%A4%A", root),
+    );
 
     assert.equal(await resolveStatic("/%E0%A4%A", root), null);
     assert.equal(await trailingSlashRedirect("/%E0%A4%A", root), null);

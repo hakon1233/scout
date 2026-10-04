@@ -10,7 +10,8 @@ import assert from "node:assert/strict";
 import { stripBriefPreamble } from "../src/research.js";
 
 test("drops a single leading meta sentence before the brief heading", () => {
-  const raw = "I have enough to write the brief.\n\n# Your brief\n\n## AI\n- thing\n";
+  const raw =
+    "I have enough to write the brief.\n\n# Your brief\n\n## AI\n- thing\n";
   assert.equal(stripBriefPreamble(raw), "# Your brief\n\n## AI\n- thing");
 });
 
@@ -21,12 +22,16 @@ test("drops a multi-line preamble before the heading", () => {
 });
 
 test("leaves a clean brief untouched", () => {
-  const clean = "# Your brief\n\n## AI\n- thing\n  [example.com — T](https://example.com)";
+  const clean =
+    "# Your brief\n\n## AI\n- thing\n  [example.com — T](https://example.com)";
   assert.equal(stripBriefPreamble(clean + "\n"), clean);
 });
 
 test("trims leading whitespace before the heading", () => {
-  assert.equal(stripBriefPreamble("\n\n  \n# Your brief\n\n## A\n- b\n"), "# Your brief\n\n## A\n- b");
+  assert.equal(
+    stripBriefPreamble("\n\n  \n# Your brief\n\n## A\n- b\n"),
+    "# Your brief\n\n## A\n- b",
+  );
 });
 
 test("headingless: drops a leading prose paragraph but keeps list content", () => {

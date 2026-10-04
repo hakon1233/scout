@@ -39,7 +39,9 @@ async function seedPairedSession(page: Page) {
       "scout.settings.v1",
       JSON.stringify({
         name: "E2E Tester",
-        interests: [{ id: "int_0_runnow", topic: "Run-now error surfacing topic" }],
+        interests: [
+          { id: "int_0_runnow", topic: "Run-now error surfacing topic" },
+        ],
       }),
     );
     window.localStorage.setItem("scout.theme", "light");
@@ -72,7 +74,10 @@ test("Run now surfaces a real single-flight rejection verbatim, not a generic re
     return route.fulfill({
       status: 409,
       contentType: "application/json",
-      body: JSON.stringify({ error: "brief in progress", brief_id: "brief_test" }),
+      body: JSON.stringify({
+        error: "brief in progress",
+        brief_id: "brief_test",
+      }),
     });
   });
 
@@ -83,14 +88,18 @@ test("Run now surfaces a real single-flight rejection verbatim, not a generic re
   // "brief in progress" survives untouched) UNLESS it matches the network-style
   // keyword test — "brief in progress" does not, so this must render as an
   // "unknown"-kind danger banner, never the generic network copy.
-  await expect(page.getByText("brief in progress", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("brief in progress", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText("Couldn't reach Scout. Check your connection."),
   ).toHaveCount(0);
 
   // The "unknown"-kind ErrorBanner branch specifically (not "network", which
   // only ever offers "Try again" — "Copy details" only exists on this branch).
-  await expect(page.getByRole("button", { name: "Copy details" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Copy details" }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
 });
 

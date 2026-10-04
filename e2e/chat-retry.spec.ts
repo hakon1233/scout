@@ -126,9 +126,9 @@ test("a failed chat turn has no live retry: the only reachable Retry re-runs the
   // ── Only a reload surfaces the failed turn itself, with its OWN Retry ──────
   await page.reload();
   await expect(page.getByLabel("Message Scout")).toBeVisible();
-  await expect(
-    page.getByText(/I couldn't finish that turn:/),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/I couldn't finish that turn:/)).toBeVisible({
+    timeout: 30_000,
+  });
 
   const failedReply = page
     .locator(".group\\/msg", { hasText: "I couldn't finish that turn:" })
@@ -159,9 +159,9 @@ test("a failed chat turn has no live retry: the only reachable Retry re-runs the
       timeout: 30_000,
     });
     await confirm.getByRole("button", { name: "Delete" }).click();
-    await expect(
-      confirm.getByText("Removed from your interests"),
-    ).toBeVisible({ timeout: 30_000 });
+    await expect(confirm.getByText("Removed from your interests")).toBeVisible({
+      timeout: 30_000,
+    });
     remaining -= 1;
     await expect(railLinks).toHaveCount(remaining, { timeout: 30_000 });
   }

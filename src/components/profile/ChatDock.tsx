@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatChange, PendingDelete, PendingRewrite } from "@scout/agent/contract";
+import type {
+  ChatChange,
+  PendingDelete,
+  PendingRewrite,
+} from "@scout/agent/contract";
 import { prefersReducedMotion } from "@/lib/motion";
 import {
   ChatActionCard,

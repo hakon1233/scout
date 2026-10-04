@@ -202,7 +202,9 @@ export async function listCorruptStateBackups(
   const prefix = `${path.basename(file)}.corrupt-`;
   try {
     const entries = await fs.readdir(path.dirname(file));
-    return entries.filter((f) => f.startsWith(prefix) && f.endsWith(".bak")).sort();
+    return entries
+      .filter((f) => f.startsWith(prefix) && f.endsWith(".bak"))
+      .sort();
   } catch {
     // Config dir absent — normal first run, nothing was ever recovered.
     return [];

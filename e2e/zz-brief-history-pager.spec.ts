@@ -81,9 +81,9 @@ test("brief history pager: pagination and single-story isolation", async ({
     window.localStorage.setItem("scout.theme", "light");
   });
   await page.goto(`${ORIGIN}/app/`);
-  await expect(
-    page.getByRole("link", { name: /Pair companion/i }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Pair companion/i })).toHaveCount(
+    0,
+  );
 
   // 5 MORE editions on top of whatever's already there. PAGE_SIZE=3, so 5
   // alone (1 current + 4 history) is already enough to guarantee "Load

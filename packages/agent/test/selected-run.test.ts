@@ -38,7 +38,11 @@ function makeTopicAwareSpawn() {
     return `## ${titled}\n- ${topic} happened.\n  [example.com — ${titled}](https://example.com/${encodeURIComponent(topic)})\n`;
   };
 
-  const spawnFn = ((_bin: string, _args: readonly string[], _options: unknown) => {
+  const spawnFn = ((
+    _bin: string,
+    _args: readonly string[],
+    _options: unknown,
+  ) => {
     const child = new EventEmitter() as EventEmitter & {
       stdin: Writable;
       stdout: EventEmitter;

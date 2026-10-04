@@ -61,7 +61,11 @@ export function stripBriefPreamble(raw: string): string {
 
   // Primary path: slice from the first markdown heading line (`# `, `## `, …).
   const headingMatch = text.match(/^#{1,6}\s/m);
-  if (headingMatch && headingMatch.index !== undefined && headingMatch.index > 0) {
+  if (
+    headingMatch &&
+    headingMatch.index !== undefined &&
+    headingMatch.index > 0
+  ) {
     return text.slice(headingMatch.index).trim();
   }
   if (headingMatch) return text; // already starts at the heading — nothing to strip.
@@ -106,41 +110,93 @@ export function buildResearchPrompt(
   // 2. The interest's intent doc, VERBATIM. It says WHAT the reader wants from
   //    this topic; the skills above say HOW to find it. Fenced so the model sees
   //    exactly where the reader's words begin and end.
-  lines.push(`What the reader wants from "${topic}" (their intent — follow it closely):`);
+  lines.push(
+    `What the reader wants from "${topic}" (their intent — follow it closely):`,
+  );
   lines.push("<intent-doc>");
   lines.push(doc);
   lines.push("</intent-doc>");
   lines.push("");
   // 3. The recency anchor.
-  lines.push(`Today's date is ${today}. Use it to judge how recent each item is.`);
+  lines.push(
+    `Today's date is ${today}. Use it to judge how recent each item is.`,
+  );
   lines.push("");
-  lines.push("Use the WebSearch tool to find news on this topic. Use WebFetch on the");
-  lines.push("most promising results to confirm the facts AND the publish date, so you");
-  lines.push("write a real summary (not a headline rehash) with a verified date.");
+  lines.push(
+    "Use the WebSearch tool to find news on this topic. Use WebFetch on the",
+  );
+  lines.push(
+    "most promising results to confirm the facts AND the publish date, so you",
+  );
+  lines.push(
+    "write a real summary (not a headline rehash) with a verified date.",
+  );
   lines.push("");
   lines.push("Output requirements:");
-  lines.push("- GitHub-flavored Markdown only. No preamble, no trailing commentary.");
-  lines.push(`- Output EXACTLY one \`## ${topic}\` section — the heading text must be the`);
-  lines.push("  topic VERBATIM as written above (same words; capitalization may differ).");
-  lines.push("- Under the heading, 2-4 story bullets following the date-first format and");
-  lines.push("  recency rules in the search skills above (newest first, ISO date in");
+  lines.push(
+    "- GitHub-flavored Markdown only. No preamble, no trailing commentary.",
+  );
+  lines.push(
+    `- Output EXACTLY one \`## ${topic}\` section — the heading text must be the`,
+  );
+  lines.push(
+    "  topic VERBATIM as written above (same words; capitalization may differ).",
+  );
+  lines.push(
+    "- Under the heading, 2-4 story bullets following the date-first format and",
+  );
+  lines.push(
+    "  recency rules in the search skills above (newest first, ISO date in",
+  );
   lines.push("  backticks leading each bullet, citation on the next line).");
-  lines.push("- When the source page has a usable lead image, add the optional");
-  lines.push("  `![source image](url)` line right under that story's citation, per the");
-  lines.push("  SOURCE IMAGE rules above. Omit it when there isn't one — never invent it.");
-  lines.push("- Under each story, add the IN-DEPTH BODY as an indented `> …` blockquote");
-  lines.push("  per the rules above. The FIRST paragraph must be a short 1-2 sentence");
-  lines.push("  lead summary; the UI renders it in bold. Follow it with 3-5 more");
-  lines.push("  paragraphs of deeper insight/analysis — EACH must add a concrete,");
-  lines.push("  checkable detail (a number, a name, a quote, a mechanism, a specific");
-  lines.push("  consequence) grounded in the same sources, not a restatement of the");
-  lines.push("  lead. This is what the reader sees only on click; keep the bullet");
-  lines.push("  summary itself to one sentence. This depth bar is the SAME for every");
-  lines.push("  topic — broad/general topics get no less depth than narrow ones.");
-  lines.push("- If you genuinely can't find anything within the last 30 days, STILL emit");
-  lines.push(`  the \`## ${topic}\` heading with a single line \`_no fresh news_\` underneath.`);
-  lines.push("- Keep each story's one-line summary tight; the in-depth blockquote body may");
-  lines.push("  run a short bold lead plus 3-5 substantive follow-on paragraphs. Keep the");
+  lines.push(
+    "- When the source page has a usable lead image, add the optional",
+  );
+  lines.push(
+    "  `![source image](url)` line right under that story's citation, per the",
+  );
+  lines.push(
+    "  SOURCE IMAGE rules above. Omit it when there isn't one — never invent it.",
+  );
+  lines.push(
+    "- Under each story, add the IN-DEPTH BODY as an indented `> …` blockquote",
+  );
+  lines.push(
+    "  per the rules above. The FIRST paragraph must be a short 1-2 sentence",
+  );
+  lines.push(
+    "  lead summary; the UI renders it in bold. Follow it with 3-5 more",
+  );
+  lines.push(
+    "  paragraphs of deeper insight/analysis — EACH must add a concrete,",
+  );
+  lines.push(
+    "  checkable detail (a number, a name, a quote, a mechanism, a specific",
+  );
+  lines.push(
+    "  consequence) grounded in the same sources, not a restatement of the",
+  );
+  lines.push(
+    "  lead. This is what the reader sees only on click; keep the bullet",
+  );
+  lines.push(
+    "  summary itself to one sentence. This depth bar is the SAME for every",
+  );
+  lines.push(
+    "  topic — broad/general topics get no less depth than narrow ones.",
+  );
+  lines.push(
+    "- If you genuinely can't find anything within the last 30 days, STILL emit",
+  );
+  lines.push(
+    `  the \`## ${topic}\` heading with a single line \`_no fresh news_\` underneath.`,
+  );
+  lines.push(
+    "- Keep each story's one-line summary tight; the in-depth blockquote body may",
+  );
+  lines.push(
+    "  run a short bold lead plus 3-5 substantive follow-on paragraphs. Keep the",
+  );
   lines.push("  whole section under ~950 words.");
   lines.push("");
   lines.push("Write the section now.");

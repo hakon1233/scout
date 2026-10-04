@@ -34,8 +34,14 @@ test("a corrupt state.json is backed up to .corrupt-*.bak, not wiped", async () 
     const backup = siblings.find(
       (f) => f.includes(".corrupt-") && f.endsWith(".bak"),
     );
-    assert.ok(backup, "expected a .corrupt-*.bak backup of the unparseable state");
-    assert.equal(await fs.readFile(path.join(tmp, backup!), "utf8"), corruptBytes);
+    assert.ok(
+      backup,
+      "expected a .corrupt-*.bak backup of the unparseable state",
+    );
+    assert.equal(
+      await fs.readFile(path.join(tmp, backup!), "utf8"),
+      corruptBytes,
+    );
 
     // And the now-absent state.json is free for a clean save (the dangerous
     // path: without the backup this save would have overwritten the corrupt

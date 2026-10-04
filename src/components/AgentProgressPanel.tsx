@@ -99,8 +99,7 @@ function StatePill({
           : "Done";
       break;
     case "failed":
-      className +=
-        " bg-surface text-danger border border-danger-border";
+      className += " bg-surface text-danger border border-danger-border";
       label = "Failed";
       break;
   }

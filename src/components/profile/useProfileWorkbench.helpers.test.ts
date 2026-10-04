@@ -204,7 +204,11 @@ test("appliedChangeMessage returns null when the confirm turn applied nothing", 
 // React's StrictMode double-invoke kicked the turn twice and the second 409'd.
 // Extracting it lets the hook compute the target once, outside any updater, and
 // dispatch exactly once.
-const chat = (id: string, role: ChatMessage["role"], text: string): ChatMessage => ({
+const chat = (
+  id: string,
+  role: ChatMessage["role"],
+  text: string,
+): ChatMessage => ({
   id,
   role,
   text,
@@ -219,12 +223,18 @@ test("resolveRetryTarget re-runs the you-message before the scout reply, trimmin
   ];
 
   const target = resolveRetryTarget(messages, "m4", null);
-  assert.deepEqual(target?.nextMessages.map((m) => m.id), ["m1", "m2", "m3"]);
+  assert.deepEqual(
+    target?.nextMessages.map((m) => m.id),
+    ["m1", "m2", "m3"],
+  );
   assert.equal(target?.wire, "second question");
 
   // Retrying an earlier reply trims back to just before that reply.
   const earlier = resolveRetryTarget(messages, "m2", null);
-  assert.deepEqual(earlier?.nextMessages.map((m) => m.id), ["m1"]);
+  assert.deepEqual(
+    earlier?.nextMessages.map((m) => m.id),
+    ["m1"],
+  );
   assert.equal(earlier?.wire, "first question");
 });
 
@@ -234,14 +244,14 @@ test("resolveRetryTarget scope-prefixes the wire when an interest is focused", (
     chat("m2", "scout", "here you go"),
   ];
   const target = resolveRetryTarget(messages, "m2", "AI safety");
-  assert.equal(target?.wire, 'Regarding my interest "AI safety": what changed?');
+  assert.equal(
+    target?.wire,
+    'Regarding my interest "AI safety": what changed?',
+  );
 });
 
 test("resolveRetryTarget returns null when there is nothing safe to re-run", () => {
-  const messages = [
-    chat("m1", "you", "q"),
-    chat("m2", "scout", "a"),
-  ];
+  const messages = [chat("m1", "you", "q"), chat("m2", "scout", "a")];
   // Unknown id.
   assert.equal(resolveRetryTarget(messages, "nope", null), null);
   // First message (no preceding you-bubble to re-run).

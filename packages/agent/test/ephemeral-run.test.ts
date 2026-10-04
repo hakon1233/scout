@@ -81,8 +81,10 @@ async function seededReader() {
   // Rich authored bodies — distinct from the default template so an overwrite
   // would be detectable byte-for-byte.
   const docs: Record<string, string> = {
-    int_authored_aaa: "# harness news\n\nAUTHORED: gstack, Matt Pocock skills repo.\n",
-    int_authored_bbb: "# ai coding tools & models\n\nAUTHORED: combine codex/claude code/anthropic.\n",
+    int_authored_aaa:
+      "# harness news\n\nAUTHORED: gstack, Matt Pocock skills repo.\n",
+    int_authored_bbb:
+      "# ai coding tools & models\n\nAUTHORED: combine codex/claude code/anthropic.\n",
   };
   for (const it of reader) {
     await fs.writeFile(path.join(interestsDir, `${it.id}.md`), docs[it.id]);
@@ -189,7 +191,10 @@ test("a NON-ephemeral POST still persists its interests (normal path unbroken)",
       headers: { "content-type": "application/json", ...auth },
       // confirm_replace satisfies the wipe guard — this intentionally
       // replaces the seeded list with a fresh one.
-      body: JSON.stringify({ interests: ["ai", "robotics"], confirm_replace: true }),
+      body: JSON.stringify({
+        interests: ["ai", "robotics"],
+        confirm_replace: true,
+      }),
     });
     assert.equal(kick.status, 202);
     await done;

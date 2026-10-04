@@ -102,7 +102,10 @@ test("today's date uses the local calendar day, not UTC", () => {
 });
 
 test("the prompt scopes the session to the single topic and its output section", () => {
-  const prompt = buildResearchPrompt({ topic: "claude code", doc: "track claude code" });
+  const prompt = buildResearchPrompt({
+    topic: "claude code",
+    doc: "track claude code",
+  });
   // Single-interest session: the topic appears as the session scope and as the
   // exactly-one `## <topic>` output section the assembler later extracts.
   assert.match(prompt, /single topic: "claude code"/);
@@ -127,8 +130,14 @@ test("the depth bar is substantive and applies equally to every topic", () => {
   // applied uniformly, never a topic-breadth branch. Pin both halves: the
   // wider paragraph range + concrete-detail requirement, and that nothing in
   // the prompt or SEARCH_SKILLS conditions depth on how broad a topic is.
-  const broad = buildResearchPrompt({ topic: "world news", doc: "track world news" });
-  const narrow = buildResearchPrompt({ topic: "acme corp", doc: "track acme corp" });
+  const broad = buildResearchPrompt({
+    topic: "world news",
+    doc: "track world news",
+  });
+  const narrow = buildResearchPrompt({
+    topic: "acme corp",
+    doc: "track acme corp",
+  });
 
   for (const prompt of [broad, narrow]) {
     assert.match(prompt, /3-5/, "prompt must ask for 3-5 follow-on paragraphs");
@@ -143,7 +152,10 @@ test("the depth bar is substantive and applies equally to every topic", () => {
   // output-requirements block) must be byte-identical, proving there is no
   // broad-vs-narrow branch anywhere in the pipeline.
   const stripTopic = (p: string) => p.split(SEARCH_SKILLS)[1];
-  assert.equal(stripTopic(broad).replace(/world news|track world news/gi, ""), stripTopic(narrow).replace(/acme corp|track acme corp/gi, ""));
+  assert.equal(
+    stripTopic(broad).replace(/world news|track world news/gi, ""),
+    stripTopic(narrow).replace(/acme corp|track acme corp/gi, ""),
+  );
 });
 
 // A `claude` stub that NEVER closes — models a hung session (model stall /
@@ -169,7 +181,11 @@ function makeHangingSpawn() {
       state.killSignal = sig ?? "";
       return true;
     };
-    child.stdin = new Writable({ write(_c, _e, cb) { cb(); } });
+    child.stdin = new Writable({
+      write(_c, _e, cb) {
+        cb();
+      },
+    });
     // Intentionally never emit "close" or "error": the session hangs.
     return child;
   }) as unknown as typeof spawn;
@@ -203,7 +219,11 @@ test("a session that closes in time is NOT affected by the timeout", async () =>
     child.pid = undefined;
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
-    child.stdin = new Writable({ write(_c, _e, cb) { cb(); } });
+    child.stdin = new Writable({
+      write(_c, _e, cb) {
+        cb();
+      },
+    });
     child.stdin.on("finish", () =>
       setImmediate(() => {
         child.stdout.emit(
@@ -239,12 +259,18 @@ test("a non-zero exit with empty stderr surfaces the stdout tail", async () => {
     child.pid = undefined;
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
-    child.stdin = new Writable({ write(_c, _e, cb) { cb(); } });
+    child.stdin = new Writable({
+      write(_c, _e, cb) {
+        cb();
+      },
+    });
     child.stdin.on("finish", () =>
       setImmediate(() => {
         child.stdout.emit(
           "data",
-          Buffer.from("You've hit your session limit · resets 8:40pm (Europe/Oslo)"),
+          Buffer.from(
+            "You've hit your session limit · resets 8:40pm (Europe/Oslo)",
+          ),
         );
         child.emit("close", 1);
       }),

@@ -31,7 +31,11 @@ export function EmptyState({
       className={`flex flex-col items-center gap-3 text-center ${className}`}
       role="status"
     >
-      {icon && <div aria-hidden className="text-muted">{icon}</div>}
+      {icon && (
+        <div aria-hidden className="text-muted">
+          {icon}
+        </div>
+      )}
       <h2 className="text-title-3 text-primary">{title}</h2>
       {body && <p className="max-w-md text-body-sm text-secondary">{body}</p>}
       {(primary || secondary) && (

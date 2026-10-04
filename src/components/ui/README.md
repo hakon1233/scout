@@ -8,24 +8,24 @@ All tokens live in `src/app/globals.css`. Light values are defined under `:root`
 
 ### Color (semantic)
 
-| Token             | Tailwind utility           | Purpose                            |
-| ----------------- | -------------------------- | ---------------------------------- |
-| `--bg-page`       | `bg-page`                  | App background                     |
-| `--bg-surface`    | `bg-surface`               | Cards, inputs, default panels      |
-| `--bg-surface-muted` | `bg-surface-muted`      | Inline muted surfaces              |
-| `--border-default` | `border-border-default`   | Default 1px borders                |
-| `--border-strong` | `border-border-strong`     | High-contrast borders              |
-| `--text-primary`  | `text-primary`             | Default body text                  |
-| `--text-secondary` | `text-secondary`          | De-emphasized supporting text      |
-| `--text-muted`    | `text-muted`               | Captions, meta                     |
-| `--accent-bg`     | `bg-accent`                | Primary action background          |
-| `--accent-fg`     | `text-accent-fg`           | Primary action foreground          |
-| `--accent-bg-hover` | `bg-accent-hover`        | Primary action hover               |
-| `--danger-*`      | `bg-danger-bg` / `bg-danger-bg-hover` / `text-danger` / `border-danger-border` | Error surfaces + destructive-action buttons |
-| `--info-*`        | `bg-info-bg` / `text-info` / `border-info-border` | Info banners |
-| `--success-*`     | `bg-success-bg` / `text-success` / `border-success-border` | Success banners |
-| `--warning-*`     | `bg-warning-bg` / `text-warning` / `border-warning-border` | Warning banners |
-| `--focus-ring`    | `ring-focus-ring`          | Focus ring color (`focus-visible:ring-2`) |
+| Token                | Tailwind utility                                                               | Purpose                                     |
+| -------------------- | ------------------------------------------------------------------------------ | ------------------------------------------- |
+| `--bg-page`          | `bg-page`                                                                      | App background                              |
+| `--bg-surface`       | `bg-surface`                                                                   | Cards, inputs, default panels               |
+| `--bg-surface-muted` | `bg-surface-muted`                                                             | Inline muted surfaces                       |
+| `--border-default`   | `border-border-default`                                                        | Default 1px borders                         |
+| `--border-strong`    | `border-border-strong`                                                         | High-contrast borders                       |
+| `--text-primary`     | `text-primary`                                                                 | Default body text                           |
+| `--text-secondary`   | `text-secondary`                                                               | De-emphasized supporting text               |
+| `--text-muted`       | `text-muted`                                                                   | Captions, meta                              |
+| `--accent-bg`        | `bg-accent`                                                                    | Primary action background                   |
+| `--accent-fg`        | `text-accent-fg`                                                               | Primary action foreground                   |
+| `--accent-bg-hover`  | `bg-accent-hover`                                                              | Primary action hover                        |
+| `--danger-*`         | `bg-danger-bg` / `bg-danger-bg-hover` / `text-danger` / `border-danger-border` | Error surfaces + destructive-action buttons |
+| `--info-*`           | `bg-info-bg` / `text-info` / `border-info-border`                              | Info banners                                |
+| `--success-*`        | `bg-success-bg` / `text-success` / `border-success-border`                     | Success banners                             |
+| `--warning-*`        | `bg-warning-bg` / `text-warning` / `border-warning-border`                     | Warning banners                             |
+| `--focus-ring`       | `ring-focus-ring`                                                              | Focus ring color (`focus-visible:ring-2`)   |
 
 ### Space (4px base)
 
@@ -56,7 +56,9 @@ Live in `src/components/ui/`. Re-exported from `src/components/ui/index.ts`.
 ### `<Button>`
 
 ```tsx
-<Button variant="primary" size="md" loading={isSaving}>Save</Button>
+<Button variant="primary" size="md" loading={isSaving}>
+  Save
+</Button>
 ```
 
 - `variant`: `primary | secondary | ghost | link | danger`

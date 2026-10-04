@@ -41,7 +41,11 @@ function makeTopicAwareSpawn() {
     return `## ${titled}\n- ${topic} happened.\n  [example.com — ${titled}](https://example.com/${encodeURIComponent(topic)})\n`;
   };
 
-  const spawnFn = ((_bin: string, _args: readonly string[], _options: unknown) => {
+  const spawnFn = ((
+    _bin: string,
+    _args: readonly string[],
+    _options: unknown,
+  ) => {
     const child = new EventEmitter() as EventEmitter & {
       stdin: Writable;
       stdout: EventEmitter;
@@ -125,7 +129,9 @@ test("retry_topics re-researches only the dropped topic and merges it in", async
     assert.equal(kick1.status, 202);
     await done;
 
-    let res = await fetch(`http://127.0.0.1:${port}/v0/briefs`, { headers: auth });
+    let res = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      headers: auth,
+    });
     let brief = ((await res.json()) as { briefs: BriefWithTopics[] }).briefs[0];
     assert.equal(brief.status, "ready");
     // Coverage is returned and correctly flags openai as missing, the rest covered.

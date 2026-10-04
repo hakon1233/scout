@@ -60,10 +60,7 @@ test("feed filter uses dark theme tokens for its button and menu", async ({
   const activeFilter = page.getByRole("button", {
     name: "Filtering by AI safety",
   });
-  await expect(activeFilter).toHaveCSS(
-    "background-color",
-    "rgb(36, 32, 26)",
-  );
+  await expect(activeFilter).toHaveCSS("background-color", "rgb(36, 32, 26)");
   // Dark-mode --accent-signal is #d2694c (rgb(210,105,76)); it was lightened
   // from #c4553f to reach WCAG AA contrast (see src/app/globals.css).
   await expect(activeFilter).toHaveCSS("border-color", "rgb(210, 105, 76)");

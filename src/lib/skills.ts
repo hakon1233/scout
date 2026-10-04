@@ -30,7 +30,9 @@ function isGroupHeader(line: string): boolean {
   if (!trimmed.endsWith(":")) return false;
   if (/^[-*]\s/.test(trimmed)) return false;
   const label = trimmed.split(/[(:]/)[0].trim();
-  return label.length > 0 && /[A-Z]/.test(label) && label === label.toUpperCase();
+  return (
+    label.length > 0 && /[A-Z]/.test(label) && label === label.toUpperCase()
+  );
 }
 
 export function parseSkillSet(raw: string): SkillSet {

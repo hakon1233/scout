@@ -73,9 +73,9 @@ async function seedPairedSession(page: Page) {
   await page.goto(`${ORIGIN}/app/`);
   // Same-origin auto-adopt (as zero-prompt.spec.ts): the pairing prompt must be
   // gone before "Run now" is reachable/enabled.
-  await expect(
-    page.getByRole("link", { name: /Pair companion/i }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Pair companion/i })).toHaveCount(
+    0,
+  );
 }
 
 test("Run now while a story detail is open still shows run progress (not a blank feed)", async ({

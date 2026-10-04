@@ -40,8 +40,7 @@ export function ChatDeleteConfirm({
     if (!autoFocus || resolved) return;
     if (typeof document !== "undefined") {
       const active = document.activeElement;
-      returnFocusRef.current =
-        active instanceof HTMLElement ? active : null;
+      returnFocusRef.current = active instanceof HTMLElement ? active : null;
     }
     cancelRef.current?.focus();
   }, [autoFocus, resolved]);

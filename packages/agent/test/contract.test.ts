@@ -40,7 +40,12 @@ const CANNED_BRIEF =
 // is how we hold a synthesis "in flight" to exercise the single-flight race
 // window.
 function makeSpawnRecorder(opts: { autoClose: boolean }) {
-  const calls: Array<{ bin: string; args: readonly string[]; options: unknown; stdin: string }> = [];
+  const calls: Array<{
+    bin: string;
+    args: readonly string[];
+    options: unknown;
+    stdin: string;
+  }> = [];
   const pending: Array<() => void> = [];
 
   const spawnFn = ((bin: string, args: readonly string[], options: unknown) => {
@@ -96,7 +101,9 @@ function makeSpawnRecorder(opts: { autoClose: boolean }) {
       const deadline = Date.now() + 30_000;
       while (pending.length < count) {
         if (Date.now() > deadline) {
-          throw new Error(`no gated child after 30s (have ${pending.length}, want ${count})`);
+          throw new Error(
+            `no gated child after 30s (have ${pending.length}, want ${count})`,
+          );
         }
         await new Promise((r) => setTimeout(r, 10));
       }
@@ -134,19 +141,27 @@ test("GET /v0/briefs returns the render contract the web app parses", async () =
     assert.equal(kick.status, 202);
     await doneP;
 
-    const res = await fetch(`http://127.0.0.1:${port}/v0/briefs`, { headers: auth });
+    const res = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      headers: auth,
+    });
     assert.equal(res.status, 200);
     const body = (await res.json()) as { briefs: Brief[] };
 
     // Top-level envelope the poller expects: { briefs: [...] }.
-    assert.ok(Array.isArray(body.briefs), "response must carry a `briefs` array");
+    assert.ok(
+      Array.isArray(body.briefs),
+      "response must carry a `briefs` array",
+    );
     assert.equal(body.briefs.length, 1);
     const brief = body.briefs[0];
 
     // adaptBrief() in src/lib/companion.ts reads exactly these fields. Pin them.
     assert.equal(typeof brief.id, "string");
     assert.equal(typeof brief.generated_at, "string");
-    assert.ok(!Number.isNaN(Date.parse(brief.generated_at)), "generated_at is ISO");
+    assert.ok(
+      !Number.isNaN(Date.parse(brief.generated_at)),
+      "generated_at is ISO",
+    );
     assert.equal(brief.status, "ready");
     assert.equal(typeof brief.summary_md, "string");
 
@@ -154,7 +169,11 @@ test("GET /v0/briefs returns the render contract the web app parses", async () =
     // and `[domain — Title](url)` citations. If either format drifts, the
     // Sources panel + interest chips silently empty — so lock both here.
     const md = brief.summary_md ?? "";
-    assert.match(md, /^##\s+.+/m, "summary_md must contain a `## topic` heading");
+    assert.match(
+      md,
+      /^##\s+.+/m,
+      "summary_md must contain a `## topic` heading",
+    );
     assert.match(
       md,
       /\[[^\]]+\]\(https?:\/\/[^)\s]+\)/,
@@ -226,10 +245,17 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first",
       `http://127.0.0.1:${port}/v0/briefs?offset=1`,
       { headers: auth },
     );
-    const offsetBody = (await offsetOnly.json()) as { briefs: Brief[]; total: number };
+    const offsetBody = (await offsetOnly.json()) as {
+      briefs: Brief[];
+      total: number;
+    };
     assert.equal(offsetOnly.status, 200);
     assert.equal(offsetBody.total, 3);
-    assert.equal(offsetBody.briefs.length, 2, "offset-only request uses default limit");
+    assert.equal(
+      offsetBody.briefs.length,
+      2,
+      "offset-only request uses default limit",
+    );
     assert.equal(offsetBody.briefs[0].id, second.id);
     assert.equal(offsetBody.briefs[1].id, first.id);
 
@@ -240,10 +266,17 @@ test("GET /v0/briefs?limit=&offset= pages the ready-brief history newest-first",
       `http://127.0.0.1:${port}/v0/briefs?limit=&offset=`,
       { headers: auth },
     );
-    const emptyParamsBody = (await emptyParams.json()) as { briefs: Brief[]; total: number };
+    const emptyParamsBody = (await emptyParams.json()) as {
+      briefs: Brief[];
+      total: number;
+    };
     assert.equal(emptyParams.status, 200);
     assert.equal(emptyParamsBody.total, 3);
-    assert.equal(emptyParamsBody.briefs.length, 3, "empty limit uses the default page size");
+    assert.equal(
+      emptyParamsBody.briefs.length,
+      3,
+      "empty limit uses the default page size",
+    );
     assert.equal(emptyParamsBody.briefs[0].id, third.id);
     assert.equal(emptyParamsBody.briefs[1].id, second.id);
     assert.equal(emptyParamsBody.briefs[2].id, first.id);
@@ -288,7 +321,9 @@ test("a second kick while a brief is in flight is rejected without clobbering th
     const firstId = ((await kick1.json()) as { brief_id: string }).brief_id;
 
     // The slot is now pending with the first id.
-    const mid = await fetch(`http://127.0.0.1:${port}/v0/briefs`, { headers: auth });
+    const mid = await fetch(`http://127.0.0.1:${port}/v0/briefs`, {
+      headers: auth,
+    });
     const midBriefs = ((await mid.json()) as { briefs: Brief[] }).briefs;
     assert.equal(midBriefs[0]?.status, "pending");
     assert.equal(midBriefs[0]?.id, firstId);
@@ -360,12 +395,19 @@ test("the pairing token is never forwarded to claude or logged, and no API key i
   try {
     const kick = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ interests: ["ai safety", "markets"] }),
     });
     assert.equal(kick.status, 202);
     const brief = await doneP;
-    assert.equal(brief.status, "ready", "synthesis succeeds with no API key configured");
+    assert.equal(
+      brief.status,
+      "ready",
+      "synthesis succeeds with no API key configured",
+    );
 
     // Per-interest sessions: one claude child per topic.
     assert.equal(recorder.calls.length, 2);
@@ -376,22 +418,35 @@ test("the pairing token is never forwarded to claude or logged, and no API key i
       const argvBlob = JSON.stringify(call.args);
       const optsBlob = JSON.stringify(call.options ?? {});
       assert.ok(!argvBlob.includes(token), "token leaked into claude argv");
-      assert.ok(!optsBlob.includes(token), "token leaked into claude spawn options/env");
-      assert.ok(!call.stdin.includes(token), "token leaked into the claude prompt (stdin)");
+      assert.ok(
+        !optsBlob.includes(token),
+        "token leaked into claude spawn options/env",
+      );
+      assert.ok(
+        !call.stdin.includes(token),
+        "token leaked into the claude prompt (stdin)",
+      );
     }
 
     // Each prompt is built from ONE interest's topic + doc, never the secret.
     // Sanity-check both topics show up (one per session) so we know we inspected
     // real prompts, not empty ones.
     const prompts = recorder.calls.map((c) => c.stdin);
-    assert.ok(prompts.some((p) => /ai safety/.test(p)), "a session must cover 'ai safety'");
-    assert.ok(prompts.some((p) => /markets/.test(p)), "a session must cover 'markets'");
+    assert.ok(
+      prompts.some((p) => /ai safety/.test(p)),
+      "a session must cover 'ai safety'",
+    );
+    assert.ok(
+      prompts.some((p) => /markets/.test(p)),
+      "a session must cover 'markets'",
+    );
 
     // Nothing logged during the whole exchange may contain the token.
     const allLogs = logged.join("\n");
     assert.ok(!allLogs.includes(token), "token leaked into stdout/stderr logs");
   } finally {
-    for (const k of Object.keys(orig) as Array<keyof typeof orig>) console[k] = orig[k];
+    for (const k of Object.keys(orig) as Array<keyof typeof orig>)
+      console[k] = orig[k];
     if (savedKey !== undefined) process.env.ANTHROPIC_API_KEY = savedKey;
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
@@ -415,7 +470,9 @@ test("PUT /v0/interests persists to state.json WITHOUT running a synthesis", asy
       headers: { "content-type": "application/json", ...auth },
       // Includes a case-dupe ("AI safety"/"ai safety") to confirm PUT applies
       // the same clean/dedupe rules POST does (keep first casing, collapse).
-      body: JSON.stringify({ interests: ["ai safety", "AI safety", "markets"] }),
+      body: JSON.stringify({
+        interests: ["ai safety", "AI safety", "markets"],
+      }),
     });
     assert.equal(res.status, 200);
     const body = (await res.json()) as { interests: string[]; status: string };
@@ -446,7 +503,10 @@ test("PUT /v0/interests persists to state.json WITHOUT running a synthesis", asy
 test("PUT /v0/interests rejects an empty/oversized interest list", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const recorder = makeSpawnRecorder({ autoClose: true });
-  const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn: recorder.spawnFn,
+  });
   const auth = { authorization: `Bearer ${token}` };
 
   try {
@@ -488,7 +548,10 @@ test("PUT /v0/interests rejects an empty/oversized interest list", async () => {
 test("PUT /v0/interests rejects malformed interest entries without partial writes", async () => {
   const { tmp, stateFile, token } = await seededServer();
   const recorder = makeSpawnRecorder({ autoClose: true });
-  const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn: recorder.spawnFn,
+  });
   const auth = { authorization: `Bearer ${token}` };
 
   try {
@@ -502,7 +565,11 @@ test("PUT /v0/interests rejects malformed interest entries without partial write
     assert.match(body.error, /interests must be strings/);
 
     const state = await loadState(stateFile);
-    assert.equal(state.interests, undefined, "malformed payload must not partially persist");
+    assert.equal(
+      state.interests,
+      undefined,
+      "malformed payload must not partially persist",
+    );
     assert.equal(recorder.calls.length, 0, "PUT must not spawn a synthesis");
   } finally {
     server.close();
@@ -535,7 +602,10 @@ async function seededServerWithInterests() {
 test("POST /v0/interests refuses a subset payload that would drop saved interests", async () => {
   const { tmp, stateFile, token, saved } = await seededServerWithInterests();
   const recorder = makeSpawnRecorder({ autoClose: true });
-  const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn: recorder.spawnFn,
+  });
   const auth = { authorization: `Bearer ${token}` };
 
   try {
@@ -546,14 +616,25 @@ test("POST /v0/interests refuses a subset payload that would drop saved interest
       body: JSON.stringify({ interests: ["qa throwaway topic"] }),
     });
     assert.equal(res.status, 409);
-    const body = (await res.json()) as { error: string; dropped: string[]; hint: string };
+    const body = (await res.json()) as {
+      error: string;
+      dropped: string[];
+      hint: string;
+    };
     assert.equal(body.error, "replace would drop saved interests");
     assert.deepEqual(body.dropped, ["ai safety", "markets", "climate"]);
-    assert.ok(body.hint.includes("confirm_replace"), "hint names the confirm token");
+    assert.ok(
+      body.hint.includes("confirm_replace"),
+      "hint names the confirm token",
+    );
 
     // Nothing persisted, no synthesis kicked.
     const state = await loadState(stateFile);
-    assert.deepEqual(state.interests, saved, "saved interests must be untouched");
+    assert.deepEqual(
+      state.interests,
+      saved,
+      "saved interests must be untouched",
+    );
     assert.equal(state.last_brief, undefined, "no brief slot may be created");
     assert.equal(recorder.calls.length, 0, "claude must not be spawned");
   } finally {
@@ -614,7 +695,9 @@ test("POST /v0/interests passes a superset (additive) payload without confirmati
     const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({ interests: ["AI Safety", "markets", "climate", "space"] }),
+      body: JSON.stringify({
+        interests: ["AI Safety", "markets", "climate", "space"],
+      }),
     });
     assert.equal(res.status, 202);
 
@@ -626,7 +709,10 @@ test("POST /v0/interests passes a superset (additive) payload without confirmati
       ["AI Safety", "markets", "climate", "space"],
     );
     // Id-preservation across the additive write keeps intent docs attached.
-    assert.equal(state.interests?.find((i) => i.topic === "AI Safety")?.id, "i-ai");
+    assert.equal(
+      state.interests?.find((i) => i.topic === "AI Safety")?.id,
+      "i-ai",
+    );
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
@@ -651,14 +737,21 @@ test("POST /v0/interests {ephemeral:true} never alters persisted interests", asy
     const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({ interests: ["qa throwaway topic"], ephemeral: true }),
+      body: JSON.stringify({
+        interests: ["qa throwaway topic"],
+        ephemeral: true,
+      }),
     });
     assert.equal(res.status, 202);
 
     // Let the autoClose synthesis land fully before inspecting persisted state.
     await done;
     const state = await loadState(stateFile);
-    assert.deepEqual(state.interests, saved, "ephemeral run must not touch saved interests");
+    assert.deepEqual(
+      state.interests,
+      saved,
+      "ephemeral run must not touch saved interests",
+    );
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
@@ -668,7 +761,10 @@ test("POST /v0/interests {ephemeral:true} never alters persisted interests", asy
 test("PUT /v0/interests applies the same wipe guard as POST", async () => {
   const { tmp, stateFile, token, saved } = await seededServerWithInterests();
   const recorder = makeSpawnRecorder({ autoClose: true });
-  const { server, port } = await startServer(0, { stateFile, spawnFn: recorder.spawnFn });
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn: recorder.spawnFn,
+  });
   const auth = { authorization: `Bearer ${token}` };
 
   try {
@@ -691,7 +787,10 @@ test("PUT /v0/interests applies the same wipe guard as POST", async () => {
     });
     assert.equal(ok.status, 200);
     const state = await loadState(stateFile);
-    assert.deepEqual((state.interests ?? []).map((i) => i.topic), ["markets"]);
+    assert.deepEqual(
+      (state.interests ?? []).map((i) => i.topic),
+      ["markets"],
+    );
     assert.equal(state.interests?.[0]?.id, "i-mk", "kept topic retains its id");
     assert.equal(recorder.calls.length, 0, "PUT never spawns a synthesis");
   } finally {

@@ -67,9 +67,7 @@ test("chat delete targets the SPECIFIC interest named, not always the first in t
   // The card names the interest the user actually asked for, not the first
   // one created — if targeting regressed to "always first", this card would
   // read "Confirm delete · Robotics manufacturing" instead.
-  await expect(
-    page.getByText(`Confirm delete · ${FIRST}`),
-  ).toHaveCount(0);
+  await expect(page.getByText(`Confirm delete · ${FIRST}`)).toHaveCount(0);
 
   await confirmSecond.getByRole("button", { name: "Delete" }).click();
   await expect(

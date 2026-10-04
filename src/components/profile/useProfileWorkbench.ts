@@ -6,8 +6,18 @@ import {
   useAbortableController,
   useAbortableEffect,
 } from "@/hooks/useAbortableEffect";
-import { confirmDeleteInterest, confirmRewriteInterest, fetchChatTranscript, runChatTurn, stopChatTurn } from "@/lib/chat";
-import type { ChatChange, PendingDelete, PendingRewrite } from "@scout/agent/contract";
+import {
+  confirmDeleteInterest,
+  confirmRewriteInterest,
+  fetchChatTranscript,
+  runChatTurn,
+  stopChatTurn,
+} from "@/lib/chat";
+import type {
+  ChatChange,
+  PendingDelete,
+  PendingRewrite,
+} from "@scout/agent/contract";
 import {
   fetchCompanionInterestSet,
   type InterestDocMeta,
@@ -492,7 +502,11 @@ export function useProfileWorkbench() {
       const focusTopic = focusKey
         ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
         : null;
-      const target = resolveRetryTarget(messagesRef.current, scoutId, focusTopic);
+      const target = resolveRetryTarget(
+        messagesRef.current,
+        scoutId,
+        focusTopic,
+      );
       if (!target) return;
       setMessages(target.nextMessages);
       dispatch(target.wire);

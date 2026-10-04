@@ -72,7 +72,8 @@ export async function handlePostChatStop({
   const parsedBody = await parseJsonBody<{ turn_id?: unknown }>(req);
   if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
   const parsed = parsedBody.body;
-  const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
+  const turnId =
+    typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
   const stopped = stopChatTurn(turnId);
   json(res, 200, { stopped }, cors);
 }
@@ -92,7 +93,8 @@ export async function handlePostChatConfirmDelete(
   const parsed = parsedBody.body;
   const interestId =
     typeof parsed.interestId === "string" ? parsed.interestId : "";
-  if (!interestId) return json(res, 400, { error: "interestId required" }, cors);
+  if (!interestId)
+    return json(res, 400, { error: "interestId required" }, cors);
   const outcome = await confirmDeleteTurn(interestId, sc.chatDeps);
   if (!outcome.ok) {
     if (outcome.reason === "in_flight") {
@@ -119,7 +121,8 @@ export async function handlePostChatConfirmRewrite(
   const parsed = parsedBody.body;
   const interestId =
     typeof parsed.interestId === "string" ? parsed.interestId : "";
-  if (!interestId) return json(res, 400, { error: "interestId required" }, cors);
+  if (!interestId)
+    return json(res, 400, { error: "interestId required" }, cors);
   const outcome = await confirmRewriteTurn(interestId, sc.chatDeps);
   if (!outcome.ok) {
     if (outcome.reason === "in_flight") {
@@ -141,7 +144,9 @@ export async function handleGetChat(
   sc: ServerContext,
 ): Promise<void> {
   const since = url.searchParams.get("since");
-  const transcript = await readChatTranscriptCached(sc.chatDeps.chatTranscriptFile);
+  const transcript = await readChatTranscriptCached(
+    sc.chatDeps.chatTranscriptFile,
+  );
   const last = state.last_chat;
   const byId = new Map(transcript.map((turn) => [turn.id, turn]));
   if (last && !byId.has(last.id)) byId.set(last.id, last);

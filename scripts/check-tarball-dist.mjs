@@ -9,7 +9,13 @@
 // Offline, no deps — uses the system `tar` to extract and node:crypto to hash.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,7 +103,8 @@ try {
       problems.push(`content differs: dist/${rel}`);
   }
   for (const rel of inTarball.keys()) {
-    if (!onDisk.has(rel)) problems.push(`extra in tarball (not in built dist): dist/${rel}`);
+    if (!onDisk.has(rel))
+      problems.push(`extra in tarball (not in built dist): dist/${rel}`);
   }
 
   if (problems.length) {

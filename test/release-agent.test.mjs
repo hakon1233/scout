@@ -320,8 +320,7 @@ test("release roots default to macOS Application Support and refuse workspace pa
   const otherCheckout = path.join(tmp, "other-checkout");
   await fs.mkdir(path.join(otherCheckout, ".git"), { recursive: true });
   assert.throws(
-    () =>
-      assertExternalReleaseRoot(repo, path.join(otherCheckout, "releases")),
+    () => assertExternalReleaseRoot(repo, path.join(otherCheckout, "releases")),
     /inside a git checkout/i,
   );
   assert.throws(
@@ -952,92 +951,95 @@ test(
   "migrateToReleases moves launchd onto current and carries env forward",
   { skip: process.platform !== "darwin" && "launchd migration is macOS-only" },
   async (t) => {
-  const { root, sha, home, plist, legacy } = await migrationFixture(t);
+    const { root, sha, home, plist, legacy } = await migrationFixture(t);
 
-  const result = await migrateToReleases({
-    ...IDLE,
-    releaseRoot: root,
-    sha,
-    home,
-    bootstrap: stubBootstrap,
-    verify: async () => undefined,
-  });
-
-  assert.equal(result.migrated, sha);
-  assert.equal(
-    await currentReleasePath(root),
-    await fs.realpath(path.join(root, "releases", sha)),
-  );
-
-  const migrated = await fs.readFile(plist, "utf8");
-  assert.match(migrated, /current\/dist\/cli\.js/);
-  assert.doesNotMatch(migrated, /workspace\/dist\/cli\.js/);
-  // The var the user's job actually carries.
-  assert.match(
-    migrated,
-    /<key>SCOUT_SESSION_TIMEOUT_MS<\/key>\s*<string>900000<\/string>/,
-  );
-  assert.deepEqual(result.carriedEnv, ["SCOUT_SESSION_TIMEOUT_MS"]);
-  // The legacy plist has no --port; adding one would move the user off 47821.
-  assert.doesNotMatch(migrated, /--port/);
-  assert.equal(result.port, null);
-
-  // Blocker 3: the legacy bytes survive, so the migration is reversible.
-  assert.equal(await fs.readFile(result.preservedPlist, "utf8"), legacy);
-});
-
-test(
-  "a failed migration restores the legacy plist and leaves no current",
-  { skip: process.platform !== "darwin" && "launchd migration is macOS-only" },
-  async (t) => {
-  const { root, sha, home, plist, legacy } = await migrationFixture(t);
-
-  await assert.rejects(
-    migrateToReleases({
-      ...IDLE,
-      releaseRoot: root,
-      sha,
-      home,
-      bootstrap: stubBootstrap,
-      verify: async () => {
-        throw new Error("companion never became ready");
-      },
-    }),
-    /rolled back[\s\S]*companion never became ready/i,
-  );
-
-  // The whole point: the user's launchd config is byte-identical to before.
-  assert.equal(await fs.readFile(plist, "utf8"), legacy);
-  await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
-});
-
-test(
-  "migrateToReleases refuses once current already exists",
-  { skip: process.platform !== "darwin" && "launchd migration is macOS-only" },
-  async (t) => {
-  const { root, sha, home } = await migrationFixture(t);
-
-  await migrateToReleases({
-    ...IDLE,
-    releaseRoot: root,
-    sha,
-    home,
-    bootstrap: stubBootstrap,
-    verify: async () => undefined,
-  });
-
-  await assert.rejects(
-    migrateToReleases({
+    const result = await migrateToReleases({
       ...IDLE,
       releaseRoot: root,
       sha,
       home,
       bootstrap: stubBootstrap,
       verify: async () => undefined,
-    }),
-    /Already migrated[\s\S]*deploy/,
-  );
-});
+    });
+
+    assert.equal(result.migrated, sha);
+    assert.equal(
+      await currentReleasePath(root),
+      await fs.realpath(path.join(root, "releases", sha)),
+    );
+
+    const migrated = await fs.readFile(plist, "utf8");
+    assert.match(migrated, /current\/dist\/cli\.js/);
+    assert.doesNotMatch(migrated, /workspace\/dist\/cli\.js/);
+    // The var the user's job actually carries.
+    assert.match(
+      migrated,
+      /<key>SCOUT_SESSION_TIMEOUT_MS<\/key>\s*<string>900000<\/string>/,
+    );
+    assert.deepEqual(result.carriedEnv, ["SCOUT_SESSION_TIMEOUT_MS"]);
+    // The legacy plist has no --port; adding one would move the user off 47821.
+    assert.doesNotMatch(migrated, /--port/);
+    assert.equal(result.port, null);
+
+    // Blocker 3: the legacy bytes survive, so the migration is reversible.
+    assert.equal(await fs.readFile(result.preservedPlist, "utf8"), legacy);
+  },
+);
+
+test(
+  "a failed migration restores the legacy plist and leaves no current",
+  { skip: process.platform !== "darwin" && "launchd migration is macOS-only" },
+  async (t) => {
+    const { root, sha, home, plist, legacy } = await migrationFixture(t);
+
+    await assert.rejects(
+      migrateToReleases({
+        ...IDLE,
+        releaseRoot: root,
+        sha,
+        home,
+        bootstrap: stubBootstrap,
+        verify: async () => {
+          throw new Error("companion never became ready");
+        },
+      }),
+      /rolled back[\s\S]*companion never became ready/i,
+    );
+
+    // The whole point: the user's launchd config is byte-identical to before.
+    assert.equal(await fs.readFile(plist, "utf8"), legacy);
+    await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
+  },
+);
+
+test(
+  "migrateToReleases refuses once current already exists",
+  { skip: process.platform !== "darwin" && "launchd migration is macOS-only" },
+  async (t) => {
+    const { root, sha, home } = await migrationFixture(t);
+
+    await migrateToReleases({
+      ...IDLE,
+      releaseRoot: root,
+      sha,
+      home,
+      bootstrap: stubBootstrap,
+      verify: async () => undefined,
+    });
+
+    await assert.rejects(
+      migrateToReleases({
+        ...IDLE,
+        releaseRoot: root,
+        sha,
+        home,
+        bootstrap: stubBootstrap,
+        verify: async () => undefined,
+      }),
+      /Already migrated[\s\S]*deploy/,
+    );
+  },
+);
 
 // --- the drain is an invariant, and migrate cannot be softened ------------
 //

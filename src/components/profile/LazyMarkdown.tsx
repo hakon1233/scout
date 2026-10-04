@@ -23,12 +23,20 @@ export type LazyMarkdownProps = {
   sanitize?: boolean;
 };
 
-export function LazyMarkdown({ text, components, sanitize }: LazyMarkdownProps) {
+export function LazyMarkdown({
+  text,
+  components,
+  sanitize,
+}: LazyMarkdownProps) {
   return (
     <React.Suspense
       fallback={<div className="whitespace-pre-wrap">{text}</div>}
     >
-      <MarkdownRenderer text={text} components={components} sanitize={sanitize} />
+      <MarkdownRenderer
+        text={text}
+        components={components}
+        sanitize={sanitize}
+      />
     </React.Suspense>
   );
 }

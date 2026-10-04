@@ -126,8 +126,8 @@ export function InterestScopeView({
               </div>
             ) : model.hasDoc ? (
               <p className="font-reading text-[16px] leading-relaxed text-secondary">
-                Scout has an assignment for this interest, but the companion
-                did not return its markdown in this session.
+                Scout has an assignment for this interest, but the companion did
+                not return its markdown in this session.
               </p>
             ) : (
               <EmptyState

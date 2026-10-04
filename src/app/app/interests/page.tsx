@@ -29,8 +29,7 @@ export default function InterestsPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    const readId = () =>
-      new URLSearchParams(window.location.search).get("id");
+    const readId = () => new URLSearchParams(window.location.search).get("id");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- URL → state hydration on mount
     setSelectedKey(readId());
     const onPop = () => setSelectedKey(readId());
@@ -51,9 +50,7 @@ export default function InterestsPage() {
   }
 
   function closeDoc() {
-    const state = window.history.state as
-      | { scoutInterestDoc?: string }
-      | null;
+    const state = window.history.state as { scoutInterestDoc?: string } | null;
     if (state?.scoutInterestDoc) {
       window.history.back(); // pops our entry → popstate clears the selection
     } else {

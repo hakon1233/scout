@@ -53,7 +53,9 @@ test("chat renders user and assistant markdown safely", async ({ page }) => {
   // Block code renders in ChatMarkdown's framed CodeBlock (a <pre> with a
   // copy button header — no nested <code> element).
   await expect(page.locator("pre")).toContainText("const topic");
-  await expect(page.getByRole("button", { name: /Copy code|Copied/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Copy code|Copied/ }),
+  ).toBeVisible();
 
   const link = page.getByRole("link", { name: "source link" });
   await expect(link).toHaveAttribute("href", "https://example.com/brief");

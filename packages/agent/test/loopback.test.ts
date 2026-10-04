@@ -14,7 +14,12 @@ import http from "node:http";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { saveState, loadState, newPairingToken, type State } from "../src/state.js";
+import {
+  saveState,
+  loadState,
+  newPairingToken,
+  type State,
+} from "../src/state.js";
 import type { Brief } from "../src/contract.js";
 import { startServer } from "../src/server.js";
 import { isSameOriginCaller } from "../src/http-util.js";
@@ -410,10 +415,7 @@ test("POST /v0/interests de-duplicates before the count budget check", async () 
         interests: [
           "AI safety",
           "ai safety", // same topic, different casing — must collapse
-          ...Array.from(
-            { length: MAX_INTERESTS - 1 },
-            (_, i) => `topic ${i}`,
-          ),
+          ...Array.from({ length: MAX_INTERESTS - 1 }, (_, i) => `topic ${i}`),
         ],
       }),
     });

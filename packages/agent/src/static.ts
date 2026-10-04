@@ -43,7 +43,10 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export function contentTypeFor(file: string): string {
-  return CONTENT_TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream";
+  return (
+    CONTENT_TYPES[path.extname(file).toLowerCase()] ??
+    "application/octet-stream"
+  );
 }
 
 // Whether `root` exists is a build-time fact fixed for the whole process

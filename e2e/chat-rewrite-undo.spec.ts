@@ -64,16 +64,24 @@ test("chat rewrite Apply surfaces a live Undo, same as create", async ({
   const rewriteReply = page
     .locator(".group\\/msg", { hasText: `Proposed rewrite · ${TOPIC}` })
     .first();
-  await expect(rewriteReply.getByText(`Proposed rewrite · ${TOPIC}`)).toBeVisible({
+  await expect(
+    rewriteReply.getByText(`Proposed rewrite · ${TOPIC}`),
+  ).toBeVisible({
     timeout: 30_000,
   });
   await rewriteReply.getByRole("button", { name: "Apply" }).click();
-  await expect(rewriteReply.getByText("Rewrite written to the doc")).toBeVisible({
+  await expect(
+    rewriteReply.getByText("Rewrite written to the doc"),
+  ).toBeVisible({
     timeout: 30_000,
   });
   // The card resolved — no more Apply/Discard.
-  await expect(rewriteReply.getByRole("button", { name: "Apply" })).toHaveCount(0);
-  await expect(rewriteReply.getByRole("button", { name: "Discard" })).toHaveCount(0);
+  await expect(rewriteReply.getByRole("button", { name: "Apply" })).toHaveCount(
+    0,
+  );
+  await expect(
+    rewriteReply.getByRole("button", { name: "Discard" }),
+  ).toHaveCount(0);
 
   // ── Apply surfaces the same live Undo a create gets ───────────────────────
   // The proposal card itself still just locks to "Applied" — it is the confirm
@@ -105,13 +113,17 @@ test("chat rewrite Apply surfaces a live Undo, same as create", async ({
   // the SAME text (as its diff/reply), so an unscoped locator would be
   // ambiguous — this is about the durable doc, not the chat log.
   const docBody = page.locator(".scout-md");
-  await expect(docBody.getByRole("heading", { name: "Rewritten intent" })).toBeVisible({
+  await expect(
+    docBody.getByRole("heading", { name: "Rewritten intent" }),
+  ).toBeVisible({
     timeout: 30_000,
   });
   await expect(docBody.getByText("Fresh angle one")).toBeVisible();
   // The original create doc's body text is gone — the rewrite is genuinely
   // durable, no trace of "Surface concrete developments" remains.
-  await expect(docBody.getByText("Surface concrete developments")).toHaveCount(0);
+  await expect(docBody.getByText("Surface concrete developments")).toHaveCount(
+    0,
+  );
 
   // ── Cleanup: remove the interest this spec created ────────────────────────
   // The interest store is shared across the whole suite (single companion
@@ -124,7 +136,9 @@ test("chat rewrite Apply surfaces a live Undo, same as create", async ({
   // so no navigation is needed to reach the composer.
   await sendMessage(page, "Delete that interest for good");
   const confirmDelete = page.getByRole("alertdialog").last();
-  await expect(confirmDelete.getByText(`Confirm delete · ${TOPIC}`)).toBeVisible({
+  await expect(
+    confirmDelete.getByText(`Confirm delete · ${TOPIC}`),
+  ).toBeVisible({
     timeout: 30_000,
   });
   await confirmDelete.getByRole("button", { name: "Delete" }).click();

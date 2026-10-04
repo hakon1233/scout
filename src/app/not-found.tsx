@@ -62,10 +62,15 @@ export default function NotFound() {
               longer exist.
             </p>
             {attemptedPath ? (
-              <p className="font-mono text-body-sm text-muted">{attemptedPath}</p>
+              <p className="font-mono text-body-sm text-muted">
+                {attemptedPath}
+              </p>
             ) : null}
             <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-              <Link href="/app/" className={`${buttonClasses("primary")} w-full sm:w-auto`}>
+              <Link
+                href="/app/"
+                className={`${buttonClasses("primary")} w-full sm:w-auto`}
+              >
                 Go to your brief
               </Link>
               <Link

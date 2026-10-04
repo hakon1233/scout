@@ -115,7 +115,9 @@ test("both engine skill sets render with every group, and no group card is empty
   // The PUBLISH DATES group carries an indented wire-format sample that the
   // parser attaches as a bullet "detail" block — assert that continuation-line
   // path renders too (regression guard for the indent-detection branch).
-  await expect(page.getByText("one-sentence summary of what happened.").first()).toBeVisible();
+  await expect(
+    page.getByText("one-sentence summary of what happened.").first(),
+  ).toBeVisible();
 
   await page.screenshot({
     path: "e2e/.artifact/skills-transparency.png",

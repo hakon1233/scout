@@ -15,7 +15,12 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
-import { saveState, loadState, newPairingToken, type State } from "../src/state.js";
+import {
+  saveState,
+  loadState,
+  newPairingToken,
+  type State,
+} from "../src/state.js";
 import type { ChatTurn } from "../src/contract.js";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
 import { isChatInFlight, startChatTurn } from "../src/chat.js";
@@ -586,7 +591,9 @@ test("POST /v0/chat/confirm-delete returns 404 without a matching pending delete
     assert.equal(res.status, 404);
 
     const state = await loadState(stateFile);
-    assert.deepEqual(state.interests, [{ id: "int_keep01", topic: "ai safety" }]);
+    assert.deepEqual(state.interests, [
+      { id: "int_keep01", topic: "ai safety" },
+    ]);
     assert.equal(await readInterestDoc("int_keep01", interestsDir), "keep doc");
   } finally {
     server.close();
@@ -621,7 +628,9 @@ test("POST /v0/chat GATES a full rewrite: surfaces pending_rewrite and leaves th
     const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({ message: "Completely rewrite ai safety from scratch." }),
+      body: JSON.stringify({
+        message: "Completely rewrite ai safety from scratch.",
+      }),
     });
     assert.equal(kick.status, 202);
     const turn = await done;
@@ -1022,7 +1031,11 @@ test("a hung chat child times out, lands the turn failed, and clears the in-flig
     // before the next test runs.
     const turn = await done;
     assert.equal(calls.length, 1, "the turn spawned exactly one claude child");
-    assert.equal(turn.status, "failed", "a hung turn must land failed, not hang forever");
+    assert.equal(
+      turn.status,
+      "failed",
+      "a hung turn must land failed, not hang forever",
+    );
     assert.match(
       turn.error_msg ?? "",
       /timed out after 50ms/,
@@ -1162,7 +1175,11 @@ test("POST /v0/chat/stop aborts the in-flight turn — no doc edit is committed"
   const model = JSON.stringify({
     reply: "Rewrote your doc into three long paragraphs.",
     changes: [
-      { op: "update", interestId: "int_abc123", doc: "full rewrite, much longer" },
+      {
+        op: "update",
+        interestId: "int_abc123",
+        doc: "full rewrite, much longer",
+      },
     ],
   });
   const { spawnFn, releaseAll } = makeChatSpawn({
@@ -1221,7 +1238,9 @@ test("POST /v0/chat/stop aborts the in-flight turn — no doc edit is committed"
     // THE acceptance: nothing was committed despite the completed model output.
     assert.equal(await readInterestDoc("int_abc123", interestsDir), "old doc");
     const after = await loadState(stateFile);
-    assert.deepEqual(after.interests, [{ id: "int_abc123", topic: "ai safety" }]);
+    assert.deepEqual(after.interests, [
+      { id: "int_abc123", topic: "ai safety" },
+    ]);
     assert.equal(after.last_chat?.status, "failed");
 
     // The slot is free again: a new turn is accepted (no stuck pending state).
@@ -1261,9 +1280,7 @@ test("POST /v0/chat/stop is a no-op for a stale turn id or no in-flight turn", a
   await writeInterestDoc("int_abc123", "old doc", interestsDir);
   const model = JSON.stringify({
     reply: "ok",
-    changes: [
-      { op: "update", interestId: "int_abc123", doc: "legit edit" },
-    ],
+    changes: [{ op: "update", interestId: "int_abc123", doc: "legit edit" }],
   });
   const { spawnFn, releaseAll } = makeChatSpawn({
     output: model,
@@ -1332,7 +1349,8 @@ test("a corrupt transcript is backed up to .corrupt-*.bak, not wiped", async () 
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-corrupt-"));
   try {
     const file = path.join(tmp, "transcript.json");
-    const corruptBytes = '[{"id":"chat_1","created_at":"2026-01-01T00:00:00Z" CORRUPT';
+    const corruptBytes =
+      '[{"id":"chat_1","created_at":"2026-01-01T00:00:00Z" CORRUPT';
     await fs.writeFile(file, corruptBytes);
 
     // Corrupt JSON reads as an empty transcript (callers degrade gracefully)...
@@ -1342,9 +1360,17 @@ test("a corrupt transcript is backed up to .corrupt-*.bak, not wiped", async () 
     // ...but the original bytes survive under a .corrupt-*.bak sibling, and the
     // original path is freed so the next write starts clean instead of clobbering.
     const siblings = await fs.readdir(tmp);
-    const backup = siblings.find((f) => f.includes(".corrupt-") && f.endsWith(".bak"));
-    assert.ok(backup, "expected a .corrupt-*.bak backup of the unparseable transcript");
-    assert.equal(await fs.readFile(path.join(tmp, backup!), "utf8"), corruptBytes);
+    const backup = siblings.find(
+      (f) => f.includes(".corrupt-") && f.endsWith(".bak"),
+    );
+    assert.ok(
+      backup,
+      "expected a .corrupt-*.bak backup of the unparseable transcript",
+    );
+    assert.equal(
+      await fs.readFile(path.join(tmp, backup!), "utf8"),
+      corruptBytes,
+    );
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
@@ -1424,7 +1450,12 @@ test("a chat turn keeps its transcript next to the state file it was given", asy
   });
   const { onChatDone, done } = awaitTurn();
   try {
-    await startChatTurn("hello", { stateFile, interestsDir, spawnFn, onChatDone });
+    await startChatTurn("hello", {
+      stateFile,
+      interestsDir,
+      spawnFn,
+      onChatDone,
+    });
     const turn = await done;
     assert.equal(turn.status, "ready");
     const saved = JSON.parse(

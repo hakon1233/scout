@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { confirmDeleteInterest, confirmRewriteInterest, pollChatTurn } from "./chat";
+import {
+  confirmDeleteInterest,
+  confirmRewriteInterest,
+  pollChatTurn,
+} from "./chat";
 import type { ChatTurn } from "@scout/agent/contract";
 
 const origin = "http://scout.test";

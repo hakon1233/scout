@@ -67,7 +67,10 @@ test("a truncated (kill-during-write) state.json is preserved, not silently rese
     const backup = siblings.find(
       (f) => f.includes(".corrupt-") && f.endsWith(".bak"),
     );
-    assert.ok(backup, "expected the torn state.json preserved as .corrupt-*.bak");
+    assert.ok(
+      backup,
+      "expected the torn state.json preserved as .corrupt-*.bak",
+    );
     assert.equal(await fs.readFile(path.join(tmp, backup!), "utf8"), torn);
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
@@ -164,7 +167,9 @@ test("listCorruptStateBackups reports the recovery file a corrupt load leaves be
 
     // Nothing to report on a healthy store — or before the dir even exists.
     assert.deepEqual(
-      await listCorruptStateBackups(path.join(tmp, "no-such-dir", "state.json")),
+      await listCorruptStateBackups(
+        path.join(tmp, "no-such-dir", "state.json"),
+      ),
       [],
     );
     await saveState(RICH_STATE, file);
@@ -182,7 +187,9 @@ test("listCorruptStateBackups reports the recovery file a corrupt load leaves be
 });
 
 test("/healthz surfaces corrupt-state recoveries instead of a silent fresh boot", async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-health-recovery-"));
+  const tmp = await fs.mkdtemp(
+    path.join(os.tmpdir(), "scout-health-recovery-"),
+  );
   const stateFile = path.join(tmp, "state.json");
   await saveState(RICH_STATE, stateFile);
   const { server, port } = await startServer(0, { stateFile });
@@ -190,7 +197,9 @@ test("/healthz surfaces corrupt-state recoveries instead of a silent fresh boot"
     // Healthy store: the field is present and explicitly null, so a consumer
     // can distinguish "no recovery happened" from "companion predates this
     // field".
-    const clean = await (await fetch(`http://127.0.0.1:${port}/healthz`)).json();
+    const clean = await (
+      await fetch(`http://127.0.0.1:${port}/healthz`)
+    ).json();
     assert.equal(clean.state_recovery, null);
 
     // Corrupt the file and trip the recovery path (any state read recovers it;
@@ -198,7 +207,9 @@ test("/healthz surfaces corrupt-state recoveries instead of a silent fresh boot"
     await fs.writeFile(stateFile, "{ torn");
     await loadState(stateFile);
 
-    const after = await (await fetch(`http://127.0.0.1:${port}/healthz`)).json();
+    const after = await (
+      await fetch(`http://127.0.0.1:${port}/healthz`)
+    ).json();
     assert.equal(after.ok, true, "recovery is a warning, not unhealthiness");
     assert.equal(after.state_recovery.corrupt_backups, 1);
     assert.match(
@@ -221,7 +232,10 @@ test("concurrent updates to one state file each see the previous one's result", 
       Array.from({ length: 20 }, (_, n) =>
         updateState(file, (s) => ({
           ...s,
-          interests: [...(s.interests ?? []), { id: `int_${n}`, topic: `t${n}` }],
+          interests: [
+            ...(s.interests ?? []),
+            { id: `int_${n}`, topic: `t${n}` },
+          ],
         })),
       ),
     );

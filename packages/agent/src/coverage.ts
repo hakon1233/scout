@@ -25,7 +25,6 @@
 // `/app/skills` transparency page. When you change the assembly logic below,
 // update that constant too so the page stays honest about what the engine does.
 
-
 // Normalize a topic or heading for comparison: lowercase, then remove every
 // non-letter/digit. So "OpenAI", "open ai", "Open-AI" and "openai" all
 // collapse to the same key. This is deliberately aggressive: model headings
@@ -42,7 +41,10 @@ type SectionBlock = { key: string; raw: string };
 // e.g. the `# Your brief` title) and an ordered list of `## ` section blocks.
 // Each block's `raw` includes its own heading line and body verbatim, so blocks
 // can be recombined losslessly. `key` is the normalized heading for matching.
-function sectionBlocks(markdown: string): { pre: string; blocks: SectionBlock[] } {
+function sectionBlocks(markdown: string): {
+  pre: string;
+  blocks: SectionBlock[];
+} {
   // Lookahead split keeps the `## ` delimiter at the start of each chunk.
   const parts = markdown.split(/(?=^##\s)/m);
   let pre = "";
@@ -311,7 +313,8 @@ export function mergeBriefSections(
 
   const patchByKey = new Map<string, string>();
   for (const b of patch.blocks) {
-    if (retryKeys.has(b.key) && !patchByKey.has(b.key)) patchByKey.set(b.key, b.raw);
+    if (retryKeys.has(b.key) && !patchByKey.has(b.key))
+      patchByKey.set(b.key, b.raw);
   }
 
   const used = new Set<string>();

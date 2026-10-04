@@ -30,7 +30,10 @@ function withCode(text: string, keyPrefix: string): React.ReactNode[] {
 function Bullet({ bullet, idx }: { bullet: SkillBullet; idx: number }) {
   return (
     <li className="flex gap-2.5 text-body-sm leading-relaxed text-secondary">
-      <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-signal" />
+      <span
+        aria-hidden="true"
+        className="mt-2 size-1.5 shrink-0 rounded-full bg-signal"
+      />
       <span className="flex flex-col gap-1">
         <span>{withCode(bullet.text, `b${idx}`)}</span>
         {bullet.detail.length > 0 && (
@@ -64,7 +67,11 @@ export function SkillSection({ set }: { set: SkillSet }) {
             </p>
             <ul className="flex flex-col gap-3">
               {group.bullets.map((bullet, bi) => (
-                <Bullet key={`${gi}-${bi}`} bullet={bullet} idx={gi * 100 + bi} />
+                <Bullet
+                  key={`${gi}-${bi}`}
+                  bullet={bullet}
+                  idx={gi * 100 + bi}
+                />
               ))}
             </ul>
           </Card>

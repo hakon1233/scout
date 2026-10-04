@@ -39,7 +39,9 @@ export function buildArtifact() {
     .map((f) => path.join(PACK_OUT, f))
     .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
   if (tarballs.length === 0) {
-    throw new Error(`no @scout/agent tarball found in ${PACK_OUT} after pack:agent`);
+    throw new Error(
+      `no @scout/agent tarball found in ${PACK_OUT} after pack:agent`,
+    );
   }
   const tarball = tarballs[0];
 
@@ -64,7 +66,10 @@ export function buildArtifact() {
 }
 
 // Allow running standalone for debugging: `node e2e/build-artifact.mjs`.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   const { tarball, cliEntry } = buildArtifact();
   console.log(`packed:   ${tarball}`);
   console.log(`cli:      ${cliEntry}`);

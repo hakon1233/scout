@@ -1,2 +1,5 @@
 # Recorded model outputs: keep them byte-for-byte.
 packages/agent/eval/cases/
+
+# Owned by pnpm.
+pnpm-lock.yaml

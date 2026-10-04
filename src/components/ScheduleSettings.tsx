@@ -26,7 +26,10 @@ function formatTimeOfDay(hhmm: string): string {
   const [h, m] = hhmm.split(":").map(Number);
   if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
   const d = new Date(2000, 0, 1, h, m);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function formatTimestamp(iso: string): string {
@@ -74,7 +77,9 @@ function LastRunRow({ schedule }: { schedule: ScheduleView }) {
         )}
       </span>
       {schedule.last_run_note && (
-        <span className="text-caption text-muted">{schedule.last_run_note}</span>
+        <span className="text-caption text-muted">
+          {schedule.last_run_note}
+        </span>
       )}
     </div>
   );
@@ -202,10 +207,7 @@ export function ScheduleSettings() {
       <Card tone="muted" className="flex flex-col gap-4">
         {/* Enable / disable */}
         <div className="flex items-center justify-between gap-4">
-          <label
-            htmlFor="schedule-enabled"
-            className="flex flex-col gap-0.5"
-          >
+          <label htmlFor="schedule-enabled" className="flex flex-col gap-0.5">
             <span className="text-body-sm font-medium text-primary">
               Daily brief
             </span>
