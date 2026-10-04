@@ -80,7 +80,7 @@ interests.
 
 > **pnpm 11 notes:** dependency `overrides` live in `pnpm-workspace.yaml`, not
 > `package.json`. Native dependencies that run install scripts (`esbuild`, `sharp`,
-> `unrs-resolver`) are pre-approved via `onlyBuiltDependencies`, so install never stops
+> `unrs-resolver`) are pre-approved via `allowBuilds`, so install never stops
 > with `ERR_PNPM_IGNORED_BUILDS`. Use `pnpm install --frozen-lockfile` to reproduce CI.
 
 ## Tests
