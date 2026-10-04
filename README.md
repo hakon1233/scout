@@ -1,7 +1,5 @@
 # Scout
 
-[![Test & Deploy](https://github.com/hakon1233/scout/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/hakon1233/scout/actions/workflows/deploy.yml)
-
 A personalised news reader. Set your interests, and a set of agents fetch, rank and
 synthesise a short brief containing only the stories you care about.
 
@@ -77,18 +75,19 @@ interests.
 > **pnpm 11 notes:** dependency `overrides` live in `pnpm-workspace.yaml`, not
 > `package.json`. Native dependencies that run install scripts (`esbuild`, `sharp`,
 > `unrs-resolver`) are pre-approved via `allowBuilds`, so install never stops
-> with `ERR_PNPM_IGNORED_BUILDS`. Use `pnpm install --frozen-lockfile` to reproduce CI.
+> with `ERR_PNPM_IGNORED_BUILDS`. Use `pnpm install --frozen-lockfile` for an install that matches the lockfile.
 
 ## Tests
 
 ```bash
+pnpm check       # typecheck, lint, tests and build — run before a commit
 pnpm test        # 234 tests — hermetic @scout/agent unit + /v0 API contract suite
 pnpm test:e2e    # Playwright
 pnpm typecheck   # tsc --noEmit
 ```
 
 The unit suite mocks the `claude` shell-out, so it runs fully offline with no model
-quota and no network. CI runs it on every push and pull request.
+quota and no network. Checks run locally with `pnpm check`; there is no hosted CI.
 
 ## Environment variables
 
@@ -98,8 +97,8 @@ in this repository.
 
 ## Deployment
 
-GitHub Actions builds the static export and deploys to GitHub Pages on every push to
-`main` (`.github/workflows/deploy.yml`). `next.config.ts` derives `basePath` from
+The hosted UI is the static export on GitHub Pages, built by
+`.github/workflows/deploy.yml` (run by hand; nothing deploys on push). `next.config.ts` derives `basePath` from
 `GITHUB_REPOSITORY` at build time, so the site works under `/<repo>/` without
 hardcoding it.
 

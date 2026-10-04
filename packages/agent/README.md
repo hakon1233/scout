@@ -115,7 +115,7 @@ pnpm test
 pnpm --filter @scout/agent test
 ```
 
-CI runs `pnpm test` on every push/PR (`.github/workflows/ci.yml`). Test files
+`pnpm check` at the repo root runs this suite with typecheck, lint and build. Test files
 live in `packages/agent/test/*.test.ts` and use `node:test` + `tsx` (no extra
 runner dependency).
 

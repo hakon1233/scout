@@ -10,8 +10,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 `pnpm test` runs the hermetic `@scout/agent` suite (PER-118): unit + `/v0` API
 contract tests for the loopback companion. It mocks the `claude` shell-out, so
-it runs fully offline with zero Claude quota and no network. CI runs it on
-every push/PR. Before touching `packages/agent/src/*` or `/v0/*` behavior, run
+it runs fully offline with zero Claude quota and no network. `pnpm check`
+runs it with typecheck, lint and build. Before touching `packages/agent/src/*` or `/v0/*` behavior, run
 `pnpm test` — it guards the known regressions (PER-91/92/106/108/110/113).
 Test files: `packages/agent/test/*.test.ts` (`node:test` + `tsx`).
 
