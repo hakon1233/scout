@@ -56,7 +56,7 @@ browser ──HTTP + pairing token──▶ companion on 127.0.0.1 ──▶ you
   drops stale stories and records which topics came back empty.
 - **The chat** edits your interests and the short "intent doc" each one carries. The
   model only proposes changes as JSON. The companion checks them, and holds deletes
-  and full rewrites until you confirm.
+  and proposed full rewrites until you confirm; small edits apply at once.
 
 The trust boundary is the loopback port. The companion checks the Host header and the
 origin, needs a pairing token on every data route, and starts `claude` with a fixed tool
