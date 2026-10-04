@@ -1417,3 +1417,28 @@ test("POST /v0/chat with a literal `null` JSON body returns 400, not 500", async
     server.close();
   }
 });
+
+test("a chat turn keeps its transcript next to the state file it was given", async () => {
+  // Without an explicit chatTranscriptFile the transcript used to default to
+  // the real ~/.config/scout, so this suite wrote into the user's live chat.
+  const { tmp, stateFile, interestsDir } = await seeded();
+  const { spawnFn } = makeChatSpawn({
+    output: JSON.stringify({ reply: "ok", changes: [] }),
+    autoClose: true,
+  });
+  const { onChatDone, done } = awaitTurn();
+  try {
+    await startChatTurn("hello", { stateFile, interestsDir, spawnFn, onChatDone });
+    const turn = await done;
+    assert.equal(turn.status, "ready");
+    const saved = JSON.parse(
+      await fs.readFile(path.join(tmp, "chat", "transcript.json"), "utf8"),
+    ) as ChatTurn[];
+    assert.deepEqual(
+      saved.map((t) => t.message),
+      ["hello"],
+    );
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});

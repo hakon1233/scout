@@ -565,6 +565,11 @@ export type ChatDeps = {
   onChatDone?: (turn: ChatTurn) => void;
 };
 
+// The transcript lives next to the state file unless a caller pins it.
+function transcriptFileFor(deps: ChatDeps): string {
+  return deps.chatTranscriptFile ?? defaultChatTranscriptFile(deps.stateFile);
+}
+
 export type ChatOutcome =
   | { started: true; turnId: string }
   | { started: false; reason: "in_flight"; turnId?: string }
@@ -734,7 +739,7 @@ export async function confirmDeleteTurn(
     // pending_delete proposal is consumed), leaving the user with an error for an
     // operation that actually succeeded. Best-effort + logged, matching the
     // fire-and-forget transcript tail in runChatTurn / startChatTurn.
-    await appendChatTranscript(turn, deps.chatTranscriptFile).catch((err) => {
+    await appendChatTranscript(turn, transcriptFileFor(deps)).catch((err) => {
       console.error(`[chat] confirm-delete transcript append failed:`, err);
     });
     deps.onChatDone?.(turn);
@@ -807,7 +812,7 @@ export async function confirmRewriteTurn(
     // failure must NOT surface as a 500 for an operation that committed (the
     // client's retry would 404, the pending_rewrite being consumed). Best-effort +
     // logged, matching runChatTurn / startChatTurn's fire-and-forget tail.
-    await appendChatTranscript(turn, deps.chatTranscriptFile).catch((err) => {
+    await appendChatTranscript(turn, transcriptFileFor(deps)).catch((err) => {
       console.error(`[chat] confirm-rewrite transcript append failed:`, err);
     });
     deps.onChatDone?.(turn);
@@ -832,7 +837,7 @@ async function runChatTurn(
       state.interests ?? [],
       deps.interestsDir,
     );
-    const transcript = await readChatTranscriptCached(deps.chatTranscriptFile);
+    const transcript = await readChatTranscriptCached(transcriptFileFor(deps));
     const output = await chatComplete(message, snapshots, transcript, {
       claudeBin: deps.claudeBin,
       spawnFn: deps.spawnFn,
@@ -905,7 +910,7 @@ async function runChatTurn(
       },
       deps.stateFile,
     );
-    await appendChatTranscript(turn, deps.chatTranscriptFile);
+    await appendChatTranscript(turn, transcriptFileFor(deps));
   } finally {
     if (currentTurnAbort?.turnId === turnId) currentTurnAbort = null;
     chatInFlight = false;
