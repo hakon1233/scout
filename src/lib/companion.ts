@@ -16,7 +16,7 @@ import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 // helper below degrades to a falsy/empty fallback on failure so the UI stays
 // usable — but that also made a genuine "my brief silently stopped updating"
 // report undiagnosable from the console: the transport could go fully dark while
-// the RunFailure surface built in this same file had nothing to key off. This
+// the run-failure banner (run-failure.ts) had nothing to key off. This
 // logs the *unexpected* data-fetch failures with a stable prefix. It never
 // surfaces raw errors in the UI and never changes control flow (callers still get
 // their existing fallback).
@@ -25,11 +25,6 @@ import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 // pingPort): a negative probe is the *expected* result of discovery — the
 // marketing host has no /healthz and the loopback port sweep misses most ports
 // on every run — so logging there would be noise that drowns the signal.
-//
-// Exported so the FE onboarding poll (connect/page.tsx) can share the same
-// stable prefix: that poll runs only after pairing is confirmed, so a transport
-// failure there is *unexpected* (same signal class as the read helpers below),
-// not an expected-negative discovery probe.
 export function logCompanionError(context: string, err: unknown): void {
   console.error(`[companion] ${context} failed`, err);
 }
@@ -437,18 +432,6 @@ export function newestReadyBrief(raw: WireBrief[]): AppBrief | null {
   return adaptBrief(newest);
 }
 
-// Returns ready briefs strictly newer than `sinceTs`. Pending/failed are surfaced
-// via `pollBriefsRaw` for the polling loop.
-export async function pollBriefs(
-  sinceTs: string,
-  token: string,
-): Promise<AppBrief[]> {
-  const briefs = await pollBriefsRaw(sinceTs, token);
-  return briefs
-    .filter((b) => b.status === "ready" && b.summary_md)
-    .map(adaptBrief);
-}
-
 // Fetch the most recent ready brief the companion holds (any age), or null if
 // none exist / the companion is unreachable. Used on `/app/` load so a brief
 // generated in a previous session shows immediately instead of the example.
@@ -591,6 +574,8 @@ export async function refreshBriefViaCompanion(
     // Run-selector (C6/PER-173): research only this subset and produce a fresh
     // brief over just those topics. Must be a subset of `interests`.
     selectedTopics?: string[];
+    // Called once the companion accepts the run, with how long we will wait.
+    onStarted?: (waitMs: number) => void;
   } = {},
 ): Promise<AppBrief> {
   const since = opts.sinceTs ?? new Date(0).toISOString();
@@ -622,12 +607,24 @@ export async function refreshBriefViaCompanion(
     300_000,
     (researchedTopicCount + 1) * PER_TOPIC_SESSION_BUDGET_MS,
   );
-  const deadline = Date.now() + (opts.timeoutMs ?? scaledDeadlineMs);
+  const waitMs = opts.timeoutMs ?? scaledDeadlineMs;
+  const deadline = Date.now() + waitMs;
   await postInterests(interests, token, opts.retryTopics, opts.selectedTopics);
+  opts.onStarted?.(waitMs);
+  let pollErrorLogged = false;
   while (Date.now() < deadline) {
     if (opts.signal?.aborted) throw new Error("aborted");
     await new Promise((r) => setTimeout(r, 2000));
-    const briefs = await pollBriefsRaw(since, token);
+    let briefs: WireBrief[];
+    try {
+      briefs = await pollBriefsRaw(since, token);
+    } catch (err) {
+      // Keep waiting through a dropped poll; log the first so a companion that
+      // stays dark is visible in the console before the deadline.
+      if (!pollErrorLogged) logCompanionError("brief-poll", err);
+      pollErrorLogged = true;
+      continue;
+    }
     const latest = briefs[0];
     if (!latest) continue;
     if (latest.status === "ready" && latest.summary_md)

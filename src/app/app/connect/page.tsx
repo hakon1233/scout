@@ -7,10 +7,8 @@ import {
   bootstrapCompanionToken,
   COMPANION_PORT,
   loadCompanionToken,
-  logCompanionError,
   pingCompanion,
-  pollBriefs,
-  postInterests,
+  refreshBriefViaCompanion,
   saveCompanionToken,
 } from "@/lib/companion";
 import { loadSettings, saveLastBrief } from "@/lib/storage";
@@ -31,23 +29,6 @@ const TARBALL_PATH = `${BASE_PATH}/agent/scout-agent-${AGENT_VERSION}.tgz`;
 // Sensible absolute default for SSR/export; overwritten with the real origin
 // after mount so the copied command is correct on whatever host serves it.
 const DEFAULT_TARBALL_URL = `https://hakon1233.github.io${TARBALL_PATH}`;
-const POLL_INTERVAL_MS = 4000;
-// The companion researches interests ONE AT A TIME (its own `claude` session
-// per topic) — so the poll budget must scale with the interest count, not
-// stay flat. A flat ~5 min budget (matching the main app path's old flat 300s
-// deadline, PER-157) gave up on a still-healthy multi-topic run once PER-265's
-// deeper per-paragraph detail bar lengthened real per-topic session time
-// (PER-267): Generate showed a false "Timed out" and a retry hit the
-// single-flight 409 — the "it doesn't work" go-around. Live measurement during
-// the PER-267 investigation showed a real 6-topic run taking 32m40s wall-clock
-// (research.ts's own hard per-session cap is 4 min, but this shared box runs
-// several concurrent agent processes, so real scheduling jitter pushes well
-// past the nominal per-session cap) — budget 6 min/topic for headroom over
-// that observed number. See companion.ts refreshBriefViaCompanion for the
-// mirrored calculation; keep both in sync.
-const PER_TOPIC_SESSION_BUDGET_MS = 6 * 60 * 1000;
-const MIN_POLL_ATTEMPTS = 75; // floor: ~5 min (75 × 4s), same headroom as before for a 1-2 topic run
-
 export default function ConnectPage() {
   const router = useRouter();
   const [token, setToken] = useState("");
@@ -70,14 +51,7 @@ export default function ConnectPage() {
   const [genState, setGenState] = useState<GenerateState>("idle");
   const [genMsg, setGenMsg] = useState("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollCountRef = useRef(0);
-  const pollMaxAttemptsRef = useRef(MIN_POLL_ATTEMPTS);
-  const startedAtRef = useRef("");
-  // Log a poll transport failure at most once per polling session (AIR-626
-  // diagnostic parity). The poll fires every few seconds, so an unguarded log
-  // would spam identical errors the whole time the companion is dark.
-  const pollErrorLoggedRef = useRef(false);
+  const runRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     // After hydration, resolve the tarball URL against the actual serving
@@ -145,76 +119,43 @@ export default function ConnectPage() {
     setGenState("posting");
     setGenMsg("");
     const interests = settings.interests.map((i) => i.topic);
+    runRef.current?.abort();
+    const run = new AbortController();
+    runRef.current = run;
+    let started = false;
     try {
-      await postInterests(interests, tok);
+      const brief = await refreshBriefViaCompanion(interests, tok, {
+        sinceTs: new Date().toISOString(),
+        signal: run.signal,
+        onStarted: (waitMs) => {
+          started = true;
+          setGenState("polling");
+          setGenMsg(
+            `Waiting for brief… (up to ~${Math.round(waitMs / 60_000)} min)`,
+          );
+        },
+      });
+      saveLastBrief(brief);
+      setGenState("done");
+      setGenMsg("Brief ready! Go to the app page to read it.");
     } catch (err) {
-      console.error("Failed to post interests to companion", err);
+      if (run.signal.aborted) return;
+      console.error("Companion run failed", err);
       const message = err instanceof Error ? err.message : "";
-      const reachableFailure =
-        /network|fetch|reach|connect|companion not reachable/i.test(message);
+      // Before the companion accepts the run, a network-style failure means
+      // it is not running; show the fix instead of the raw error.
+      const unreachable =
+        !started && /network|fetch|reach|connect/i.test(message);
       setGenMsg(
-        reachableFailure
+        unreachable
           ? "Could not reach the companion. Make sure `scout-agent run` is running on this machine."
           : message || "The companion rejected this run.",
       );
       setGenState("error");
-      return;
     }
-
-    // Poll for the brief. Scale the attempt budget to how many topics this
-    // run actually researches (sequential, one `claude` session each) so a
-    // longer interest list gets real room instead of a flat 5-minute cap.
-    const maxAttempts = Math.max(
-      MIN_POLL_ATTEMPTS,
-      Math.ceil(
-        ((interests.length + 1) * PER_TOPIC_SESSION_BUDGET_MS) /
-          POLL_INTERVAL_MS,
-      ),
-    );
-    pollMaxAttemptsRef.current = maxAttempts;
-    setGenState("polling");
-    setGenMsg(
-      `Waiting for brief… (up to ~${Math.round((maxAttempts * POLL_INTERVAL_MS) / 60_000)} min)`,
-    );
-    startedAtRef.current = new Date().toISOString();
-    pollCountRef.current = 0;
-    pollErrorLoggedRef.current = false;
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      pollCountRef.current++;
-      if (pollCountRef.current > pollMaxAttemptsRef.current) {
-        clearInterval(pollRef.current!);
-        setGenState("error");
-        setGenMsg(
-          "Timed out waiting for brief. Check the companion terminal for errors.",
-        );
-        return;
-      }
-      try {
-        const briefs = await pollBriefs(startedAtRef.current, tok);
-        if (briefs.length > 0) {
-          clearInterval(pollRef.current!);
-          saveLastBrief(briefs[0]);
-          setGenState("done");
-          setGenMsg("Brief ready! Go to the app page to read it.");
-        }
-      } catch (err) {
-        // Keep polling through transient errors, but surface the *first* one to
-        // the console so a persistently-dark transport during onboarding is
-        // diagnosable instead of only showing the eventual timeout (AIR-626).
-        if (!pollErrorLoggedRef.current) {
-          pollErrorLoggedRef.current = true;
-          logCompanionError("onboarding-brief-poll", err);
-        }
-      }
-    }, POLL_INTERVAL_MS);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
+  useEffect(() => () => runRef.current?.abort(), []);
 
   // The page is only reachable at 127.0.0.1:47821 because the companion is
   // already installed, running, and paired — so when both are true, render the
