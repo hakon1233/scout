@@ -40,7 +40,7 @@ test("confirmDeleteInterest passes through a caller abort signal", async () => {
     return Response.json({ turn: readyTurn() });
   };
 
-  await confirmDeleteInterest("int_ai", "tok", {
+  await confirmDeleteInterest(["int_ai"], "tok", {
     signal: controller.signal,
   });
 

@@ -517,6 +517,71 @@ test("POST /v0/chat/confirm-delete removes the interest + doc and returns a read
   }
 });
 
+test("a turn proposing two deletes offers both, and one confirm removes both", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [
+      { id: "int_keep01", topic: "ai safety" },
+      { id: "int_drop02", topic: "crypto" },
+      { id: "int_drop03", topic: "golf" },
+    ],
+  });
+  const model = JSON.stringify({
+    reply: "Delete crypto and golf? Confirm below.",
+    changes: [
+      { op: "delete", interestId: "int_drop02" },
+      { op: "delete", interestId: "int_drop03" },
+    ],
+  });
+  const { spawnFn } = makeChatSpawn({ output: model, autoClose: true });
+  const { onChatDone, done } = awaitTurn();
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  const auth = { authorization: `Bearer ${token}` };
+
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ message: "Drop crypto and golf." }),
+    });
+    assert.equal(kick.status, 202);
+    const turn = await done;
+    assert.deepEqual(turn.pending_deletes, [
+      { interestId: "int_drop02", topic: "crypto" },
+      { interestId: "int_drop03", topic: "golf" },
+    ]);
+    // Older clients read only the first.
+    assert.deepEqual(turn.pending_delete, {
+      interestId: "int_drop02",
+      topic: "crypto",
+    });
+
+    const res = await fetch(`http://127.0.0.1:${port}/v0/chat/confirm-delete`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ interestIds: ["int_drop02", "int_drop03"] }),
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { turn: ChatTurn };
+    assert.deepEqual(body.turn.changes, [
+      { interestId: "int_drop02", op: "delete", topic: "crypto" },
+      { interestId: "int_drop03", op: "delete", topic: "golf" },
+    ]);
+    const state = await loadState(stateFile);
+    assert.deepEqual(
+      (state.interests ?? []).map((i) => i.id),
+      ["int_keep01"],
+    );
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/chat/confirm-delete returns 404 for an unknown id (nothing removed)", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_keep01", topic: "ai safety" }],

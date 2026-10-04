@@ -33,7 +33,9 @@ test("transcriptMessages locks hydrated delete proposals consumed by a later con
     (message) => message.role === "scout",
   );
 
-  assert.equal(scoutMessages[0].pendingDelete?.interestId, "int_ai");
+  assert.deepEqual(scoutMessages[0].pendingDeletes, [
+    { interestId: "int_ai", topic: "AI" },
+  ]);
   assert.equal(scoutMessages[0].deleteResolved, "deleted");
   assert.equal(scoutMessages[0].deleteAutoFocus, false);
 });
@@ -157,7 +159,7 @@ test("appliedChangeMessage surfaces a confirmed rewrite as an undoable action ca
     ],
   };
 
-  const msg = appliedChangeMessage(turn, "int_ai", "# AI\n\nOld.");
+  const msg = appliedChangeMessage(turn, { int_ai: "# AI\n\nOld." });
 
   assert.ok(msg);
   assert.equal(msg.role, "scout");
@@ -180,7 +182,7 @@ test("appliedChangeMessage carries the pre-delete doc so undo can re-create it v
     changes: [{ interestId: "int_ai", op: "delete", topic: "AI" }],
   };
 
-  const msg = appliedChangeMessage(turn, "int_ai", "# AI\n\nBody.");
+  const msg = appliedChangeMessage(turn, { int_ai: "# AI\n\nBody." });
 
   assert.ok(msg);
   assert.equal(msg.changes?.[0].op, "delete");
@@ -196,7 +198,7 @@ test("appliedChangeMessage returns null when the confirm turn applied nothing", 
     reply: "nothing changed",
   };
 
-  assert.equal(appliedChangeMessage(turn, "int_ai", null), null);
+  assert.equal(appliedChangeMessage(turn, { int_ai: null }), null);
 });
 
 // resolveRetryTarget: the pure core of retry(). Previously this logic lived
@@ -259,4 +261,43 @@ test("resolveRetryTarget returns null when there is nothing safe to re-run", () 
   // A scout reply with no preceding you-message anywhere above it.
   const noYou = [chat("m1", "scout", "greeting"), chat("m2", "scout", "a")];
   assert.equal(resolveRetryTarget(noYou, "m2", null), null);
+});
+
+test("a turn proposing several deletes shows them all, resolved once all are confirmed", () => {
+  const proposal: ChatTurn = {
+    id: "turn_1",
+    created_at: "2026-07-11T12:00:00.000Z",
+    status: "ready",
+    message: "Delete AI and golf",
+    reply: "Delete AI and golf? Confirm below.",
+    pending_delete: { interestId: "int_ai", topic: "AI" },
+    pending_deletes: [
+      { interestId: "int_ai", topic: "AI" },
+      { interestId: "int_golf", topic: "Golf" },
+    ],
+  };
+  const confirm: ChatTurn = {
+    id: "turn_2",
+    created_at: "2026-07-11T12:01:00.000Z",
+    status: "ready",
+    message: 'Delete "AI" and "Golf"',
+    reply: 'Removed "AI" and "Golf" from your interests.',
+    changes: [
+      { interestId: "int_ai", op: "delete", topic: "AI" },
+      { interestId: "int_golf", op: "delete", topic: "Golf" },
+    ],
+  };
+  const pending = transcriptMessages([proposal]).find(
+    (m) => m.role === "scout",
+  );
+  assert.deepEqual(
+    pending?.pendingDeletes?.map((d) => d.topic),
+    ["AI", "Golf"],
+  );
+  assert.equal(pending?.deleteResolved, undefined);
+
+  const done = transcriptMessages([proposal, confirm]).find(
+    (m) => m.role === "scout",
+  );
+  assert.equal(done?.deleteResolved, "deleted");
 });

@@ -186,9 +186,7 @@ function emitChat(prompt) {
     // stays alive until the user presses [Delete]. A compound message
     // naming MULTIPLE topics ("delete X and Y") resolves to one delete change
     // per named topic, mirroring how a real model would emit one `delete` op
-    // per interest the user asked to remove in the same turn — this is what
-    // exposes chat.ts's `pendingDeletes[0]` truncation (only the first
-    // confirm-gated proposal in a turn is ever surfaced to the FE).
+    // per interest the user asked to remove in the same turn.
     const topics = targetIds.map(
       (id) => snapshots.find((s) => s.id === id)?.topic ?? "that interest",
     );

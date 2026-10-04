@@ -12,14 +12,14 @@ import type { PendingDelete } from "@scout/agent/contract";
 export type DeleteResolution = "deleted" | "cancelled" | undefined;
 
 export function ChatDeleteConfirm({
-  pd,
+  pds,
   resolved,
   autoFocus = true,
   onConfirm,
   onCancel,
   disabled,
 }: {
-  pd: PendingDelete;
+  pds: PendingDelete[];
   resolved: DeleteResolution;
   autoFocus?: boolean;
   onConfirm: () => void;
@@ -69,7 +69,7 @@ export function ChatDeleteConfirm({
           id={labelId}
           className="font-mono text-[10px] uppercase tracking-[0.05em] text-secondary"
         >
-          Confirm delete · {pd.topic}
+          Confirm delete · {pds.map((d) => d.topic).join(", ")}
         </span>
         {resolved && (
           <span
@@ -86,8 +86,15 @@ export function ChatDeleteConfirm({
       </div>
 
       <p className="px-2.5 pt-2.5 font-reading text-[14px] leading-[1.5] text-primary">
-        Delete <span className="font-semibold">“{pd.topic}”</span>? This removes
-        it from your saved interests.
+        Delete{" "}
+        {pds.map((d, i) => (
+          <span key={d.interestId}>
+            {i === 0 ? "" : i === pds.length - 1 ? " and " : ", "}
+            <span className="font-semibold">“{d.topic}”</span>
+          </span>
+        ))}
+        ? This removes {pds.length > 1 ? "them" : "it"} from your saved
+        interests.
       </p>
 
       <div className="flex items-center gap-2 px-2.5 py-2.5">

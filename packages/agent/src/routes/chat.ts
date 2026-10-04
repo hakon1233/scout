@@ -88,14 +88,22 @@ export async function handlePostChatConfirmDelete(
   { req, res, cors }: AuthedRequestContext,
   sc: ServerContext,
 ): Promise<void> {
-  const parsedBody = await parseJsonBody<{ interestId?: unknown }>(req);
+  const parsedBody = await parseJsonBody<{
+    interestId?: unknown;
+    interestIds?: unknown;
+  }>(req);
   if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
   const parsed = parsedBody.body;
-  const interestId =
-    typeof parsed.interestId === "string" ? parsed.interestId : "";
-  if (!interestId)
-    return json(res, 400, { error: "interestId required" }, cors);
-  const outcome = await confirmDeleteTurn(interestId, sc.chatDeps);
+  // `interestIds` confirms several proposed deletes at once; `interestId` is
+  // the single-delete form older clients send.
+  const interestIds = Array.isArray(parsed.interestIds)
+    ? parsed.interestIds.filter((id): id is string => typeof id === "string")
+    : typeof parsed.interestId === "string"
+      ? [parsed.interestId]
+      : [];
+  if (interestIds.length === 0)
+    return json(res, 400, { error: "interestIds required" }, cors);
+  const outcome = await confirmDeleteTurn(interestIds, sc.chatDeps);
   if (!outcome.ok) {
     if (outcome.reason === "in_flight") {
       return json(res, 409, { error: "chat turn in progress" }, cors);

@@ -95,6 +95,9 @@ export type ChatTurn = {
   // Applied changes; [] when the turn only answered. Never holds a delete or a
   // full rewrite from the model: those arrive as pending proposals.
   changes?: ChatChange[];
+  // Every delete the turn proposed, confirmed together. `pending_delete` is the
+  // first of them, kept for clients that read only one.
+  pending_deletes?: PendingDelete[];
   pending_delete?: PendingDelete;
   pending_rewrite?: PendingRewrite;
   error_msg?: string;

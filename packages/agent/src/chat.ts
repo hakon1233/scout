@@ -163,7 +163,7 @@ export type ConfirmDeleteOutcome =
 // docs-rail card disappears) and it survives a reload. Refuses while a model turn
 // is in flight so the two writers can't clobber the interest set.
 export async function confirmDeleteTurn(
-  interestId: string,
+  interestIds: string[],
   deps: ChatDeps,
 ): Promise<ConfirmDeleteOutcome> {
   if (chatInFlight) return { ok: false, reason: "in_flight" };
@@ -177,11 +177,17 @@ export async function confirmDeleteTurn(
   chatInFlight = true;
   try {
     const state = await loadState(deps.stateFile);
-    const pending = state.last_chat?.pending_delete;
+    const lastChat = state.last_chat;
+    const pending =
+      lastChat?.pending_deletes ??
+      (lastChat?.pending_delete ? [lastChat.pending_delete] : []);
     // The delete route is the stored proposal consumer, not a generic delete-by-id
     // API. This mirrors confirmRewriteTurn: stale cards or direct route calls must
     // not bypass the server-side confirmation state.
-    if (!pending || pending.interestId !== interestId) {
+    if (
+      interestIds.length === 0 ||
+      !interestIds.every((id) => pending.some((p) => p.interestId === id))
+    ) {
       return { ok: false, reason: "not_found" };
     }
 
@@ -192,26 +198,32 @@ export async function confirmDeleteTurn(
     // post-delete list would silently revert any interest-set change that landed
     // between the two loads. Applying against `fresh` also makes a double-confirm
     // safe: the second call finds the interest already gone and 404s.
-    const fresh = await loadState(deps.stateFile);
-    const { applied } = await applyConfirmedDelete(
-      fresh.interests ?? [],
-      interestId,
-      deps.interestsDir,
-    );
-    if (!applied) return { ok: false, reason: "not_found" };
+    let interests = (await loadState(deps.stateFile)).interests ?? [];
+    const applied: ChatChange[] = [];
+    for (const id of interestIds) {
+      const result = await applyConfirmedDelete(
+        interests,
+        id,
+        deps.interestsDir,
+      );
+      interests = result.interests;
+      if (result.applied) applied.push(result.applied);
+    }
+    if (applied.length === 0) return { ok: false, reason: "not_found" };
 
+    const topics = quotedList(applied.map((c) => c.topic ?? ""));
     const turn: ChatTurn = {
       id: newChatTurnId(),
       created_at: new Date().toISOString(),
       status: "ready",
-      message: `Delete "${applied.topic}"`,
-      reply: `Removed "${applied.topic}" from your interests.`,
-      changes: [applied],
+      message: `Delete ${topics}`,
+      reply: `Removed ${topics} from your interests.`,
+      changes: applied,
     };
 
     await updateState(deps.stateFile, (s) => ({
       ...s,
-      interests: replayChanges(s.interests ?? [], [applied]),
+      interests: replayChanges(s.interests ?? [], applied),
       last_chat: turn,
     }));
     // The delete is already durable in state.last_chat above; the transcript is a
@@ -228,6 +240,14 @@ export async function confirmDeleteTurn(
   } finally {
     chatInFlight = false;
   }
+}
+
+// "A", "A" and "B", or "A", "B" and "C".
+function quotedList(items: string[]): string {
+  const quoted = items.map((t) => `"${t}"`);
+  return quoted.length < 2
+    ? quoted.join("")
+    : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`;
 }
 
 export type ConfirmRewriteOutcome =
@@ -347,7 +367,7 @@ async function runChatTurn(
       reply: output.reply,
       changes: applied,
       ...(pendingDeletes.length > 0
-        ? { pending_delete: pendingDeletes[0] }
+        ? { pending_deletes: pendingDeletes, pending_delete: pendingDeletes[0] }
         : {}),
       ...(pendingRewrites.length > 0
         ? { pending_rewrite: pendingRewrites[0] }

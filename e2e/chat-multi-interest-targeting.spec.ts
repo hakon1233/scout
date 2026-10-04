@@ -87,7 +87,7 @@ test("chat delete targets the SPECIFIC interest named, not always the first in t
   await expect(firstRail).toBeHidden({ timeout: 30_000 });
 });
 
-test("a single turn naming two deletions only ever surfaces one confirm card — the other silently never happens", async ({
+test("a single turn naming two deletions offers one card for both, and one Delete removes both", async ({
   page,
 }) => {
   const A = "Quantum computing";
@@ -109,50 +109,20 @@ test("a single turn naming two deletions only ever surfaces one confirm card —
   await expect(railA).toBeVisible();
   await expect(railB).toBeVisible();
 
-  // ── ONE message asking to delete BOTH ─────────────────────────────────────
-  // The stub (mirroring a real model, given the same instructions) proposes
-  // TWO delete changes in this turn's `changes` array — a perfectly ordinary
-  // compound request. chat.ts's applyChatChanges collects both into
-  // `pendingDeletes` (confirmed via source read: packages/agent/src/chat.ts),
-  // but runChatTurn only ever puts `pendingDeletes[0]` on the turn object it
-  // hands to the FE — the second proposal has no code path that ever reaches
-  // the client. This is the real bug this spec proves, not a stub artifact.
   await sendMessage(page, `Please delete ${A} and ${B}`);
 
-  // The assistant's own reply (streamed into the transcript) claims BOTH are
-  // pending — this is the text a user actually reads.
-  await expect(
-    page.getByText(`Delete ${A} and ${B}?`, { exact: false }),
-  ).toBeVisible({ timeout: 30_000 });
-
-  // ...but only ONE confirm card ever renders, for whichever topic happened
-  // to be first in the snapshot (A, created first). No card for B exists
-  // anywhere in the transcript — not pending, not resolved, never created.
-  // (ChatDeleteConfirm's `role="alertdialog"` is unconditional — it is never
-  // dropped once a card resolves, unlike ChatActionCard's rewrite proposal —
-  // so every delete-confirm card the whole session ever rendered stays
-  // queryable by that role; asserting on B's own topic text, rather than a
-  // global alertdialog count, is what actually isolates THIS turn's claim.)
-  const confirmA = page
+  const confirm = page
     .getByRole("alertdialog")
-    .filter({ hasText: `Confirm delete · ${A}` });
-  await expect(confirmA).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(`Confirm delete · ${B}`)).toHaveCount(0);
+    .filter({ hasText: `Confirm delete · ${A}, ${B}` });
+  await expect(confirm).toBeVisible({ timeout: 30_000 });
+  // Nothing is removed until the reader confirms.
+  await expect(railA).toBeVisible();
+  await expect(railB).toBeVisible();
 
-  // Confirm the one card that exists.
-  await confirmA.getByRole("button", { name: "Delete" }).click();
-  await expect(confirmA.getByText("Removed from your interests")).toBeVisible({
+  await confirm.getByRole("button", { name: "Delete" }).click();
+  await expect(confirm.getByText("Removed from your interests")).toBeVisible({
     timeout: 30_000,
   });
   await expect(railA).toBeHidden({ timeout: 30_000 });
-
-  // The SECOND requested deletion never happened — no card, no error, no
-  // trace anywhere in the transcript. The interest the user explicitly
-  // asked to remove in the same breath as A is still fully alive.
-  await expect(railB).toBeVisible();
-
-  // ── Cleanup: remove B on its own (now the only interest, so the fallback
-  // "no topic named → first snapshot" path also resolves it correctly) ─────
-  await deleteInterestByTopic(page, B);
   await expect(railB).toBeHidden({ timeout: 30_000 });
 });

@@ -30,7 +30,7 @@ export type ChatMessage = {
   prev?: Record<string, string | null>;
   // A confirm-gated delete this turn proposed. Renders a
   // [Delete]/[Cancel] card; the interest is removed only on [Delete].
-  pendingDelete?: PendingDelete;
+  pendingDeletes?: PendingDelete[];
   // Whether the user resolved the pending delete (and how).
   deleteResolved?: DeleteResolution;
   // Transcript-hydrated proposal cards are historical; they should not yank
@@ -128,7 +128,7 @@ export function ChatDock({
   onStop: () => void;
   onRetry: (scoutId: string) => void;
   onUndo: (change: ChatChange, prev: string | null) => void;
-  onConfirmDelete: (pd: PendingDelete, msgId: string) => void;
+  onConfirmDelete: (pds: PendingDelete[], msgId: string) => void;
   onCancelDelete: (msgId: string) => void;
   onConfirmRewrite: (pr: PendingRewrite, msgId: string) => void;
   onDiscardRewrite: (msgId: string) => void;
@@ -255,12 +255,12 @@ export function ChatDock({
                     />
                   ))}
 
-                  {m.pendingDelete && (
+                  {m.pendingDeletes && (
                     <ChatDeleteConfirm
-                      pd={m.pendingDelete}
+                      pds={m.pendingDeletes}
                       resolved={m.deleteResolved}
                       autoFocus={m.deleteAutoFocus}
-                      onConfirm={() => onConfirmDelete(m.pendingDelete!, m.id)}
+                      onConfirm={() => onConfirmDelete(m.pendingDeletes!, m.id)}
                       onCancel={() => onCancelDelete(m.id)}
                       disabled={sending}
                     />

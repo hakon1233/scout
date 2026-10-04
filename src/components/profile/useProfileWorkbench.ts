@@ -32,6 +32,7 @@ import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 import {
   appliedChangeMessage,
+  proposedDeletes,
   applyDocBodyChange,
   applyDocMetaChange,
   applyInterestChange,
@@ -224,22 +225,25 @@ export function useProfileWorkbench() {
   // delete as its own action card so the user gets a live Undo — same as a
   // create, and matching what a reload already shows.
   const confirmDelete = useCallback(
-    (pd: PendingDelete, msgId: string) => {
+    (pds: PendingDelete[], msgId: string) => {
       if (sending) return;
       setSending(true);
       setError(null);
-      // Snapshot the doc as it is right now, before the delete drops it, so the
-      // action card diffs it out and undo re-creates it verbatim.
-      const prevBody = docBodiesRef.current[pd.interestId] ?? null;
+      const ids = pds.map((d) => d.interestId);
+      // Snapshot the docs as they are right now, before the delete drops them,
+      // so the action card diffs them out and undo re-creates them verbatim.
+      const prevBodies = Object.fromEntries(
+        ids.map((id) => [id, docBodiesRef.current[id] ?? null]),
+      );
       abortedRef.current = false;
       const controller = startAbortable();
       (async () => {
         try {
-          const turn = await confirmDeleteInterest(pd.interestId, token, {
+          const turn = await confirmDeleteInterest(ids, token, {
             signal: controller.signal,
           });
-          flashRemove(pd.interestId);
-          const card = appliedChangeMessage(turn, pd.interestId, prevBody);
+          ids.forEach(flashRemove);
+          const card = appliedChangeMessage(turn, prevBodies);
           setMessages((prev) => {
             const resolved = resolveMessage(prev, msgId, {
               deleteResolved: "deleted",
@@ -293,7 +297,9 @@ export function useProfileWorkbench() {
           // Append the applied rewrite as its own action card so a confirmed
           // rewrite gets the same live Undo a create does — the proposal
           // card itself just locks to "Applied".
-          const card = appliedChangeMessage(turn, pr.interestId, prevBody);
+          const card = appliedChangeMessage(turn, {
+            [pr.interestId]: prevBody,
+          });
           setMessages((prev) => {
             const resolved = resolveMessage(prev, msgId, {
               rewriteResolved: "applied",
@@ -374,7 +380,7 @@ export function useProfileWorkbench() {
           const replyAt = new Date().toISOString();
           const changes =
             turn.changes && turn.changes.length > 0 ? turn.changes : undefined;
-          const pendingDelete = turn.pending_delete;
+          const pendingDeletes = proposedDeletes(turn);
           const pendingRewrite = turn.pending_rewrite;
           // Snapshot the pre-change bodies so the action card can diff and undo
           // — and the rewrite proposal card can diff current vs proposed.
@@ -391,7 +397,7 @@ export function useProfileWorkbench() {
                 docBodiesRef.current[pendingRewrite.interestId] ?? null;
             }
           }
-          if (turn.reply || changes || pendingDelete || pendingRewrite) {
+          if (turn.reply || changes || pendingDeletes || pendingRewrite) {
             const id = nextMsgId();
             setMessages((prevMsgs) => [
               ...prevMsgs,
@@ -400,15 +406,15 @@ export function useProfileWorkbench() {
                 role: "scout",
                 text:
                   turn.reply ??
-                  (pendingDelete
-                    ? `Want me to remove “${pendingDelete.topic}”?`
+                  (pendingDeletes
+                    ? `Want me to remove ${pendingDeletes.map((d) => `“${d.topic}”`).join(" and ")}?`
                     : pendingRewrite
                       ? `Here's a proposed rewrite of “${pendingRewrite.topic}” — apply below.`
                       : "Done — updated your interests."),
                 ts: replyAt,
                 changes,
                 prev,
-                pendingDelete,
+                pendingDeletes,
                 pendingRewrite,
               },
             ]);

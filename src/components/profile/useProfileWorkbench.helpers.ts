@@ -6,7 +6,11 @@
 // reasoned about (and unit-tested) in isolation. Keep it that way: if a helper
 // needs `window`, a timer, or a ref, it belongs in the hook, not here.
 
-import type { ChatChange, ChatTurn } from "@scout/agent/contract";
+import type {
+  ChatChange,
+  ChatTurn,
+  PendingDelete,
+} from "@scout/agent/contract";
 import { type InterestDocMeta, interestKey } from "@/lib/interest-docs";
 import type { Interest } from "@scout/agent/contract";
 import type { ChatMessage } from "./ChatDock";
@@ -67,6 +71,13 @@ function rewriteSig(interestId: string, doc: string | undefined): string {
   return `${interestId}\u0000${doc ?? ""}`;
 }
 
+// Every delete a turn proposed; older companions send only `pending_delete`.
+export function proposedDeletes(turn: ChatTurn): PendingDelete[] | undefined {
+  if (turn.pending_deletes && turn.pending_deletes.length > 0)
+    return turn.pending_deletes;
+  return turn.pending_delete ? [turn.pending_delete] : undefined;
+}
+
 export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
   const consumedDeleteIds = new Set<string>();
   // Deletes may key on interestId alone: an `op:"delete"` change ONLY ever comes
@@ -87,7 +98,7 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
   }
 
   return turns.flatMap((turn) => {
-    const pendingDelete = turn.pending_delete;
+    const pendingDeletes = proposedDeletes(turn);
     const pendingRewrite = turn.pending_rewrite;
     const out: ChatMessage[] = [
       {
@@ -101,7 +112,7 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
       turn.status === "ready" &&
       (turn.reply ||
         (turn.changes && turn.changes.length > 0) ||
-        pendingDelete ||
+        pendingDeletes ||
         pendingRewrite)
     ) {
       out.push({
@@ -111,12 +122,13 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
         ts: turn.created_at,
         changes:
           turn.changes && turn.changes.length > 0 ? turn.changes : undefined,
-        pendingDelete,
+        pendingDeletes,
         deleteResolved:
-          pendingDelete && consumedDeleteIds.has(pendingDelete.interestId)
+          pendingDeletes &&
+          pendingDeletes.every((d) => consumedDeleteIds.has(d.interestId))
             ? "deleted"
             : undefined,
-        deleteAutoFocus: pendingDelete ? false : undefined,
+        deleteAutoFocus: pendingDeletes ? false : undefined,
         pendingRewrite,
         rewriteResolved:
           pendingRewrite &&
@@ -154,16 +166,14 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
 // carries exactly one).
 export function appliedChangeMessage(
   turn: ChatTurn,
-  interestId: string,
-  prevBody: string | null,
+  prevBodies: Record<string, string | null>,
 ): ChatMessage | null {
   const changes =
     turn.changes && turn.changes.length > 0 ? turn.changes : undefined;
   if (!changes) return null;
   const prev: Record<string, string | null> = {};
   for (const ch of changes) {
-    if (ch.interestId)
-      prev[ch.interestId] = ch.interestId === interestId ? prevBody : null;
+    if (ch.interestId) prev[ch.interestId] = prevBodies[ch.interestId] ?? null;
   }
   return {
     id: nextMsgId(),

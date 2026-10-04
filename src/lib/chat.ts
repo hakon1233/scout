@@ -118,7 +118,7 @@ export async function stopChatTurn(
 // so this resolves fast. Throws human-readable errors on 404 (already gone) /
 // 409 (a turn is in flight).
 export async function confirmDeleteInterest(
-  interestId: string,
+  interestIds: string[],
   token: string,
   opts: { signal?: AbortSignal } = {},
 ): Promise<ChatTurn> {
@@ -127,7 +127,7 @@ export async function confirmDeleteInterest(
     {
       token,
       method: "POST",
-      body: { interestId },
+      body: { interestId: interestIds[0], interestIds },
       timeoutMs: 10_000,
       signal: opts.signal,
       failure: "Couldn't remove that interest",
