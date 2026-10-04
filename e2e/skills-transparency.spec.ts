@@ -35,7 +35,7 @@ const RESEARCH = {
     "RECENCY (the whole point of this brief)",
     "PUBLISH DATES (one per item, mandatory, captured as a field — not buried in link text)",
     "SOURCE IMAGE (one per item, OPTIONAL, handpicked from the source — never invented)",
-    "IN-DEPTH BODY (one per item, render contract for the click-through detail — PER-214/PER-256/PER-265)",
+    "IN-DEPTH BODY (one per item, shown when the reader opens the story)",
     "SOURCES & QUALITY",
   ],
 };

@@ -85,7 +85,7 @@ SOURCE IMAGE (one per item, OPTIONAL, handpicked from the source — never inven
 - One image per story maximum. Prefer a wide/landscape editorial lead image; skip
   sprites, avatars, share-button icons, and sub-200px thumbnails.
 
-IN-DEPTH BODY (one per item, render contract for the click-through detail — PER-214/PER-256/PER-265):
+IN-DEPTH BODY (one per item, shown when the reader opens the story):
 - The one-sentence summary on the bullet line is the SHORT feed blurb. In ADDITION,
   give each story a multi-paragraph detail body that the reader sees only after
   clicking into that story.

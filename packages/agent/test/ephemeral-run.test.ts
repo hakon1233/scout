@@ -68,13 +68,13 @@ function makeTopicAwareSpawn() {
 // Seed a state file + an interests dir holding the user's AUTHORED docs, with
 // state.interests anchored to those ids — the exact shape an ephemeral run must
 // protect.
-async function seededFounder() {
+async function seededReader() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-ephemeral-test-"));
   const stateFile = path.join(tmp, "state.json");
   const interestsDir = path.join(tmp, "interests");
   await fs.mkdir(interestsDir, { recursive: true });
   const token = newPairingToken();
-  const founder = [
+  const reader = [
     { id: "int_authored_aaa", topic: "harness news" },
     { id: "int_authored_bbb", topic: "ai coding tools & models" },
   ];
@@ -84,16 +84,16 @@ async function seededFounder() {
     int_authored_aaa: "# harness news\n\nAUTHORED: gstack, Matt Pocock skills repo.\n",
     int_authored_bbb: "# ai coding tools & models\n\nAUTHORED: combine codex/claude code/anthropic.\n",
   };
-  for (const it of founder) {
+  for (const it of reader) {
     await fs.writeFile(path.join(interestsDir, `${it.id}.md`), docs[it.id]);
   }
-  await saveState({ pairing_token: token, interests: founder }, stateFile);
-  return { tmp, stateFile, interestsDir, token, founder, docs };
+  await saveState({ pairing_token: token, interests: reader }, stateFile);
+  return { tmp, stateFile, interestsDir, token, reader, docs };
 }
 
 test("ephemeral run produces a brief but never mutates the user's saved interests or docs", async () => {
-  const { tmp, stateFile, interestsDir, token, founder, docs } =
-    await seededFounder();
+  const { tmp, stateFile, interestsDir, token, reader, docs } =
+    await seededReader();
   const { calls, spawnFn } = makeTopicAwareSpawn();
   const auth = { authorization: `Bearer ${token}` };
 
@@ -128,7 +128,7 @@ test("ephemeral run produces a brief but never mutates the user's saved interest
     assert.equal(
       (brief as Brief & { ephemeral?: boolean }).ephemeral,
       true,
-      "PER-288: the pollable QA result must be marked so the real feed can ignore it",
+      "the pollable QA result must be marked so the real feed can ignore it",
     );
 
     // INVARIANT 1: saved interests are byte-identical to the seeded set — the
@@ -138,18 +138,18 @@ test("ephemeral run produces a brief but never mutates the user's saved interest
       (state.last_brief as (Brief & { ephemeral?: boolean }) | undefined)
         ?.ephemeral,
       true,
-      "PER-288: the persisted last_brief slot must retain its ephemeral provenance",
+      "the persisted last_brief slot must retain its ephemeral provenance",
     );
     assert.deepEqual(
       state.interests?.map((i) => ({ id: i.id, topic: i.topic })),
-      founder,
+      reader,
     );
 
     // INVARIANT 2: the real interests dir is unchanged — no new templated docs were
     // created and the authored bodies were not overwritten.
     const after = await fs.readdir(interestsDir);
     assert.deepEqual(after.sort(), before.sort());
-    for (const it of founder) {
+    for (const it of reader) {
       const body = await fs.readFile(
         path.join(interestsDir, `${it.id}.md`),
         "utf8",
@@ -170,7 +170,7 @@ test("ephemeral run produces a brief but never mutates the user's saved interest
 });
 
 test("a NON-ephemeral POST still persists its interests (normal path unbroken)", async () => {
-  const { tmp, stateFile, token } = await seededFounder();
+  const { tmp, stateFile, token } = await seededReader();
   const { spawnFn } = makeTopicAwareSpawn();
   const auth = { authorization: `Bearer ${token}` };
 

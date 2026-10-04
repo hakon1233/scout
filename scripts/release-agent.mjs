@@ -852,7 +852,7 @@ Environment:
   SCOUT_AGENT_PORT    Companion port (default 47821)
   SCOUT_ALLOW_UNKNOWN_ACTIVITY=1  Proceed when activity state cannot be read.
                       Applies to activate/deploy ONLY. migrate ignores it: the
-                      first transition reaches the founder and always refuses
+                      first transition reaches the live service and always refuses
                       unless it can prove the companion is idle.
 `;
 }

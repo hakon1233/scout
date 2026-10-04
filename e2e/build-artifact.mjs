@@ -55,7 +55,7 @@ export function buildArtifact() {
     if (!existsSync(required)) {
       throw new Error(
         `packed artifact is missing ${path.relative(pkgDir, required)} — ` +
-          `check the \`files\` list in packages/agent/package.json (PER-111)`,
+          `check the \`files\` list in packages/agent/package.json`,
       );
     }
   }

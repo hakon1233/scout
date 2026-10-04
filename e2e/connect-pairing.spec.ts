@@ -99,7 +99,7 @@ test("the advertised companion tarball is actually served (onboarding link is no
 }) => {
   test.fixme(
     true,
-    "AIR-641: pack:agent's webroot snapshot is taken before its own tarball is packed, so a genuinely fresh checkout's first pack:agent run bakes a companion webroot with NO tarball at all — 404s deterministically, not CI-only (any machine that's never run pack:agent before hits this; a stale cached tarball from a prior local run is what makes it look CI-only). Real product bug, not test-infra; tracked, not the stub-claude.mjs AIR-642 crash this was previously mislabeled as.",
+    "Known bug: pack:agent snapshots the webroot before it packs the tarball, so the first pack:agent on a fresh checkout bakes a webroot with no tarball and this download 404s.",
   );
   // The exact URL the walkthrough tells the user to `npm i -g`. If the page's
   // pinned version constant drifts from the packed artifact, this 404s and

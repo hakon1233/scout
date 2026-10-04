@@ -222,7 +222,7 @@ export function assertSafeToBuild({
 
   throw refuse(
     `${LAUNCH_AGENT_LABEL} uses a live-serving path inside this checkout:\n  ${liveTarget}\n` +
-      "Building here could replace the founder's served backend or webroot. " +
+      "Building here could replace the backend or webroot the live service runs. " +
       "Use a checkout that is not targeted by the live service; do not bypass this guard.",
   );
 }

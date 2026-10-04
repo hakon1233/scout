@@ -1,4 +1,4 @@
-// Bake build provenance into dist/build-info.json (PER-239).
+// Bake build provenance into dist/build-info.json.
 //
 // Runs as the last step of `pnpm --filter @scout/agent build` (after tsc), so
 // every built companion carries the exact git SHA it was compiled from. The
