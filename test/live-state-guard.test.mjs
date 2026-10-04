@@ -38,7 +38,7 @@ function run(action, { stateDir, guardDir }, runId) {
   });
 }
 
-test("stays quiet when founder-visible state is unchanged", async (t) => {
+test("stays quiet when live state is unchanged", async (t) => {
   const paths = await fixture(t);
 
   const snapshot = run("snapshot", paths, "test-run-clean");

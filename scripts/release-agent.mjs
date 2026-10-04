@@ -150,8 +150,8 @@ export async function assertCompanionIdle(
 
 // The busy-run drain is an invariant OF the activation path, not a courtesy the
 // CLI performs on its behalf. It used to be a single `main()` call site, so any
-// programmatic caller bypassed it in silence — QA's own PER-302 AC7 harness
-// called migrateToReleases() directly, got no drain, and did not notice.
+// programmatic caller bypassed it in silence — a test harness once called
+// migrateToReleases() directly, got no drain, and did not notice.
 // Requiring `origin` rather than defaulting it is the point: a caller that has
 // no way to prove the companion is idle is refused, not quietly waved through.
 async function assertActivationPathIdle({
@@ -326,11 +326,11 @@ async function readBundledBuildInfo(releasePath) {
   return buildInfo;
 }
 
-// PER-299 exists because "what commit is live" had two answers. Writing the
-// expected SHA into the artifact's provenance record and reading it back does
-// not reduce that to one answer — it produces one answer that agrees with
-// itself. The packed artifact's own git_sha is the observation; `sha` is only
-// what we asked for. Compare them; never copy one onto the other.
+// The release design exists because "what commit is live" had two answers.
+// Writing the expected SHA into the artifact's provenance record and reading it
+// back does not reduce that to one answer — it produces one answer that agrees
+// with itself. The packed artifact's own git_sha is the observation; `sha` is
+// only what we asked for. Compare them; never copy one onto the other.
 //
 // The absent and dirty cases are refusals rather than values to normalise:
 // write-build-info.mjs emits the `-dirty` suffix precisely so a dirty build
@@ -568,7 +568,7 @@ export async function restartLaunchAgent({
 // The first migration: launchd moves off the development workspace and onto
 // the stable `current` path. It happens exactly once, it is the only step in
 // this system with no immutable predecessor to fall back to, and it runs on
-// the founder's only instance — so unlike a routine A→B activation it must
+// the user's only instance — so unlike a routine A→B activation it must
 // carry its own reverse.
 //
 // Deliberately loads the service module from the STAGED RELEASE rather than
@@ -584,13 +584,13 @@ export async function migrateToReleases({
   verify,
   now = () => Date.now(),
   // Test seam only: keeps `launchctl bootout ing.scout.agent` away from the
-  // founder's running job. Production leaves it unset.
+  // user's running job. Production leaves it unset.
   bootstrap,
 }) {
   if (!FULL_SHA.test(sha)) throw new Error(`Invalid release SHA: ${sha}`);
   // allowUnknown is hardcoded false and takes no caller input. The hatch may
   // soften a steady-state deploy, but this is the one-shot transition that
-  // reaches the founder: it boots launchd out and back in, so an in-flight
+  // reaches the user: it boots launchd out and back in, so an in-flight
   // research run or chat turn dies with it. "We could not reach the companion"
   // is not evidence that nothing was running. Drain BEFORE taking the
   // activation lock, so the lock is never held across network I/O.
@@ -664,7 +664,7 @@ export async function migrateToReleases({
         home,
         // Reproduce the port the job already had. The live plist has none, and
         // defaulting here is how a stray SCOUT_AGENT_PORT would silently move
-        // the founder off 47821.
+        // the user off 47821.
         port: existing.port,
         scriptPath: path.join(releaseRoot, "current", "dist", "cli.js"),
         extraEnv,

@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       # Version comes from the "packageManager" field in package.json
       # (pnpm@11.x) — the same pnpm major the lockfile is frozen under. Pinning
-      # an older major here breaks --frozen-lockfile (AIR-624).
+      # an older major here breaks --frozen-lockfile.
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -33,9 +33,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      # Companion unit + /v0 API contract suite (PER-118), hermetic/offline.
+      # Companion unit + /v0 API contract suite, hermetic/offline.
       - run: pnpm test
-      # Headless Playwright E2E of the zero-prompt first-run loop (PER-119). It
+      # Headless Playwright E2E of the zero-prompt first-run loop. It
       # packs + boots the artifact with a stubbed `claude` binary, so it needs
       # Chromium but no API keys and no network.
       - run: pnpm exec playwright install --with-deps chromium
@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@v4
       # Version comes from the "packageManager" field in package.json
       # (pnpm@11.x) — the same pnpm major the lockfile is frozen under. Pinning
-      # an older major here breaks --frozen-lockfile (AIR-624).
+      # an older major here breaks --frozen-lockfile.
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -63,13 +63,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Rebuild + repack the companion tarball from src/ on every deploy so the
       # blob served at /agent/scout-agent-<v>.tgz can never lag the source
-      # (PER-113 #3 — a hand-committed tarball nearly shipped stale onboarding
-      # in PER-111). pack:agent runs build:agent (webroot + agent compile) then
-      # npm pack into public/agent/, which `pnpm build` copies into out/.
+      # (a hand-committed tarball once nearly shipped stale onboarding).
+      # pack:agent runs build:agent (webroot + agent compile) then npm pack into
+      # public/agent/, which `pnpm build` copies into out/.
       - run: pnpm run pack:agent
         env:
           NEXT_TELEMETRY_DISABLED: "1"
-      # Stale-artifact guard (PER-120, PER-111 lesson): the `dist` that SHIPS
+      # Stale-artifact guard: the `dist` that SHIPS
       # inside the just-packed tarball must be byte-identical to the freshly
       # built packages/agent/dist. If they drift, fail the build — "done in
       # code ≠ shipped in the tarball."

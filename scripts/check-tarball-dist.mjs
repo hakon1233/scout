@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// PER-120 stale-artifact guard (PER-111 lesson: "done in code ≠ shipped in the
-// tarball"). After `pnpm run pack:agent` has freshly built packages/agent/dist
-// AND packed it into public/agent/scout-agent-<v>.tgz, this asserts the dist
-// that SHIPS inside the tarball is byte-identical to the dist on disk. Any drift
-// (a stale tarball, a pack that didn't pick up the latest build, a partial
-// rebuild) fails the deploy build instead of silently shipping the wrong code.
+// Stale-artifact guard ("done in code ≠ shipped in the tarball"). After `pnpm
+// run pack:agent` has freshly built packages/agent/dist AND packed it into
+// public/agent/scout-agent-<v>.tgz, this asserts the dist that SHIPS inside the
+// tarball is byte-identical to the dist on disk. Any drift (a stale tarball, a
+// pack that didn't pick up the latest build, a partial rebuild) fails the
+// deploy build instead of silently shipping the wrong code.
 //
 // Offline, no deps — uses the system `tar` to extract and node:crypto to hash.
 import { createHash } from "node:crypto";

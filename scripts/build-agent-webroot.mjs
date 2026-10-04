@@ -8,7 +8,7 @@
 // to `/_next/...`, routes to `/`, `/app/`, `/app/connect/`. A localhost page
 // calling the localhost API is same-origin, so Chrome's Local Network Access
 // gate never engages → no "Allow local network" prompt. That is the whole
-// point of PER-110.
+// point.
 //
 // Run from the repo root: `node scripts/build-agent-webroot.mjs`.
 
@@ -25,7 +25,7 @@ const repoRoot = path.resolve(
 const outDir = path.join(repoRoot, "out");
 const webroot = path.join(repoRoot, "packages", "agent", "webroot");
 
-// Refuse before anything below can replace bytes the founder's process serves.
+// Refuse before anything below can replace bytes the live process serves.
 // Print the reason plainly: a stack trace above the message reads like a crash,
 // and this needs to read like a stop sign.
 try {

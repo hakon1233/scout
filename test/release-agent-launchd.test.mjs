@@ -81,13 +81,13 @@ http.createServer((req, res) => {
   return dir;
 }
 
-// PER-303 blocker 6: this file was named *.spike.mjs, which the `test/*.test.mjs`
-// glob does not match — it never ran, so it was not evidence about anything.
+// Named *.test.mjs (not *.spike.mjs) so the `test/*.test.mjs` glob actually
+// runs it.
 //
 // Its plist is hand-rolled on purpose: what this exercises is the `current`
 // symlink flip and the rollback of a failing release through REAL launchd, on a
 // unique temporary label (ing.scout.agent.per301.<pid>), port and state dir, so
-// it can never touch the founder's job. The legacy->current transition, which
+// it can never touch the user's job. The legacy->current transition, which
 // must drive the real installService, is covered in release-agent.test.mjs
 // ("migrateToReleases ...") — a hand-rolled plist would prove nothing there.
 
@@ -106,10 +106,10 @@ test(
     const domain = `gui/${process.getuid()}`;
     const target = `${domain}/${label}`;
     const port = await freePort();
-    // PER-310: the drain is an invariant inside activateRelease, so the spike
-    // now proves it against the REAL launchd-managed companion — real fetch,
-    // real /v0/version, no stub. Activation refuses unless this origin answers
-    // that nothing is in flight.
+    // The drain is an invariant inside activateRelease, so the spike now proves
+    // it against the REAL launchd-managed companion — real fetch, real
+    // /v0/version, no stub. Activation refuses unless this origin answers that
+    // nothing is in flight.
     const origin = `http://127.0.0.1:${port}`;
     const shaA = "a".repeat(40);
     const shaB = "b".repeat(40);

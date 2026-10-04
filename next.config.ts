@@ -7,8 +7,8 @@ const basePath = repo ? `/${repo}` : "";
 
 // Single-source the companion version from packages/agent/package.json so the
 // Connect page's tarball URL can never drift from the version the deploy
-// actually packs and names the tarball after (PER-275 — a hand-duplicated
-// version used to silently 404 the onboarding install command on a bump).
+// actually packs and names the tarball after (a hand-duplicated version used to
+// silently 404 the onboarding install command on a bump).
 const agentPkgPath = fileURLToPath(
   new URL("./packages/agent/package.json", import.meta.url),
 );

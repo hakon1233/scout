@@ -183,7 +183,7 @@ test("does not require launchctl away from macOS", async (t) => {
   );
 });
 
-// --- fail-closed paths (CTO review of 75d600f) ---------------------------
+// --- fail-closed paths ---------------------------------------------------
 
 test("refuses when a live argument cannot be resolved to a real path", async (t) => {
   const { root, repoRoot, cli } = await fixture(t);
@@ -269,7 +269,7 @@ test("inspects launchd through the absolute system binary, not PATH", () => {
 // --- mutation-seam wiring -------------------------------------------------
 // The helper tests above all pass a stub inspector, so they stay green even if
 // nothing calls the guard. These assert the two seams that actually rewrite
-// founder-served bytes are wired to it.
+// live-served bytes are wired to it.
 
 test("the backend build runs the guard in the script body, not a bypassable lifecycle hook", async () => {
   const manifest = JSON.parse(
@@ -314,7 +314,7 @@ test("the webroot build runs the guard before it touches webroot/", async () => 
   }
 });
 
-// --- the guard's own entrypoint (PER-308) ---------------------------------
+// --- the guard's own entrypoint -------------------------------------------
 // The end-to-end tests below are the only ones that exercise the call site as a
 // real command, and they skip everywhere launchd does not serve from this
 // checkout — i.e. every CI run and every agent workspace. So the line that
@@ -437,7 +437,7 @@ test("the guard file invokes runAsScript unconditionally at the top level", asyn
 // --- end-to-end, on a machine where this checkout really is the live one ---
 // These are the only tests that prove the wiring at the command level. They
 // skip where launchd does not serve from this checkout (CI, any non-live
-// clone); on the founder's machine today they are the real proof.
+// clone); on the machine running the live companion they are the real proof.
 
 function thisCheckoutIsLive() {
   try {
@@ -509,7 +509,7 @@ test(
   },
 );
 
-// --- PER-303 blocker 8a: the CLI self-check must survive symlinks ----------
+// --- the CLI self-check must survive symlinks ------------------------------
 
 test("recognises itself as the entrypoint when invoked through a symlink", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "scout-guard-symlink-"));
@@ -560,7 +560,7 @@ test(
   },
 );
 
-// --- PER-303 blocker 8b: relative arguments are placed, never dropped ------
+// --- relative arguments are placed, never dropped --------------------------
 
 test("refuses when a relative LaunchAgent argument places inside this checkout", async (t) => {
   const { repoRoot, cli } = await fixture(t);
@@ -602,8 +602,8 @@ test("refuses a relative LaunchAgent argument it cannot place", async (t) => {
   );
 });
 
-// --- PER-306: a crafted argument must not shadow the working directory or -----
-// --- truncate the arguments block. Both hid a live path and permitted. --------
+// --- a crafted argument must not shadow the working directory or truncate ---
+// --- the arguments block. Both hid a live path and permitted. ---------------
 
 test("refuses when an argument literal shadows the job's working directory", async (t) => {
   const { repoRoot, cli } = await fixture(t);

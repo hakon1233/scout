@@ -25,10 +25,10 @@ import {
 
 const execFileP = promisify(execFile);
 
-// PER-310: the busy-run drain lives inside activateRelease/migrateToReleases,
-// so EVERY caller must prove the companion is idle — there is no implicit
-// bypass for tests either. Suites not about the drain inject an idle companion
-// explicitly; `activityFetch` builds the other states.
+// The busy-run drain lives inside activateRelease/migrateToReleases, so EVERY
+// caller must prove the companion is idle — there is no implicit bypass for
+// tests either. Suites not about the drain inject an idle companion explicitly;
+// `activityFetch` builds the other states.
 function activityFetch(activityInFlight) {
   return async () =>
     new Response(JSON.stringify({ activity_in_flight: activityInFlight }), {
@@ -435,7 +435,7 @@ test("stagePackedRelease observes the artifact's own SHA and freezes the directo
   assert.equal(releasePath, path.join(root, "releases", sha));
 
   // The packed build-info must come through byte-identical. Rewriting it is
-  // what made the live SHA an assertion instead of an observation (PER-299).
+  // what made the live SHA an assertion instead of an observation.
   const buildInfo = JSON.parse(
     await fs.readFile(
       path.join(releasePath, "dist", "build-info.json"),
@@ -553,13 +553,13 @@ test("stagePackedRelease refuses an artifact built from a different commit", asy
   );
 });
 
-// PER-308: 54eb606 claimed "validateStagedRelease re-observes rather than
-// trusting release.json" but shipped no test — deleting the assertObservedSha
-// call inside validateStagedRelease left the suite green. This is the failing
-// case for that claim: an already-staged, frozen release whose artifact is
-// mutated out from under it must be refused when re-validated. Re-validation is
-// reached by staging the same SHA a second time (stagePackedRelease returns
-// validateStagedRelease when the target already exists).
+// validateStagedRelease re-observes rather than trusting release.json; without
+// this test, deleting the assertObservedSha call inside validateStagedRelease
+// would leave the suite green. This is the failing case for that behaviour: an
+// already-staged, frozen release whose artifact is mutated out from under it
+// must be refused when re-validated. Re-validation is reached by staging the
+// same SHA a second time (stagePackedRelease returns validateStagedRelease when
+// the target already exists).
 test("validateStagedRelease re-observes the artifact, refusing a build-info corrupted after staging", async (t) => {
   const { root } = await tempReleaseRoot();
   const sha = "c".repeat(40);
@@ -853,11 +853,11 @@ test("readiness and drain time out when headers arrive but the body stalls", asy
   );
 });
 
-// --- PER-303 blockers 5/6: the first migration, legacy -> current ---------
+// --- the first migration, legacy -> current -------------------------------
 //
 // These drive the REAL installService compiled from packages/agent/src, not a
 // hand-rolled in-test plist. A hand-rolled one proves nothing about the code
-// that will actually run on the founder's machine.
+// that will actually run on the user's machine.
 //
 // SAFETY: launchctl is never invoked — a `bootstrap` stub is injected, and
 // SCOUT_LAUNCH_AGENT_PLIST pins the plist under a temp dir. Compiling to a temp
@@ -973,13 +973,13 @@ test(
   const migrated = await fs.readFile(plist, "utf8");
   assert.match(migrated, /current\/dist\/cli\.js/);
   assert.doesNotMatch(migrated, /workspace\/dist\/cli\.js/);
-  // Blocker 4: the var the founder's job actually carries.
+  // The var the user's job actually carries.
   assert.match(
     migrated,
     /<key>SCOUT_SESSION_TIMEOUT_MS<\/key>\s*<string>900000<\/string>/,
   );
   assert.deepEqual(result.carriedEnv, ["SCOUT_SESSION_TIMEOUT_MS"]);
-  // The legacy plist has no --port; adding one would move the founder off 47821.
+  // The legacy plist has no --port; adding one would move the user off 47821.
   assert.doesNotMatch(migrated, /--port/);
   assert.equal(result.port, null);
 
@@ -1007,7 +1007,7 @@ test(
     /rolled back[\s\S]*companion never became ready/i,
   );
 
-  // The whole point: the founder's launchd config is byte-identical to before.
+  // The whole point: the user's launchd config is byte-identical to before.
   assert.equal(await fs.readFile(plist, "utf8"), legacy);
   await assert.rejects(fs.lstat(path.join(root, "current")), /ENOENT/);
 });
@@ -1040,14 +1040,15 @@ test(
   );
 });
 
-// --- PER-310: the drain is an invariant, and migrate cannot be softened ---
+// --- the drain is an invariant, and migrate cannot be softened ------------
 //
-// Two CEO AC6 dispositions, one suite each. Both were "fixed" in PER-303 by a
-// single assertCompanionIdle call in main(), which satisfied neither: the
-// escape hatch reached the first migration, and every programmatic caller
-// skipped the drain entirely. Each test below goes red if its half is reverted.
+// Two rules, one suite each: every caller drains, and the escape hatch never
+// reaches the first migration. A single assertCompanionIdle call in main()
+// satisfies neither: the escape hatch reaches the first migration, and every
+// programmatic caller skips the drain entirely. Each test below goes red if its
+// half is reverted.
 //
-// Method note (PER-302 rule 3): a refusal suite needs a control that is
+// Method note: a refusal suite needs a control that is
 // ACCEPTED, or N refusals only prove the thing refuses everything. The controls
 // are "the hatch still opens for a steady-state activation" and the existing
 // happy-path tests, which pass an idle companion and succeed.
@@ -1104,9 +1105,9 @@ test("no caller input can soften the first migration's drain", async (t) => {
 });
 
 test("the unknown-activity hatch still opens for a steady-state activation", async (t) => {
-  // The CEO's disposition was that SCOUT_ALLOW_UNKNOWN_ACTIVITY *stays* for
-  // routine deploys. Without this control, the migrate tests above would also
-  // pass if someone deleted the hatch outright.
+  // SCOUT_ALLOW_UNKNOWN_ACTIVITY deliberately *stays* for routine deploys.
+  // Without this control, the migrate tests above would also pass if someone
+  // deleted the hatch outright.
   const { root, releases } = await tempReleaseRoot();
   t.after(() => removeTree(root));
   const releaseA = await addRelease(releases, "a".repeat(40));
@@ -1221,7 +1222,7 @@ test("the activation path refuses a caller that cannot prove idleness at all", a
   assert.equal(await fs.readFile(migration.plist, "utf8"), migration.legacy);
 });
 
-// --- PER-303 blocker 7: provenance checks that can actually fail ----------
+// --- provenance checks that can actually fail -----------------------------
 //
 // Both fixtures used to serve /v0/version and /scout-build.json from the same
 // field, so verifyRelease's cross-check could not fail by construction. These

@@ -1,5 +1,5 @@
-// PER-300: a build must never rewrite the checkout used by the founder's
-// running LaunchAgent. This is the emergency refusal seam until deployment
+// A build must never rewrite the checkout used by the user's running
+// LaunchAgent. This is the emergency refusal seam until deployment
 // moves launchd to immutable releases outside development workspaces.
 //
 // Every uncertainty here is a refusal. The guard only permits a build when it
@@ -60,7 +60,7 @@ function indentDepth(line) {
 // keyed on that indentation, so a value INSIDE `arguments = { … }` — which the
 // plist author controls — can never be read as one of the job's top-level keys.
 //
-// Two fail-opens this closes (PER-306), both of which made a live path
+// Two fail-opens this closes, both of which made a live path
 // invisible to the containment check so the guard permitted instead of
 // refusing:
 //   - an argument whose literal text is `working directory = <outside>` was
@@ -255,8 +255,9 @@ export function invokedAsScript(argv1 = process.argv[1]) {
 // collaborator throwing (exit 1) — without a live LaunchAgent. This is not a
 // production bypass: the sole caller is the top-level line below, which always
 // passes the real two, and there is no env-var or PATH seam to swap them.
-// Swapping the refusal seam is exactly the PATH-injection class PER-300 closed;
-// re-opening it through a test hook would defeat the guard just as thoroughly.
+// Swapping the refusal seam is exactly the PATH-injection class this guard
+// closes; re-opening it through a test hook would defeat the guard just as
+// thoroughly.
 export function runAsScript({ invokedAsScript, assertSafeToBuild }) {
   try {
     if (invokedAsScript()) {

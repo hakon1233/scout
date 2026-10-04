@@ -100,12 +100,11 @@ Delete the file to un-pair, or run `scout-agent pair --force` to rotate the toke
 
 ## Tests
 
-The companion ships a hermetic test suite (PER-118): it runs fully offline,
+The companion ships a hermetic test suite: it runs fully offline,
 mocks the `claude` shell-out, and costs zero Claude quota (no real
 WebSearch/WebFetch). It locks the `/v0/*` contract and pins fixes for past
-regressions (PER-91 interest cap, PER-92 in-flight brief slot, PER-106 brief
-render shape, PER-108 token never forwarded/logged, PER-110 token bootstrap,
-PER-113 preamble stripping).
+regressions (interest cap, in-flight brief slot, brief render shape, token
+never forwarded/logged, token bootstrap, preamble stripping).
 
 ```bash
 # from the repo root — runs the @scout/agent suite
