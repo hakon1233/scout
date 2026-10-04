@@ -26,7 +26,7 @@ import {
   SAMPLE_INTERESTS,
 } from "@/lib/interest-docs";
 import { prefersReducedMotion } from "@/lib/motion";
-import { loadSettings } from "@/lib/storage";
+import { loadSettings, saveSettings } from "@/lib/storage";
 import type { Interest } from "@scout/agent/contract";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
@@ -41,6 +41,7 @@ import {
   dropKey,
   greetingMessage,
   markdownDemoMessages,
+  mirroredSettings,
   nextMsgId,
   resolveMessage,
   resolveRetryTarget,
@@ -149,6 +150,14 @@ export function useProfileWorkbench() {
     },
     [hydrated, mockSeed],
   );
+
+  // Keep the saved settings in step with the interests the chat changed, so the
+  // feed doesn't run (and re-save) interests deleted here.
+  useEffect(() => {
+    if (!hydrated || mockSeed !== null) return;
+    const next = mirroredSettings(loadSettings(), interests);
+    if (next) saveSettings(next);
+  }, [hydrated, mockSeed, interests]);
 
   useEffect(() => {
     const timers = beatTimers.current;

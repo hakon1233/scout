@@ -5,6 +5,7 @@ import type { ChatTurn } from "@scout/agent/contract";
 import type { ChatMessage } from "./ChatDock";
 import {
   appliedChangeMessage,
+  mirroredSettings,
   resolveRetryTarget,
   transcriptMessages,
 } from "./useProfileWorkbench.helpers";
@@ -300,4 +301,15 @@ test("a turn proposing several deletes shows them all, resolved once all are con
     (m) => m.role === "scout",
   );
   assert.equal(done?.deleteResolved, "deleted");
+});
+
+test("saved settings follow the workbench's interests, including deleting the last one", () => {
+  const stored = { name: "Ada", interests: [{ id: "int_a", topic: "AI" }] };
+  assert.deepEqual(mirroredSettings(stored, []), {
+    name: "Ada",
+    interests: [],
+  });
+  assert.equal(mirroredSettings(stored, stored.interests), null);
+  // Nothing saved yet: nothing to keep in step.
+  assert.equal(mirroredSettings(null, []), null);
 });

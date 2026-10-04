@@ -13,6 +13,7 @@ import type {
 } from "@scout/agent/contract";
 import { type InterestDocMeta, interestKey } from "@/lib/interest-docs";
 import type { Interest } from "@scout/agent/contract";
+import type { Settings } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 
@@ -307,4 +308,17 @@ export function buildDocCards(
       href: `/app/interests/?id=${encodeURIComponent(key)}`,
     };
   });
+}
+
+// Saved settings with the workbench's interests, or null when nothing changes
+// (or nothing is saved yet). Keeps a later run from re-sending interests the
+// chat deleted.
+export function mirroredSettings(
+  stored: Settings | null,
+  interests: Interest[],
+): Settings | null {
+  if (!stored) return null;
+  if (JSON.stringify(stored.interests) === JSON.stringify(interests))
+    return null;
+  return { ...stored, interests };
 }
