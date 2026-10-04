@@ -34,7 +34,11 @@ import {
   type PendingDelete,
   type PendingRewrite,
 } from "./state.js";
-import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
+import {
+  assertNotRealStateUnderTest,
+  atomicWriteFile,
+  CONFIG_DIR,
+} from "./persistence.js";
 import { runClaude } from "./claude-runner.js";
 // Shared with the POST/PUT /v0/interests validator — see limits.ts for why the
 // constant lives in a leaf module rather than next to either consumer.
@@ -134,6 +138,7 @@ export async function readChatTranscript(
 async function preserveCorruptTranscript(file: string): Promise<void> {
   try {
     const backup = `${file}.corrupt-${Date.now()}.bak`;
+    assertNotRealStateUnderTest(file);
     await fs.rename(file, backup);
     console.error(
       `[chat] transcript ${file} was corrupt; preserved at ${backup} and started fresh`,

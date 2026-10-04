@@ -8,7 +8,11 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { TopicCoverage } from "./coverage.js";
-import { CONFIG_DIR, atomicWriteFile } from "./persistence.js";
+import {
+  CONFIG_DIR,
+  assertNotRealStateUnderTest,
+  atomicWriteFile,
+} from "./persistence.js";
 
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
 
@@ -334,6 +338,7 @@ export async function loadState(file = STATE_FILE): Promise<State> {
 async function preserveCorruptState(file: string): Promise<void> {
   try {
     const backup = `${file}.corrupt-${Date.now()}.bak`;
+    assertNotRealStateUnderTest(file);
     await fs.rename(file, backup);
     console.error(
       `[state] ${file} was corrupt; preserved at ${backup} and started fresh`,

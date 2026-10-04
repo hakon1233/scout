@@ -18,6 +18,23 @@ import crypto from "node:crypto";
 // here (state.json, chat/transcript.json, interests/<id>.md).
 export const CONFIG_DIR = path.join(os.homedir(), ".config", "scout");
 
+// The real user's state dir, from the password database so a faked HOME in a
+// test cannot hide it.
+const REAL_CONFIG_DIR = path.join(os.userInfo().homedir, ".config", "scout");
+
+// Fails closed: under a test runner (NODE_TEST_CONTEXT), refuse any write,
+// rename or delete inside the real ~/.config/scout. A test that forgets to
+// pass a temp path then fails instead of editing the user's live state.
+export function assertNotRealStateUnderTest(file: string): void {
+  if (!process.env.NODE_TEST_CONTEXT) return;
+  const rel = path.relative(REAL_CONFIG_DIR, path.resolve(file));
+  if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
+    throw new Error(
+      `Refusing to touch ${file} from a test: it is inside the real ${REAL_CONFIG_DIR}. Pass a temp path.`,
+    );
+  }
+}
+
 // Atomic write: serialize to a sibling temp file, fsync it, then rename over
 // the target. rename(2) is atomic on POSIX, so a crash mid-write can never
 // leave a torn or truncated file — a reader that catches the parse error and
@@ -38,6 +55,7 @@ export async function atomicWriteFile(
   data: string,
   mode = 0o600,
 ): Promise<void> {
+  assertNotRealStateUnderTest(file);
   const dir = path.dirname(file);
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;

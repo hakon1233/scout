@@ -14,7 +14,11 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { atomicWriteFile, CONFIG_DIR } from "./persistence.js";
+import {
+  assertNotRealStateUnderTest,
+  atomicWriteFile,
+  CONFIG_DIR,
+} from "./persistence.js";
 
 export const INTERESTS_DIR = path.join(CONFIG_DIR, "interests");
 
@@ -67,6 +71,7 @@ export async function deleteInterestDoc(
   dir = INTERESTS_DIR,
 ): Promise<void> {
   try {
+    assertNotRealStateUnderTest(interestDocPath(id, dir));
     await fs.unlink(interestDocPath(id, dir));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
