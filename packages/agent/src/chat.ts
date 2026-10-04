@@ -402,28 +402,22 @@ export function buildChatPrompt(
 }
 
 // Run one chat turn through a tool-less `claude` child and parse its JSON
-// output. A Stop (opts.signal) kills the child and rejects with ChatStoppedError
-// so the turn lands stopped without applying changes.
+// output. A Stop (opts.signal) kills the child and rejects, so the turn lands
+// stopped without applying changes.
 export async function chatComplete(
   message: string,
   snapshots: InterestSnapshot[],
   transcript: ChatTurn[] = [],
   opts: ChatOptions = {},
 ): Promise<ChatModelOutput> {
-  let raw: string;
-  try {
-    raw = await runClaude(buildChatPrompt(message, snapshots, transcript), {
-      tools: "none",
-      label: "claude chat turn",
-      claudeBin: opts.claudeBin,
-      spawnFn: opts.spawnFn,
-      timeoutMs: opts.timeoutMs,
-      signal: opts.signal,
-    });
-  } catch (err) {
-    if (opts.signal?.aborted) throw new ChatStoppedError();
-    throw err;
-  }
+  const raw = await runClaude(buildChatPrompt(message, snapshots, transcript), {
+    tools: "none",
+    label: "claude chat turn",
+    claudeBin: opts.claudeBin,
+    spawnFn: opts.spawnFn,
+    timeoutMs: opts.timeoutMs,
+    signal: opts.signal,
+  });
   return parseChatOutput(raw);
 }
 
@@ -602,14 +596,7 @@ let currentTurnAbort: { turnId: string; controller: AbortController } | null =
 // Canonical "user pressed Stop" outcome. The turn lands as `failed` with this
 // message (a new status value would ripple through every ChatTurn consumer);
 // the FE recognizes a stop locally anyway and suppresses the error bubble.
-export const CHAT_STOPPED_MSG = "Stopped — no changes were applied.";
-
-class ChatStoppedError extends Error {
-  constructor() {
-    super(CHAT_STOPPED_MSG);
-    this.name = "ChatStoppedError";
-  }
-}
+const CHAT_STOPPED_MSG = "Stopped — no changes were applied.";
 
 // Abort the in-flight chat turn (PER-232). With a turnId, only aborts when it
 // matches the in-flight turn (a stale Stop can't kill a newer turn); without
@@ -877,7 +864,7 @@ async function runChatTurn(
     // round-trip outraced the Stop (or the killed child still flushed output),
     // a stopped turn must commit nothing — this is AC3/AC5's "no uncommitted
     // change is written".
-    if (abort.signal.aborted) throw new ChatStoppedError();
+    abort.signal.throwIfAborted();
     // Apply against the freshly-loaded interest list so the change set is durable
     // on disk BEFORE the turn flips to `ready` (observable-in-same-response).
     // Deletes and full rewrites are gated: they come back as `pendingDeletes` /
@@ -912,8 +899,7 @@ async function runChatTurn(
       message,
       // A user Stop is not an error — land the canonical message verbatim so
       // clients (and QA) can tell "stopped, nothing written" from a real failure.
-      error_msg:
-        err instanceof ChatStoppedError ? CHAT_STOPPED_MSG : String(err),
+      error_msg: abort.signal.aborted ? CHAT_STOPPED_MSG : String(err),
     };
   }
 
