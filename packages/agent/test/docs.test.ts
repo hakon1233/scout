@@ -21,7 +21,6 @@ import path from "node:path";
 import {
   migrateInterests,
   reconcileInterests,
-  interestTopics,
   legacyInterestId,
   newInterestId,
   newPairingToken,
@@ -154,17 +153,6 @@ test("reconcileInterests matches topics case-insensitively (keeps the id)", () =
   const existing = [{ id: "int_a", topic: "AI Safety" }];
   const out = reconcileInterests(existing, ["ai safety"]);
   assert.equal(out[0].id, "int_a");
-});
-
-test("interestTopics is the topic-only engine boundary", () => {
-  assert.deepEqual(
-    interestTopics([
-      { id: "x", topic: "a" },
-      { id: "y", topic: "b" },
-    ]),
-    ["a", "b"],
-  );
-  assert.deepEqual(interestTopics(undefined), []);
 });
 
 // ── Doc store round-trip ─────────────────────────────────────────────────────

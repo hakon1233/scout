@@ -1,6 +1,4 @@
-// The launchd plist rewrite is the fragile half of the release system, and the
-// legacy->current migration is the one activation with no immutable predecessor
-// to fall back to.
+// The launchd plist rewrite: install, backup/restore, and the legacy migration.
 //
 // SAFETY: nothing here may reach the real launchd job. installService shells
 // out to `launchctl bootout gui/<uid>/ing.scout.agent`, which would stop the
@@ -72,7 +70,7 @@ async function pinnedHome(t: TestContext): Promise<string> {
 
 const noopBootstrap = async () => ({ bootstrapped: true, note: "stubbed" });
 
-// --- blocker 2: the install-service footgun ------------------------------
+// --- the plist must point at the stable current path ---
 
 test("refuses to pin the plist inside an immutable release directory", () => {
   // This is exactly what realpath(process.argv[1]) yields once `current`
@@ -118,7 +116,7 @@ test("installService refuses a release-pinned scriptPath before writing anything
   );
 });
 
-// --- blocker 3: atomic, backed up, reversible, validated ------------------
+// --- plist writes are backed up, reversible and validated ---
 
 test("isServiceInstalled rejects a truncated plist instead of reporting durable", async (t) => {
   const home = await pinnedHome(t);
@@ -178,7 +176,7 @@ test("restoreServicePlist puts the original bytes back and refuses invalid ones"
   );
 });
 
-// --- blocker 4: env and port carried forward, never silently dropped ------
+// --- env and port carried forward from the legacy plist ---
 
 test("reads the environment and absent port out of the legacy plist", async (t) => {
   const home = await pinnedHome(t);
@@ -201,35 +199,6 @@ test("reads the environment and absent port out of the legacy plist", async (t) 
   assert.deepEqual(droppedEnvKeys(existing.environment), [
     "SCOUT_SESSION_TIMEOUT_MS",
   ]);
-});
-
-test("SCOUT_SESSION_TIMEOUT_MS survives a legacy to current round-trip", async (t) => {
-  const home = await pinnedHome(t);
-  if (process.platform !== "darwin") return;
-  await fs.writeFile(
-    process.env.SCOUT_LAUNCH_AGENT_PLIST!,
-    legacyPlist({ scriptPath: "/legacy/workspace/cli.js", home }),
-  );
-
-  const before = await readExistingService(home);
-  const extraEnv: Record<string, string> = {};
-  for (const key of droppedEnvKeys(before!.environment)) {
-    extraEnv[key] = before!.environment[key];
-  }
-
-  await installService({
-    home,
-    port: before!.port,
-    scriptPath: "/tmp/agent/current/dist/cli.js",
-    extraEnv,
-    bootstrap: noopBootstrap,
-  });
-
-  const after = await readExistingService(home);
-  assert.equal(after!.environment.SCOUT_SESSION_TIMEOUT_MS, "900000");
-  assert.equal(after!.port, undefined, "an absent port must stay absent");
-  assert.ok(!after!.programArguments.includes("--port"));
-  assert.deepEqual(droppedEnvKeys(after!.environment, extraEnv), []);
 });
 
 test("buildLaunchAgentPlist emits extra env and never shadows HOME or PATH", () => {

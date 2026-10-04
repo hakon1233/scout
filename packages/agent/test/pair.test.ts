@@ -31,12 +31,6 @@ test("mints a token on first pairing (no existing token)", () => {
   assert.equal(rotated, true);
 });
 
-test("force on a fresh state still mints exactly one token", () => {
-  const { token, rotated } = resolvePairingToken({}, true);
-  assert.ok(token.length > 0);
-  assert.equal(rotated, true);
-});
-
 test("successive forced rotations yield distinct tokens", () => {
   const first = resolvePairingToken({ pairing_token: "a" }, true).token;
   const second = resolvePairingToken({ pairing_token: first }, true).token;

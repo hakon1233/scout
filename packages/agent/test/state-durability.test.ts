@@ -1,24 +1,5 @@
-// Kill-during-write durability regression tests for state.json.
-//
-// A non-atomic saveState + an error-swallowing loadState once meant a crash
-// mid-write left a truncated state.json that the next load silently replaced
-// with {} — wiping the pairing token, interests, and brief history. Atomic
-// writes, the corrupt-file backup and the persistence seam fixed that. These
-// tests pin the durability contract so it cannot silently regress:
-//
-//   - A torn write artifact (state.json truncated mid-JSON, exactly what a
-//     killed non-atomic writer leaves behind) must be preserved as a
-//     .corrupt-*.bak sibling, never silently absorbed into a fresh {}.
-//   - A saveState that FAILS mid-write must leave the previous state.json
-//     byte-for-byte intact (the temp+rename seam in persistence.ts is what
-//     guarantees this; reverting it to a plain writeFile fails these tests).
-//   - A saveState that succeeds must leave no *.tmp residue behind.
-//   - Concurrent savers must never produce a torn/interleaved file — the
-//     result is always exactly one complete payload (last rename wins).
-//
-// Complements state.test.ts (garbage-bytes corruption + first-run) and
-// chat.test.ts (corrupt transcript preservation). Hermetic: temp files only, no
-// network.
+// state.json durability: corrupt files are kept as .corrupt-*.bak, saves are
+// atomic, and concurrent writers never tear or lose an update.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -43,35 +24,55 @@ const RICH_STATE: State = {
   ],
 };
 
-test("a truncated (kill-during-write) state.json is preserved, not silently reset", async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-torn-"));
+test("a corrupt state.json is backed up to .corrupt-*.bak, not wiped", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-corrupt-"));
   try {
     const file = path.join(tmp, "state.json");
-    await saveState(RICH_STATE, file);
-    const full = await fs.readFile(file, "utf8");
+    const corruptBytes = '{"interests":[{"id":"i1","topic":"AI" CORRUPT';
+    await fs.writeFile(file, corruptBytes);
 
-    // Simulate the artifact a killed non-atomic writer leaves: a valid JSON
-    // prefix cut off mid-document. (saveState itself can no longer produce
-    // this — that is the point — but a pre-atomic version, a disk fault, or a
-    // truncating restore still can.)
-    const torn = full.slice(0, Math.floor(full.length / 2));
-    await fs.writeFile(file, torn);
+    // loadState degrades to empty state so the companion still boots...
+    const state = await loadState(file);
+    assert.deepEqual(state, {}, "corrupt state should load as empty");
 
-    // The companion still boots (degrades to empty state)...
-    assert.deepEqual(await loadState(file), {});
-
-    // ...but the torn bytes survive in a .corrupt-*.bak sibling. This is the
-    // assertion that fails on the pre-fix code, where the torn file stayed in
-    // place waiting for the next saveState to destroy it.
+    // ...but the original bytes survive under a .corrupt-*.bak sibling, so the
+    // user's config is recoverable rather than silently destroyed.
     const siblings = await fs.readdir(tmp);
     const backup = siblings.find(
       (f) => f.includes(".corrupt-") && f.endsWith(".bak"),
     );
     assert.ok(
       backup,
-      "expected the torn state.json preserved as .corrupt-*.bak",
+      "expected a .corrupt-*.bak backup of the unparseable state",
     );
-    assert.equal(await fs.readFile(path.join(tmp, backup!), "utf8"), torn);
+    assert.equal(
+      await fs.readFile(path.join(tmp, backup!), "utf8"),
+      corruptBytes,
+    );
+
+    // And the now-absent state.json is free for a clean save (the dangerous
+    // path: without the backup this save would have overwritten the corrupt
+    // file and lost its contents forever).
+    await saveState({ pairing_token: "tok_fresh" }, file);
+    assert.equal((await loadState(file)).pairing_token, "tok_fresh");
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a missing state.json is not backed up (normal first run)", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-state-missing-"));
+  try {
+    const file = path.join(tmp, "state.json");
+    const state = await loadState(file);
+    assert.deepEqual(state, {}, "missing state should load as empty");
+
+    const siblings = await fs.readdir(tmp);
+    assert.equal(
+      siblings.filter((f) => f.includes(".corrupt-")).length,
+      0,
+      "a never-written state file must not produce a .corrupt-*.bak",
+    );
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }

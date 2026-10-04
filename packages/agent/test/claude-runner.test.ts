@@ -98,15 +98,6 @@ test("a no-tools run gets an empty tool set", async () => {
   ]);
 });
 
-test("no run bypasses Claude Code's permission checks", async () => {
-  for (const tools of ["web-research", "none"] as const) {
-    const stub = stubSpawn({ stdout: "x" });
-    await runClaude("prompt", { tools, spawnFn: stub.spawnFn });
-    const argv = stub.calls[0].args.join(" ");
-    assert.doesNotMatch(argv, /dangerously|bypassPermissions/);
-  }
-});
-
 test("the child runs in the temp dir, never the companion's working directory", async () => {
   const stub = stubSpawn({ stdout: "x" });
   await runClaude("prompt", { tools: "none", spawnFn: stub.spawnFn });

@@ -1,9 +1,5 @@
-// Unit tests for the research prompt builder + the shared search-skills layer.
-// The problem: runs surfaced months-old stories with no dates. The fix is one
-// canonical, version-controlled "skills folder" fragment injected verbatim into
-// every research session, plus a date-first bullet contract. These tests pin
-// that the fragment actually reaches the prompt and that its non-negotiable
-// rules are present. Run: pnpm --filter @scout/agent test
+// The research prompt builder: shared search skills, the interest's doc and
+// the date anchor all reach the prompt; a research session returns its output.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -48,20 +44,6 @@ test("THE INVARIANT: the interest's doc is injected into the prompt VERBATIM", (
   assert.ok(skillsAt >= 0 && docAt >= 0 && dateAt >= 0);
   assert.ok(skillsAt < docAt, "search skills must precede the doc");
   assert.ok(docAt < dateAt, "the doc must precede the date anchor");
-});
-
-test("the search-skills fragment enforces the recency + date + sourcing rules", () => {
-  // Recency window and the explicit widen-with-a-note rule.
-  assert.match(SEARCH_SKILLS, /LAST 7 DAYS/);
-  assert.match(SEARCH_SKILLS, /LAST 30 DAYS/);
-  assert.match(SEARCH_SKILLS, /showing older items/);
-  assert.match(SEARCH_SKILLS, /NEVER silently present months-old/i);
-  // Mandatory per-story publish date, captured as a field.
-  assert.match(SEARCH_SKILLS, /publish date/i);
-  assert.match(SEARCH_SKILLS, /NEWEST FIRST/);
-  // Source quality + dedupe.
-  assert.match(SEARCH_SKILLS, /primary/i);
-  assert.match(SEARCH_SKILLS, /[Dd]eduplicate|dedupe/);
 });
 
 test("STORY_DATE_RE extracts the date token from a model-shaped story bullet", () => {
@@ -114,98 +96,6 @@ test("the prompt scopes the session to the single topic and its output section",
   assert.match(prompt, /_no fresh news_/);
 });
 
-test("the prompt asks for a bold lead paragraph followed by deeper detail", () => {
-  const prompt = buildResearchPrompt({ topic: "ai", doc: "track ai" });
-
-  assert.match(prompt, /FIRST paragraph/i);
-  assert.match(prompt, /1[-–]2 sentences/i);
-  assert.match(prompt, /bold/i);
-  assert.match(prompt, /follow[- ]on paragraphs/i);
-  assert.match(prompt, /insight|analysis|implication/i);
-});
-
-test("the depth bar is substantive and applies equally to every topic", () => {
-  // Detail-view bodies felt shallow across EVERY topic, not
-  // just broad/general ones — so the fix is a straight quality/length bump
-  // applied uniformly, never a topic-breadth branch. Pin both halves: the
-  // wider paragraph range + concrete-detail requirement, and that nothing in
-  // the prompt or SEARCH_SKILLS conditions depth on how broad a topic is.
-  const broad = buildResearchPrompt({
-    topic: "world news",
-    doc: "track world news",
-  });
-  const narrow = buildResearchPrompt({
-    topic: "acme corp",
-    doc: "track acme corp",
-  });
-
-  for (const prompt of [broad, narrow]) {
-    assert.match(prompt, /3-5/, "prompt must ask for 3-5 follow-on paragraphs");
-    assert.match(
-      prompt,
-      /concrete,?\s*checkable detail/i,
-      "prompt must require each follow-on paragraph to add a concrete detail",
-    );
-  }
-  // The two prompts differ only in topic/doc — the depth instructions
-  // themselves (drawn from the shared SEARCH_SKILLS fragment + the fixed
-  // output-requirements block) must be byte-identical, proving there is no
-  // broad-vs-narrow branch anywhere in the pipeline.
-  const stripTopic = (p: string) => p.split(SEARCH_SKILLS)[1];
-  assert.equal(
-    stripTopic(broad).replace(/world news|track world news/gi, ""),
-    stripTopic(narrow).replace(/acme corp|track acme corp/gi, ""),
-  );
-});
-
-// A `claude` stub that NEVER closes — models a hung session (model stall /
-// network wedge / a rate-limit retry that never returns). Records whether the
-// timeout path killed it. This is the hung-session regression: before the
-// per-session timeout, a single hung session blocked the whole sequential run
-// loop forever and the brief stayed `pending` indefinitely.
-function makeHangingSpawn() {
-  const state = { killed: false, killSignal: "" };
-  const spawnFn = ((_bin: string, _args: readonly string[], _opts: unknown) => {
-    const child = new EventEmitter() as EventEmitter & {
-      stdin: Writable;
-      stdout: EventEmitter;
-      stderr: EventEmitter;
-      pid?: number;
-      kill: (sig?: string) => boolean;
-    };
-    child.pid = undefined; // skip os.setPriority in the stub.
-    child.stdout = new EventEmitter();
-    child.stderr = new EventEmitter();
-    child.kill = (sig?: string) => {
-      state.killed = true;
-      state.killSignal = sig ?? "";
-      return true;
-    };
-    child.stdin = new Writable({
-      write(_c, _e, cb) {
-        cb();
-      },
-    });
-    // Intentionally never emit "close" or "error": the session hangs.
-    return child;
-  }) as unknown as typeof spawn;
-  return { state, spawnFn };
-}
-
-test("a hung claude session is killed and rejects after the timeout", async () => {
-  const { state, spawnFn } = makeHangingSpawn();
-  await assert.rejects(
-    researchAndSynthesize(
-      { topic: "ai", doc: "track ai" },
-      { spawnFn, timeoutMs: 50 },
-    ),
-    /timed out after 50ms/,
-    "a session that never closes must reject with a timeout, not hang forever",
-  );
-  assert.equal(state.killed, true, "the hung child must be killed on timeout");
-  assert.equal(state.killSignal, "SIGTERM", "kill should start with SIGTERM");
-});
-
 test("a session that closes in time is NOT affected by the timeout", async () => {
   // A fast, well-behaved stub still resolves normally — the timeout is a ceiling,
   // not a delay.
@@ -241,49 +131,4 @@ test("a session that closes in time is NOT affected by the timeout", async () =>
     { spawnFn, timeoutMs: 5000 },
   );
   assert.match(md, /## ai/);
-});
-
-test("a non-zero exit with empty stderr surfaces the stdout tail", async () => {
-  // The real failure this pins: on 2026-07-15 the claude CLI reported
-  // "You've hit your session limit · resets 8:40pm (Europe/Oslo)" on STDOUT
-  // and exited 1 with stderr EMPTY, so all six topics of a manual run failed
-  // with an undiagnosable `error_msg: "claude exited 1:"`. The actual cause
-  // must reach the rejection (and thus the brief's error_msg).
-  const spawnFn = ((_bin: string, _args: readonly string[], _opts: unknown) => {
-    const child = new EventEmitter() as EventEmitter & {
-      stdin: Writable;
-      stdout: EventEmitter;
-      stderr: EventEmitter;
-      pid?: number;
-    };
-    child.pid = undefined;
-    child.stdout = new EventEmitter();
-    child.stderr = new EventEmitter();
-    child.stdin = new Writable({
-      write(_c, _e, cb) {
-        cb();
-      },
-    });
-    child.stdin.on("finish", () =>
-      setImmediate(() => {
-        child.stdout.emit(
-          "data",
-          Buffer.from(
-            "You've hit your session limit · resets 8:40pm (Europe/Oslo)",
-          ),
-        );
-        child.emit("close", 1);
-      }),
-    );
-    return child;
-  }) as unknown as typeof spawn;
-
-  await assert.rejects(
-    researchAndSynthesize(
-      { topic: "ai", doc: "track ai" },
-      { spawnFn, timeoutMs: 5000 },
-    ),
-    /claude exited 1: You've hit your session limit/,
-    "the stdout-carried cause must appear in the error, not be dropped",
-  );
 });

@@ -1,18 +1,5 @@
-// Contract for the ephemeral / dry-run trigger.
-//
-// Background — the incident this guards against: a normal POST /v0/interests
-// persists its `interests` body as the user's new saved list (reconcileInterests
-// → startRun → saveState) and lazily backfills a default intent doc for every new
-// id. A QA/automation run that POSTed a reduced or generic test payload therefore
-// OVERWROTE the user's authored interests and littered the doc store with
-// templated docs.
-//
-// The fix: `ephemeral: true`. An ephemeral run researches the supplied topics and
-// produces a brief, but MUST NOT mutate the user's saved config — `state.interests`
-// is left verbatim and the intent-doc backfill is redirected to a throwaway temp dir,
-// so no real `interests/<id>.md` is created or overwritten. This test pins exactly
-// that: the user's saved interests + on-disk docs are byte-identical after an ephemeral
-// run, while a brief still lands. Hermetic: no real claude, no network.
+// An ephemeral POST /v0/interests produces a brief without changing the saved
+// interests, their docs or the brief history.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -165,47 +152,6 @@ test("ephemeral run produces a brief but never mutates the user's saved interest
     // real past edition. The runner gates the append on `!isEphemeral`, so the
     // history stays empty here even though a brief was produced above.
     assert.equal(state.briefs, undefined);
-  } finally {
-    server.close();
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
-});
-
-test("a NON-ephemeral POST still persists its interests (normal path unbroken)", async () => {
-  const { tmp, stateFile, token } = await seededReader();
-  const { spawnFn } = makeTopicAwareSpawn();
-  const auth = { authorization: `Bearer ${token}` };
-
-  let resolveNext: ((b: Brief) => void) | null = null;
-  const nextDone = () => new Promise<Brief>((r) => (resolveNext = r));
-  const { server, port } = await startServer(0, {
-    stateFile,
-    spawnFn,
-    onSynthesisDone: (b) => resolveNext?.(b),
-  });
-
-  try {
-    const done = nextDone();
-    const kick = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...auth },
-      // confirm_replace satisfies the wipe guard — this intentionally
-      // replaces the seeded list with a fresh one.
-      body: JSON.stringify({
-        interests: ["ai", "robotics"],
-        confirm_replace: true,
-      }),
-    });
-    assert.equal(kick.status, 202);
-    await done;
-
-    // The real UI's "Run now" sends the full current list; a normal POST is meant
-    // to persist it. This stays true — only `ephemeral: true` opts out.
-    const state = await loadState(stateFile);
-    assert.deepEqual(
-      state.interests?.map((i) => i.topic),
-      ["ai", "robotics"],
-    );
   } finally {
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });

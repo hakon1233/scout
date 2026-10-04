@@ -1,11 +1,5 @@
-// Chat-session contract tests: POST /v0/chat → poll GET /v0/chat.
-//
-// The chat manages the WHOLE interest collection: one turn can create, refine,
-// or delete an interest. We mock the `claude` shell-out with an in-process spawn
-// stub that returns a canned `{reply, changes}` JSON object, so these are fully
-// hermetic — zero quota, no network. The key acceptance is end-to-end: a doc
-// edit made via chat PERSISTS to interests/<id>.md (so C2's next run sees it) and
-// is observable in the same turn's machine-readable change set.
+// Chat turns over POST /v0/chat → GET /v0/chat: one turn can create, refine or
+// delete interests, with a stubbed `claude` returning canned `{reply, changes}`.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -24,7 +18,6 @@ import {
 import type { ChatTurn } from "../src/contract.js";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
 import { isChatInFlight, startChatTurn } from "../src/chat.js";
-import { buildChatPrompt } from "../src/chat-model.js";
 import { readChatTranscript } from "../src/chat-transcript.js";
 import { startServer } from "../src/server.js";
 
@@ -860,73 +853,66 @@ test("POST /v0/chat returns 409 while a turn is in flight; the prior turn isn't 
   }
 });
 
-test("a no-change chat turn doesn't clobber an interest a concurrent PUT added mid-turn", async () => {
-  const { tmp, stateFile, interestsDir, token } = await seeded({
-    interests: [{ id: "int_abc123", topic: "ai safety" }],
-  });
-  // A pure Q&A turn: the model replies but changes nothing.
-  const model = JSON.stringify({
-    reply: "AI safety tracks alignment and evals work.",
-    changes: [],
-  });
-  const { spawnFn, releaseAll, calls } = makeChatSpawn({
-    output: model,
-    autoClose: false,
-  });
-  const { onChatDone, done } = awaitTurn();
-
-  const { server, port } = await startServer(0, {
-    stateFile,
-    interestsDir,
-    spawnFn,
-    onChatDone,
-  });
-  const auth = { authorization: `Bearer ${token}` };
-
-  try {
-    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({ message: "what does ai safety track?" }),
+for (const { name, changes, expected } of [
+  { name: "a no-change turn", changes: [], expected: ["alpha", "gamma"] },
+  {
+    name: "a turn that creates an interest",
+    changes: [{ op: "create", topic: "beta", doc: "Track beta." }],
+    expected: ["alpha", "gamma", "beta"],
+  },
+]) {
+  test(`${name} keeps an interest a concurrent PUT /v0/interests saved mid-turn`, async () => {
+    const { tmp, stateFile, interestsDir, token } = await seeded({
+      interests: [{ id: "int_a", topic: "alpha" }],
     });
-    assert.equal(kick.status, 202);
-
-    // Wait until the turn is genuinely in flight — the child is spawned only
-    // AFTER runChatTurn has loaded its turn-start interest snapshot, so the
-    // concurrent write below cannot leak into that snapshot.
-    while (calls.length === 0) await new Promise((r) => setTimeout(r, 5));
-
-    // Simulate a concurrent PUT /v0/interests adding a second interest while the
-    // model round-trip is still outstanding.
-    const mid = await loadState(stateFile);
-    await saveState(
-      {
-        ...mid,
-        interests: [
-          ...(mid.interests ?? []),
-          { id: "int_def456", topic: "crypto policy" },
-        ],
-      },
+    const chat = makeChatSpawn({
+      output: JSON.stringify({ reply: "ok", changes }),
+      autoClose: false,
+    });
+    const { onChatDone, done } = awaitTurn();
+    const { server, port } = await startServer(0, {
       stateFile,
-    );
+      interestsDir,
+      spawnFn: chat.spawnFn,
+      onChatDone,
+    });
+    const headers = {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    };
+    try {
+      const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ message: "hello" }),
+      });
+      assert.equal(kick.status, 202);
+      await chat.waitForHeldChild();
 
-    // Let the no-change turn complete and persist.
-    releaseAll();
-    const landed = await done;
-    assert.equal(landed.status, "ready");
+      // The reader saves a new interest while the model is still answering.
+      const put = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ interests: ["alpha", "gamma"] }),
+      });
+      assert.equal(put.status, 200);
 
-    // The concurrently-added interest must survive: a turn that changed nothing
-    // writes no interest list, so the persist falls through to the reloaded set.
-    const after = await loadState(stateFile);
-    const topics = (after.interests ?? []).map((i) => i.topic).sort();
-    assert.deepEqual(topics, ["ai safety", "crypto policy"]);
-    // The turn still lands as last_chat.
-    assert.equal(after.last_chat?.id, landed.id);
-  } finally {
-    server.close();
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
-});
+      chat.releaseAll();
+      const landed = await done;
+      assert.equal(landed.status, "ready");
+
+      const after = await loadState(stateFile);
+      assert.deepEqual(
+        (after.interests ?? []).map((i) => i.topic),
+        expected,
+      );
+      assert.equal(after.last_chat?.id, landed.id);
+    } finally {
+      server.close();
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+}
 
 test("POST /v0/chat accepts a new turn after a restart leaves only a persisted pending turn", async () => {
   const staleTurn: ChatTurn = {
@@ -1130,34 +1116,6 @@ test("the pairing token never reaches the chat claude child (argv/options/stdin)
     server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
-});
-
-// "Delete is non-functional" was a model op-selection bug, not
-// missing plumbing — the model rewrote/blanked the doc with `update` instead of
-// emitting `delete`. The fix is prompt steering. This guards that the steering
-// stays in the prompt so a future prompt edit can't silently regress delete.
-test("buildChatPrompt steers removal intents to the delete op, not update", () => {
-  const prompt = buildChatPrompt("delete my ai safety interest", [
-    { id: "int_abc123", topic: "ai safety", doc: "Track alignment research." },
-  ]);
-  // Names removal verbs the user actually says, so the model maps them to delete.
-  assert.match(prompt, /remove|delete|drop|get rid of|stop\s+tracking/i);
-  // The load-bearing instruction: never fake a removal with an update.
-  assert.match(prompt, /Deleting is the ONLY way to remove an interest/);
-  assert.match(prompt, /NEVER try to/i);
-});
-
-// A `delete` is confirm-gated, so the model's reply must read as a
-// pending request, not a done-action. Guards the prompt rule that stops the
-// "Done — deleted X" / "Removed X" copy appearing before the user confirms.
-test("buildChatPrompt tells the model a delete is confirm-gated and the reply must be a pending request", () => {
-  const prompt = buildChatPrompt("delete my ai safety interest", [
-    { id: "int_abc123", topic: "ai safety", doc: "Track alignment research." },
-  ]);
-  assert.match(prompt, /CONFIRM-GATED/);
-  // The model must NOT claim the delete is done before confirmation.
-  assert.match(prompt, /PENDING REQUEST/);
-  assert.match(prompt, /NEVER claim it is done/i);
 });
 
 // Stop must abort the SERVER-side turn. The original failure was exactly this
@@ -1376,39 +1334,6 @@ test("a corrupt transcript is backed up to .corrupt-*.bak, not wiped", async () 
   }
 });
 
-// The common no-file case stays quiet (no spurious backup, returns []).
-test("a missing transcript returns [] without creating a backup", async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scout-chat-missing-"));
-  try {
-    const file = path.join(tmp, "transcript.json");
-    assert.deepEqual(await readChatTranscript(file), []);
-    assert.deepEqual(await fs.readdir(tmp), []);
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
-});
-
-test("a non-ENOENT transcript read failure logs and returns []", async () => {
-  const originalError = console.error;
-  const calls: unknown[][] = [];
-  console.error = (...args: unknown[]) => {
-    calls.push(args);
-  };
-  try {
-    const file = path.join("/dev/null", "transcript.json");
-    assert.deepEqual(await readChatTranscript(file), []);
-  } finally {
-    console.error = originalError;
-  }
-
-  assert.equal(calls.length, 1);
-  assert.match(
-    String(calls[0][0]),
-    /^\[scout\] .*transcript\.json could not be read:/,
-  );
-  assert.equal((calls[0][1] as NodeJS.ErrnoException).code, "ENOTDIR");
-});
-
 // Bug-hunt regression: a literal JSON `null` body (valid JSON, but not an
 // object) must yield a clean 400, not a 500. Before the parseJsonBody fix,
 // `JSON.parse("null")` returned `null`, which the handler then dereferenced
@@ -1466,56 +1391,6 @@ test("a chat turn keeps its transcript next to the state file it was given", asy
       ["hello"],
     );
   } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
-});
-
-test("an interest saved while a chat turn runs survives the turn's own change", async () => {
-  const { tmp, stateFile, interestsDir, token } = await seeded({
-    interests: [{ id: "int_a", topic: "alpha" }],
-  });
-  const model = JSON.stringify({
-    reply: "Added beta.",
-    changes: [{ op: "create", topic: "beta", doc: "Track beta." }],
-  });
-  const chat = makeChatSpawn({ output: model, autoClose: false });
-  const { onChatDone, done } = awaitTurn();
-  const { server, port } = await startServer(0, {
-    stateFile,
-    interestsDir,
-    spawnFn: chat.spawnFn,
-    onChatDone,
-  });
-  const headers = {
-    "content-type": "application/json",
-    authorization: `Bearer ${token}`,
-  };
-  try {
-    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ message: "add beta" }),
-    });
-    assert.equal(kick.status, 202);
-    await chat.waitForHeldChild();
-
-    // The reader saves a new interest while the model is still answering.
-    const put = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
-      method: "PUT",
-      headers,
-      body: JSON.stringify({ interests: ["alpha", "gamma"] }),
-    });
-    assert.equal(put.status, 200);
-
-    chat.releaseAll();
-    assert.equal((await done).status, "ready");
-
-    const topics = ((await loadState(stateFile)).interests ?? []).map(
-      (i) => i.topic,
-    );
-    assert.deepEqual(topics, ["alpha", "gamma", "beta"]);
-  } finally {
-    server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });

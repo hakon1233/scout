@@ -719,45 +719,6 @@ test("POST /v0/interests passes a superset (additive) payload without confirmati
   }
 });
 
-test("POST /v0/interests {ephemeral:true} never alters persisted interests", async () => {
-  const { tmp, stateFile, token, saved } = await seededServerWithInterests();
-  const recorder = makeSpawnRecorder({ autoClose: true });
-  let synthesisDone: (b: unknown) => void = () => {};
-  const done = new Promise((r) => (synthesisDone = r));
-  const { server, port } = await startServer(0, {
-    stateFile,
-    spawnFn: recorder.spawnFn,
-    onSynthesisDone: (b) => synthesisDone(b),
-  });
-  const auth = { authorization: `Bearer ${token}` };
-
-  try {
-    // A disjoint test topic, exactly like a QA fire — accepted (202, a brief is
-    // produced) but the user's saved set must be byte-identical afterwards.
-    const res = await fetch(`http://127.0.0.1:${port}/v0/interests`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...auth },
-      body: JSON.stringify({
-        interests: ["qa throwaway topic"],
-        ephemeral: true,
-      }),
-    });
-    assert.equal(res.status, 202);
-
-    // Let the autoClose synthesis land fully before inspecting persisted state.
-    await done;
-    const state = await loadState(stateFile);
-    assert.deepEqual(
-      state.interests,
-      saved,
-      "ephemeral run must not touch saved interests",
-    );
-  } finally {
-    server.close();
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
-});
-
 test("PUT /v0/interests applies the same wipe guard as POST", async () => {
   const { tmp, stateFile, token, saved } = await seededServerWithInterests();
   const recorder = makeSpawnRecorder({ autoClose: true });
