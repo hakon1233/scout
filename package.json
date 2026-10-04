@@ -16,7 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "test": "node --test test/*.test.mjs && pnpm --filter @scout/agent test && pnpm run test:web",
     "test:web": "tsx --test 'src/**/*.test.ts'",
     "build:agent-webroot": "node scripts/build-agent-webroot.mjs",
