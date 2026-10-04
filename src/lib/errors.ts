@@ -81,21 +81,6 @@ export function classifyError(err: unknown): ClassifiedError {
   };
 }
 
-/**
- * Read a companion error response body, tolerating non-JSON payloads.
- * Centralises the `await res.json().catch(...)` parse+cast that was duplicated
- * across every companion/chat fetch helper. Callers keep their own
- * `?? fallback` so messaging stays per-call-site (behaviour-preserving).
- */
-export async function readErrorBody(
-  res: Response,
-): Promise<{ error?: string; hint?: string }> {
-  return (await res.json().catch(() => ({ error: res.statusText }))) as {
-    error?: string;
-    hint?: string;
-  };
-}
-
 function stackOrMessage(err: unknown): string {
   const e = err as Error;
   return e?.stack ?? e?.message ?? String(err);

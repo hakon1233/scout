@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  PATHS,
-  type Interest,
-} from "@scout/agent/contract";
-import { isServedFromCompanion } from "./companion";
+import { PATHS, type Interest } from "@scout/agent/contract";
+import { companionFetch, isServedFromCompanion } from "./companion";
 import { isClient } from "./safe-storage";
 
 // Per-interest "intent doc" metadata (PER-155 C1/C4). The intent doc is the
@@ -84,9 +81,9 @@ export async function fetchInterestsFull(token: string): Promise<{
   if (!isClient()) return null;
   if (!(await isServedFromCompanion())) return null;
   try {
-    const res = await fetch(`${window.location.origin}${PATHS.interests}`, {
-      headers: token ? { authorization: `Bearer ${token}` } : undefined,
-      signal: AbortSignal.timeout(2500),
+    const res = await companionFetch(PATHS.interests, {
+      token,
+      timeoutMs: 2500,
     });
     if (!res.ok) return null;
     const body = (await res.json()) as {

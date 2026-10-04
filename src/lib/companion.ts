@@ -10,7 +10,6 @@ import {
   type Brief as WireBrief,
   type ScheduleView,
 } from "@scout/agent/contract";
-import { readErrorBody } from "./errors";
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 
 // Dev/diagnostic trace for the browser→loopback transport (AIR-626). Every fetch
@@ -45,7 +44,7 @@ let cachedBase: string | null = null;
 // In-flight coalescing for the cached-base re-ping (AIR-617), mirroring
 // isServedFromCompanion's pattern below. fetchRunFailure's poll tick runs
 // `Promise.all([pollBriefsRaw, fetchSchedule])`, and both independently call
-// requireBase() → discoverCompanion() in the same tick — without this, each
+// companionFetch() → discoverCompanion() in the same tick — without this, each
 // fired its own /healthz ping against the identical cached port, doubling
 // requests on every poll (10-30s, page.tsx). Sharing the in-flight promise
 // collapses that pair to one ping without changing what gets verified.
@@ -235,7 +234,9 @@ export async function discoverCompanion(): Promise<string | null> {
   }
   if (cachedBase) {
     const cachedPort = new URL(cachedBase).port;
-    if (await pingCachedBase(cachedPort ? Number(cachedPort) : COMPANION_PORT)) {
+    if (
+      await pingCachedBase(cachedPort ? Number(cachedPort) : COMPANION_PORT)
+    ) {
       return cachedBase;
     }
     cachedBase = null;
@@ -253,13 +254,63 @@ export async function pingCompanion(): Promise<boolean> {
   return (await discoverCompanion()) !== null;
 }
 
-async function requireBase(): Promise<string> {
+export type CompanionRequest = {
+  token?: string;
+  method?: "GET" | "POST" | "PUT";
+  // Sent as JSON.
+  body?: unknown;
+  // Defaults to 5s; a caller's `signal` replaces the timeout.
+  timeoutMs?: number;
+  signal?: AbortSignal;
+};
+
+// The one way to call the companion: finds it, then sends the request with the
+// pairing token. Resolves with the raw response, so a caller can treat a
+// refusal as "nothing" instead of an error. Throws when no companion answers.
+export async function companionFetch(
+  path: string,
+  req: CompanionRequest = {},
+): Promise<Response> {
   const base = await discoverCompanion();
-  if (!base)
+  if (!base) {
     throw new Error(
-      "Companion not reachable. Start `scout-agent run` and try again.",
+      "Scout's companion isn't reachable. Start it with `scout-agent run` and try again.",
     );
-  return base;
+  }
+  const headers: Record<string, string> = {};
+  if (req.token) headers.authorization = `Bearer ${req.token}`;
+  if (req.body !== undefined) headers["content-type"] = "application/json";
+  return fetch(`${base}${path}`, {
+    method: req.method ?? "GET",
+    headers,
+    body: req.body === undefined ? undefined : JSON.stringify(req.body),
+    signal: req.signal ?? AbortSignal.timeout(req.timeoutMs ?? 5_000),
+  });
+}
+
+// companionFetch for a JSON reply. A refusal throws an Error with the message
+// set for its status, else the companion's hint or error, else
+// "<failure> (<status>)."
+export async function companionJson<T>(
+  path: string,
+  req: CompanionRequest & {
+    failure: string;
+    messages?: Partial<Record<number, string>>;
+  },
+): Promise<T> {
+  const res = await companionFetch(path, req);
+  if (!res.ok) {
+    const fixed = req.messages?.[res.status];
+    if (fixed) throw new Error(fixed);
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      hint?: string;
+    };
+    throw new Error(
+      body.hint ?? body.error ?? `${req.failure} (${res.status}).`,
+    );
+  }
+  return (await res.json()) as T;
 }
 
 export async function postInterests(
@@ -273,7 +324,6 @@ export async function postInterests(
   // so the companion's saved set (the scheduler's source of truth) is unchanged.
   selectedTopics?: string[],
 ): Promise<{ brief_id: string; status: string }> {
-  const base = await requireBase();
   const body: {
     interests: string[];
     retry_topics?: string[];
@@ -282,20 +332,13 @@ export async function postInterests(
   if (retryTopics && retryTopics.length > 0) body.retry_topics = retryTopics;
   if (selectedTopics && selectedTopics.length > 0)
     body.selected_topics = selectedTopics;
-  const res = await fetch(`${base}${PATHS.interests}`, {
+  return companionJson(PATHS.interests, {
+    token,
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(10_000),
+    body,
+    timeoutMs: 10_000,
+    failure: "Couldn't start the run",
   });
-  if (!res.ok) {
-    const err = await readErrorBody(res);
-    throw new Error(err.hint ?? err.error);
-  }
-  return res.json() as Promise<{ brief_id: string; status: string }>;
 }
 
 // Persist the user's interests to the companion (state.json) WITHOUT kicking a
@@ -313,29 +356,18 @@ export async function saveInterests(
   // need it.
   confirmReplace?: boolean,
 ): Promise<{ interests: string[]; status: string }> {
-  const base = await requireBase();
   const body: { interests: string[]; confirm_replace?: boolean } = {
     interests,
   };
   if (confirmReplace) body.confirm_replace = true;
-  const res = await fetch(`${base}${PATHS.interests}`, {
+  return companionJson(PATHS.interests, {
+    token,
     method: "PUT",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(8_000),
+    body,
+    timeoutMs: 8_000,
+    failure: "Couldn't save interests",
   });
-  if (!res.ok) {
-    const err = await readErrorBody(res);
-    throw new Error(
-      err.hint ?? err.error ?? `Couldn't save interests (${res.status}).`,
-    );
-  }
-  return res.json() as Promise<{ interests: string[]; status: string }>;
 }
-
 
 // The brief arrives as markdown; the feed shows one article per citation.
 // Exported so the mapping can be tested without a companion.
@@ -499,7 +531,9 @@ export function assessRunFailure(input: {
   //    to the schedule's note.
   if (lastStatus === "failed" || scheduleStatus === "failed") {
     const failedAt =
-      lastStatus === "failed" ? (lastAt ?? null) : (scheduleAt ?? lastAt ?? null);
+      lastStatus === "failed"
+        ? (lastAt ?? null)
+        : (scheduleAt ?? lastAt ?? null);
     // A failure only reflects the CURRENT state if no successful brief is newer
     // than it. `schedule.last_run_status` is written ONLY by scheduled runs
     // (runner.ts), so a 07:00 scheduled fire that failed but was superseded by a
@@ -597,20 +631,13 @@ export async function fetchRunFailure(
   }
 }
 
-
 // Read the persisted schedule config + run telemetry. Throws on an unreachable
 // companion or non-2xx so the caller can render a real error / "not paired" state.
 export async function fetchSchedule(token: string): Promise<ScheduleView> {
-  const base = await requireBase();
-  const res = await fetch(`${base}${PATHS.schedule}`, {
-    headers: { authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(5_000),
+  return companionJson(PATHS.schedule, {
+    token,
+    failure: "Couldn't read the schedule",
   });
-  if (!res.ok) {
-    const err = await readErrorBody(res);
-    throw new Error(err.error ?? `Couldn't read the schedule (${res.status}).`);
-  }
-  return res.json() as Promise<ScheduleView>;
 }
 
 // Write the schedule (enable/disable and/or time-of-day). The companion
@@ -621,21 +648,13 @@ export async function updateSchedule(
   patch: { enabled?: boolean; time_of_day?: string },
   token: string,
 ): Promise<ScheduleView> {
-  const base = await requireBase();
-  const res = await fetch(`${base}${PATHS.schedule}`, {
+  return companionJson(PATHS.schedule, {
+    token,
     method: "PUT",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(patch),
-    signal: AbortSignal.timeout(8_000),
+    body: patch,
+    timeoutMs: 8_000,
+    failure: "Couldn't save the schedule",
   });
-  if (!res.ok) {
-    const err = await readErrorBody(res);
-    throw new Error(err.error ?? `Couldn't save the schedule (${res.status}).`);
-  }
-  return res.json() as Promise<ScheduleView>;
 }
 
 // Page the companion's rolling brief history, newest-first (PER-219). Backs the
@@ -654,12 +673,10 @@ export async function fetchBriefHistory(
   opts: { limit: number; offset: number },
 ): Promise<{ briefs: AppBrief[]; total: number }> {
   try {
-    const base = await requireBase();
-    const url = `${base}${PATHS.briefs}?limit=${opts.limit}&offset=${opts.offset}`;
-    const res = await fetch(url, {
-      headers: { authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(5_000),
-    });
+    const res = await companionFetch(
+      `${PATHS.briefs}?limit=${opts.limit}&offset=${opts.offset}`,
+      { token },
+    );
     if (!res.ok) return { briefs: [], total: 0 };
     const json = (await res.json()) as {
       briefs: WireBrief[];
@@ -679,12 +696,10 @@ export async function pollBriefsRaw(
   sinceTs: string,
   token: string,
 ): Promise<WireBrief[]> {
-  const base = await requireBase();
-  const url = `${base}${PATHS.briefs}?since=${encodeURIComponent(sinceTs)}`;
-  const res = await fetch(url, {
-    headers: { authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(5_000),
-  });
+  const res = await companionFetch(
+    `${PATHS.briefs}?since=${encodeURIComponent(sinceTs)}`,
+    { token },
+  );
   if (!res.ok) return [];
   const json = (await res.json()) as { briefs?: WireBrief[] };
   // Trust-boundary guard: a malformed/empty `{}` body (no `briefs`) must not
@@ -772,19 +787,12 @@ export async function refreshBriefViaCompanion(
 // never writes interests or kicks a live research/model run; it re-ranks the
 // existing local history into one top-stories edition.
 export async function generateWeeklyBrief(token: string): Promise<AppBrief> {
-  const base = await requireBase();
-  const res = await fetch(`${base}${PATHS.weeklyBrief}`, {
+  const json = await companionJson<{ brief?: WireBrief }>(PATHS.weeklyBrief, {
+    token,
     method: "POST",
-    headers: { authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(10_000),
+    timeoutMs: 10_000,
+    failure: "Couldn't generate weekly brief",
   });
-  if (!res.ok) {
-    const err = await readErrorBody(res);
-    throw new Error(
-      err.error ?? `Couldn't generate weekly brief (${res.status}).`,
-    );
-  }
-  const json = (await res.json()) as { brief?: WireBrief };
   // Trust-boundary guard (mirrors the pollBriefsRaw fix, AIR-670): a 2xx with a
   // malformed/empty `{}` body (no `brief`) must not reach adaptBrief, which
   // immediately dereferences `.summary_md`/`.id` and would throw a raw

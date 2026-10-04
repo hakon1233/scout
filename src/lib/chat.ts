@@ -14,33 +14,16 @@
 // apply, with their own deterministic confirm routes — so the confirm cards
 // the FE renders for them are real controls, not dead ones.
 
-import { discoverCompanion } from "./companion";
-import { readErrorBody } from "./errors";
-import {
-  PATHS,
-  type ChatTurn,
-} from "@scout/agent/contract";
+import { companionFetch, companionJson } from "./companion";
+import { PATHS, type ChatTurn } from "@scout/agent/contract";
 
+const BUSY = "Scout is still working on your last message — give it a moment.";
 
 export async function fetchChatTranscript(token: string): Promise<ChatTurn[]> {
-  const base = await requireBase();
-  const res = await fetch(`${base}${PATHS.chat}`, {
-    headers: { authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(5_000),
-  });
+  const res = await companionFetch(PATHS.chat, { token });
   if (!res.ok) return [];
   const json = (await res.json()) as { turns?: ChatTurn[] };
   return Array.isArray(json.turns) ? json.turns : [];
-}
-
-async function requireBase(): Promise<string> {
-  const base = await discoverCompanion();
-  if (!base) {
-    throw new Error(
-      "Scout isn't reachable. Start the companion (`scout-agent run`) and try again.",
-    );
-  }
-  return base;
 }
 
 // Kick one chat turn. Returns the new turn id. Throws a human-readable error on
@@ -49,26 +32,14 @@ export async function kickChatTurn(
   message: string,
   token: string,
 ): Promise<string> {
-  const base = await requireBase();
-  const res = await fetch(`${base}${PATHS.chat}`, {
+  const body = await companionJson<{ turn_id?: string }>(PATHS.chat, {
+    token,
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ message }),
-    signal: AbortSignal.timeout(10_000),
+    body: { message },
+    timeoutMs: 10_000,
+    failure: "Couldn't send that message",
+    messages: { 409: BUSY },
   });
-  if (res.status === 409) {
-    throw new Error(
-      "Scout is still working on your last message — give it a moment.",
-    );
-  }
-  if (!res.ok) {
-    const err = await readErrorBody(res);
-    throw new Error(err.error ?? `Couldn't send that message (${res.status}).`);
-  }
-  const body = (await res.json()) as { turn_id?: string };
   if (!body.turn_id) throw new Error("Scout didn't accept that message.");
   return body.turn_id;
 }
@@ -82,7 +53,6 @@ export async function pollChatTurn(
   token: string,
   opts: { signal?: AbortSignal; timeoutMs?: number; intervalMs?: number } = {},
 ): Promise<ChatTurn> {
-  const base = await requireBase();
   const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
   const interval = opts.intervalMs ?? 1200;
   // GET /v0/chat?since= filters by created_at server-side (AIR-639): without
@@ -97,12 +67,9 @@ export async function pollChatTurn(
     await new Promise((r) => setTimeout(r, interval));
     let turn: ChatTurn | undefined;
     try {
-      const res = await fetch(
-        `${base}${PATHS.chat}?since=${encodeURIComponent(since)}`,
-        {
-          headers: { authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(5_000),
-        },
+      const res = await companionFetch(
+        `${PATHS.chat}?since=${encodeURIComponent(since)}`,
+        { token },
       );
       if (!res.ok) continue;
       const json = (await res.json()) as { turns?: ChatTurn[] };
@@ -131,15 +98,10 @@ export async function stopChatTurn(
   turnId?: string,
 ): Promise<boolean> {
   try {
-    const base = await requireBase();
-    const res = await fetch(`${base}${PATHS.chatStop}`, {
+    const res = await companionFetch(PATHS.chatStop, {
+      token,
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(turnId ? { turn_id: turnId } : {}),
-      signal: AbortSignal.timeout(5_000),
+      body: turnId ? { turn_id: turnId } : {},
     });
     if (!res.ok) return false;
     const body = (await res.json()) as { stopped?: boolean };
@@ -159,31 +121,18 @@ export async function confirmDeleteInterest(
   token: string,
   opts: { signal?: AbortSignal } = {},
 ): Promise<ChatTurn> {
-  const base = await requireBase();
-  const res = await fetch(`${base}${PATHS.chatConfirmDelete}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${token}`,
+  const body = await companionJson<{ turn?: ChatTurn }>(
+    PATHS.chatConfirmDelete,
+    {
+      token,
+      method: "POST",
+      body: { interestId },
+      timeoutMs: 10_000,
+      signal: opts.signal,
+      failure: "Couldn't remove that interest",
+      messages: { 409: BUSY, 404: "That interest was already removed." },
     },
-    body: JSON.stringify({ interestId }),
-    signal: opts.signal ?? AbortSignal.timeout(10_000),
-  });
-  if (res.status === 409) {
-    throw new Error(
-      "Scout is still working on your last message — give it a moment.",
-    );
-  }
-  if (res.status === 404) {
-    throw new Error("That interest was already removed.");
-  }
-  if (!res.ok) {
-    const err = await readErrorBody(res);
-    throw new Error(
-      err.error ?? `Couldn't remove that interest (${res.status}).`,
-    );
-  }
-  const body = (await res.json()) as { turn?: ChatTurn };
+  );
   if (!body.turn) throw new Error("Scout didn't confirm the removal.");
   return body.turn;
 }
@@ -199,31 +148,21 @@ export async function confirmRewriteInterest(
   token: string,
   opts: { signal?: AbortSignal } = {},
 ): Promise<ChatTurn> {
-  const base = await requireBase();
-  const res = await fetch(`${base}${PATHS.chatConfirmRewrite}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${token}`,
+  const body = await companionJson<{ turn?: ChatTurn }>(
+    PATHS.chatConfirmRewrite,
+    {
+      token,
+      method: "POST",
+      body: { interestId },
+      timeoutMs: 10_000,
+      signal: opts.signal,
+      failure: "Couldn't apply that rewrite",
+      messages: {
+        409: BUSY,
+        404: "That proposal expired — ask Scout for the rewrite again.",
+      },
     },
-    body: JSON.stringify({ interestId }),
-    signal: opts.signal ?? AbortSignal.timeout(10_000),
-  });
-  if (res.status === 409) {
-    throw new Error(
-      "Scout is still working on your last message — give it a moment.",
-    );
-  }
-  if (res.status === 404) {
-    throw new Error("That proposal expired — ask Scout for the rewrite again.");
-  }
-  if (!res.ok) {
-    const err = await readErrorBody(res);
-    throw new Error(
-      err.error ?? `Couldn't apply that rewrite (${res.status}).`,
-    );
-  }
-  const body = (await res.json()) as { turn?: ChatTurn };
+  );
   if (!body.turn) throw new Error("Scout didn't confirm the rewrite.");
   return body.turn;
 }
