@@ -25,7 +25,7 @@ test("the web app imports only browser-safe companion modules", () => {
   const offenders = sourceFiles("src").flatMap((file) =>
     [
       ...readFileSync(file, "utf8").matchAll(
-        /from\s+["'](@scout\/agent\/[^"']+|[./]+packages\/agent[^"']*)["']/g,
+        /(?:from|import)\s*\(?\s*["'](@scout\/agent\/[^"']+|[./]+packages\/agent[^"']*)["']/g,
       ),
     ]
       .map((m) => m[1])
@@ -38,6 +38,10 @@ test("the web app imports only browser-safe companion modules", () => {
 test("browser-safe companion modules import nothing", () => {
   for (const name of BROWSER_SAFE) {
     const source = readFileSync(`packages/agent/src/${name}.ts`, "utf8");
-    assert.doesNotMatch(source, /^import\s/m, `${name}.ts has an import`);
+    assert.doesNotMatch(
+      source,
+      /^\s*import[\s{*"']|^\s*export\s[^;]*\sfrom\s*["']|\bimport\s*\(/m,
+      `${name}.ts has an import`,
+    );
   }
 });
