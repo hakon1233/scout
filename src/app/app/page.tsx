@@ -629,7 +629,7 @@ export default function AppPage() {
         !error && (
           <div className="flex flex-col gap-3">
             <Banner tone="info">
-              Example brief — open the profile menu and click{" "}
+              Example brief — open Settings (top right) and click{" "}
               <span className="font-medium">Run now</span> to make your own.
             </Banner>
             <BriefLayout brief={SAMPLE_BRIEF} name={settings.name} />
