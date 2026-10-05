@@ -16,8 +16,8 @@
 import { SEARCH_SKILLS } from "@scout/agent/search-skills";
 import { ASSEMBLY_SKILLS } from "@scout/agent/assembly-skills";
 
-// One bullet: its main text plus any indented continuation lines (e.g. a wire-
-// format sample that should render as a small monospace block under the bullet).
+// One bullet: its main text plus any format-sample lines under it, which render
+// as a small monospace block.
 export type SkillBullet = { text: string; detail: string[] };
 export type SkillGroup = { title: string; bullets: SkillBullet[] };
 export type SkillSet = { heading: string; intro: string; groups: SkillGroup[] };
@@ -77,15 +77,21 @@ export function parseSkillSet(raw: string): SkillSet {
       continue;
     }
     if (!current) continue;
-    // A top-level bullet starts a new bullet; a deeper-indented `-`/`*` or any
-    // indented continuation line attaches to the current bullet as detail.
+    // A top-level bullet starts a new bullet. An indented line is either the
+    // bullet's wrapped prose or, from the first line that starts with markup
+    // (`-`, `*`, `[`, `!`, `>`), a format sample shown as detail.
     const topBullet = /^[-*]\s+(.*)$/.exec(line);
     const isIndented = /^\s+\S/.test(line);
+    const trimmed = line.trim();
     if (topBullet && !isIndented) {
       flushBullet();
       bullet = { text: topBullet[1].trim(), detail: [] };
-    } else if (bullet && line.trim() !== "") {
-      bullet.detail.push(line.trim());
+    } else if (bullet && trimmed !== "") {
+      if (bullet.detail.length === 0 && !/^[-*[!>]/.test(trimmed)) {
+        bullet.text += ` ${trimmed}`;
+      } else {
+        bullet.detail.push(trimmed);
+      }
     }
   }
   flushBullet();
