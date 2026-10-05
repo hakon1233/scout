@@ -125,6 +125,11 @@ export function runClaude(
         "--safe-mode",
         "--setting-sources",
         "",
+        // The child no longer reads the reader's settings, so a model choice
+        // has to come from here. Unset, the CLI's default model is used.
+        ...(process.env.SCOUT_CLAUDE_MODEL
+          ? ["--model", process.env.SCOUT_CLAUDE_MODEL]
+          : []),
       ],
       { stdio: ["pipe", "pipe", "pipe"], cwd: os.tmpdir(), env: childEnv() },
     );
@@ -207,7 +212,11 @@ export function runClaude(
           // The CLI reports some failures (e.g. a usage cap) on stdout with an
           // empty stderr, so fall back to stdout to keep the cause visible.
           const detail = (stderr.trim() || stdout.trim()).slice(0, 400);
-          return reject(new Error(`claude exited ${code}: ${detail}`));
+          // A CLI older than the flags above refuses them before doing anything.
+          const hint = /unknown option/.test(detail)
+            ? " — update Claude Code (`claude update`) and try again"
+            : "";
+          return reject(new Error(`claude exited ${code}: ${detail}${hint}`));
         }
         resolve(stdout);
       }),

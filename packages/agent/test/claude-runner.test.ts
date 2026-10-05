@@ -182,6 +182,37 @@ test("the binary comes from claudeBin, then SCOUT_CLAUDE_BIN, then `claude`", as
   }
 });
 
+test("SCOUT_CLAUDE_MODEL picks the model; unset, the CLI's default is used", async () => {
+  const previous = process.env.SCOUT_CLAUDE_MODEL;
+  try {
+    delete process.env.SCOUT_CLAUDE_MODEL;
+    const a = stubSpawn({ stdout: "x" });
+    await runClaude("p", { tools: "none", spawnFn: a.spawnFn });
+    assert.ok(!a.calls[0].args.includes("--model"));
+
+    process.env.SCOUT_CLAUDE_MODEL = "sonnet";
+    const b = stubSpawn({ stdout: "x" });
+    await runClaude("p", { tools: "none", spawnFn: b.spawnFn });
+    assert.deepEqual(b.calls[0].args.slice(-2), ["--model", "sonnet"]);
+  } finally {
+    if (previous === undefined) delete process.env.SCOUT_CLAUDE_MODEL;
+    else process.env.SCOUT_CLAUDE_MODEL = previous;
+  }
+});
+
+test("a CLI too old for Scout's flags is told to update Claude Code", async () => {
+  const stub = stubSpawn({
+    stderr: "error: unknown option '--safe-mode'",
+    exitCode: 1,
+  });
+  await assert.rejects(
+    runClaude("p", { tools: "none", spawnFn: stub.spawnFn }),
+    (err: Error) =>
+      /update Claude Code/.test(err.message) &&
+      err.message.includes("unknown option '--safe-mode'"),
+  );
+});
+
 test("a non-zero exit names stderr, or stdout when stderr is empty", async () => {
   const withStderr = stubSpawn({
     stderr: "boom",

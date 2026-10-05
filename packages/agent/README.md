@@ -16,7 +16,8 @@ tools — no third-party search API key required.
 ## Requires
 
 - Node 20+
-- The Claude Code CLI installed and authenticated. `claude --version` must work
+- The Claude Code CLI, 2.1.289 or newer (the companion starts it with
+  `--safe-mode`), installed and authenticated. `claude --version` must work
   and the account must have WebSearch enabled (the anthropic.com Pro / Max
   subscription does).
 
@@ -92,6 +93,9 @@ Delete `state.json` to un-pair, or run `scout-agent pair --force` to rotate the 
   URL such as `https://my-mac.example.net:48721`). Loopback and the
   hosted UI (`https://hakon1233.github.io`) are always allowed; nothing else is.
 - `SCOUT_SESSION_TIMEOUT_MS` — hard ceiling per `claude` run (default 4 minutes).
+- `SCOUT_CLAUDE_MODEL` — model for research and chat, passed as `--model` (for
+  example `sonnet`). Unset, the CLI's default model is used: the companion starts
+  `claude` without your Claude Code settings, so a model set there doesn't apply.
 
 ## Tests
 

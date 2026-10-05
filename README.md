@@ -27,8 +27,8 @@ interests.
 
 ## Run it for real
 
-Install and sign in to [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
-then:
+Install and sign in to [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+2.1.289 or newer, then:
 
 ```bash
 pnpm build:agent                       # builds the companion with the web app inside
