@@ -16,7 +16,7 @@ import { PORT } from "./port";
 // makes the "still absent after a server reload, past the stall" assertion a
 // genuine proof that the server turn (not just the poll) was cancelled.
 //
-// Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
+// Fully offline and deterministic: no network, no Claude account, no quota.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 // A topic that cannot pre-exist in the seeded rail, so its presence/absence is

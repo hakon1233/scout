@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Deterministic, offline stand-in for the `claude` CLI used by the companion's
-// research.ts shell-out. The E2E suite points SCOUT_CLAUDE_BIN at this file so
-// the zero-prompt core loop can be exercised end-to-end without a real
-// Anthropic/Exa key, without network, and at zero quota — the same mock
+// claude-runner.ts shell-out. The E2E suite points SCOUT_CLAUDE_BIN at this file
+// so the zero-prompt core loop can be exercised end-to-end without a Claude
+// account, without network, and at zero quota — the same mock
 // philosophy as the @scout/agent unit suite (test/contract.test.ts), but here
 // it is a real on-disk executable because we run the *packed artifact*, not
 // src/, so spawnFn injection isn't available.

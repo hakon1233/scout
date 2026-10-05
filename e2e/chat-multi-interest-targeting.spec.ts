@@ -11,7 +11,7 @@ import { PORT } from "./port";
 // specs below possible; generic phrasing ("delete that interest for good", no
 // topic named) still falls back to the first snapshot.
 //
-// Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
+// Fully offline and deterministic: no network, no Claude account, no quota.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 

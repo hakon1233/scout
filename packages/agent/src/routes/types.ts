@@ -3,8 +3,8 @@
 // The `auth` discriminant is the load-bearing part: the ROUTER (server.ts)
 // enforces it before any handler runs, so no /v0 route can drift on auth.
 // "bearer" handlers are typed to receive the already-token-verified State and
-// therefore cannot even be written to skip the check — the H2 audit risk was
-// exactly "easy for a new route to diverge on limits/auth".
+// therefore cannot even be written to skip the check, so a new route can't
+// diverge on auth.
 
 import type http from "node:http";
 import type { spawn } from "node:child_process";

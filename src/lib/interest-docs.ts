@@ -9,12 +9,11 @@ import { isClient } from "./safe-storage";
 // only carries the *metadata* the profile landing needs — whether a doc exists
 // and when it last changed — not the doc body itself (that's the doc editor).
 //
-// C1 (rich interest model + per-interest `.md` store) and C4 (`/v0/chat`) are
-// not landed yet, so the live companion has no doc endpoint. This loader is
-// forward-compatible: it probes the future endpoint and degrades to "no doc
-// for any interest" when it's absent — never inventing a doc that doesn't
-// exist (that would be a dishonest indicator). The `?mock=…` query param seeds
-// a synthetic shape so the indicator's two states stay reviewable before C1.
+// The metadata comes from the companion's GET /v0/interests. When that answer
+// carries none, every interest reads as "no doc" — never inventing a doc that
+// doesn't exist (that would be a dishonest indicator). The `?mock=…` query
+// param seeds a synthetic shape so the indicator's two states can be reviewed
+// and tested without a companion.
 export type InterestDocMeta = {
   hasDoc: boolean;
   // ISO timestamp of the doc's last edit, when known. Drives the "updated …"
@@ -27,7 +26,7 @@ export type InterestDocMeta = {
 
 export type InterestWithDoc = Interest & { doc: InterestDocMeta };
 
-// Stable per-interest key used for the doc editor deep-link and the future
+// Stable per-interest key used for the doc editor deep-link and the
 // `interests/<id>.md` store. Prefers the interest's own id; falls back to a
 // slug of the topic so a companion-adopted interest (topic-only, no id) still
 // gets a deterministic, shareable URL.
@@ -122,8 +121,8 @@ export async function fetchCompanionInterestSet(
   return { interests: mergeInterests(local, topics), meta: {} };
 }
 
-// Synthetic doc metadata for design/QA review of the indicator's two states
-// before C1 lands. Marks every other interest as having a doc so reviewers see
+// Synthetic doc metadata for reviewing and testing the indicator's two states
+// without a companion. Marks every other interest as having a doc so reviewers see
 // both "intent doc" and "no doc yet" rows. Gated behind `?mock` — never used
 // against real data. `seed=full` marks all interests as having a doc.
 export function mockDocMeta(

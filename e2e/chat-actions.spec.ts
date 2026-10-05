@@ -18,7 +18,7 @@ import { PORT } from "./port";
 //                interest (dead-control proof), a fresh Delete hits the
 //                confirm-delete route and removes it from the rail.
 //
-// Fully offline and deterministic: no network, no Anthropic/Exa key, no quota.
+// Fully offline and deterministic: no network, no Claude account, no quota.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const TOPIC = "Rust async runtimes";

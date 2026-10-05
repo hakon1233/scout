@@ -4,7 +4,7 @@
 // and deterministic:
 //
 //   - The `claude` shell-out is redirected to e2e/fixtures/stub-claude.mjs via
-//     SCOUT_CLAUDE_BIN, so synthesis is canned (no Anthropic/Exa key, no quota,
+//     SCOUT_CLAUDE_BIN, so synthesis is canned (no Claude account, no quota,
 //     no network).
 //   - HOME is overridden to a throwaway dir under e2e/.artifact/home so the
 //     companion's state.json (os.homedir()/.config/scout/state.json — no env

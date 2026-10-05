@@ -14,7 +14,7 @@ import { PORT } from "./port";
 //
 // Determinism/offline: the daily `claude` shell-out is stubbed
 // (SCOUT_CLAUDE_BIN); the weekly assembly is pure history aggregation; and every
-// non-loopback request is blocked below. No Anthropic/Exa key, no quota, no net.
+// non-loopback request is blocked below. No Claude account, no quota, no net.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 

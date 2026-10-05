@@ -176,8 +176,8 @@ test("POST /v0/chat refines an existing interest's doc; the edit persists and is
       },
     ]);
 
-    // ACCEPTANCE: the edit is durable on disk — C2's next run for this interest
-    // will read the new doc.
+    // The edit is durable on disk: the next run for this interest will read
+    // the new doc.
     assert.equal(
       await readInterestDoc("int_abc123", interestsDir),
       "Focus on alignment eval results.",

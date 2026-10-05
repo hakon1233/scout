@@ -12,8 +12,7 @@ import type { Brief } from "@/lib/types";
 // a full "Daily brief — <date>" feed (reusing BriefLayout/FeedView). It pages the
 // companion's rolling history via GET /v0/briefs?limit=&offset= — 3 at a time,
 // newest-first — with a "Load older briefs" button. "Manage interests" sits next
-// to it: this footer bar is also the (only) place those two actions live now that
-// the inline feed buttons are gone (AC2).
+// to it: this footer bar is the only place those two actions live.
 //
 // The current brief is shown by the page ABOVE this component, so the pager skips
 // history index 0 (offset starts at 1) and additionally id-filters defensively so

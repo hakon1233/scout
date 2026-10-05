@@ -20,7 +20,7 @@ import { PORT } from "./port";
 // Fully offline and deterministic: the stub `claude` (e2e/fixtures/stub-claude.mjs)
 // answers create by phrasing and the reversing "delete …" phrasing with a
 // confirm-gated delete op keyed off the first snapshot id — no network, no
-// Anthropic/Exa key, no quota.
+// Claude account, no quota.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const TOPIC = "GPU kernel scheduling";

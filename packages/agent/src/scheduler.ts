@@ -2,11 +2,11 @@
 // the shared brief-run path (runner.ts) on a recurring daily schedule, so the
 // user gets a fresh brief at a configured time without doing anything.
 //
-// Reboot caveat (surfaced, not swallowed): `scout-agent run` (nohup) is NOT
-// reboot-durable. This timer only exists while the process lives; after a Mac
-// mini reboot the user must re-run `scout-agent run`. GET /v0/schedule
-// exposes `reboot_durable: false` so the Settings UI can warn. A
-// launchd login item / durable `serve` is an optional follow-up, not built here.
+// Reboot caveat (surfaced, not swallowed): this timer only exists while the
+// process lives. A plain `scout-agent run` is gone after a reboot;
+// `scout-agent install-service` runs the companion as a launchd agent that
+// comes back. GET /v0/schedule reports which (`reboot_durable`) so the Settings
+// UI can warn.
 
 import {
   defaultSchedule,

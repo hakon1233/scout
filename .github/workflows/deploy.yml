@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   # Gate: typecheck + lint + companion unit/contract suite + headless E2E.
-  # Fully offline — no real Anthropic/Exa key; the `claude` shell-out is stubbed.
+  # Fully offline — no real Claude account; the `claude` shell-out is stubbed.
   test:
     runs-on: ubuntu-latest
     steps:

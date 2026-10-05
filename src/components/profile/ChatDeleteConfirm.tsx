@@ -29,7 +29,7 @@ export function ChatDeleteConfirm({
   const labelId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   // Remember what had focus when the card appeared so we can hand it back after
-  // the user resolves the confirmation (AC8 — focus management). Captured once.
+  // the user resolves the confirmation. Captured once.
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
   // On mount, move focus onto the freshly-appeared destructive confirmation so a

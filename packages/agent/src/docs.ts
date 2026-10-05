@@ -2,7 +2,7 @@
 //
 // Each interest (see `Interest` in state.ts) can have one prose "intent doc"
 // that spells out *exactly* what the user wants from that topic — the captured
-// intent that C2 injects into the topic's research prompt. We keep these as
+// intent the topic's research session gets in its prompt. We keep these as
 // individual `.md` files (one per interest id) rather than inline in state.json
 // so the user can read/edit/delete them with any editor, and so a large doc
 // never bloats the hot state file.

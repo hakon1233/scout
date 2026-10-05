@@ -217,9 +217,7 @@ export default function AppPage() {
     [hydrated],
   );
 
-  // Single brief path: the local Scout companion. The browser→Exa path was
-  // removed — it fetched api.exa.ai directly and was CORS-broken.
-  // The companion runs the local `claude` CLI over the loopback server, so
+  // Single brief path: the local Scout companion. The companion runs the local `claude` CLI over the loopback server, so
   // there are no API keys and no cross-origin calls.
   const generate = useCallback(
     async (opts?: { retryTopics?: string[] }) => {

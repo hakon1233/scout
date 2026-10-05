@@ -67,13 +67,13 @@ export type RunSource = "on_demand" | "scheduled";
 // usage/session-limit exhaustion at 07:00 reads very differently from a crashed
 // CLI or a network timeout, and drives whether a scheduled retry can even help.
 // Pure so runner.test.ts pins the mapping without spawning anything. The inputs
-// come from research.ts's reject messages:
+// come from claude-runner.ts's reject messages (research.ts adds empty output):
 //   - usage/rate limit   → "claude exited N: …limit…"
 //   - per-session timeout → 'claude session for "X" timed out after Nms'
 //   - spawn failure       → "failed to spawn 'claude' — …"
 //   - empty output        → "claude returned empty output"
-// These messages are log-safe: research.ts slices stderr, which the OAuth token
-// never reaches, so nothing secret rides into the persisted reason.
+// These messages are log-safe: claude-runner.ts slices stderr, which the OAuth
+// token never reaches, so nothing secret rides into the persisted reason.
 export function summarizeSessionFailures(errors: string[]): string {
   const joined = errors.join("\n").toLowerCase();
   if (
@@ -154,7 +154,7 @@ export function isRunInFlight(): boolean {
 // `in_flight` forever. We still require the pending to be older than this grace
 // window so we never stomp a slot a (hypothetical) sibling process just wrote.
 // The window must exceed a realistic full run: N interests × per-session timeout
-// (research.ts DEFAULT_SESSION_TIMEOUT_MS = 4 min). 30 min covers a slow ~7-topic
+// (claude-runner.ts DEFAULT_TIMEOUT_MS = 4 min). 30 min covers a slow ~7-topic
 // run while still reclaiming a genuinely dead run on the next attempt.
 const STALE_PENDING_MS = 30 * 60 * 1000;
 
@@ -383,7 +383,7 @@ async function runSynthesis(
     // an honest REASON to the user — "Claude usage limit
     // reached" reads very differently from "the CLI isn't installed". Kept
     // in-memory only; never persisted per-topic (the aggregate reason is what the
-    // UI shows). Safe to hold: research.ts never forwards the OAuth token into
+    // UI shows). Safe to hold: claude-runner.ts never forwards the OAuth token into
     // these messages (it slices stderr, which the token never reaches).
     const sessionErrors: string[] = [];
     let anyOk = false;
