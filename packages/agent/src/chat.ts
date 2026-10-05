@@ -94,7 +94,7 @@ function chatFailureMessage(err: unknown): string {
   if (/failed to spawn/.test(raw)) {
     return "Couldn't start the Claude CLI. Is it installed and on PATH?";
   }
-  if (/chat model/.test(raw)) {
+  if (/^chat model (did not return|returned invalid)/.test(raw)) {
     return "Claude's answer couldn't be read. Try again.";
   }
   return "Something went wrong. Try again.";
