@@ -234,6 +234,23 @@ function emitChat(prompt) {
   writeOut();
 }
 
+// Any other topic the session asks for (research.ts names it in the prompt's
+// first line) gets one canned story of its own, so an interest added in
+// `pnpm demo` shows up in the brief instead of reading as missing.
+function topicSection(prompt) {
+  const topic = prompt.match(/for a single topic: "([^"]+)"/)?.[1];
+  if (!topic || /^(ai safety|markets)$/i.test(topic)) return "";
+  const today = new Date().toISOString().slice(0, 10);
+  const slug = topic.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return [
+    "",
+    `## ${topic}`,
+    `- \`${today}\` — A demo story about ${topic}, written by the offline stub.`,
+    `  [example.com — ${topic} update](https://example.com/${slug})`,
+    "",
+  ].join("\n");
+}
+
 // Guards against a double-invocation: the real `.on("end", emit)` listener and
 // the `setTimeout(emit, 500)` fallback below can BOTH fire on a slow/loaded
 // machine (e.g. a CPU-starved CI runner) if stdin's 'end' event lands after the
@@ -276,7 +293,7 @@ function emit() {
     "  [news.example.org — Markets recap](https://news.example.org/markets)",
     "",
   ].join("\n");
-  process.stdout.write(brief);
+  process.stdout.write(brief + topicSection(stdin));
   process.exit(0);
 }
 
