@@ -1,6 +1,6 @@
-// `pnpm eval`: score recorded model outputs against the prompts' rules.
+// `pnpm eval`: check the prompts' rules against hand-written example outputs.
 //
-// Each case under eval/cases is one model output plus the checks it is
+// Each case under eval/cases is one example output plus the checks it is
 // expected to fail (none, for a good output). The eval passes when every case
 // fails exactly its expected checks, so the bad examples prove each check
 // catches the failure it names. Fully offline: no model is called.

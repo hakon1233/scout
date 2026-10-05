@@ -18,7 +18,8 @@ code, tests and comments.
 - `pnpm test:e2e`: Playwright against a companion built from source.
 - `pnpm demo`: the whole app on <http://127.0.0.1:47899/app/>, offline. Use it to try a
   change by hand.
-- `pnpm eval`: score recorded model outputs after changing a prompt.
+- `pnpm eval`: check the prompts' rules against hand-written example outputs after
+  changing a prompt.
 
 ## Rules
 

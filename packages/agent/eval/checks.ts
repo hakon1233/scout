@@ -1,6 +1,7 @@
 // Offline checks for model output. Each check is one rule from the prompts the
 // companion sends (search-skills.ts, research.ts, chat.ts), applied to a
-// recorded output with the same parsers the product uses. No model is called.
+// hand-written example output with the same parsers the product uses. No model
+// is called.
 
 import { promises as fs } from "node:fs";
 import os from "node:os";

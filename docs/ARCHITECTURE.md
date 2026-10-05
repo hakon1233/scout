@@ -89,5 +89,5 @@ as `CONTEXT.md` defines them.
 - `src/**/*.test.ts`: web app logic tests, with `fetch` stubbed.
 - `e2e/`: Playwright against a real companion built from source, with a stub `claude`
   (`e2e/fixtures/stub-claude.mjs`) and a throwaway home directory.
-- `pnpm eval`: scores recorded model outputs against the prompts' rules
-  (`packages/agent/eval`), offline.
+- `pnpm eval`: checks the prompts' rules against hand-written example outputs, good and
+  bad (`packages/agent/eval`), offline. No model is called.

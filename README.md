@@ -81,11 +81,14 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (code map and invarian
 ```bash
 pnpm check       # format, typecheck, lint, unit + contract tests, build
 pnpm test:e2e    # Playwright against a companion built from source (stub claude)
-pnpm eval        # score recorded model outputs against the prompts' rules
+pnpm eval        # check the prompts' rules against hand-written example outputs
 ```
 
-Checks run locally; there is no hosted CI. `pnpm test` runs about 310 unit and HTTP
-contract tests; the e2e suite runs 62 browser tests.
+Checks run locally. The manual deploy workflow (`.github/workflows/deploy.yml`) runs
+them again before it publishes the hosted UI. `pnpm test` runs about 310 unit and HTTP
+contract tests; the e2e suite runs 62 browser tests. The eval's cases are written by
+hand, a good and a bad output for each rule, so a failing check names the rule a
+prompt change broke.
 
 ## Status
 
