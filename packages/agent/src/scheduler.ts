@@ -116,7 +116,7 @@ export class Scheduler {
   // show it. This is the single writer of schedule.next_run_at.
   //
   // TOTAL — never rejects. On 2026-07-04 the 05:00Z fire's re-arm hit
-  // ENOSPC in saveState below; the exception escaped AFTER stop() had cleared
+  // ENOSPC in the state write below; the exception escaped AFTER stop() had cleared
   // the old timer and BEFORE a new one was armed, so the scheduler died silently
   // inside a healthy 13-day-old process and no daily brief ran for 12 days.
   // Arming the timer must therefore never depend on persistence succeeding:
@@ -163,10 +163,9 @@ export class Scheduler {
     // Node's default handling, and totally silent (every test drives fire()
     // directly/awaited, so only this automatic path is exposed). Log it so a
     // "my scheduled brief silently never ran" report is diagnosable from stderr.
-    // Matches the runner.ts:279 / chat.ts:708 catch pattern.
     //
     // Clear-before-arm: `stop()` at the top of reschedule() nulls the
-    // timer, but re-arming happens here AFTER two awaits (loadState/saveState).
+    // timer, but re-arming happens here AFTER two awaits (loadState/updateState).
     // Two overlapping reschedule() calls (a fire()'s re-arm racing an
     // onScheduleChanged PUT) each pass their stop() before either arms, then both
     // arm — orphaning the first timer, which stays live and double-fires the

@@ -1,8 +1,7 @@
 // Persistent state for the loopback companion.
 //
-// We deliberately keep this in a single JSON file so users can inspect or
-// delete it. There is no Supabase, no remote sync — everything lives at
-// `~/.config/scout/state.json` with chmod 0600.
+// One JSON file the user can inspect or delete: `~/.config/scout/state.json`,
+// owner-only (0600). Nothing syncs anywhere.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -190,9 +189,9 @@ export async function loadState(file = STATE_FILE): Promise<State> {
   return state ?? {};
 }
 
-// List the .corrupt-*.bak recovery files preserveCorruptState left beside the
+// List the .corrupt-*.bak recovery files readJsonFile left beside the
 // state file, oldest first (names embed a ms timestamp, so lexical sort is
-// chronological). preserveCorruptState is only console-loud, which no one
+// chronological). That recovery is only console-loud, which no one
 // watches for a launchd-managed companion — after a recovery the app just
 // looks freshly unpaired with no explanation. /healthz folds this in
 // so the recovery is visible wherever the companion's health already is.

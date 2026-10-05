@@ -8,7 +8,7 @@
 // wins). Two guards enforce single-flight:
 //   1. An in-memory `runInFlight` boolean, shared across the HTTP server and the
 //      scheduler because both import this module (one process, one singleton).
-//      This closes the loadState→saveState async gap where the persisted
+//      This closes the loadState→updateState async gap where the persisted
 //      `pending` flag isn't visible yet.
 //   2. The persisted `last_brief.status === "pending"` check, which survives a
 //      restart mid-run.
@@ -201,7 +201,7 @@ export async function startRun(
   const state = await loadState(deps.stateFile);
 
   // A live run in THIS process always blocks (in-memory guard, set synchronously
-  // before the pending slot is persisted — closes the loadState→saveState gap).
+  // before the pending slot is persisted — closes the loadState→updateState gap).
   if (runInFlight) {
     return {
       started: false,
@@ -293,10 +293,10 @@ export async function startRun(
   // `state.interests` verbatim (leaving it absent if it was absent) instead of the
   // run's topic set — a test/QA payload can research arbitrary topics without
   // shrinking or replacing the saved list.
-  // We hold `runInFlight` from line 221 (claimed synchronously, before the first
-  // await, so a second startRun can't race in and double-start). But until
+  // We hold `runInFlight` from just above (claimed synchronously, before the
+  // first await, so a second startRun can't race in and double-start). But until
   // runSynthesis takes ownership of clearing the flag in its finally, any throw
-  // in this setup (saveState disk-full, mkdtemp EACCES) would leave runInFlight
+  // in this setup (state write disk-full, mkdtemp EACCES) would leave runInFlight
   // stuck true for the life of the process — wedging every future run with
   // `in_flight` and making isStalePending refuse to reclaim the slot. Reset on
   // early failure so the slot stays reclaimable, then rethrow to the caller.

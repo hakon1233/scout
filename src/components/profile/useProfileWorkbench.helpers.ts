@@ -161,10 +161,10 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
 // resolved and drop the confirm turn's `changes` on the floor, leaving the user
 // no in-app way to reverse a confirmed change even though the create path has
 // one (and a reload — which projects the same confirm turn through
-// transcriptMessages — already shows the Undo). `prevBody` is the doc as it was
-// just before the confirm, powering the diff and the verbatim undo. Returns
-// null when the turn carried no changes (defensive: a confirm turn always
-// carries exactly one).
+// transcriptMessages — already shows the Undo). `prevBodies` holds each doc as
+// it was just before the confirm, keyed by interest id, powering the diff and
+// the verbatim undo. Returns null when the turn carried no changes (defensive:
+// a confirm turn always carries at least one).
 export function appliedChangeMessage(
   turn: ChatTurn,
   prevBodies: Record<string, string | null>,

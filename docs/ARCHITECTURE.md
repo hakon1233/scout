@@ -39,8 +39,9 @@ as `CONTEXT.md` defines them.
   `chat-changes.ts` (the applier that validates what the model proposed),
   `chat-transcript.ts`: the chat that edits interests and intent docs.
 - `state.ts`, `persistence.ts`, `docs.ts`: storage. `updateState` is the only writer of
-  `state.json`: one queue per file, so concurrent writers never lose each other's changes.
-  Writes are atomic (temp file, then rename).
+  `state.json`: one queue per file, so writers inside the companion process never lose
+  each other's changes (the `pair` command is a separate process). Writes are atomic
+  (temp file, then rename).
 - `scheduler.ts`: the daily run, inside the companion process.
 - `service.ts`, `cli.ts`, `static.ts`: the `scout-agent` command, the macOS launchd
   service and the static file server for the bundled web app.

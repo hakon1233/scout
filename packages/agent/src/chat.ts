@@ -225,7 +225,7 @@ export async function confirmDeleteTurn(
     // The delete is already durable in state.last_chat above; the transcript is a
     // secondary append-only record. A transient write failure here must NOT turn a
     // committed delete into a route-level 500 — the client's retry would 404 (the
-    // pending_delete proposal is consumed), leaving the user with an error for an
+    // pending_deletes proposal is consumed), leaving the user with an error for an
     // operation that actually succeeded. Best-effort + logged, matching the
     // fire-and-forget transcript tail in runChatTurn / startChatTurn.
     await appendChatTranscript(turn, transcriptFileFor(deps)).catch((err) => {
@@ -267,7 +267,7 @@ export async function confirmRewriteTurn(
 
   // Hold the single-flight guard for the whole critical section — see the note in
   // confirmDeleteTurn. Without it a startChatTurn fired between this gate and the
-  // saveState below would interleave its `last_chat` write with ours and could
+  // updateState below would interleave its `last_chat` write with ours and could
   // resurrect the consumed pending_rewrite. Reset in `finally`.
   chatInFlight = true;
   try {
@@ -346,8 +346,9 @@ async function runChatTurn(
     // Apply against the freshly-loaded interest list so the change set is durable
     // on disk BEFORE the turn flips to `ready` (observable-in-same-response).
     // Deletes and full rewrites are gated: they come back as `pendingDeletes` /
-    // `pendingRewrites` (NOT applied) for the FE to confirm. We surface the
-    // first of each — the confirm cards are single-op.
+    // `pendingRewrites` (NOT applied) for the reader to confirm. Every delete is
+    // surfaced (`pending_delete` keeps the first for older clients); only the
+    // first rewrite is, since its confirm card is single-op.
     const result = await applyChatChanges(
       state.interests ?? [],
       output.changes,

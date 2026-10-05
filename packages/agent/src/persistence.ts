@@ -2,11 +2,9 @@
 //
 // Everything the companion persists lives under `~/.config/scout` as owner-only
 // files the user can inspect or delete — state.json, the chat transcript, and
-// the per-interest intent docs. They share two primitives: the config dir root
-// and a crash-safe atomic write. Those used to live in state.ts, which forced
-// unrelated stores (docs.ts, chat.ts) to import the whole state domain model
-// just to write a file safely. This module owns the generic seam so each store
-// depends only on the filesystem helper, not on each other's domain types.
+// the per-interest intent docs. They share the primitives here: the config dir
+// root, a crash-safe atomic write and a JSON read that recovers from a corrupt
+// file. Each store depends on this module, not on each other's domain types.
 
 import { promises as fs } from "node:fs";
 import os from "node:os";

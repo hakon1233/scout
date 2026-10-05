@@ -9,7 +9,7 @@
 // The contract that keeps the chat UI honest (no dead controls): a `ready`
 // turn's `changes` are ALREADY durable on disk before the poll sees them, so
 // the FE fires its "Updated" beat only on a confirmed write — never
-// optimistically. The TWO structured exceptions are `pending_delete` and
+// optimistically. The TWO structured exceptions are `pending_deletes` and
 // `pending_rewrite`: proposals the companion explicitly did NOT apply, with
 // their own deterministic confirm routes — so the confirm cards the FE renders
 // for them are real controls, not dead ones.

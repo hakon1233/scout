@@ -534,7 +534,7 @@ export async function pollBriefsRaw(
   return json.briefs ?? [];
 }
 
-// Each research session may run 4 minutes (research.ts), but on a busy machine
+// Each research session may run 4 minutes (claude-runner.ts), but on a busy machine
 // a real six-topic run took 32m40s; 6 minutes per topic leaves headroom.
 const PER_TOPIC_SESSION_BUDGET_MS = 6 * 60 * 1000;
 
@@ -608,8 +608,8 @@ export async function generateWeeklyBrief(token: string): Promise<AppBrief> {
   // malformed/empty `{}` body (no `brief`) must not reach adaptBrief, which
   // immediately dereferences `.summary_md`/`.id` and would throw a raw
   // "Cannot read properties of undefined" TypeError — surfaced to the user as a
-  // confusing generic error. Surface the same clean failure as the `!res.ok`
-  // path above instead.
+  // confusing generic error. Surface a clean failure instead, as companionJson
+  // does for a non-2xx response.
   if (!json.brief) {
     throw new Error("Couldn't generate weekly brief (malformed response).");
   }

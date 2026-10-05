@@ -1,12 +1,11 @@
 // Request-shape limits for the interest list.
 //
-// These three numbers are arithmetically coupled, and used to live in three
-// different modules: the count in both routes/interests.ts and chat.ts, the
-// body cap in http-util.ts. Raising one without the others silently breaks the
-// others — lifting the count to 15 while MAX_BODY_BYTES still assumed 6 would
-// have turned long or non-ASCII topics into confusing 413s rather than a clear
-// validation error. They live together here so the arithmetic is checkable in
-// one place.
+// These three numbers are arithmetically coupled: the count (used by
+// routes/interests.ts and chat.ts), the per-interest length, and the body cap
+// (used by http-util.ts). Raising one without the others breaks them — a
+// higher count with an unchanged body cap turns long or non-ASCII topics into
+// confusing 413s rather than a clear validation error. They live together so
+// the arithmetic is checkable in one place.
 //
 // This module deliberately imports nothing: routes/interests.ts reaches
 // chat.ts through routes/types.ts, so a constant shared between them has to

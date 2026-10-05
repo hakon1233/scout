@@ -37,7 +37,7 @@ const HOME = path.join(E2E_DIR, ".artifact", "home");
 rmSync(HOME, { recursive: true, force: true });
 mkdirSync(HOME, { recursive: true });
 
-// research.ts: claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ??
+// claude-runner.ts: claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ??
 // "claude", then spawn(claudeBin, [fixed args]) with the prompt on stdin. Our
 // stub is a `#!/usr/bin/env node` script marked executable, so pointing the env
 // var straight at it lets spawn exec it directly (it ignores the fixed args and
