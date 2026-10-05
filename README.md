@@ -103,6 +103,8 @@ Scout was built by one developer working with AI coding agents (Claude Code). Th
 developer chose the architecture: no server, research on the reader's machine,
 loopback trust. They also made the product decisions, and they reviewed and used
 the product. Agents wrote most of the code and tests against those decisions.
+The project started under the name Notiva, and its early agents were coordinated
+through Paperclip, an agent-orchestration tool; you will see both in the history.
 The preparation for publication was also agent-driven: security review, module
 restructuring, test cleanup and these docs, each change approved by the developer.
 
