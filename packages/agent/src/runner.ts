@@ -19,6 +19,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { USAGE_LIMIT_RE } from "./claude-runner.js";
 import {
   BRIEF_HISTORY_CAP,
   interestTopics,
@@ -76,11 +77,7 @@ export type RunSource = "on_demand" | "scheduled";
 // token never reaches, so nothing secret rides into the persisted reason.
 export function summarizeSessionFailures(errors: string[]): string {
   const joined = errors.join("\n").toLowerCase();
-  if (
-    /usage limit|rate limit|limit reached|too many requests|\b429\b|resets? at/.test(
-      joined,
-    )
-  ) {
+  if (USAGE_LIMIT_RE.test(joined)) {
     return "Claude usage/session limit reached — try again later";
   }
   if (/timed out|timeout/.test(joined)) {

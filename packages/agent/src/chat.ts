@@ -21,6 +21,7 @@
 // `state.interests`, which a model editing files alone could never accomplish.
 
 import type { spawn } from "node:child_process";
+import { USAGE_LIMIT_RE } from "./claude-runner.js";
 import { loadState, newChatTurnId, updateState } from "./state.js";
 import type { ChatChange, ChatTurn } from "./contract.js";
 import { writeInterestDoc } from "./docs.js";
@@ -77,6 +78,27 @@ let currentTurnAbort: { turnId: string; controller: AbortController } | null =
 // message (a new status value would ripple through every ChatTurn consumer);
 // the FE recognizes a stop locally anyway and suppresses the error bubble.
 const CHAT_STOPPED_MSG = "Stopped — no changes were applied.";
+
+// The reason a failed turn gives the reader. The raw error goes to the log.
+function chatFailureMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  console.error("[chat] turn failed:", raw);
+  if (/unknown option/.test(raw)) {
+    return "Your Claude Code is too old for Scout. Run `claude update` and try again.";
+  }
+  if (USAGE_LIMIT_RE.test(raw)) {
+    return "Claude's usage limit was reached. Try again later.";
+  }
+  if (/timed out/.test(raw))
+    return "Claude took too long to answer. Try again.";
+  if (/failed to spawn/.test(raw)) {
+    return "Couldn't start the Claude CLI. Is it installed and on PATH?";
+  }
+  if (/chat model/.test(raw)) {
+    return "Claude's answer couldn't be read. Try again.";
+  }
+  return "Something went wrong. Try again.";
+}
 
 // Abort the in-flight chat turn. With a turnId, only aborts when it
 // matches the in-flight turn (a stale Stop can't kill a newer turn); without
@@ -378,7 +400,9 @@ async function runChatTurn(
       message,
       // A user Stop is not an error — land the canonical message verbatim so
       // clients (and QA) can tell "stopped, nothing written" from a real failure.
-      error_msg: abort.signal.aborted ? CHAT_STOPPED_MSG : String(err),
+      error_msg: abort.signal.aborted
+        ? CHAT_STOPPED_MSG
+        : chatFailureMessage(err),
     };
   }
 

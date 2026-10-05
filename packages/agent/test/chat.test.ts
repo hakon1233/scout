@@ -1087,9 +1087,9 @@ test("a hung chat child times out, lands the turn failed, and clears the in-flig
       "failed",
       "a hung turn must land failed, not hang forever",
     );
-    assert.match(
-      turn.error_msg ?? "",
-      /timed out after 50ms/,
+    assert.equal(
+      turn.error_msg,
+      "Claude took too long to answer. Try again.",
       "the failure names the per-turn timeout",
     );
     assert.equal(
@@ -1456,6 +1456,43 @@ test("a chat turn keeps its transcript next to the state file it was given", asy
       ["hello"],
     );
   } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a failed chat turn stores a reader-facing reason, not the raw error", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  const { spawnFn } = makeChatSpawn({
+    output: "Sure! I'd be happy to help.",
+    autoClose: true,
+  });
+  const { onChatDone, done } = awaitTurn();
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ message: "add rust" }),
+    });
+    assert.equal(kick.status, 202);
+    const turn = await done;
+    assert.equal(turn.status, "failed");
+    assert.equal(
+      turn.error_msg,
+      "Claude's answer couldn't be read. Try again.",
+    );
+  } finally {
+    server.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });

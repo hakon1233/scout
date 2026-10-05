@@ -40,7 +40,7 @@ test("a failed turn gets its own Retry, which re-runs that message; replies that
   await expect(log.last()).toContainText("I couldn't finish that turn:", {
     timeout: 30_000,
   });
-  await expect(log.last()).toContainText("claude exited 1");
+  await expect(log.last()).toContainText("Something went wrong. Try again.");
   // Re-running a turn that already changed something would apply it twice.
   await expect(created.getByRole("button", { name: "Copy" })).toHaveCount(1);
   await expect(created.getByRole("button", { name: "Retry" })).toHaveCount(0);

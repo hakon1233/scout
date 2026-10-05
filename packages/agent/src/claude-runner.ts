@@ -76,6 +76,10 @@ function childEnv(): NodeJS.ProcessEnv {
   return kept as NodeJS.ProcessEnv;
 }
 
+// How the CLI words a usage or rate limit in its error output.
+export const USAGE_LIMIT_RE =
+  /usage limit|rate limit|limit reached|too many requests|\b429\b|resets? at/i;
+
 // Lower the child's priority so the CPU-heavy model loop cannot starve the
 // single-threaded loopback server and stall the UI's polling. Advisory only.
 const CHILD_NICENESS = 10;
