@@ -28,7 +28,8 @@ as `CONTEXT.md` defines them.
   `routes/index.ts` is the table of routes. `http-util.ts` holds the origin allowlist and
   the size-limited body reader.
 - `claude-runner.ts`: the only place a `claude` child process starts. It sets the tool
-  list (web research or none), the timeout, the abort signal and the working directory.
+  list (web research or none), the timeout, the abort signal and the working directory,
+  and starts the child without the reader's own Claude Code setup or full environment.
 - `runner.ts`, `research.ts`, `coverage.ts`, `search-skills.ts`, `assembly-skills.ts`: a
   run. The runner researches one interest at a time. Each session gets the search rules
   and that interest's intent doc. The runner then assembles the sections, drops stale

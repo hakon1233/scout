@@ -10,7 +10,11 @@ import { Writable } from "node:stream";
 import type { spawn } from "node:child_process";
 import { runClaude } from "../src/claude-runner.js";
 
-type Call = { bin: string; args: readonly string[]; options: { cwd?: string } };
+type Call = {
+  bin: string;
+  args: readonly string[];
+  options: { cwd?: string; env?: NodeJS.ProcessEnv };
+};
 
 // A spawn stand-in: records the call, then answers with `stdout`/`stderr` and
 // `exitCode` once the prompt is written, or never closes when `hang` is set.
@@ -80,6 +84,9 @@ test("a web-research run can use WebSearch and WebFetch and nothing else", async
     "--allowed-tools",
     "WebSearch,WebFetch",
     "--strict-mcp-config",
+    "--safe-mode",
+    "--setting-sources",
+    "",
   ]);
 });
 
@@ -95,7 +102,42 @@ test("a no-tools run gets an empty tool set", async () => {
     "--tools",
     "",
     "--strict-mcp-config",
+    "--safe-mode",
+    "--setting-sources",
+    "",
   ]);
+});
+
+test("the child gets only the environment it needs to run and sign in", async () => {
+  const names = [
+    "PATH",
+    "HOME",
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "SCOUT_E2E_PORT",
+    "GITHUB_TOKEN",
+    "OPENAI_API_KEY",
+  ];
+  const previous = Object.fromEntries(names.map((n) => [n, process.env[n]]));
+  for (const n of names.slice(2)) process.env[n] = `test-${n}`;
+  try {
+    const stub = stubSpawn({ stdout: "x" });
+    await runClaude("prompt", { tools: "none", spawnFn: stub.spawnFn });
+    const env: Record<string, string | undefined> =
+      stub.calls[0].options.env ?? {};
+    assert.equal(env.PATH, process.env.PATH);
+    assert.equal(env.HOME, process.env.HOME);
+    assert.equal(env.ANTHROPIC_API_KEY, "test-ANTHROPIC_API_KEY");
+    assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, "test-CLAUDE_CODE_OAUTH_TOKEN");
+    assert.equal(env.SCOUT_E2E_PORT, "test-SCOUT_E2E_PORT");
+    assert.equal(env.GITHUB_TOKEN, undefined);
+    assert.equal(env.OPENAI_API_KEY, undefined);
+  } finally {
+    for (const [n, v] of Object.entries(previous)) {
+      if (v === undefined) delete process.env[n];
+      else process.env[n] = v;
+    }
+  }
 });
 
 test("the child runs in the temp dir, never the companion's working directory", async () => {

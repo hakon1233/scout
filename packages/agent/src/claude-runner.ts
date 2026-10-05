@@ -7,7 +7,10 @@
 // prompt injection. Each run therefore gets an explicit, minimal tool set via
 // `--tools` (which removes every other built-in tool, unlike `--allowed-tools`,
 // which only pre-approves), no MCP servers, no permission bypass, and the temp
-// dir as its working directory.
+// dir as its working directory. It also starts without the user's own Claude
+// Code setup (`--safe-mode` drops CLAUDE.md, skills, plugins and hooks;
+// `--setting-sources ""` drops their settings files) and with only the
+// environment it needs, so nothing private sits in a session a page can steer.
 
 import { spawn } from "node:child_process";
 import os from "node:os";
@@ -39,6 +42,39 @@ const TOOL_ARGS: Record<ClaudeTools, string[]> = {
   ],
   none: ["--tools", ""],
 };
+
+// Variables the child may inherit: enough to run, sign in (an API key, an OAuth
+// token, a cloud provider, a proxy) and, for the companion's own SCOUT_*
+// settings, to let the e2e stub find its port. Everything else stays out.
+const ENV_NAMES = new Set([
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+  "HTTPS_PROXY",
+  "HTTP_PROXY",
+  "NO_PROXY",
+  "https_proxy",
+  "http_proxy",
+  "no_proxy",
+  "NODE_EXTRA_CA_CERTS",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+  "CLOUD_ML_REGION",
+]);
+const ENV_PREFIXES = ["ANTHROPIC_", "CLAUDE_", "AWS_", "SCOUT_"];
+
+function childEnv(): NodeJS.ProcessEnv {
+  const kept = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) =>
+        ENV_NAMES.has(name) || ENV_PREFIXES.some((p) => name.startsWith(p)),
+    ),
+  );
+  return kept as NodeJS.ProcessEnv;
+}
 
 // Lower the child's priority so the CPU-heavy model loop cannot starve the
 // single-threaded loopback server and stall the UI's polling. Advisory only.
@@ -86,8 +122,11 @@ export function runClaude(
         "text",
         ...TOOL_ARGS[opts.tools],
         "--strict-mcp-config",
+        "--safe-mode",
+        "--setting-sources",
+        "",
       ],
-      { stdio: ["pipe", "pipe", "pipe"], cwd: os.tmpdir() },
+      { stdio: ["pipe", "pipe", "pipe"], cwd: os.tmpdir(), env: childEnv() },
     );
 
     if (child.pid !== undefined) {
