@@ -13,6 +13,7 @@ import {
   loadState,
   normalizeTimeOfDay,
   updateState,
+  type ScheduleConfig,
 } from "./state.js";
 import type { Brief } from "./contract.js";
 import {
@@ -78,6 +79,8 @@ export class Scheduler {
   private retryCount = 0;
   private readonly retryDelayMs: number;
   private readonly maxRetries: number;
+  // The schedule as last read, used when state.json can't be read.
+  private lastSchedule: ScheduleConfig | undefined;
 
   constructor(
     deps: RunDeps,
@@ -115,19 +118,28 @@ export class Scheduler {
   // one (or none, if disabled). Persists the computed next_run_at so the UI can
   // show it. This is the single writer of schedule.next_run_at.
   //
-  // TOTAL — never rejects. On 2026-07-04 the 05:00Z fire's re-arm hit
-  // ENOSPC in the state write below; the exception escaped AFTER stop() had cleared
-  // the old timer and BEFORE a new one was armed, so the scheduler died silently
-  // inside a healthy 13-day-old process and no daily brief ran for 12 days.
-  // Arming the timer must therefore never depend on persistence succeeding:
-  // loadState is total (state.ts recovers/refreshes rather than throwing), the
-  // timer is armed BEFORE the telemetry write, and the write itself is
-  // log-only-on-failure. The worst a full disk can now do is stale next_run_at
-  // telemetry and a failed run — tomorrow's fire stays armed either way.
+  // TOTAL — never rejects. Once, a re-arm hit ENOSPC in the state write below;
+  // the exception escaped AFTER stop() had cleared the old timer and BEFORE a
+  // new one was armed, so the scheduler died silently inside a healthy process
+  // and no daily brief ran for 12 days. Arming the timer must therefore never
+  // depend on the disk: a failed read falls back to the schedule as last read
+  // (or the default), the timer is armed BEFORE the telemetry write, and that
+  // write is log-only-on-failure. The worst a broken disk can do is stale
+  // next_run_at telemetry and a failed run; tomorrow's fire stays armed.
   async reschedule(): Promise<void> {
     this.stop();
-    const state = await loadState(this.deps.stateFile);
-    const cfg = state.schedule ?? defaultSchedule();
+    let cfg: ScheduleConfig;
+    try {
+      const state = await loadState(this.deps.stateFile);
+      cfg = state.schedule ?? defaultSchedule();
+      this.lastSchedule = cfg;
+    } catch (err) {
+      console.error(
+        "[scheduler] couldn't read state; arming from the last known schedule:",
+        err,
+      );
+      cfg = this.lastSchedule ?? defaultSchedule();
+    }
 
     if (!cfg?.enabled) {
       if (cfg?.next_run_at) {

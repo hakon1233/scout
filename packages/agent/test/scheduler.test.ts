@@ -580,3 +580,26 @@ test("a persistence failure while re-arming never disarms the schedule", async (
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
+
+test("a state file that can't be read at fire time never disarms the schedule", async () => {
+  const { tmp, stateFile } = await tmpState({
+    pairing_token: newPairingToken(),
+    interests: [{ id: "int_aisafety", topic: "ai safety" }],
+    schedule: { enabled: true, time_of_day: "07:00" },
+  });
+  const now = () => new Date(2026, 5, 1, 7, 0, 0, 0);
+  const scheduler = new Scheduler({ stateFile }, now);
+  try {
+    await scheduler.start();
+    // A read that fails with something other than "missing" (EISDIR here)
+    // makes loadState reject.
+    await fs.rm(stateFile);
+    await fs.mkdir(stateFile);
+    await scheduler.fire().catch(() => {});
+    const armed = (scheduler as unknown as { timer: unknown }).timer;
+    assert.ok(armed !== null, "tomorrow's fire must still be armed");
+  } finally {
+    scheduler.stop();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
