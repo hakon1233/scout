@@ -22,7 +22,7 @@
 
 import type { spawn } from "node:child_process";
 import { USAGE_LIMIT_RE } from "./claude-runner.js";
-import { loadState, newChatTurnId, updateState } from "./state.js";
+import { loadState, newChatTurnId, updateState, type State } from "./state.js";
 import type { ChatChange, ChatTurn } from "./contract.js";
 import { writeInterestDoc } from "./docs.js";
 import { buildInterestSnapshots, chatComplete } from "./chat-model.js";
@@ -173,49 +173,94 @@ export async function startChatTurn(
   return { started: true, turnId };
 }
 
-export type ConfirmDeleteOutcome =
+export type ConfirmOutcome =
   | { ok: true; turn: ChatTurn }
   | { ok: false; reason: "not_found" }
   | { ok: false; reason: "in_flight" };
 
-// Confirm-gated delete: the deterministic, no-model path that actually
-// removes an interest after the user presses [Delete]. It writes a `ready` turn
-// (with the delete in `changes`) to the same slot + transcript a model turn would,
-// so the FE applies it through the exact same confirmed-write seam (flash + the
-// docs-rail card disappears) and it survives a reload. Refuses while a model turn
-// is in flight so the two writers can't clobber the interest set.
-export async function confirmDeleteTurn(
-  interestIds: string[],
+// What a confirmed proposal lands as: the turn's text and changes, and whether
+// the changes are replayed onto `state.interests` (a rewrite only edits a doc).
+type Confirmed = {
+  message: string;
+  reply: string;
+  changes: ChatChange[];
+  replayInterests: boolean;
+};
+
+// The deterministic, no-model path behind [Delete] and [Apply]. `apply` checks
+// the stored proposal against the state and carries it out, or returns null
+// when it is gone. The result lands as a `ready` turn in the same slot and
+// transcript a model turn uses, so the FE applies it through the same
+// confirmed-write seam and it survives a reload. The new turn replaces the
+// proposal turn, so a stale card can't confirm it twice (a second confirm 404s).
+async function confirmTurn(
+  label: string,
   deps: ChatDeps,
-): Promise<ConfirmDeleteOutcome> {
+  apply: (state: State) => Promise<Confirmed | null>,
+): Promise<ConfirmOutcome> {
   if (chatInFlight) return { ok: false, reason: "in_flight" };
 
   // Hold the single-flight guard for the whole critical section. The check above
   // only refuses when a model turn is ALREADY running; without setting the flag
   // here a startChatTurn fired mid-confirm would pass its own `chatInFlight`
   // check and interleave its interest-set write with ours (last-writer-wins =
-  // a silently dropped delete or dropped model change). Reset in `finally` so a
+  // a silently dropped confirm or dropped model change). Reset in `finally` so a
   // not_found early-return or a throw never wedges the flag on.
   chatInFlight = true;
   try {
-    const state = await loadState(deps.stateFile);
+    const confirmed = await apply(await loadState(deps.stateFile));
+    if (!confirmed) return { ok: false, reason: "not_found" };
+    const turn: ChatTurn = {
+      id: newChatTurnId(),
+      created_at: new Date().toISOString(),
+      status: "ready",
+      message: confirmed.message,
+      reply: confirmed.reply,
+      changes: confirmed.changes,
+    };
+
+    // Replay onto the current state, so an interest-set change that landed
+    // since `apply` read it is kept.
+    await updateState(deps.stateFile, (s) => ({
+      ...s,
+      ...(confirmed.replayInterests
+        ? { interests: replayChanges(s.interests ?? [], confirmed.changes) }
+        : {}),
+      last_chat: turn,
+    }));
+    // The confirm is already durable in state.last_chat above; the transcript is
+    // a secondary append-only record. A transient write failure here must NOT
+    // turn a committed confirm into a route-level 500 — the client's retry would
+    // 404 (the proposal is consumed), leaving the user with an error for an
+    // operation that actually succeeded. Best-effort + logged.
+    await appendChatTranscript(turn, transcriptFileFor(deps)).catch((err) => {
+      console.error(`[chat] ${label} transcript append failed:`, err);
+    });
+    deps.onChatDone?.(turn);
+    return { ok: true, turn };
+  } finally {
+    chatInFlight = false;
+  }
+}
+
+// Confirm-gated delete: removes the interests the stored proposal named. The
+// delete route consumes that proposal; it is not a generic delete-by-id API, so
+// stale cards or direct route calls can't bypass the server-side confirmation.
+export function confirmDeleteTurn(
+  interestIds: string[],
+  deps: ChatDeps,
+): Promise<ConfirmOutcome> {
+  return confirmTurn("confirm-delete", deps, async (state) => {
     const lastChat = state.last_chat;
     const pending =
       lastChat?.pending_deletes ??
       (lastChat?.pending_delete ? [lastChat.pending_delete] : []);
-    // The delete route is the stored proposal consumer, not a generic delete-by-id
-    // API. This mirrors confirmRewriteTurn: stale cards or direct route calls must
-    // not bypass the server-side confirmation state.
     if (
       interestIds.length === 0 ||
       !interestIds.every((id) => pending.some((p) => p.interestId === id))
     ) {
-      return { ok: false, reason: "not_found" };
+      return null;
     }
-
-    // Work out what to delete from the state read above. The write below replays
-    // those deletes onto the current state, so an interest-set change that landed
-    // in between is kept.
     let interests = state.interests ?? [];
     const applied: ChatChange[] = [];
     for (const id of interestIds) {
@@ -227,37 +272,15 @@ export async function confirmDeleteTurn(
       interests = result.interests;
       if (result.applied) applied.push(result.applied);
     }
-    if (applied.length === 0) return { ok: false, reason: "not_found" };
-
+    if (applied.length === 0) return null;
     const topics = quotedList(applied.map((c) => c.topic ?? ""));
-    const turn: ChatTurn = {
-      id: newChatTurnId(),
-      created_at: new Date().toISOString(),
-      status: "ready",
+    return {
       message: `Delete ${topics}`,
       reply: `Removed ${topics} from your interests.`,
       changes: applied,
+      replayInterests: true,
     };
-
-    await updateState(deps.stateFile, (s) => ({
-      ...s,
-      interests: replayChanges(s.interests ?? [], applied),
-      last_chat: turn,
-    }));
-    // The delete is already durable in state.last_chat above; the transcript is a
-    // secondary append-only record. A transient write failure here must NOT turn a
-    // committed delete into a route-level 500 — the client's retry would 404 (the
-    // pending_deletes proposal is consumed), leaving the user with an error for an
-    // operation that actually succeeded. Best-effort + logged, matching the
-    // fire-and-forget transcript tail in runChatTurn / startChatTurn.
-    await appendChatTranscript(turn, transcriptFileFor(deps)).catch((err) => {
-      console.error(`[chat] confirm-delete transcript append failed:`, err);
-    });
-    deps.onChatDone?.(turn);
-    return { ok: true, turn };
-  } finally {
-    chatInFlight = false;
-  }
+  });
 }
 
 // "A", "A" and "B", or "A", "B" and "C".
@@ -268,75 +291,30 @@ function quotedList(items: string[]): string {
     : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`;
 }
 
-export type ConfirmRewriteOutcome =
-  | { ok: true; turn: ChatTurn }
-  | { ok: false; reason: "not_found" }
-  | { ok: false; reason: "in_flight" };
-
-// Confirm-gated rewrite: the deterministic, no-model path that writes
-// the STORED proposed doc after the user presses [Apply]. The proposal lives on
-// the persisted turn (`last_chat.pending_rewrite`) — the client sends only the
-// interestId, never the doc, so a tampered or stale client can't write arbitrary
-// content. Like confirmDeleteTurn it emits a `ready` turn (with the rewrite as
-// an `update` in `changes`) into the same slot + transcript, so the FE applies
-// it through the exact same confirmed-write seam (flash on the docs-rail card)
-// and it survives a reload. Refuses while a model turn is in flight.
-export async function confirmRewriteTurn(
+// Confirm-gated rewrite: writes the STORED proposed doc
+// (`last_chat.pending_rewrite`). The client sends only the interestId, never
+// the doc, so a tampered or stale client can't write arbitrary content.
+export function confirmRewriteTurn(
   interestId: string,
   deps: ChatDeps,
-): Promise<ConfirmRewriteOutcome> {
-  if (chatInFlight) return { ok: false, reason: "in_flight" };
-
-  // Hold the single-flight guard for the whole critical section — see the note in
-  // confirmDeleteTurn. Without it a startChatTurn fired between this gate and the
-  // updateState below would interleave its `last_chat` write with ours and could
-  // resurrect the consumed pending_rewrite. Reset in `finally`.
-  chatInFlight = true;
-  try {
-    const state = await loadState(deps.stateFile);
+): Promise<ConfirmOutcome> {
+  return confirmTurn("confirm-rewrite", deps, async (state) => {
     const pending = state.last_chat?.pending_rewrite;
     // The proposal must still be the live one for THIS interest, and the interest
     // must still exist (it could have been deleted since the proposal).
-    if (!pending || pending.interestId !== interestId) {
-      return { ok: false, reason: "not_found" };
-    }
+    if (!pending || pending.interestId !== interestId) return null;
     const target = (state.interests ?? []).find((i) => i.id === interestId);
-    if (!target) return { ok: false, reason: "not_found" };
-
+    if (!target) return null;
     await writeInterestDoc(interestId, pending.doc, deps.interestsDir);
-    const applied: ChatChange = {
-      interestId,
-      op: "update",
-      topic: target.topic,
-      doc: pending.doc,
-    };
-
-    const turn: ChatTurn = {
-      id: newChatTurnId(),
-      created_at: new Date().toISOString(),
-      status: "ready",
+    return {
       message: `Apply rewrite of "${target.topic}"`,
       reply: `Applied the rewrite of "${target.topic}".`,
-      changes: [applied],
+      changes: [
+        { interestId, op: "update", topic: target.topic, doc: pending.doc },
+      ],
+      replayInterests: false,
     };
-
-    // The new turn replaces the proposal turn in the slot, so the
-    // pending_rewrite can't be re-applied later from a stale card (a second
-    // confirm 404s).
-    await updateState(deps.stateFile, (s) => ({ ...s, last_chat: turn }));
-    // The rewrite is already durable: the doc was written above and the turn is in
-    // state.last_chat. The transcript is a secondary record — a transient write
-    // failure must NOT surface as a 500 for an operation that committed (the
-    // client's retry would 404, the pending_rewrite being consumed). Best-effort +
-    // logged, matching runChatTurn / startChatTurn's fire-and-forget tail.
-    await appendChatTranscript(turn, transcriptFileFor(deps)).catch((err) => {
-      console.error(`[chat] confirm-rewrite transcript append failed:`, err);
-    });
-    deps.onChatDone?.(turn);
-    return { ok: true, turn };
-  } finally {
-    chatInFlight = false;
-  }
+  });
 }
 
 async function runChatTurn(
