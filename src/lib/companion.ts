@@ -38,7 +38,7 @@ let cachedBase: string | null = null;
 
 // In-flight coalescing for the cached-base re-ping, mirroring
 // isServedFromCompanion's pattern below. fetchRunFailure's poll tick runs
-// `Promise.all([pollBriefsRaw, fetchSchedule])`, and both independently call
+// `Promise.all([readBriefSlot, fetchSchedule])`, and both independently call
 // companionFetch() → discoverCompanion() in the same tick — without this, each
 // fired its own /healthz ping against the identical cached port, doubling
 // requests on every poll (10-30s, page.tsx). Sharing the in-flight promise
@@ -398,24 +398,22 @@ function adaptBrief(b: WireBrief): AppBrief {
   };
 }
 
-// Shared by fetchLatestBrief and fetchRunFailure so both can derive the newest
-// ready brief from an already-fetched raw list instead of each issuing their own
-// /v0/briefs request. Kept cheap: pick the winner on the raw
-// `generated_at` field first, then run adaptBrief (a full markdown regex parse)
-// only on that one, not on every ready brief every poll tick.
-//
-// NOTE: the `?since=` list both callers pass only ever holds the
-// single `last_brief` slot — briefs.ts filters `?since=` to that one slot, never
-// the ready-brief history — so `raw` here is ≤1 element. On a failed/pending slot
-// it therefore carries NO ready brief; fetchRunFailure falls back to
-// fetchBriefHistory (via resolveLastSuccessBrief) for the true last success.
-export function newestReadyBrief(raw: WireBrief[]): AppBrief | null {
-  const ready = raw.filter((b) => b.status === "ready" && b.summary_md);
-  if (ready.length === 0) return null;
-  const newest = ready.reduce((newest, b) =>
-    b.generated_at > newest.generated_at ? b : newest,
-  );
-  return adaptBrief(newest);
+// The companion's last_brief slot and the newest real (non-ephemeral) ready
+// brief. `?since=` returns only that one slot, so on a failed or pending run it
+// carries no ready brief; only then is one page of ready-brief history read,
+// keeping the healthy poll tick a single request. Ephemeral test runs occupy
+// the slot so their initiator can poll them, but they are not feed editions
+// and the runner keeps them out of history. Throws on an unreachable companion.
+export async function readBriefSlot(
+  token: string,
+): Promise<{ slot?: WireBrief; lastGood: AppBrief | null }> {
+  const raw = await pollBriefsRaw(new Date(0).toISOString(), token);
+  const slot = raw.find((b) => !b.ephemeral);
+  if (slot?.status === "ready" && slot.summary_md) {
+    return { slot, lastGood: adaptBrief(slot) };
+  }
+  const history = await fetchBriefHistory(token, { limit: 1, offset: 0 });
+  return { slot, lastGood: history.briefs[0] ?? null };
 }
 
 // Fetch the most recent ready brief the companion holds (any age), or null if
@@ -425,34 +423,11 @@ export async function fetchLatestBrief(
   token: string,
 ): Promise<AppBrief | null> {
   try {
-    const raw = await pollBriefsRaw(new Date(0).toISOString(), token);
-    return await resolveLastSuccessBrief(newestReadyBrief(raw), () =>
-      fetchBriefHistory(token, { limit: 1, offset: 0 }).then(
-        (history) => history.briefs[0] ?? null,
-      ),
-    );
+    return (await readBriefSlot(token)).lastGood;
   } catch (err) {
     logCompanionError("latest-brief-fetch", err);
     return null;
   }
-}
-
-// Resolve the "last successful brief" for the run-failure banner's
-// "Showing your last good brief from <date>" clause. `pollBriefsRaw(?since=)`
-// returns only the single `last_brief` slot, so on a failed/pending run
-// `slotReady` is null even though ready briefs still exist in history. In that
-// (uncommon, unhealthy) case only, fall back to one page of ready-brief history.
-// `fetchHistoryNewest` is invoked lazily so the healthy path — slot already
-// ready — stays a single request and doesn't undo the poll-dedup.
-export async function resolveLastSuccessBrief(
-  slotReady: AppBrief | null,
-  fetchHistoryNewest: () => Promise<AppBrief | null>,
-): Promise<AppBrief | null> {
-  // Ephemeral test runs intentionally occupy last_brief so their
-  // initiator can poll the result, but they are not feed editions. Real history
-  // already excludes them at the runner, making it the safe fallback.
-  if (slotReady && !slotReady.ephemeral) return slotReady;
-  return await fetchHistoryNewest();
 }
 
 // Read the persisted schedule config + run telemetry. Throws on an unreachable
@@ -516,7 +491,7 @@ export async function fetchBriefHistory(
   }
 }
 
-export async function pollBriefsRaw(
+async function pollBriefsRaw(
   sinceTs: string,
   token: string,
 ): Promise<WireBrief[]> {

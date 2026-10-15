@@ -3,11 +3,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  parseArticlesFromMarkdown,
-  resolveLastSuccessBrief,
-} from "./companion";
-import type { Brief } from "./types";
+import { fetchLatestBrief, parseArticlesFromMarkdown } from "./companion";
 
 test("empty markdown yields no articles and no interests", () => {
   const { articles, interests } = parseArticlesFromMarkdown("", "b1");
@@ -15,65 +11,74 @@ test("empty markdown yields no articles and no interests", () => {
   assert.deepEqual(interests, []);
 });
 
-// fetchRunFailure sources the "last good brief from <date>" timestamp
-// via resolveLastSuccessBrief. The single last_brief slot carries no ready brief
-// on a failed/pending run, so it must fall back to the ready-brief history —
-// but only then, to keep the healthy poll tick a single request.
-function readyBrief(id: string, generatedAt: string): Brief {
-  return { id, generatedAt, interests: [], articles: [], markdown: "" };
+// The feed's latest brief, read from a stubbed companion serving this page's
+// origin. The single last_brief slot carries no ready brief on a failed run,
+// so the read falls back to one page of ready-brief history, but only then, to
+// keep the healthy poll tick a single request.
+const origin = "http://scout.test";
+Object.defineProperty(globalThis, "window", {
+  value: { location: { origin } },
+  configurable: true,
+});
+
+function serveBriefs(slot: object[], history: object[]): string[] {
+  const asked: string[] = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/healthz") return new Response(null, { status: 200 });
+    asked.push(url.search);
+    return Response.json({
+      briefs: url.searchParams.has("since") ? slot : history,
+    });
+  };
+  return asked;
 }
 
-test("a ready slot is returned as the last success without fetching history", async () => {
-  const slot = readyBrief("today", "2026-07-11T09:00:00.000Z");
-  let historyCalls = 0;
-  const result = await resolveLastSuccessBrief(slot, async () => {
-    historyCalls += 1;
-    return readyBrief("older", "2026-07-01T09:00:00.000Z");
-  });
-  assert.equal(result, slot);
-  assert.equal(
-    historyCalls,
-    0,
-    "a healthy (ready) slot must not trigger the history round-trip (poll-dedup)",
+function wireBrief(id: string, generatedAt: string, extra: object = {}) {
+  return {
+    id,
+    generated_at: generatedAt,
+    status: "ready",
+    summary_md: `## Topic\n\n- ${id}`,
+    ...extra,
+  };
+}
+
+test("a ready slot is the latest brief, without fetching history", async () => {
+  const asked = serveBriefs(
+    [wireBrief("today", "2026-07-11T09:00:00.000Z")],
+    [wireBrief("older", "2026-07-01T09:00:00.000Z")],
   );
+  const latest = await fetchLatestBrief("tok");
+  assert.equal(latest?.id, "today");
+  assert.equal(asked.length, 1, "a ready slot must not cost a history request");
 });
 
 test("an ephemeral ready slot falls back to the newest real brief", async () => {
-  const ephemeral = {
-    ...readyBrief("qa-run", "2026-07-16T19:06:41.414Z"),
-    ephemeral: true,
-  } as Brief & { ephemeral: true };
-  const historic = readyBrief("scheduled", "2026-07-16T18:37:00.759Z");
-  let historyCalls = 0;
-
-  const result = await resolveLastSuccessBrief(ephemeral, async () => {
-    historyCalls += 1;
-    return historic;
-  });
-
-  assert.equal(historyCalls, 1, "an ephemeral slot must consult real history");
-  assert.equal(result, historic);
-});
-
-test("a failed/pending slot falls back to the newest ready brief from history", async () => {
-  const historic = readyBrief("last-good", "2026-07-10T09:00:00.000Z");
-  let historyCalls = 0;
-  const result = await resolveLastSuccessBrief(null, async () => {
-    historyCalls += 1;
-    return historic;
-  });
-  assert.equal(
-    historyCalls,
-    1,
-    "an unready slot must consult history exactly once",
+  serveBriefs(
+    [wireBrief("qa-run", "2026-07-16T19:06:41.414Z", { ephemeral: true })],
+    [wireBrief("scheduled", "2026-07-16T18:37:00.759Z")],
   );
-  assert.equal(result, historic);
-  assert.equal(result?.generatedAt, "2026-07-10T09:00:00.000Z");
+  const latest = await fetchLatestBrief("tok");
+  assert.equal(latest?.id, "scheduled");
 });
 
-test("a failed slot with no ready history yields null (no last-success clause)", async () => {
-  const result = await resolveLastSuccessBrief(null, async () => null);
-  assert.equal(result, null);
+test("a failed slot falls back to the newest ready brief from history", async () => {
+  const asked = serveBriefs(
+    [wireBrief("today", "2026-07-11T09:00:00.000Z", { status: "failed" })],
+    [wireBrief("last-good", "2026-07-10T09:00:00.000Z")],
+  );
+  const latest = await fetchLatestBrief("tok");
+  assert.equal(latest?.generatedAt, "2026-07-10T09:00:00.000Z");
+  assert.deepEqual(asked.slice(1), ["?limit=1&offset=0"]);
+});
+
+test("a failed slot with no ready history yields no latest brief", async () => {
+  serveBriefs(
+    [wireBrief("today", "2026-07-11T09:00:00.000Z", { status: "failed" })],
+    [],
+  );
+  assert.equal(await fetchLatestBrief("tok"), null);
 });
 
 // A brief that exercises every part of the story format at once: a citation

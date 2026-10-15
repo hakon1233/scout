@@ -2,14 +2,7 @@
 // succeeded for over a day? Read-only: it never writes interests or starts a
 // run.
 
-import {
-  fetchBriefHistory,
-  fetchSchedule,
-  logCompanionError,
-  newestReadyBrief,
-  pollBriefsRaw,
-  resolveLastSuccessBrief,
-} from "./companion";
+import { fetchSchedule, logCompanionError, readBriefSlot } from "./companion";
 
 // A surfaced "your daily run failed / silently stopped" signal. A failed run
 // overwrites `last_brief` with status:"failed" and never enters the ready
@@ -121,32 +114,20 @@ export async function fetchRunFailure(
   token: string,
 ): Promise<RunFailure | null> {
   try {
-    const [rawLast, schedule] = await Promise.all([
-      pollBriefsRaw(new Date(0).toISOString(), token),
+    // A QA/dry-run result is not the user's run-health state, so `slot` skips
+    // ephemeral briefs; `lastGood` backs "last good brief from <date>".
+    const [{ slot, lastGood }, schedule] = await Promise.all([
+      readBriefSlot(token),
       fetchSchedule(token).catch(() => null),
     ]);
-    // A QA/dry-run result is not the user's run-health state. Its provenance is
-    // retained in last_brief only so the initiating automation can poll it.
-    const last = rawLast.find((brief) => !brief.ephemeral);
-    // On a failed/pending slot the ?since= poll carries no ready brief, so fall
-    // back to the newest ready brief from history so the banner can honestly
-    // show "last good brief from <date>". Lazy: the healthy path (slot
-    // ready) never issues the extra request.
-    const lastSuccess = await resolveLastSuccessBrief(
-      newestReadyBrief(rawLast),
-      () =>
-        fetchBriefHistory(token, { limit: 1, offset: 0 }).then(
-          (h) => h.briefs[0] ?? null,
-        ),
-    );
     return assessRunFailure({
-      lastStatus: last?.status,
-      lastError: last?.error_msg,
-      lastAt: last?.generated_at,
+      lastStatus: slot?.status,
+      lastError: slot?.error_msg,
+      lastAt: slot?.generated_at,
       scheduleStatus: schedule?.last_run_status ?? null,
       scheduleNote: schedule?.last_run_note ?? null,
       scheduleAt: schedule?.last_run_at ?? null,
-      lastSuccessAt: lastSuccess?.generatedAt ?? null,
+      lastSuccessAt: lastGood?.generatedAt ?? null,
       now: Date.now(),
     });
   } catch (err) {
