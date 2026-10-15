@@ -88,10 +88,6 @@ export function createWeeklyBriefFromHistory(
   };
 }
 
-export function buildWeeklyBrief(history: Brief[], now = new Date()): Brief {
-  return createWeeklyBriefFromHistory(history, now);
-}
-
 export async function createAndPersistWeeklyBrief(
   stateFile: string,
   now = new Date(),

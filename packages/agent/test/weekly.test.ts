@@ -8,10 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { loadState, newPairingToken, saveState } from "../src/state.js";
 import type { Brief } from "../src/contract.js";
-import {
-  buildWeeklyBrief,
-  createWeeklyBriefFromHistory,
-} from "../src/weekly.js";
+import { createWeeklyBriefFromHistory } from "../src/weekly.js";
 import { startServer } from "../src/server.js";
 
 function dailyBrief(
@@ -47,7 +44,7 @@ const storyOld = [
   "  [old.example — Funding](https://example.com/old)",
 ].join("\n");
 
-test("buildWeeklyBrief pools the last 7 days, dedupes by URL, and caps top stories", () => {
+test("createWeeklyBriefFromHistory pools the last 7 days, dedupes by URL, and caps top stories", () => {
   const now = new Date("2026-06-15T12:00:00.000Z");
   const history: Brief[] = [
     dailyBrief("latest", "2026-06-15T07:00:00.000Z", "AI", [storyA, storyB]),
@@ -55,7 +52,7 @@ test("buildWeeklyBrief pools the last 7 days, dedupes by URL, and caps top stori
     dailyBrief("too-old", "2026-06-01T07:00:00.000Z", "Startups", [storyOld]),
   ];
 
-  const weekly = buildWeeklyBrief(history, now);
+  const weekly = createWeeklyBriefFromHistory(history, now);
 
   assert.equal(weekly.kind, "weekly");
   assert.equal(weekly.status, "ready");
@@ -67,7 +64,7 @@ test("buildWeeklyBrief pools the last 7 days, dedupes by URL, and caps top stori
   assert.doesNotMatch(weekly.summary_md ?? "", /Old funding news/);
 });
 
-test("buildWeeklyBrief dedupes URLs that differ only by query/hash/trailing slash", () => {
+test("createWeeklyBriefFromHistory dedupes URLs that differ only by query/hash/trailing slash", () => {
   // Same story cited across two days: once clean, once with a tracking query
   // param and a trailing slash. The web app keys likes + feed dedupe on the
   // canonical URL (src/lib/likes.ts), so the weekly digest must collapse these
@@ -86,7 +83,7 @@ test("buildWeeklyBrief dedupes URLs that differ only by query/hash/trailing slas
     dailyBrief("older", "2026-06-14T07:00:00.000Z", "AI", [tracked]),
   ];
 
-  const weekly = buildWeeklyBrief(history, now);
+  const weekly = createWeeklyBriefFromHistory(history, now);
 
   const occurrences =
     (weekly.summary_md ?? "").match(/example\.com\/agent/g) ?? [];
@@ -96,7 +93,7 @@ test("buildWeeklyBrief dedupes URLs that differ only by query/hash/trailing slas
   assert.doesNotMatch(weekly.summary_md ?? "", /re-cited with tracking params/);
 });
 
-test("buildWeeklyBrief drops stale stories inside otherwise eligible daily briefs", () => {
+test("createWeeklyBriefFromHistory drops stale stories inside otherwise eligible daily briefs", () => {
   const now = new Date("2026-06-15T12:00:00.000Z");
   const staleStoryInRecentBrief = [
     "- `2026-05-01` — A stale item got through a recent daily brief.",
@@ -109,7 +106,7 @@ test("buildWeeklyBrief drops stale stories inside otherwise eligible daily brief
     ]),
   ];
 
-  const weekly = buildWeeklyBrief(history, now);
+  const weekly = createWeeklyBriefFromHistory(history, now);
 
   assert.match(weekly.summary_md ?? "", /OpenAI shipped a new agent release/);
   assert.doesNotMatch(weekly.summary_md ?? "", /stale item got through/);
