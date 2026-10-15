@@ -61,6 +61,13 @@ export function buildArtifact() {
       );
     }
   }
+  // The webroot is the site's static export, which also holds the hosted
+  // tarball. Packing that copy would nest the previous package inside this one.
+  if (existsSync(path.join(pkgDir, "webroot", "agent"))) {
+    throw new Error(
+      "packed artifact carries webroot/agent/ (an older companion tarball)",
+    );
+  }
 
   return { pkgDir, cliEntry, tarball };
 }

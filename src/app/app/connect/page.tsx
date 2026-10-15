@@ -17,18 +17,13 @@ import { loadSettings, saveLastBrief } from "@/lib/storage";
 type Status = "idle" | "checking" | "connected" | "disconnected";
 type GenerateState = "idle" | "posting" | "polling" | "done" | "error";
 
-// We serve the prebuilt, zero-dependency companion tarball from this site
-// (GitHub Pages) and install from the URL directly — works on a clean machine
-// with no registry account.
-const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
-// Sourced from packages/agent/package.json via next.config.ts, not
-// hand-duplicated here — the deploy names the packed tarball after that same
-// version, so a stale hardcode used to silently 404 this URL on a bump.
-const AGENT_VERSION = process.env.NEXT_PUBLIC_AGENT_VERSION;
-const TARBALL_PATH = `${BASE_PATH}/agent/scout-agent-${AGENT_VERSION}.tgz`;
-// Sensible absolute default for SSR/export; overwritten with the real origin
-// after mount so the copied command is correct on whatever host serves it.
-const DEFAULT_TARBALL_URL = `https://hakon1233.github.io${TARBALL_PATH}`;
+// The prebuilt, zero-dependency companion tarball lives on one fixed host, and
+// users install from that URL directly — works on a clean machine with no
+// registry account. Every origin that serves this page links there: the
+// companion serves this page too, but its package can't contain itself.
+// The version comes from packages/agent/package.json via next.config.ts — the
+// deploy names the packed tarball after that same version.
+const AGENT_TARBALL_URL = `https://hakon1233.github.io/scout/agent/scout-agent-${process.env.NEXT_PUBLIC_AGENT_VERSION}.tgz`;
 export default function ConnectPage() {
   const router = useRouter();
   const [token, setToken] = useState("");
@@ -40,13 +35,6 @@ export default function ConnectPage() {
   const [hasSavedToken, setHasSavedToken] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [hasInterests, setHasInterests] = useState(false);
-  // Resolve the tarball URL against the actual origin this page is served from,
-  // so the copied command is correct regardless of the deploy host. Must START
-  // at DEFAULT_TARBALL_URL so the first client render matches the SSR/static
-  // export render (which has no `window`) — otherwise the differing command
-  // text triggers a hydration mismatch (React #418). We swap in the real origin
-  // in a post-mount effect, after hydration has reconciled.
-  const [tarballUrl, setTarballUrl] = useState(DEFAULT_TARBALL_URL);
   const [status, setStatus] = useState<Status>("idle");
   const [copied, setCopied] = useState<string | null>(null);
   const [genState, setGenState] = useState<GenerateState>("idle");
@@ -55,15 +43,10 @@ export default function ConnectPage() {
   const runRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    // After hydration, resolve the tarball URL against the actual serving
-    // origin so the copied install command points at this host. Doing this in
-    // an effect (not a lazy initializer) keeps the first client render equal to
-    // the SSR render — see the comment on `tarballUrl` above. Intentional
-    // post-mount sync of a client-only value (the serving origin).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTarballUrl(`${window.location.origin}${TARBALL_PATH}`);
     // Mirror saved interests so State A can surface a "set interests first"
-    // link before the user clicks Generate. Read once on mount (post-hydration).
+    // link before the user clicks Generate. Read once on mount (post-hydration)
+    // so the first client render matches the static export.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHasInterests((loadSettings()?.interests.length ?? 0) > 0);
   }, []);
 
@@ -215,7 +198,7 @@ export default function ConnectPage() {
 
   // Install the prebuilt companion globally from the tarball URL, then use the
   // short `scout-agent` commands. No npm-registry account needed.
-  const installCmd = `npm i -g ${tarballUrl}\nscout-agent pair`;
+  const installCmd = `npm i -g ${AGENT_TARBALL_URL}\nscout-agent pair`;
   const runCmd = "scout-agent run";
 
   const generateLabel =

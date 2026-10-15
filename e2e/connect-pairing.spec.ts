@@ -7,25 +7,29 @@ import { PORT } from "./port";
 // github.io-style entry point a brand-new user hits before any companion is
 // running. The committed suite already covers the SAME-ORIGIN auto-adopt path
 // (zero-prompt.spec) and that Connect is *reachable* while unpaired
-// (navigation-history.spec). What was untested is the onboarding payload the
-// walkthrough actually hands the user:
+// (navigation-history.spec). This spec covers the onboarding payload the
+// walkthrough hands the user:
 //
-//   1. the install command points at THIS serving origin's tarball, not the
-//      hardcoded github.io default — i.e. the documented post-mount origin swap
-//      (the React #418 hydration-safe rewrite) really happened;
-//   2. that advertised tarball is genuinely served (HEAD → 200), so the copied
-//      `npm i -g <url>` is not a dangling link — this guards the version-drift
-//      regression where the page's `scout-agent-0.3.0.tgz` constant and the
-//      packed artifact fall out of sync;
-//   3. the Copy button puts the byte-for-byte command on the clipboard (what
+//   1. the install command points at the one hosted tarball URL, whichever
+//      origin serves the page (the companion's own package can't contain
+//      itself, so a same-origin link would 404);
+//   2. the Copy button puts the byte-for-byte command on the clipboard (what
 //      the user pastes === what they see); and
-//   4. the manual token-paste escape hatch persists the pairing token.
+//   3. the manual token-paste escape hatch persists the pairing token.
 //
 // All offline: we force the unpaired state by 404-ing the companion's /healthz
 // and /v0/config probes, exactly like navigation-history's unpaired test.
 
 const ORIGIN = `http://127.0.0.1:${PORT}`;
-const TARBALL_PATH = "/agent/scout-agent-0.3.0.tgz";
+const AGENT_VERSION = (
+  JSON.parse(
+    readFileSync(
+      path.join(__dirname, "..", "packages", "agent", "package.json"),
+      "utf8",
+    ),
+  ) as { version: string }
+).version;
+const TARBALL_URL = `https://hakon1233.github.io/scout/agent/scout-agent-${AGENT_VERSION}.tgz`;
 const TOKEN_KEY = "scout.companion.token";
 const COMPANION_PORT_SWEEP = [47821, 47822, 47823, 47830, 47840];
 
@@ -79,7 +83,7 @@ async function gotoUnpairedConnect(page: import("@playwright/test").Page) {
   ).toBeVisible();
 }
 
-test("unpaired walkthrough advertises an install command pinned to the serving origin", async ({
+test("the install command links the hosted tarball, not the serving origin", async ({
   page,
 }) => {
   await gotoUnpairedConnect(page);
@@ -89,31 +93,8 @@ test("unpaired walkthrough advertises an install command pinned to the serving o
   await expect(installPre).toBeVisible();
 
   const cmd = (await installPre.innerText()).trim();
-  // Origin swap landed: the URL is the loopback host serving this page, NOT the
-  // DEFAULT_TARBALL_URL (hakon1233.github.io) baked in for the static export.
-  expect(cmd).toContain(`npm i -g ${ORIGIN}${TARBALL_PATH}`);
-  expect(cmd).toContain("scout-agent pair");
-  expect(cmd).not.toContain("github.io");
-});
-
-test("the advertised companion tarball is actually served (onboarding link is not dangling)", async ({
-  request,
-}) => {
-  test.fixme(
-    true,
-    "Known bug: pack:agent snapshots the webroot before it packs the tarball, so the first pack:agent on a fresh checkout bakes a webroot with no tarball and this download 404s.",
-  );
-  // The exact URL the walkthrough tells the user to `npm i -g`. If the page's
-  // pinned version constant drifts from the packed artifact, this 404s and
-  // first-run onboarding silently breaks. HEAD avoids pulling the ~100MB body;
-  // the companion's static server supports HEAD (server.ts static fallback).
-  const res = await request.fetch(`${ORIGIN}${TARBALL_PATH}`, {
-    method: "HEAD",
-  });
-  expect(
-    res.status(),
-    `install tarball ${TARBALL_PATH} should be served by the companion`,
-  ).toBe(200);
+  expect(cmd).toBe(`npm i -g ${TARBALL_URL}\nscout-agent pair`);
+  expect(cmd).not.toContain(ORIGIN);
 });
 
 test("Copy puts the exact install command on the clipboard", async ({
@@ -141,7 +122,7 @@ test("Copy puts the exact install command on the clipboard", async ({
   // What the user pastes is byte-for-byte what the terminal block shows — no
   // hydration drift, no stale origin.
   expect(clip.trim()).toBe(shown);
-  expect(clip).toContain(`${ORIGIN}${TARBALL_PATH}`);
+  expect(clip).toContain(TARBALL_URL);
 });
 
 test("manual token paste escape hatch persists the pairing token", async ({

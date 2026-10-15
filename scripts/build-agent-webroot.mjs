@@ -56,7 +56,12 @@ execFileSync("pnpm", ["exec", "next", "build"], {
 
 console.log(`[webroot] syncing ${outDir} -> ${webroot}`);
 await fs.rm(webroot, { recursive: true, force: true });
-await fs.cp(outDir, webroot, { recursive: true });
+// Skip out/agent/: it holds the hosted companion tarball, which the companion's
+// own package must not carry (it would nest the previous package inside it).
+await fs.cp(outDir, webroot, {
+  recursive: true,
+  filter: (src) => src !== path.join(outDir, "agent"),
+});
 
 // Stable, machine-readable UI provenance. Next's generated HTML starts with
 // `/_next/static/media` and `/_next/static/chunks`; neither segment is the

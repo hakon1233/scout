@@ -30,8 +30,8 @@ GitHub Pages — no registry account needed:
 npm i -g https://hakon1233.github.io/scout/agent/scout-agent-0.3.0.tgz
 ```
 
-The Connect page (`/app/connect`) always shows the current install command for
-the host you opened it from.
+The Connect page (`/app/connect`) shows the same command for the current
+version, wherever you opened it from.
 
 ## Use
 
