@@ -82,7 +82,7 @@ export type ServerDeps = {
   buildInfoFile?: string;
 };
 
-export function createServer(deps: ServerDeps = {}): http.Server {
+function createServer(deps: ServerDeps = {}): http.Server {
   const stateFile = deps.stateFile ?? STATE_FILE;
   const claudeBin = deps.claudeBin;
   const spawnFn = deps.spawnFn;

@@ -16,9 +16,9 @@
 // (sorting stories, dropping stale ones, merging retried sections) works on
 // the raw text and lives in coverage.ts.
 
-export type Citation = { label: string; url: string };
+type Citation = { label: string; url: string };
 
-export type BriefEntry =
+type BriefEntry =
   | {
       kind: "story";
       // The heading the story sits under; null before the first heading.

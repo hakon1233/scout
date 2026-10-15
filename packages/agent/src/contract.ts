@@ -30,7 +30,7 @@ export type Interest = {
 //   covered — the section has at least one cited story;
 //   empty   — the model found no fresh news (an honest "nothing", not an error);
 //   missing — the session failed or the section was dropped (worth a retry).
-export type TopicStatus = "covered" | "empty" | "missing";
+type TopicStatus = "covered" | "empty" | "missing";
 export type TopicCoverage = { topic: string; status: TopicStatus };
 
 // The exact topic and intent doc one section's research used, kept with the

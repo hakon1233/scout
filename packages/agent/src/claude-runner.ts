@@ -17,7 +17,7 @@ import os from "node:os";
 import { StringDecoder } from "node:string_decoder";
 
 // "web-research": WebSearch + WebFetch only. "none": no tools at all.
-export type ClaudeTools = "web-research" | "none";
+type ClaudeTools = "web-research" | "none";
 
 export type ClaudeRunOptions = {
   tools: ClaudeTools;

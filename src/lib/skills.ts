@@ -19,7 +19,7 @@ import { ASSEMBLY_SKILLS } from "@scout/agent/assembly-skills";
 // One bullet: its main text plus any format-sample lines under it, which render
 // as a small monospace block.
 export type SkillBullet = { text: string; detail: string[] };
-export type SkillGroup = { title: string; bullets: SkillBullet[] };
+type SkillGroup = { title: string; bullets: SkillBullet[] };
 export type SkillSet = { heading: string; intro: string; groups: SkillGroup[] };
 
 // A line is a group header when the label before its first `(` or `:` is non-empty

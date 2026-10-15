@@ -19,7 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // dist/static.js → packages/agent/webroot. In dev (tsx src/static.ts) this
 // resolves to packages/agent/src/../webroot, which simply won't exist — the
 // server then 404s static routes and keeps the API working.
-export const WEBROOT = path.resolve(__dirname, "..", "webroot");
+const WEBROOT = path.resolve(__dirname, "..", "webroot");
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -42,7 +42,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".webmanifest": "application/manifest+json",
 };
 
-export function contentTypeFor(file: string): string {
+function contentTypeFor(file: string): string {
   return (
     CONTENT_TYPES[path.extname(file).toLowerCase()] ??
     "application/octet-stream"
@@ -56,7 +56,7 @@ export function contentTypeFor(file: string): string {
 // own distinct tmp roots, so this can't leak across them).
 const webrootExistsCache = new Map<string, boolean>();
 
-export async function hasWebroot(root: string = WEBROOT): Promise<boolean> {
+async function hasWebroot(root: string = WEBROOT): Promise<boolean> {
   const cached = webrootExistsCache.get(root);
   if (cached !== undefined) return cached;
   let exists: boolean;

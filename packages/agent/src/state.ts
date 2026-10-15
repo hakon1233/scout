@@ -148,7 +148,7 @@ export function reconcileInterests(
 }
 
 // Default time-of-day for the daily schedule when none is stored yet.
-export const DEFAULT_TIME_OF_DAY = "07:00";
+const DEFAULT_TIME_OF_DAY = "07:00";
 
 // The schedule we materialize on first load when none is persisted. We default
 // `enabled: true` because the whole feature IS the user's opt-in ("schedule

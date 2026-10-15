@@ -143,7 +143,7 @@ export function json(
 
 // Thrown by readBody when the request body exceeds MAX_BODY_BYTES, so the
 // handler can answer 413 instead of buffering an unbounded body into memory.
-export class BodyTooLargeError extends Error {
+class BodyTooLargeError extends Error {
   constructor() {
     super("request body too large");
     this.name = "BodyTooLargeError";

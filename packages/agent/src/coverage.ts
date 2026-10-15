@@ -185,7 +185,7 @@ export function sortSectionStoriesNewestFirst(body: string): string {
 
 // Ordinary news older than this many days is dropped. "~30 days" in the search
 // rules; we treat strictly-older-than-30-days as stale.
-export const FRESHNESS_CUTOFF_DAYS = 30;
+const FRESHNESS_CUTOFF_DAYS = 30;
 
 // Words in an interest's topic or its intent doc that explicitly opt the topic
 // into background / evergreen / historical content. Such a topic is EXEMPT from

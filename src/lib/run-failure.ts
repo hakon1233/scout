@@ -25,7 +25,7 @@ export type RunFailure = {
 
 // Alert threshold: flag a silent stop when the last SUCCESSFUL
 // brief is older than this, even if the current slot didn't explicitly error.
-export const STALE_SUCCESS_MS = 26 * 60 * 60 * 1000; // 26h
+const STALE_SUCCESS_MS = 26 * 60 * 60 * 1000; // 26h
 
 // Strip the companion's internal "all research sessions failed — " prefix so the
 // banner's own "Today's brief failed —" lead-in doesn't read as a doubled clause.

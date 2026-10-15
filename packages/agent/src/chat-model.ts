@@ -57,7 +57,7 @@ export async function buildInterestSnapshots(
   );
 }
 
-export function buildChatPrompt(
+function buildChatPrompt(
   message: string,
   snapshots: InterestSnapshot[],
   transcript: ChatTurn[] = [],

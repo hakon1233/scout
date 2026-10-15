@@ -20,7 +20,7 @@ import {
   CONFIG_DIR,
 } from "./persistence.js";
 
-export const INTERESTS_DIR = path.join(CONFIG_DIR, "interests");
+const INTERESTS_DIR = path.join(CONFIG_DIR, "interests");
 
 // Interest ids are minted by state.ts (`newInterestId` → `int_<hex>`,
 // `legacyInterestId` → `int_<sha256>`), so they're always this charset. We still

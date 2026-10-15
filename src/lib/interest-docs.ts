@@ -24,8 +24,6 @@ export type InterestDocMeta = {
   body?: string;
 };
 
-export type InterestWithDoc = Interest & { doc: InterestDocMeta };
-
 // Stable per-interest key used for the doc editor deep-link and the
 // `interests/<id>.md` store. Prefers the interest's own id; falls back to a
 // slug of the topic so a companion-adopted interest (topic-only, no id) still
@@ -61,7 +59,7 @@ function mergeInterests(local: Interest[], topics: string[]): Interest[] {
 // doc metadata in one round-trip. Works from any origin the companion allows.
 // Returns null without a pairing token, or when no companion answers, so the
 // caller can fall back to local settings.
-export async function fetchInterestsFull(token: string): Promise<{
+async function fetchInterestsFull(token: string): Promise<{
   interests: Interest[];
   meta: Record<string, InterestDocMeta>;
 } | null> {

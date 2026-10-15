@@ -15,7 +15,7 @@ import type { AuthedRequestContext, ServerContext } from "./types.js";
 
 // A single chat message. Generous enough for a paragraph of intent, bounded so an
 // oversized turn can't be forwarded into the (model-priced) chat prompt.
-export const MAX_CHAT_MESSAGE_LEN = 4000;
+const MAX_CHAT_MESSAGE_LEN = 4000;
 
 // Kick one chat turn over the interest collection. Async
 // kick + poll, exactly like POST /v0/interests: we persist a `pending`

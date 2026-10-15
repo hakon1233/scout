@@ -28,10 +28,7 @@ export async function fetchChatTranscript(token: string): Promise<ChatTurn[]> {
 
 // Kick one chat turn. Returns the new turn id. Throws a human-readable error on
 // 409 (a turn is already in flight — single chat slot) or 400 (empty / too long).
-export async function kickChatTurn(
-  message: string,
-  token: string,
-): Promise<string> {
+async function kickChatTurn(message: string, token: string): Promise<string> {
   const body = await companionJson<{ turn_id?: string }>(PATHS.chat, {
     token,
     method: "POST",

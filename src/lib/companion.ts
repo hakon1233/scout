@@ -31,7 +31,7 @@ export function logCompanionError(context: string, err: unknown): void {
 
 export const COMPANION_PORT = 47821;
 // Tried in order. Keep small — this only runs on the Connect page ping.
-export const COMPANION_PORT_SWEEP = [47821, 47822, 47823, 47830, 47840];
+const COMPANION_PORT_SWEEP = [47821, 47822, 47823, 47830, 47840];
 const TOKEN_KEY = "scout.companion.token";
 
 let cachedBase: string | null = null;
@@ -101,7 +101,7 @@ let servedProbeInFlight: Promise<boolean> | null = null;
 //
 // Not a hardcoded localhost/127.0.0.1 regex, which would exclude a proxy
 // origin and break the token bootstrap and same-origin API there.
-export async function isServedFromCompanion(): Promise<boolean> {
+async function isServedFromCompanion(): Promise<boolean> {
   if (!isClient()) return false;
   if (servedFromCompanionConfirmed) return true;
   if (servedProbeInFlight) return servedProbeInFlight;
@@ -218,7 +218,7 @@ async function pingPort(port: number, timeoutMs = 1500): Promise<boolean> {
 
 // Returns the base URL of the live companion, or null. Caches the result
 // so subsequent calls in the same session skip the sweep.
-export async function discoverCompanion(): Promise<string | null> {
+async function discoverCompanion(): Promise<string | null> {
   // Served same-origin from the companion (loopback OR an HTTPS proxy)? Use this
   // exact origin — every API call is then same-origin (no CORS, no LNA prompt)
   // and we skip the loopback sweep. isServedFromCompanion() already confirmed it
@@ -324,7 +324,7 @@ export async function verifyCompanionToken(
   }
 }
 
-export async function postInterests(
+async function postInterests(
   interests: string[],
   token: string,
   // Focused-retry: when set, the companion re-researches ONLY these

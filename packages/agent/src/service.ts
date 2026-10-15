@@ -28,7 +28,7 @@ const execFileP = promisify(execFile);
 // launchd job label and the canonical per-user LaunchAgent path.
 export const LAUNCH_AGENT_LABEL = "ing.scout.agent";
 
-export function launchAgentsDir(home = os.homedir()): string {
+function launchAgentsDir(home = os.homedir()): string {
   return path.join(home, "Library", "LaunchAgents");
 }
 
@@ -40,7 +40,7 @@ export function plistPath(home = os.homedir()): string {
   return path.join(launchAgentsDir(home), `${LAUNCH_AGENT_LABEL}.plist`);
 }
 
-export function logPath(home = os.homedir()): string {
+function logPath(home = os.homedir()): string {
   return path.join(home, "Library", "Logs", "scout-agent.log");
 }
 
@@ -117,7 +117,7 @@ export type PlistOptions = {
 };
 
 // Environment keys buildLaunchAgentPlist always emits itself.
-export const MANAGED_ENV_KEYS = ["HOME", "PATH"] as const;
+const MANAGED_ENV_KEYS = ["HOME", "PATH"] as const;
 
 export type ExistingService = {
   plist: string;

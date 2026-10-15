@@ -7,7 +7,7 @@ import type { Article } from "./types";
 
 export type InterestState = "pending" | "searching" | "done" | "failed";
 
-export type PerInterestProgress = {
+type PerInterestProgress = {
   topic: string;
   state: InterestState;
   resultCount?: number;
