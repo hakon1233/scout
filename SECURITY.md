@@ -33,6 +33,11 @@ reader's machine that can start their local `claude` CLI.
   get the research session to fetch an address on your LAN. The session holds only its
   prompt (one interest's topic and intent doc), and its output is only text in your
   brief.
+- **Story images load from the source site.** When the model picks an image for a
+  story, your browser fetches it from the site that published the story, which can see
+  that request. Nothing else in the app loads from off your machine: each story's source
+  is drawn as a local letter badge, not fetched from a favicon service. The demo's
+  stories have no images.
 - **`/v0/config` behind a proxy.** Its same-origin check reads browser-set headers
   (`Sec-Fetch-Site`, `Origin`), which a non-browser client can fake. On loopback only
   local programs can call it; if you expose the companion with `tailscale serve` or

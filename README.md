@@ -22,7 +22,8 @@ pnpm demo
 The first run builds the companion, which takes a minute or two. Then open
 <http://127.0.0.1:47899/app/>. This runs the real companion with a stub in place of
 `claude`, in a throwaway home directory, so it needs no account and makes no network
-calls. Add interests, run a brief, open stories, and ask the chat to change your
+calls: the companion talks only to the stub, and the page in your browser loads nothing
+from outside `127.0.0.1`. Add interests, run a brief, open stories, and ask the chat to change your
 interests.
 
 ## Run it for real

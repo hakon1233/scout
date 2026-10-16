@@ -3,7 +3,7 @@
 import * as React from "react";
 import { AppNav } from "@/components/AppNav";
 import { LikeButton } from "@/components/LikeButton";
-import { FeedImage, faviconFor, formatDate } from "@/components/FeedView";
+import { FeedImage, SourceBadge, formatDate } from "@/components/FeedView";
 import { EmptyState } from "@/components/ui";
 import { useLikedStories, type LikedStory } from "@/lib/likes";
 
@@ -115,15 +115,7 @@ function LikedCard({ story }: { story: LikedStory }) {
             </p>
           )}
           <span className="mt-auto flex items-center gap-2 pr-11 pt-1 text-caption text-muted">
-            {/* eslint-disable-next-line @next/next/no-img-element -- 16px favicon; next/image's client runtime buys nothing under images.unoptimized:true. */}
-            <img
-              src={faviconFor(story.source)}
-              alt=""
-              width={16}
-              height={16}
-              loading="lazy"
-              className="h-4 w-4 rounded-sm"
-            />
+            <SourceBadge host={story.source} />
             {story.source} ↗
           </span>
         </div>

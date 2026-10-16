@@ -7,7 +7,7 @@ import { PORT } from "./port";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 // Belt-and-suspenders offline guard: abort any request that isn't to the
-// loopback companion (e.g. the favicon service BriefView pulls from google.com).
+// loopback companion (e.g. a story's source image).
 // If the app ever depends on a remote during the core loop, this fails loudly.
 async function blockNonLoopback(page: import("@playwright/test").Page) {
   await page.route("**/*", (route) => {

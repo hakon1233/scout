@@ -10,7 +10,10 @@ const SETTINGS_KEY = "scout.settings.v1";
 const BRIEF_KEY = "scout.lastBrief.v1";
 const LIKES_KEY = "scout.likes.v1";
 
+// Returns the remote URLs the page tried to load, so a test can assert there
+// were none.
 async function blockNonLoopback(page: import("@playwright/test").Page) {
+  const blocked: string[] = [];
   await page.route("**/*", (route) => {
     const url = route.request().url();
     if (
@@ -22,10 +25,12 @@ async function blockNonLoopback(page: import("@playwright/test").Page) {
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       return route.continue();
     }
-    // Source images + favicons are external — abort them so the feed degrades
-    // to its text-only form (FeedImage onError) and nothing leaves loopback.
+    // Source images are external — abort them so the feed degrades to its
+    // text-only form (FeedImage onError) and nothing leaves the loopback.
+    blocked.push(url);
     return route.abort();
   });
+  return blocked;
 }
 
 // A two-story daily brief. Headlines derive from the `domain — Title` citation
@@ -140,7 +145,7 @@ function leadHeart(
 test("saving a story from the feed surfaces it in the Liked feed and persists", async ({
   page,
 }) => {
-  await blockNonLoopback(page);
+  const blocked = await blockNonLoopback(page);
   await seedFeed(page);
 
   await page.goto(`${ORIGIN}/app/`);
@@ -191,6 +196,10 @@ test("saving a story from the feed surfaces it in the Liked feed and persists", 
   await expect(
     page.getByRole("heading", { name: LEAD_HEADLINE }),
   ).toBeVisible();
+
+  // The Liked feed's source badges are local too: nothing asked a remote host.
+  await expect(page.locator('img[src*="google.com"]')).toHaveCount(0);
+  expect(blocked).toEqual([]);
 });
 
 test("unliking from the feed card clears it from the Liked feed", async ({

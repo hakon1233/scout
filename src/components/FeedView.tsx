@@ -260,15 +260,7 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 text-body-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element -- 16px favicon; next/image's client runtime buys nothing under images.unoptimized:true. */}
-          <img
-            src={faviconFor(item.source)}
-            alt=""
-            width={16}
-            height={16}
-            loading="lazy"
-            className="h-4 w-4 rounded-sm"
-          />
+          <SourceBadge host={item.source} />
           Read the full story at {item.source} ↗
         </a>
       </div>
@@ -373,8 +365,17 @@ function hostname(url: string): string {
   }
 }
 
-export function faviconFor(host: string): string {
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`;
+// A letter tile for the story's source. Drawn locally, so showing a feed never
+// tells a favicon service which sites you read.
+export function SourceBadge({ host }: { host: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-border-default bg-surface text-caption font-semibold uppercase leading-none text-muted"
+    >
+      {host.replace(/^www\./, "").charAt(0)}
+    </span>
+  );
 }
 
 // The canonical date formatter now lives in `@/lib/format-date` so the brief

@@ -16,7 +16,10 @@ const ORIGIN = `http://127.0.0.1:${PORT}`;
 const SETTINGS_KEY = "scout.settings.v1";
 const BRIEF_KEY = "scout.lastBrief.v1";
 
+// Returns the remote URLs the page tried to load, so a test can assert there
+// were none.
 async function blockNonLoopback(page: import("@playwright/test").Page) {
+  const blocked: string[] = [];
   await page.route("**/*", (route) => {
     const url = route.request().url();
     if (
@@ -28,10 +31,12 @@ async function blockNonLoopback(page: import("@playwright/test").Page) {
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       return route.continue();
     }
-    // Source images + favicons are external — abort them so the feed degrades to
-    // its text-only form (FeedImage onError) and nothing leaves the loopback.
+    // Source images are external — abort them so the feed degrades to its
+    // text-only form (FeedImage onError) and nothing leaves the loopback.
+    blocked.push(url);
     return route.abort();
   });
+  return blocked;
 }
 
 // A two-story daily brief. Headlines derive from the `domain — Title` citation
@@ -102,7 +107,7 @@ const OTHER_HEADLINE = "A new alignment benchmark lands";
 test("opening a story collapses the feed to that single story", async ({
   page,
 }) => {
-  await blockNonLoopback(page);
+  const blocked = await blockNonLoopback(page);
   await seedFeed(page);
 
   await page.goto(`${ORIGIN}/app/`);
@@ -139,6 +144,11 @@ test("opening a story collapses the feed to that single story", async ({
   await expect(page.getByRole("heading", { name: OTHER_HEADLINE })).toHaveCount(
     0,
   );
+
+  // Source badges are drawn locally: no image asks a remote favicon service,
+  // and a story without an image fetches nothing off the loopback.
+  await expect(page.locator('img[src*="google.com"]')).toHaveCount(0);
+  expect(blocked).toEqual([]);
 });
 
 test("the in-app Back button restores the full feed", async ({ page }) => {
