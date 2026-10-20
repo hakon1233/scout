@@ -8,7 +8,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Working on Scout
 
-Read `docs/ARCHITECTURE.md` for the code map and invariants, and `CONTEXT.md` for the
+Read `docs/ARCHITECTURE.md` for the code map and invariants, and `GLOSSARY.md` for the
 domain terms (interest, intent doc, run, brief, story, coverage). Use those words in
 code, tests and comments.
 

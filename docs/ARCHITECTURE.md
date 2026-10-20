@@ -15,7 +15,7 @@ browser ──HTTP + pairing token──▶ companion (127.0.0.1:47821) ──st
 ```
 
 Words such as interest, intent doc, run, brief, section, story and coverage are used
-as `CONTEXT.md` defines them.
+as `GLOSSARY.md` defines them.
 
 ## Codemap
 

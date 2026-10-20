@@ -65,7 +65,7 @@ list. See [SECURITY.md](SECURITY.md).
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (code map and invariants) and
 [docs/adr/](docs/adr/) (three decisions worth recording). Domain terms are defined in
-[CONTEXT.md](CONTEXT.md).
+[GLOSSARY.md](GLOSSARY.md).
 
 ## Tech choices
 
