@@ -4,7 +4,7 @@
 // lands.
 
 import type { spawn } from "node:child_process";
-import type { ChatTurn, Interest } from "./contract.js";
+import type { ChatTurn, Interest } from "#core";
 import { runClaude } from "./claude-runner.js";
 import { readInterestDoc } from "./docs.js";
 // Shared with the POST/PUT /v0/interests validator — see limits.ts for why the

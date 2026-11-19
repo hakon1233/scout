@@ -6,6 +6,12 @@
     "scout-agent": "./dist/cli.js"
   },
   "type": "module",
+  "imports": {
+    "#core": {
+      "source": "@scout/core",
+      "default": "./dist/core/index.js"
+    }
+  },
   "engines": {
     "node": ">=20"
   },
@@ -15,9 +21,9 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node ../../scripts/live-build-guard.mjs && tsc -p tsconfig.json && node scripts/write-build-info.mjs",
-    "dev": "tsx src/cli.ts",
-    "test": "tsx --test test/*.test.ts",
+    "build": "node ../../scripts/live-build-guard.mjs && tsc -p ../core/tsconfig.json --outDir dist/core && tsc -p tsconfig.json && node scripts/write-build-info.mjs",
+    "dev": "tsx --conditions=source src/cli.ts",
+    "test": "tsx --conditions=source --test test/*.test.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {},

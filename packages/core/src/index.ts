@@ -1,0 +1,35 @@
+// @scout/core: Scout's brief grammar and rules, as pure TypeScript. No Node,
+// Deno or browser-only APIs and no imports outside this folder, so the web app,
+// the companion and the hosted functions can all use it.
+
+export type {
+  Brief,
+  ChatChange,
+  ChatTurn,
+  Interest,
+  PendingDelete,
+  PendingRewrite,
+  ScheduleRunStatus,
+  ScheduleView,
+  TopicBasis,
+  TopicCoverage,
+} from "./contract.ts";
+export { PATHS } from "./contract.ts";
+export { SEARCH_SKILLS } from "./search-skills.ts";
+export { ASSEMBLY_SKILLS } from "./assembly-skills.ts";
+export {
+  buildResearchPrompt,
+  stripBriefPreamble,
+  type ResearchInterest,
+} from "./research-prompt.ts";
+export {
+  assembleBrief,
+  computeCoverage,
+  enforceBriefFreshness,
+  extractTopicSection,
+  interestWantsEvergreen,
+  mergeBriefSections,
+  normalizeTopic,
+} from "./coverage.ts";
+export { canonicalUrl, parseBrief } from "./brief-document.ts";
+export { createWeeklyBriefFromHistory } from "./weekly.ts";

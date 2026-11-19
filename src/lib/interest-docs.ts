@@ -1,6 +1,6 @@
 "use client";
 
-import { PATHS, type Interest } from "@scout/agent/contract";
+import { PATHS, type Interest } from "@scout/core";
 import { companionFetch, fetchCompanionInterests } from "./companion";
 import { isClient } from "./safe-storage";
 

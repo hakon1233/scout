@@ -91,14 +91,14 @@ export async function deleteInterestDoc(
 // (no dead controls).
 export function defaultInterestDoc(topic: string): string {
   const t = topic.trim();
-  // NB: this text is fed to interestWantsEvergreen (coverage.ts) as the interest's
+  // NB: this text is fed to interestWantsEvergreen (packages/core coverage.ts) as the interest's
   // intent doc. That check is a naive keyword match with no negation awareness, so
   // this default MUST NOT contain any EVERGREEN_RE trigger word (evergreen,
   // background, historical/history, retrospective, timeline, explainer, primer,
   // deep-dive, long-read) — a false positive there disables the >30-day freshness
   // cutoff for every default-doc interest, bringing back months-old stories.
   // Keep the "skip old context" intent, worded around those words.
-  // coverage.test.ts pins this invariant.
+  // docs.test.ts pins this invariant.
   return [
     `# ${t}`,
     "",

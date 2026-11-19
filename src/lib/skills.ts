@@ -13,8 +13,7 @@
 // Both share one on-the-wire shape: a leading `## ` title line, an intro
 // paragraph, then ALL-CAPS group labels ending in `:` each followed by `- `
 // bullets (bullets may have indented continuation lines, e.g. a format sample).
-import { SEARCH_SKILLS } from "@scout/agent/search-skills";
-import { ASSEMBLY_SKILLS } from "@scout/agent/assembly-skills";
+import { ASSEMBLY_SKILLS, SEARCH_SKILLS } from "@scout/core";
 
 // One bullet: its main text plus any format-sample lines under it, which render
 // as a small monospace block.

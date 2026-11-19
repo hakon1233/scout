@@ -28,7 +28,7 @@ import {
   defaultSchedule,
   type State,
 } from "../src/state.js";
-import type { Brief } from "../src/contract.js";
+import type { Brief } from "#core";
 import { Scheduler, nextFireAt } from "../src/scheduler.js";
 import { startServer } from "../src/server.js";
 

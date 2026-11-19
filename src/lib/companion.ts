@@ -4,12 +4,12 @@
 // agent on a different port can still pair.
 
 import type { Brief as AppBrief } from "./types";
-import { parseBrief } from "@scout/agent/brief-document";
 import {
+  parseBrief,
   PATHS,
   type Brief as WireBrief,
   type ScheduleView,
-} from "@scout/agent/contract";
+} from "@scout/core";
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 
 // Dev/diagnostic trace for the browser→loopback transport. Every fetch

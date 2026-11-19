@@ -9,10 +9,10 @@
 import type {
   ChatChange,
   ChatTurn,
+  Interest,
   PendingDelete,
-} from "@scout/agent/contract";
+} from "@scout/core";
 import { type InterestDocMeta, interestKey } from "@/lib/interest-docs";
-import type { Interest } from "@scout/agent/contract";
 import type { Settings } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";

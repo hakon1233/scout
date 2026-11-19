@@ -55,7 +55,7 @@ scout-agent install-service
 
 ## Endpoints
 
-All bound to `127.0.0.1`. Shapes and paths are defined in `src/contract.ts`; the
+All bound to `127.0.0.1`. Shapes and paths are defined in `packages/core/src/contract.ts`; the
 route table with each route's auth level is `src/routes/index.ts`.
 
 | Method         | Path                                                                   | Auth             | Purpose                                                                    |

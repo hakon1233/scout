@@ -3,7 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import type { Article, Brief } from "@/lib/types";
-import { canonicalUrl } from "@scout/agent/brief-document";
+import { canonicalUrl } from "@scout/core";
 import type { LikeInput } from "@/lib/likes";
 import { LikeButton } from "@/components/LikeButton";
 import { EmptyState } from "@/components/ui";

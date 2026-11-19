@@ -4,7 +4,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canonicalUrl, parseBrief } from "../src/brief-document.js";
+import { canonicalUrl, parseBrief } from "../src/brief-document.ts";
 
 const brief = (...lines: string[]) => lines.join("\n") + "\n";
 

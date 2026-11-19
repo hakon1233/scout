@@ -9,7 +9,7 @@
 import type http from "node:http";
 import type { spawn } from "node:child_process";
 import type { State } from "../state.js";
-import type { Brief } from "../contract.js";
+import type { Brief } from "#core";
 import type { ChatDeps } from "../chat.js";
 
 // Per-server dependencies (ServerDeps with defaults applied), built once in

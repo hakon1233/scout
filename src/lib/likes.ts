@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
-import { canonicalUrl } from "@scout/agent/brief-document";
+import { canonicalUrl } from "@scout/core";
 
 // Device-local "liked stories" store. A brand-new localStorage store,
 // fully separate from the interests store and from every companion endpoint.

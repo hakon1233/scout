@@ -7,7 +7,7 @@ import type {
   Interest,
   PendingDelete,
   PendingRewrite,
-} from "./contract.js";
+} from "#core";
 import type { ProposedChange } from "./chat-model.js";
 import {
   deleteInterestDoc,

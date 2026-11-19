@@ -31,9 +31,10 @@ code, tests and comments.
   `~/.config/scout` throws.
 - Never point manual testing at a real companion (port 47821 and `~/.config/scout`):
   that is someone's actual reading list. Use `pnpm demo`.
-- The HTTP contract lives in `packages/agent/src/contract.ts`. The web app imports it,
-  so change both sides in one commit. Only the four modules listed in
-  `src/lib/boundaries.test.ts` may be imported by the web app.
+- The HTTP contract lives in `packages/core/src/contract.ts`. The web app and the
+  companion both import it, so change both sides in one commit. The web app imports
+  shared code from `@scout/core` only, and core imports nothing outside its folder
+  (`src/lib/boundaries.test.ts`).
 - `claude-runner.ts` is the only place a `claude` child starts, and `updateState` is the
   only writer of `state.json`. Keep it that way.
 - Write a failing test first for a bug fix, at the module's interface (the HTTP routes

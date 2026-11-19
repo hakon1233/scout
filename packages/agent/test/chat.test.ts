@@ -15,7 +15,7 @@ import {
   newPairingToken,
   type State,
 } from "../src/state.js";
-import type { ChatTurn } from "../src/contract.js";
+import type { ChatTurn } from "#core";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
 import { isChatInFlight, startChatTurn } from "../src/chat.js";
 import { readChatTranscript } from "../src/chat-transcript.js";

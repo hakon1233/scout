@@ -25,7 +25,7 @@ import {
   handlePostChatConfirmRewrite,
   handlePostChatStop,
 } from "./chat.js";
-import { PATHS } from "../contract.js";
+import { PATHS } from "#core";
 import type { V0RouteSpec } from "./types.js";
 
 export const V0_ROUTES: Record<
