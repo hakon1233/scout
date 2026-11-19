@@ -11,9 +11,10 @@ You can follow interests that Håkon curates (free), or share your own by link s
 the same brief. Free accounts get a few scheduled interests; a paid plan later raises the limits.
 
 **User journey**
+
 1. **Sign in**: Google, or email with a confirmation link.
 2. **First interest by chat**: "What do you want to follow?" The chat drafts the intent doc.
-   If a public interest matches, it offers "Follow *AI policy* (curated)" instead.
+   If a public interest matches, it offers "Follow _AI policy_ (curated)" instead.
 3. **First brief**: the run starts at once (1–3 min, with a progress line); the brief opens when done.
 4. **Schedule**: each interest is daily, weekly or paused, at a time you choose; quota shown ("2 of 3 daily").
 5. **Follow / share**: "Share" gives a link; whoever opens it can follow; followers read the
@@ -23,13 +24,14 @@ the same brief. Free accounts get a few scheduled interests; a paid plan later r
 
 ### Hosting choice
 
-| Option | Time limit per call | Fit |
-|---|---|---|
-| **Supabase Edge Functions + pg_cron** | 150 s free, **400 s paid**; 2 s CPU, async I/O excluded [S1] | One interest per call fits in 400 s. Auth, DB, cron and functions on one platform. Deno, not Node. |
-| Vercel function + Vercel cron | 300 s Hobby; 800 s Pro [V1]. Hobby cron is once a day with ±59 min precision [V2] | Needs Pro for minute cron. Adds a second backend platform. |
-| Small Node worker (Fly/Railway) | none | Reuses Node code as is, but adds a server to run, deploy, watch and keep alive. |
+| Option                                | Time limit per call                                                               | Fit                                                                                                |
+| ------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Supabase Edge Functions + pg_cron** | 150 s free, **400 s paid**; 2 s CPU, async I/O excluded [S1]                      | One interest per call fits in 400 s. Auth, DB, cron and functions on one platform. Deno, not Node. |
+| Vercel function + Vercel cron         | 300 s Hobby; 800 s Pro [V1]. Hobby cron is once a day with ±59 min precision [V2] | Needs Pro for minute cron. Adds a second backend platform.                                         |
+| Small Node worker (Fly/Railway)       | none                                                                              | Reuses Node code as is, but adds a server to run, deploy, watch and keep alive.                    |
 
 **Recommendation: Supabase Pro.**
+
 - Use Supabase for auth, Postgres, pg_cron and two Edge Functions (`run`, `chat`).
 - The web app stays a static Next.js export, hosted on GitHub Pages now and on any static host later.
 - **One run = one interest = one function call**, which keeps each call well under 400 s:
@@ -42,18 +44,19 @@ the same brief. Free accounts get a few scheduled interests; a paid plan later r
 
 ### Data model (all tables RLS on, deny by default)
 
-| Table | Holds | RLS |
-|---|---|---|
-| `profiles` | `id = auth.uid`, `plan`, `timezone`, `is_admin` | Read and update your own row, except `plan` and `is_admin`. |
-| `plans` | One row per plan: the limits (§3) | Readable by signed-in users; no client writes. |
-| `settings` | One row: global daily dollar ceiling, model id, kill switch | No client access. |
-| `interests` | `owner_id`, `topic`, `doc` (intent doc), `cadence` (daily, weekly or off), `run_at`, `visibility` (private, shared or public), `share_slug`, `deleted_at` | Owner: full access. Others: read only if you follow it, or through the `interest_by_slug` RPC. |
-| `follows` | `user_id`, `interest_id` | Your own rows. Inserted only through the `follow` RPC (which checks visibility). |
-| `runs` | `interest_id`, `status` (queued, running, ready or failed), `scheduled_for`, `section_md`, `coverage`, `searches`, `cost_usd`, `error_msg` | Read if you can read the interest. Writes: service role only. |
-| `chat_turns` | `user_id`, `message`, `reply`, `changes`, `pending`, `status`, `cost_usd` | Your own rows. Writes go through the `chat` function. |
-| `notifications` | `user_id`, `kind`, `payload` (snapshot of topic and doc), `read_at` | Your own rows. Clients may update `read_at` only. |
+| Table           | Holds                                                                                                                                                     | RLS                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `profiles`      | `id = auth.uid`, `plan`, `timezone`, `is_admin`                                                                                                           | Read and update your own row, except `plan` and `is_admin`.                                    |
+| `plans`         | One row per plan: the limits (§3)                                                                                                                         | Readable by signed-in users; no client writes.                                                 |
+| `settings`      | One row: global daily dollar ceiling, model id, kill switch                                                                                               | No client access.                                                                              |
+| `interests`     | `owner_id`, `topic`, `doc` (intent doc), `cadence` (daily, weekly or off), `run_at`, `visibility` (private, shared or public), `share_slug`, `deleted_at` | Owner: full access. Others: read only if you follow it, or through the `interest_by_slug` RPC. |
+| `follows`       | `user_id`, `interest_id`                                                                                                                                  | Your own rows. Inserted only through the `follow` RPC (which checks visibility).               |
+| `runs`          | `interest_id`, `status` (queued, running, ready or failed), `scheduled_for`, `section_md`, `coverage`, `searches`, `cost_usd`, `error_msg`                | Read if you can read the interest. Writes: service role only.                                  |
+| `chat_turns`    | `user_id`, `message`, `reply`, `changes`, `pending`, `status`, `cost_usd`                                                                                 | Your own rows. Writes go through the `chat` function.                                          |
+| `notifications` | `user_id`, `kind`, `payload` (snapshot of topic and doc), `read_at`                                                                                       | Your own rows. Clients may update `read_at` only.                                              |
 
 **A brief is a query, not a table.** "Today's brief" is:
+
 - the latest ready run of each interest you own or follow;
 - assembled in the browser by the existing `assembleBrief` and `parseBrief`.
 
@@ -62,15 +65,15 @@ removes brief storage, brief merging and the per-user copy of shared briefs.
 
 ### Deep modules
 
-| Module | Interface | Hides |
-|---|---|---|
-| **`core`** (pure TS package, no Node or Deno APIs; imported by web and functions) | The existing functions: `SEARCH_SKILLS`, `ASSEMBLY_SKILLS`, `buildResearchPrompt`, `computeCoverage`, `enforceBriefFreshness`, `assembleBrief`, `parseBrief`, `createWeeklyBriefFromHistory`, change-set validation, contract types | Scout's whole brief grammar and rules. Already Node-free today: coverage, brief-document, assembly and search skills, chat-changes, weekly, contract, limits. |
-| **`researchInterest(interest, {claude}) → {sectionMd, coverage, usage}`** | One call | The Messages API call on `claude-haiku-5-5`:<br>- web_search and web_fetch tools, `max_uses`;<br>- the cached system prefix (search skills);<br>- `pause_turn` continuation and the 300 s timeout;<br>- tool errors returned in a 200;<br>- freshness enforcement and preamble stripping;<br>- dollar cost from `usage`.<br>Seam: a `ClaudeClient` with two adapters (Anthropic SDK and a test stub), so it is a real seam. Replaces `claude-runner` plus `research`. |
-| **Run queue** (SQL `enqueue_due_runs(now)` + `run` function) | pg_cron calls `enqueue_due_runs` every minute. For each queued run, pg_net POSTs `{runId}` to `run`. | Due-time maths per timezone. Checks for quota, the global ceiling and the kill switch. Single flight per interest (unique queued or running run). One retry for a failed run. |
-| **`allowance(user)`** (one SQL function) | Returns `{plan, used, limits}` | All limit logic. Used by the interest-cadence trigger, `enqueue_due_runs`, on-demand runs, the chat and the UI quota line. **The only place limits are read.** |
-| **`chatTurn(user, message) → ChatTurn`** (`chat` function) | One call | Today's chat prompt:<br>- the interest snapshot plus the public catalog;<br>- a change set as structured output;<br>- validation by `core`;<br>- pending delete or rewrite held until you confirm;<br>- applied in one transaction.<br>Adds the op `follow`. |
-| **Sharing RPCs** (`set_visibility`, `follow`, `host_copy`) | Three calls | Slug minting, follow rules, the notification trigger, copying a stopped interest onto your own quota. |
-| **Web `data.ts`** (replaces `lib/companion.ts`) | `interests`, `feed(day)`, `runNow`, `chat`, `notifications` … | supabase-js, auth session, polling of a run until it is ready. The only data module the UI imports (boundaries test updated). |
+| Module                                                                            | Interface                                                                                                                                                                                                                           | Hides                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`core`** (pure TS package, no Node or Deno APIs; imported by web and functions) | The existing functions: `SEARCH_SKILLS`, `ASSEMBLY_SKILLS`, `buildResearchPrompt`, `computeCoverage`, `enforceBriefFreshness`, `assembleBrief`, `parseBrief`, `createWeeklyBriefFromHistory`, change-set validation, contract types | Scout's whole brief grammar and rules. Already Node-free today: coverage, brief-document, assembly and search skills, chat-changes, weekly, contract, limits.                                                                                                                                                                                                                                                                                                         |
+| **`researchInterest(interest, {claude}) → {sectionMd, coverage, usage}`**         | One call                                                                                                                                                                                                                            | The Messages API call on `claude-haiku-5-5`:<br>- web_search and web_fetch tools, `max_uses`;<br>- the cached system prefix (search skills);<br>- `pause_turn` continuation and the 300 s timeout;<br>- tool errors returned in a 200;<br>- freshness enforcement and preamble stripping;<br>- dollar cost from `usage`.<br>Seam: a `ClaudeClient` with two adapters (Anthropic SDK and a test stub), so it is a real seam. Replaces `claude-runner` plus `research`. |
+| **Run queue** (SQL `enqueue_due_runs(now)` + `run` function)                      | pg_cron calls `enqueue_due_runs` every minute. For each queued run, pg_net POSTs `{runId}` to `run`.                                                                                                                                | Due-time maths per timezone. Checks for quota, the global ceiling and the kill switch. Single flight per interest (unique queued or running run). One retry for a failed run.                                                                                                                                                                                                                                                                                         |
+| **`allowance(user)`** (one SQL function)                                          | Returns `{plan, used, limits}`                                                                                                                                                                                                      | All limit logic. Used by the interest-cadence trigger, `enqueue_due_runs`, on-demand runs, the chat and the UI quota line. **The only place limits are read.**                                                                                                                                                                                                                                                                                                        |
+| **`chatTurn(user, message) → ChatTurn`** (`chat` function)                        | One call                                                                                                                                                                                                                            | Today's chat prompt:<br>- the interest snapshot plus the public catalog;<br>- a change set as structured output;<br>- validation by `core`;<br>- pending delete or rewrite held until you confirm;<br>- applied in one transaction.<br>Adds the op `follow`.                                                                                                                                                                                                          |
+| **Sharing RPCs** (`set_visibility`, `follow`, `host_copy`)                        | Three calls                                                                                                                                                                                                                         | Slug minting, follow rules, the notification trigger, copying a stopped interest onto your own quota.                                                                                                                                                                                                                                                                                                                                                                 |
+| **Web `data.ts`** (replaces `lib/companion.ts`)                                   | `interests`, `feed(day)`, `runNow`, `chat`, `notifications` …                                                                                                                                                                       | supabase-js, auth session, polling of a run until it is ready. The only data module the UI imports (boundaries test updated).                                                                                                                                                                                                                                                                                                                                         |
 
 ### Reused vs dropped
 
@@ -94,8 +97,15 @@ removes brief storage, brief merging and the per-user copy of shared briefs.
 **Limits live in one place: the `plans` table**, read only through `allowance()`:
 
 ```json
-{ "id": "free", "daily_interests": 3, "weekly_interests": 10, "on_demand_runs_per_day": 3,
-  "chat_turns_per_day": 40, "searches_per_run": 5, "max_doc_chars": 4000 }
+{
+  "id": "free",
+  "daily_interests": 3,
+  "weekly_interests": 10,
+  "on_demand_runs_per_day": 3,
+  "chat_turns_per_day": 40,
+  "searches_per_run": 5,
+  "max_doc_chars": 4000
+}
 ```
 
 - Changing a number is one SQL update, with no deploy.
@@ -103,35 +113,38 @@ removes brief storage, brief merging and the per-user copy of shared briefs.
 - `settings` holds the global `daily_ceiling_usd` (start at $10) and a kill switch.
 
 **Prices** [P1] [P2]:
+
 - Haiku 5.5: $0.10 per M input tokens, $0.50 per M output (prompts ≤100K tokens), cache hits $0.01 per M.
 - Web search: $10 per 1,000 searches. Failed searches are free; results count as input tokens.
 - Web fetch: tokens only.
 
 **Cost of one interest run** (estimate; measure it in task 4):
 
-| Item | Amount | Cost |
-|---|---|---|
-| Searches | ~4–5 | $0.040–0.050 |
-| Input tokens (results and pages re-read across steps) | ~120K | $0.012 |
-| Output tokens (thinking and section) | ~6K | $0.003 |
-| **Total per run** | | **≈ $0.055–0.065**, three quarters of it search |
+| Item                                                  | Amount | Cost                                            |
+| ----------------------------------------------------- | ------ | ----------------------------------------------- |
+| Searches                                              | ~4–5   | $0.040–0.050                                    |
+| Input tokens (results and pages re-read across steps) | ~120K  | $0.012                                          |
+| Output tokens (thinking and section)                  | ~6K    | $0.003                                          |
+| **Total per run**                                     |        | **≈ $0.055–0.065**, three quarters of it search |
 
 **Cost of one free user per month:**
 
-| Free plan | Runs/month | Cost/month |
-|---|---|---|
+| Free plan                          | Runs/month    | Cost/month  |
+| ---------------------------------- | ------------- | ----------- |
 | 3 daily + 10 weekly (the proposal) | 90 + 43 = 133 | **≈ $7.50** |
-| 1 daily + 3 weekly | 30 + 13 = 43 | ≈ $2.50 |
-| Following only (public or shared) | 0 | $0 |
+| 1 daily + 3 weekly                 | 30 + 13 = 43  | ≈ $2.50     |
+| Following only (public or shared)  | 0             | $0          |
 
 A chat turn costs well under $0.01 (no tools).
 
 **Levers:**
+
 - Following costs nothing, so steer people to public interests.
 - Fewer searches per run, set in `searches_per_run`.
 - The Batches API (half price, but it throttles searches, so only for weekly runs).
 
 **Hard ceilings**, all four enforced:
+
 1. **Per user:** `allowance()`.
 2. **Per run:** `max_uses` plus a 300 s timeout.
 3. **Global:** the sum of today's run and chat `cost_usd` against `daily_ceiling_usd`. When over, new runs wait ("paused: capacity") and chat says so.
@@ -140,24 +153,28 @@ A chat turn costs well under $0.01 (no tools).
 ## 4. Sharing model
 
 **States** (`visibility`):
+
 - `private`: owner only.
 - `shared`: anyone with the link can follow. Runs on the host's quota.
 - `public`: set only by an admin (Håkon). Listed in the catalog and offered by the chat. Runs on no one's quota (house cost).
 
 **Follow:**
+
 - Opening `/i/<slug>` shows the latest brief and a Follow button. The slug is random, 20+ characters.
 - The followed interest's runs show up in your feed.
 - Following never counts against your quota. You can't edit what you follow.
 
 **Host stops sharing** (sets it private, or deletes it):
+
 - A trigger removes the follow rows.
 - It writes one notification per follower, with a snapshot of the topic and intent doc:
-  "Anna stopped sharing *Rust compilers*. [Host it yourself] [Dismiss]".
+  "Anna stopped sharing _Rust compilers_. [Host it yourself] [Dismiss]".
 - **Host it yourself** calls `host_copy`. It makes your own private interest from the snapshot,
   checked by `allowance()`; if you are over quota, it says so and offers weekly.
 - A deleted interest is soft-deleted (`deleted_at`), so past runs still show in history.
 
 **Simplest notification:** a bell with an unread count.
+
 - It reads `notifications` on page load and on focus. No realtime, no email.
 - In Phase 1 there are only three kinds: stopped sharing, run failed twice, over quota.
 
@@ -211,30 +228,30 @@ A chat turn costs well under $0.01 (no tools).
 
 **Phase 2+ (parked):** each idea, and what would show we need it.
 
-| Idea | What would show the need |
-|---|---|
-| Payments and a `pro` plan | Free users hit quota and ask for more. |
-| Email and push digests | Users stop returning to the site after week 1. |
-| Memory and dedup across days | Users complain about repeat stories. |
-| Faster runs (parallel or streamed sections) | First-brief drop-off during the 1–3 min wait. |
-| Native web-view app | Users ask for a home-screen app. |
-| Image proxy | Privacy complaints, or broken images. |
-| Realtime notifications | People wait on a page for a run to finish. |
-| Public catalog search with embeddings | More than ~50 public interests. |
-| Node worker for runs | Runs near the 400 s limit. |
+| Idea                                        | What would show the need                       |
+| ------------------------------------------- | ---------------------------------------------- |
+| Payments and a `pro` plan                   | Free users hit quota and ask for more.         |
+| Email and push digests                      | Users stop returning to the site after week 1. |
+| Memory and dedup across days                | Users complain about repeat stories.           |
+| Faster runs (parallel or streamed sections) | First-brief drop-off during the 1–3 min wait.  |
+| Native web-view app                         | Users ask for a home-screen app.               |
+| Image proxy                                 | Privacy complaints, or broken images.          |
+| Realtime notifications                      | People wait on a page for a run to finish.     |
+| Public catalog search with embeddings       | More than ~50 public interests.                |
+| Node worker for runs                        | Runs near the 400 s limit.                     |
 
 ## 7. Complexity verdict
 
-| Piece | Verdict | Drivers | Simpler alternative |
-|---|---|---|---|
-| `core` extraction | **Low** | The code is already pure. | None needed. |
-| Schema and RLS | **Medium** | Follow visibility rules, and RLS tests. | Fewer tables (done: briefs are a query). |
-| Auth | **Low** | Supabase does it. Google needs an OAuth client set up. | Email only at first. |
-| `researchInterest` | **Medium** | Tool loop edge cases (`pause_turn`, errors in a 200), the new tokenizer, keeping output inside the grammar. | Basic `web_search_20250305` without dynamic filtering if Haiku misbehaves. |
-| Run queue | **Medium** | Timezones, single flight, retries, ceiling. | One cron per hour that runs everything due (coarser times). |
-| Chat function | **Medium** | Structured output port, pending confirmations. | Drop rewrite confirmation in Phase 1 (keep delete). |
-| Sharing and notifications | **Medium** | The stop-sharing flow and snapshots. | Phase 1 without "host it yourself": the notification only. |
-| Cost control | **Low–Medium** | A cost ledger per call. | Rely on the Anthropic spend limit alone (blunt: stops everyone). |
+| Piece                     | Verdict        | Drivers                                                                                                     | Simpler alternative                                                        |
+| ------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `core` extraction         | **Low**        | The code is already pure.                                                                                   | None needed.                                                               |
+| Schema and RLS            | **Medium**     | Follow visibility rules, and RLS tests.                                                                     | Fewer tables (done: briefs are a query).                                   |
+| Auth                      | **Low**        | Supabase does it. Google needs an OAuth client set up.                                                      | Email only at first.                                                       |
+| `researchInterest`        | **Medium**     | Tool loop edge cases (`pause_turn`, errors in a 200), the new tokenizer, keeping output inside the grammar. | Basic `web_search_20250305` without dynamic filtering if Haiku misbehaves. |
+| Run queue                 | **Medium**     | Timezones, single flight, retries, ceiling.                                                                 | One cron per hour that runs everything due (coarser times).                |
+| Chat function             | **Medium**     | Structured output port, pending confirmations.                                                              | Drop rewrite confirmation in Phase 1 (keep delete).                        |
+| Sharing and notifications | **Medium**     | The stop-sharing flow and snapshots.                                                                        | Phase 1 without "host it yourself": the notification only.                 |
+| Cost control              | **Low–Medium** | A cost ledger per call.                                                                                     | Rely on the Anthropic spend limit alone (blunt: stops everyone).           |
 
 **Overall: Medium.** About 11 subagent jobs. The riskiest pieces are the research adapter's
 output quality on Haiku 5.5 and the cost per run. Both are measured in task 4, before the UI work.
