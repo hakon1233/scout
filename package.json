@@ -17,7 +17,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test && pnpm build",
-    "test": "node --test test/*.test.mjs && pnpm --filter @scout/core test && pnpm --filter @scout/agent test && pnpm --filter @scout/research test && pnpm --filter @scout/hosted test && pnpm run test:web",
+    "test": "node --test test/*.test.mjs && pnpm --filter @scout/core test && pnpm --filter @scout/agent test && pnpm --filter @scout/research test && pnpm --filter @scout/hosted test && pnpm --filter @scout/worker test && pnpm run test:web",
     "test:web": "tsx --test 'src/**/*.test.ts'",
     "build:agent-webroot": "node scripts/build-agent-webroot.mjs",
     "build:agent": "pnpm run build:agent-webroot && pnpm --filter @scout/agent build",

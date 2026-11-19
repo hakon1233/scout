@@ -7,6 +7,11 @@ reader's interests and briefs, and it runs research through the reader's own `cl
 The web app never talks to anything except the companion. Both use **`@scout/core`**
 (`packages/core/`): the brief grammar and rules as pure TypeScript.
 
+The hosted plan (`docs/HOSTED-PLAN.md`) adds server-side code the web app never imports:
+`packages/research` (one interest's research, plus the shared Claude client and prices),
+`packages/hosted` (the setup chat), `packages/worker` (the run queue's Cloudflare
+Worker) and `supabase/` (schema, RLS, sign-up trigger and run queue in SQL).
+
 ```
 browser ──HTTP + pairing token──▶ companion (127.0.0.1:47821) ──stdin──▶ claude CLI
    ▲                                   │                                   (WebSearch,
@@ -93,6 +98,21 @@ price table also gives each turn's cost. Server only: the web app never imports 
   interests, to Haiku 5.5 as structured output; core's `planChatChanges` decides what
   lands; deletes, full rewrites and follows wait for a confirm of the stored proposal.
 
+### Run queue (`packages/worker/src`, `supabase/migrations/*_run_queue.sql`)
+
+Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
+
+- SQL owns every rule: `claim_runs` reaps stale runs, stops on the kill switch
+  (`settings.paused`) or the daily ceiling (`spend_today` against `daily_ceiling_usd`),
+  queues due scheduled interests, and claims a batch (public interests first).
+  `finish_run` records a result and its cost; a failed first attempt is queued again.
+  `request_run` is a reader's "run now", limited by `allowance()`.
+- `run-due.ts`: `runDue({queue, claude})`, one tick: claim, research each run with
+  `researchInterest`, finish each. Host-neutral; tests use a stub queue.
+- `supabase.ts`: the `RunQueue` adapter over PostgREST, and `requestRun` as the reader.
+- `http.ts`: `POST /runs {interestId}` with the reader's Supabase JWT; it only queues.
+- `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`.
+
 ### Web app (`src`)
 
 - `app/`: pages. `app/app/page.tsx` is the feed, `app/app/connect` is onboarding and
@@ -146,9 +166,11 @@ redirect URLs.
 ## Testing
 
 - `packages/core/test`: core's unit tests. No network, no filesystem.
-- `packages/hosted/test`: the hosted functions through their interface, with a stub
-  Claude client that answers with recorded responses (`test/fixtures`) and an
-  in-memory store. No network.
+- `packages/research/test`, `packages/hosted/test`, `packages/worker/test`: the hosted
+  code through its interfaces, with a stub Claude client that answers with recorded
+  responses and an in-memory store or queue. No network.
+- `supabase/tests`: pgTAP tests for RLS, quotas, the sign-up trigger and the run queue
+  (`pnpm test:rls`, needs Docker; not part of `pnpm check`).
 - `packages/agent/test`: the companion's unit and HTTP contract tests (`node:test`). They
   use a stub `claude`, a temporary state directory and port 0, so they need no network
   and no model quota. A guard makes any test that points at the real `~/.config/scout`
