@@ -1,7 +1,8 @@
 // The seams around the web app and @scout/core: the app imports shared code
 // only from @scout/core (never the companion's modules or the server-side
 // @scout/research), and the core stays pure, importing nothing outside its own
-// folder, so it is safe in a browser, in Node and in Deno.
+// folder, so it is safe in a browser, in Node and in Deno. Only lib/auth.ts
+// may import supabase-js: the Supabase client and session live there alone.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -34,6 +35,17 @@ test("the web app imports no companion or server-side module", () => {
         /@scout\/(agent|research)|packages\/(agent|core|research)/.test(spec),
       )
       .map((spec) => `${file}: ${spec}`),
+  );
+  assert.deepEqual(offenders, []);
+});
+
+test("only the auth module holds the Supabase client", () => {
+  const offenders = sourceFiles("src").flatMap((file) =>
+    file === path.join("src", "lib", "auth.ts")
+      ? []
+      : importsOf(file)
+          .filter((spec) => spec.startsWith("@supabase/"))
+          .map((spec) => `${file}: ${spec}`),
   );
   assert.deepEqual(offenders, []);
 });

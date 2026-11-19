@@ -88,6 +88,21 @@ it (`src/lib/boundaries.test.ts` checks this). Plain TypeScript with `fetch`.
   interest list, and the "your run failed" banner.
 - `lib/storage.ts`, `lib/safe-storage.ts`, `lib/likes.ts`: browser storage. Every write
   goes through `safe-storage`.
+- `lib/auth.ts`: hosted sign-in (Google or an email link) and the only place the
+  Supabase client and session live. Interface: `hostedAuth()` returns `currentUser`,
+  `signInWithGoogle`, `sendMagicLink`, `signOut`, `onAuthChange`, or null when the build
+  has no `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Every sign-in
+  comes back to `app/app/signin` (implicit flow: tokens in the URL fragment, read by the
+  client), so the static export needs no callback route. Errors reach the page as
+  plain sentences.
+
+### Hosted backend (`supabase/`)
+
+The hosted plan's schema, RLS and `allowance()` (`migrations/`), with pgTAP tests in
+`tests/` (`pnpm test:rls`, against `supabase start`). A trigger on `auth.users` creates
+each new account's profile row (free plan, UTC). `config.toml` turns on Google (client
+id and secret read from env by name) and the email link, and lists the sign-in page's
+redirect URLs.
 
 ## Invariants
 
@@ -109,6 +124,8 @@ it (`src/lib/boundaries.test.ts` checks this). Plain TypeScript with `fetch`.
   onboarding page.
 - No credentials live in this repository or pass through the companion. The `claude` CLI
   authenticates itself.
+- Only `src/lib/auth.ts` imports supabase-js (`src/lib/boundaries.test.ts`). The browser
+  gets the anon key only; RLS decides what it can read.
 
 ## Testing
 
@@ -117,7 +134,8 @@ it (`src/lib/boundaries.test.ts` checks this). Plain TypeScript with `fetch`.
   use a stub `claude`, a temporary state directory and port 0, so they need no network
   and no model quota. A guard makes any test that points at the real `~/.config/scout`
   throw.
-- `src/**/*.test.ts`: web app logic tests, with `fetch` stubbed.
+- `src/**/*.test.ts`: web app logic tests, with `fetch` stubbed. The auth module's tests
+  stub the Supabase auth client.
 - `e2e/`: Playwright against a real companion built from source, with a stub `claude`
   (`e2e/fixtures/stub-claude.mjs`) and a throwaway home directory.
 - `pnpm eval`: checks the prompts' rules against hand-written example outputs, good and
