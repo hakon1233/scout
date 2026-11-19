@@ -3,3 +3,6 @@ packages/agent/eval/cases/
 
 # Owned by pnpm.
 pnpm-lock.yaml
+
+# Agent worktrees: separate checkouts.
+.claude/
