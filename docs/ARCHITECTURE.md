@@ -66,6 +66,17 @@ The companion runs core's code from `dist/core`: its build compiles core there, 
 - `service.ts`, `cli.ts`, `static.ts`: the `scout-agent` command, the macOS launchd
   service and the static file server for the bundled web app.
 
+### Research (`packages/research/src`)
+
+Server-side only, for the hosted plan (`docs/HOSTED-PLAN.md`); the web app never imports
+it (`src/lib/boundaries.test.ts` checks this). Plain TypeScript with `fetch`.
+
+- `research-interest.ts`: `researchInterest(interest, {claude})`, one interest's research
+  as one Claude API call on Haiku with web search and web fetch. It returns the section,
+  its coverage and the cost. Prompt, freshness and coverage come from core.
+- `claude-client.ts`: the `ClaudeClient` seam, with a `fetch` adapter and a recorded-
+  response adapter for tests. `pricing.ts`: the price table.
+
 ### Web app (`src`)
 
 - `app/`: pages. `app/app/page.tsx` is the feed, `app/app/connect` is onboarding and

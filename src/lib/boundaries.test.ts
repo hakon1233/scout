@@ -1,7 +1,7 @@
 // The seams around the web app and @scout/core: the app imports shared code
-// only from @scout/core (never the companion's own modules), and the core
-// stays pure, importing nothing outside its own folder, so it is safe in a
-// browser, in Node and in Deno.
+// only from @scout/core (never the companion's modules or the server-side
+// @scout/research), and the core stays pure, importing nothing outside its own
+// folder, so it is safe in a browser, in Node and in Deno.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -27,10 +27,12 @@ function importsOf(file: string): string[] {
   );
 }
 
-test("the web app imports no companion module", () => {
+test("the web app imports no companion or server-side module", () => {
   const offenders = sourceFiles("src").flatMap((file) =>
     importsOf(file)
-      .filter((spec) => /@scout\/agent|packages\/(agent|core)/.test(spec))
+      .filter((spec) =>
+        /@scout\/(agent|research)|packages\/(agent|core|research)/.test(spec),
+      )
       .map((spec) => `${file}: ${spec}`),
   );
   assert.deepEqual(offenders, []);

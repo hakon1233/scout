@@ -1,0 +1,141 @@
+[
+  {
+    "id": "msg_rec_01",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-5-5",
+    "content": [
+      {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "rec-signature-1"
+      },
+      {
+        "type": "text",
+        "text": "I'll search for this week's news on open-source AI agents."
+      },
+      {
+        "type": "server_tool_use",
+        "id": "srvtoolu_rec_01",
+        "name": "web_search",
+        "input": {
+          "query": "open-source AI agent runtime release November 2026"
+        }
+      },
+      {
+        "type": "web_search_tool_result",
+        "tool_use_id": "srvtoolu_rec_01",
+        "content": [
+          {
+            "type": "web_search_result",
+            "url": "https://northwind.example/blog/runtime-3",
+            "title": "Agent runtime 3.0",
+            "encrypted_content": "rec-encrypted-1",
+            "page_age": "2 days ago"
+          },
+          {
+            "type": "web_search_result",
+            "url": "https://examplefoundation.org/news/trace-format-1-1",
+            "title": "Trace format 1.1",
+            "encrypted_content": "rec-encrypted-2",
+            "page_age": "November 12, 2026"
+          }
+        ]
+      },
+      {
+        "type": "server_tool_use",
+        "id": "srvtoolu_rec_02",
+        "name": "web_search",
+        "input": { "query": "agent evaluation survey maintainers 2026" }
+      },
+      {
+        "type": "web_search_tool_result",
+        "tool_use_id": "srvtoolu_rec_02",
+        "content": {
+          "type": "web_search_tool_result_error",
+          "error_code": "too_many_requests"
+        }
+      },
+      {
+        "type": "server_tool_use",
+        "id": "srvtoolu_rec_03",
+        "name": "web_fetch",
+        "input": { "url": "https://northwind.example/blog/runtime-3" }
+      }
+    ],
+    "stop_reason": "pause_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 5200,
+      "cache_creation_input_tokens": 3000,
+      "cache_read_input_tokens": 0,
+      "output_tokens": 900,
+      "server_tool_use": { "web_search_requests": 1, "web_fetch_requests": 0 }
+    }
+  },
+  {
+    "id": "msg_rec_02",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-5-5",
+    "content": [
+      {
+        "type": "web_fetch_tool_result",
+        "tool_use_id": "srvtoolu_rec_03",
+        "content": {
+          "type": "web_fetch_result",
+          "url": "https://northwind.example/blog/runtime-3",
+          "retrieved_at": "2026-11-20T09:14:02Z",
+          "content": {
+            "type": "document",
+            "source": {
+              "type": "text",
+              "media_type": "text/plain",
+              "data": "Agent runtime 3.0. Published 18 November 2026. ..."
+            },
+            "title": "Agent runtime 3.0"
+          }
+        }
+      },
+      {
+        "type": "text",
+        "text": "I have enough to write the section.\n\n"
+      },
+      {
+        "type": "text",
+        "text": "## Open-Source AI Agents\n\n- `2026-11-12` — The Example Foundation published version 1.1 of its shared trace format for agent runs.\n  [examplefoundation.org — Trace format 1.1](https://examplefoundation.org/news/trace-format-1-1)\n  > Version 1.1 of the vendor-neutral trace format adds cost and token fields to every model-call event.\n  >\n  > Each event now carries input, output and cached token counts, so a replayed run shows where its spend went step by step.\n  >\n  > Six agent frameworks emit the format today, up from four at the 1.0 release in September, the announcement says.\n  >\n  > The working group plans a 1.2 draft in January that records tool errors as their own event type.\n",
+        "citations": [
+          {
+            "type": "web_search_result_location",
+            "url": "https://examplefoundation.org/news/trace-format-1-1",
+            "title": "Trace format 1.1",
+            "encrypted_index": "rec-index-1",
+            "cited_text": "Version 1.1 adds cost and token fields to every model-call event."
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "text": "- `2026-11-18` — Northwind Labs released version 3 of its agent runtime with per-tool spending limits.\n  [northwind.example — Agent runtime 3.0](https://northwind.example/blog/runtime-3)\n  ![source image](https://northwind.example/img/runtime-3.png)\n  > Northwind Labs shipped version 3 of its open-source agent runtime, adding a spending limit to every tool.\n  >\n  > A tool's manifest now declares a maximum cost per call, and the runtime stops a run that would cross the limit instead of finishing it.\n  >\n  > The release notes say 9 of the 14 built-in tools ship with default limits, and the rest are marked free.\n  >\n  > Plugins written for version 2 keep working, but log a warning until their manifests declare a limit.\n",
+        "citations": [
+          {
+            "type": "web_search_result_location",
+            "url": "https://northwind.example/blog/runtime-3",
+            "title": "Agent runtime 3.0",
+            "encrypted_index": "rec-index-2",
+            "cited_text": "version 3 adds a spending limit to every tool"
+          }
+        ]
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 9000,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 3000,
+      "output_tokens": 2400,
+      "server_tool_use": { "web_search_requests": 0, "web_fetch_requests": 1 }
+    }
+  }
+]

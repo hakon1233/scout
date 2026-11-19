@@ -1,0 +1,22 @@
+{
+  "name": "@scout/research",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One interest's research through the Claude API (Haiku with server-side web search and fetch), for the hosted functions. Server-side only: the web app never imports it.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "tsx --conditions=source --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@scout/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "license": "MIT"
+}
