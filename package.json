@@ -26,7 +26,8 @@
     "deploy:agent": "node scripts/release-agent.mjs deploy",
     "check:tarball-dist": "node scripts/check-tarball-dist.mjs",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
-    "eval": "tsx packages/agent/eval/run.ts"
+    "eval": "tsx packages/agent/eval/run.ts",
+    "test:rls": "supabase db reset --local && supabase test db"
   },
   "dependencies": {
     "next": "16.3.8",

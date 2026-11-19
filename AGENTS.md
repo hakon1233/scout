@@ -20,6 +20,8 @@ code, tests and comments.
   change by hand.
 - `pnpm eval`: check the prompts' rules against hand-written example outputs after
   changing a prompt.
+- `pnpm test:rls`: the hosted schema's RLS and quota tests (`supabase/tests`). Needs
+  Docker and `supabase start`; resets the local database first. Not part of `pnpm check`.
 
 ## Rules
 
