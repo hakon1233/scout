@@ -3,7 +3,7 @@
 // for GET /v0/chat; appended once per turn.
 
 import path from "node:path";
-import type { ChatTurn } from "./contract.js";
+import type { ChatTurn } from "#core";
 import { atomicWriteFile, CONFIG_DIR, readJsonFile } from "./persistence.js";
 
 export function defaultChatTranscriptFile(stateFile?: string): string {

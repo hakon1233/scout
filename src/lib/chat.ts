@@ -15,7 +15,7 @@
 // for them are real controls, not dead ones.
 
 import { companionFetch, companionJson } from "./companion";
-import { PATHS, type ChatTurn } from "@scout/agent/contract";
+import { PATHS, type ChatTurn } from "@scout/core";
 
 const BUSY = "Scout is still working on your last message — give it a moment.";
 

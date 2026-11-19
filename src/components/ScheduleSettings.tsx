@@ -8,7 +8,7 @@ import {
   fetchSchedule,
   updateSchedule,
 } from "@/lib/companion";
-import type { ScheduleView } from "@scout/agent/contract";
+import type { ScheduleView } from "@scout/core";
 
 // Settings UI for the recurring schedule. Reads/writes the companion's
 // GET|PUT /v0/schedule contract: an enable toggle + time-of-day picker,

@@ -15,9 +15,10 @@ import {
 } from "@/lib/chat";
 import type {
   ChatChange,
+  Interest,
   PendingDelete,
   PendingRewrite,
-} from "@scout/agent/contract";
+} from "@scout/core";
 import {
   fetchCompanionInterestSet,
   type InterestDocMeta,
@@ -27,7 +28,6 @@ import {
 } from "@/lib/interest-docs";
 import { prefersReducedMotion } from "@/lib/motion";
 import { loadSettings, saveSettings } from "@/lib/storage";
-import type { Interest } from "@scout/agent/contract";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 import {

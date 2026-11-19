@@ -8,7 +8,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Interest } from "../src/contract.js";
+import type { Interest } from "#core";
 import { type Check, checkChatOutput, checkResearchOutput } from "./checks.js";
 
 const CASES_DIR = path.join(

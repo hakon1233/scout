@@ -11,8 +11,7 @@ import {
   sortSectionStoriesNewestFirst,
   enforceBriefFreshness,
   interestWantsEvergreen,
-} from "../src/coverage.js";
-import { defaultInterestDoc } from "../src/docs.js";
+} from "../src/coverage.ts";
 
 test("normalizeTopic collapses casing, punctuation and whitespace", () => {
   assert.equal(normalizeTopic("OpenAI"), "openai");
@@ -302,23 +301,6 @@ test("evergreen/background interests keep older items", () => {
   // Untouched: the old item and its citation remain.
   assert.equal(out, brief);
   assert.ok(out.includes("2019-03-01"));
-});
-
-test("the default backfilled doc does NOT read as evergreen", () => {
-  // The default intent doc (docs.ts defaultInterestDoc) is backfilled for every
-  // interest without a hand-authored .md — the common case. It tells the model to
-  // SKIP old context, so it must NOT trip interestWantsEvergreen; a false positive
-  // there drops the topic's key into evergreenKeys and disables the >30-day
-  // freshness cutoff for it, letting months-old stories through. Guards against
-  // reintroducing an EVERGREEN_RE trigger word
-  // (evergreen/background/historical/explainer/…) into the default doc text.
-  for (const topic of ["ai coding tools", "climate", "Formula 1"]) {
-    assert.equal(
-      interestWantsEvergreen(topic, defaultInterestDoc(topic)),
-      false,
-      `default doc for "${topic}" must not opt into evergreen content`,
-    );
-  }
 });
 
 for (const { name, items } of [

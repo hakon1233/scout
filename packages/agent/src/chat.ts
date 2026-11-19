@@ -23,7 +23,7 @@
 import type { spawn } from "node:child_process";
 import { USAGE_LIMIT_RE } from "./claude-runner.js";
 import { loadState, newChatTurnId, updateState, type State } from "./state.js";
-import type { ChatChange, ChatTurn } from "./contract.js";
+import type { ChatChange, ChatTurn } from "#core";
 import { writeInterestDoc } from "./docs.js";
 import { buildInterestSnapshots, chatComplete } from "./chat-model.js";
 import {

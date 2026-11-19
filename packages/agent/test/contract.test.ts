@@ -26,7 +26,7 @@ import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
 import { saveState, loadState, newPairingToken } from "../src/state.js";
-import type { Brief } from "../src/contract.js";
+import type { Brief } from "#core";
 import { startServer } from "../src/server.js";
 import { MAX_INTERESTS } from "../src/limits.js";
 

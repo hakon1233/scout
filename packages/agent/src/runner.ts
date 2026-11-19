@@ -28,7 +28,6 @@ import {
   updateState,
   type ScheduleConfig,
 } from "./state.js";
-import type { Brief, Interest } from "./contract.js";
 import { researchAndSynthesize } from "./research.js";
 import {
   computeCoverage,
@@ -38,7 +37,9 @@ import {
   enforceBriefFreshness,
   interestWantsEvergreen,
   normalizeTopic,
-} from "./coverage.js";
+  type Brief,
+  type Interest,
+} from "#core";
 import { ensureInterestDoc } from "./docs.js";
 
 export type RunDeps = {

@@ -9,7 +9,7 @@ import {
 } from "../state.js";
 import { isServiceInstalled } from "../service.js";
 import { json, jsonBodyParseError, parseJsonBody } from "../http-util.js";
-import type { ScheduleView } from "../contract.js";
+import type { ScheduleView } from "#core";
 import type { AuthedRequestContext, ServerContext } from "./types.js";
 
 function scheduleView(cfg: ScheduleConfig): ScheduleView {

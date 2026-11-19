@@ -15,7 +15,7 @@ import {
   updateState,
   type ScheduleConfig,
 } from "./state.js";
-import type { Brief } from "./contract.js";
+import type { Brief } from "#core";
 import {
   recordScheduledSkip,
   startRun,

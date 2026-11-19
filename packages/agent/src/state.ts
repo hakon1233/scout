@@ -6,12 +6,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import type {
-  Brief,
-  ChatTurn,
-  Interest,
-  ScheduleRunStatus,
-} from "./contract.js";
+import type { Brief, ChatTurn, Interest, ScheduleRunStatus } from "#core";
 import { CONFIG_DIR, atomicWriteFile, readJsonFile } from "./persistence.js";
 
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");

@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
 import { loadState, saveState, newPairingToken } from "../src/state.js";
-import type { Brief } from "../src/contract.js";
+import type { Brief } from "#core";
 import { startServer } from "../src/server.js";
 
 // A claude stub: each per-interest session emits that one topic's section.

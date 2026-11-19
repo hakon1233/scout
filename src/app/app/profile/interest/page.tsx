@@ -13,7 +13,7 @@ import {
   type InterestDocMeta,
 } from "@/lib/interest-docs";
 import { loadSettings } from "@/lib/storage";
-import type { Interest } from "@scout/agent/contract";
+import type { Interest } from "@scout/core";
 
 const MD = {
   h1: (p: React.HTMLAttributes<HTMLHeadingElement>) => (

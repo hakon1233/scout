@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { ChatChange, PendingRewrite } from "@scout/agent/contract";
+import type { ChatChange, PendingRewrite } from "@scout/core";
 import { lineDiff, type DiffLine } from "@/lib/chat-diff";
 
 // One inline action card under a Scout turn. It is the visible proof a turn
