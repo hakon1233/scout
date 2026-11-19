@@ -8,6 +8,7 @@ export type {
   ChatTurn,
   Interest,
   PendingDelete,
+  PendingFollow,
   PendingRewrite,
   ScheduleRunStatus,
   ScheduleView,
@@ -33,3 +34,16 @@ export {
 } from "./coverage.ts";
 export { canonicalUrl, parseBrief } from "./brief-document.ts";
 export { createWeeklyBriefFromHistory } from "./weekly.ts";
+export {
+  planChatChanges,
+  replayChanges,
+  type ChatChangeLimits,
+  type ChatChangePlan,
+  type InterestSnapshot,
+  type ProposedChange,
+} from "./chat-changes.ts";
+export {
+  buildChatPrompt,
+  parseChatOutput,
+  type ChatModelOutput,
+} from "./chat-prompt.ts";

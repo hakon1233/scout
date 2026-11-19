@@ -7,8 +7,12 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { applyChatChanges } from "../src/chat-changes.js";
-import { parseChatOutput } from "../src/chat-model.js";
-import { normalizeTopic, parseBrief, type Interest } from "#core";
+import {
+  normalizeTopic,
+  parseBrief,
+  parseChatOutput,
+  type Interest,
+} from "#core";
 
 export type Check = { name: string; pass: boolean; detail?: string };
 

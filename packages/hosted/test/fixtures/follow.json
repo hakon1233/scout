@@ -1,0 +1,29 @@
+{
+  "id": "msg_01followxxxxxxxxxxxxxx",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-haiku-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"reply\": \"There's already a curated \\\"AI policy\\\" — follow it? Confirm below.\", \"changes\": [{\"op\": \"follow\", \"interestId\": \"pub_ai_policy\"}]}",
+      "citations": null
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "container": null,
+  "usage": {
+    "input_tokens": 2150,
+    "output_tokens": 310,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": null,
+    "inference_geo": "us",
+    "output_tokens_details": {
+      "thinking_tokens": 0
+    },
+    "server_tool_use": null,
+    "service_tier": "standard"
+  }
+}

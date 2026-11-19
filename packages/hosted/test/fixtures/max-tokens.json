@@ -1,0 +1,29 @@
+{
+  "id": "msg_01maxtokensxxxxxxxxxxx",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-haiku-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"reply\": \"Here is a very long doc",
+      "citations": null
+    }
+  ],
+  "stop_reason": "max_tokens",
+  "stop_sequence": null,
+  "container": null,
+  "usage": {
+    "input_tokens": 2150,
+    "output_tokens": 8192,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": null,
+    "inference_geo": "us",
+    "output_tokens_details": {
+      "thinking_tokens": 0
+    },
+    "server_tool_use": null,
+    "service_tier": "standard"
+  }
+}

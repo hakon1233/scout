@@ -1,4 +1,5 @@
-// The seam between researchInterest and the Claude Messages API. Two adapters:
+// The seam between Scout's server code (researchInterest, the hosted chat, the
+// run queue's Worker) and the Claude Messages API. Two adapters:
 // anthropicClient (plain fetch, for the hosted functions) and recordedClient
 // (replays recorded responses, for tests). Host-neutral: fetch and AbortSignal
 // only, no Node, Deno or Supabase APIs.
@@ -12,7 +13,12 @@ export type MessagesRequest = {
   model: string;
   max_tokens: number;
   messages: Array<{ role: "user" | "assistant"; content: ContentBlock[] }>;
-  tools: ContentBlock[];
+  tools?: ContentBlock[];
+  // Effort and structured output (the hosted chat's JSON change set).
+  output_config?: {
+    effort?: "low" | "medium" | "high";
+    format?: { type: "json_schema"; schema: Record<string, unknown> };
+  };
 };
 
 export type Usage = {
@@ -32,8 +38,9 @@ export type MessagesResponse = {
   usage: Usage;
 };
 
-// One Messages API call. Throws on a transport or HTTP error; a tool error
-// inside a 200 is part of the response, not a throw.
+// One Messages API call. Throws on a transport or HTTP error (an HTTP error
+// carries its `status`); a tool error inside a 200 is part of the response,
+// not a throw.
 export interface ClaudeClient {
   createMessage(
     request: MessagesRequest,
@@ -76,7 +83,9 @@ export function anthropicClient(opts: {
         } catch {
           // Not JSON (a proxy's HTML page): keep the raw start.
         }
-        throw new Error(`Claude API ${res.status}: ${detail}`);
+        throw Object.assign(new Error(`Claude API ${res.status}: ${detail}`), {
+          status: res.status,
+        });
       }
       return JSON.parse(text) as MessagesResponse;
     },

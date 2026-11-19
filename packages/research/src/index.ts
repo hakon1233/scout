@@ -1,5 +1,5 @@
-// @scout/research: one interest's research through the Claude API, for the
-// hosted functions. Server-side only; the web app never imports it.
+// @scout/research: one interest's research through the Claude API, and the
+// Claude client seam and price table every hosted function shares. Server-side only; the web app never imports it.
 
 export {
   researchInterest,
@@ -14,4 +14,6 @@ export {
   type ClaudeClient,
   type MessagesRequest,
   type MessagesResponse,
+  type Usage,
 } from "./claude-client.ts";
+export { HAIKU_PRICES, responseCostUsd } from "./pricing.ts";
