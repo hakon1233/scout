@@ -153,7 +153,14 @@ enabled = true
 # in emails.
 site_url = "http://127.0.0.1:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# Scout sends every sign-in back to its sign-in page (src/lib/auth.ts): local dev
+# (`pnpm dev` or `pnpm start`) and the GitHub Pages preview. The hosted project's own
+# list is set in its dashboard (Authentication > URL Configuration).
+additional_redirect_urls = [
+  "http://127.0.0.1:3000/app/signin/",
+  "http://localhost:3000/app/signin/",
+  "https://hakon1233.github.io/scout/app/signin/",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -207,6 +214,7 @@ web3 = 30
 # secret = ""
 
 [auth.email]
+# Email sign-in is the magic link (signInWithOtp): the link confirms the address by design.
 # Allow/disallow new user signups via email to your project.
 enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
@@ -309,6 +317,19 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
+# Sign-in is Google or an email link (magic link); the web app offers no passwords.
+# The OAuth client lives in Google Cloud. Its authorised redirect URI is this
+# project's `<API URL>/auth/v1/callback`; locally http://127.0.0.1:54321/auth/v1/callback.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = ""
+url = ""
+skip_nonce_check = false
+email_optional = false
+
 [auth.external.apple]
 enabled = false
 client_id = ""

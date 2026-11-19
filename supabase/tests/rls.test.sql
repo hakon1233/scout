@@ -17,9 +17,9 @@ insert into auth.users (id, email, aud, role) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'anna@example.test', 'authenticated', 'authenticated'),
   ('bbbbbbbb-0000-0000-0000-000000000002', 'ben@example.test', 'authenticated', 'authenticated');
 
-insert into public.profiles (id, timezone) values
-  ('aaaaaaaa-0000-0000-0000-000000000001', 'Europe/Oslo'),
-  ('bbbbbbbb-0000-0000-0000-000000000002', 'UTC');
+-- Sign-up already made both profiles (free, UTC).
+update public.profiles set timezone = 'Europe/Oslo'
+where id = 'aaaaaaaa-0000-0000-0000-000000000001';
 
 insert into public.interests (id, owner_id, topic, doc, visibility, share_slug, cadence) values
   ('00000000-0000-0000-0000-0000000000a1', 'aaaaaaaa-0000-0000-0000-000000000001',

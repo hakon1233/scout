@@ -64,7 +64,7 @@ export function AppNav({
 // in the editorial UI, so it stays theme-adaptive (light/dark) and consistent
 // with the rest of the type. Doubles as the home link (back to the feed) from
 // any /app/* route.
-function ScoutWordmark() {
+export function ScoutWordmark() {
   return (
     <Link
       href="/app/"
