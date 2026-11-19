@@ -1,0 +1,20 @@
+# Scout's run queue Worker (Cloudflare Workers free plan). Not deployed from CI yet.
+#
+# Secrets, set once with `wrangler secret put <NAME>`, never written here:
+#   SUPABASE_SERVICE_ROLE_KEY  claims and finishes runs
+#   ANTHROPIC_API_KEY          the research calls
+name = "scout-runs"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+# One tick a minute. Each tick claims at most RUN_BATCH runs (see src/run-due.ts
+# for the free plan's limits).
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+SUPABASE_URL = "https://<project-ref>.supabase.co"
+# The publishable (anon) key: public by design, like the web app's.
+SUPABASE_ANON_KEY = "<anon key>"
+ALLOWED_ORIGIN = "https://hakon1233.github.io"
+RUN_BATCH = "2"

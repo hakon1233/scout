@@ -77,6 +77,21 @@ it (`src/lib/boundaries.test.ts` checks this). Plain TypeScript with `fetch`.
 - `claude-client.ts`: the `ClaudeClient` seam, with a `fetch` adapter and a recorded-
   response adapter for tests. `pricing.ts`: the price table.
 
+### Run queue (`packages/worker/src`, `supabase/migrations/*_run_queue.sql`)
+
+Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
+
+- SQL owns every rule: `claim_runs` reaps stale runs, stops on the kill switch
+  (`settings.paused`) or the daily ceiling (`spend_today` against `daily_ceiling_usd`),
+  queues due scheduled interests, and claims a batch (public interests first).
+  `finish_run` records a result and its cost; a failed first attempt is queued again.
+  `request_run` is a reader's "run now", limited by `allowance()`.
+- `run-due.ts`: `runDue({queue, claude})`, one tick: claim, research each run with
+  `researchInterest`, finish each. Host-neutral; tests use a stub queue.
+- `supabase.ts`: the `RunQueue` adapter over PostgREST, and `requestRun` as the reader.
+- `http.ts`: `POST /runs {interestId}` with the reader's Supabase JWT; it only queues.
+- `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`.
+
 ### Web app (`src`)
 
 - `app/`: pages. `app/app/page.tsx` is the feed, `app/app/connect` is onboarding and

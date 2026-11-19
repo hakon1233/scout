@@ -96,10 +96,10 @@ select ok(
   not exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
-      and p.proname not in ('allowance', 'is_time_zone')
       and (has_function_privilege('anon', p.oid, 'execute')
-           or has_function_privilege('authenticated', p.oid, 'execute'))),
-  'clients may call only allowance and is_time_zone');
+           or (p.proname not in ('allowance', 'is_time_zone', 'request_run')
+               and has_function_privilege('authenticated', p.oid, 'execute')))),
+  'anon may call nothing; signed-in readers only allowance, is_time_zone and request_run');
 
 -- ---------------------------------------------------------------------------
 -- Ben, who follows nothing yet
