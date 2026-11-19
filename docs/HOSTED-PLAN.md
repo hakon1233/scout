@@ -292,3 +292,4 @@ output quality on Haiku 5.5 and the cost per run. Both are measured in task 4, b
 - Sign-in: Google plus email link. Apple later.
 - Public brief page (readable without sign-in, "Make your own brief" button) is in Phase 1; see docs/MARKETING.md. Signed-out visitors need read access to public interests' latest runs.
 - Branches: `main` is the backup of the local version; hosted work lives on `ideas`, later `development` and `production`.
+- Hosting (20 Nov, replaces "Supabase Pro from day one"): Supabase Free for auth and the database, plus one Cloudflare Worker (free plan) that runs research and chat. A Worker cron run may last 15 min; Supabase Functions stop at 150 s (Free) / 400 s (Pro). Move to Workers Paid ($5) if the 10 ms CPU limit bites, and to Supabase Pro once people pay. Server modules stay host-neutral, so the runner can move.
