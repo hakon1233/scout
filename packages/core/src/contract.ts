@@ -84,6 +84,13 @@ export type PendingRewrite = {
   doc: string;
 };
 
+// A public interest a turn offered to follow instead of creating a near copy.
+// It waits for the reader's confirm. Hosted chat only.
+export type PendingFollow = {
+  interestId: string;
+  topic: string;
+};
+
 // One chat turn. Kicked with POST /v0/chat and polled with GET /v0/chat, like
 // a brief run. A `ready` turn's `changes` are already on disk.
 export type ChatTurn = {
@@ -100,6 +107,7 @@ export type ChatTurn = {
   pending_deletes?: PendingDelete[];
   pending_delete?: PendingDelete;
   pending_rewrite?: PendingRewrite;
+  pending_follows?: PendingFollow[];
   error_msg?: string;
 };
 

@@ -37,6 +37,9 @@ as `@scout/core`, the companion as `#core`.
 - `brief-document.ts`: the brief's markdown grammar, read side (topics, stories,
   citations), used by the web app's feed.
 - `weekly.ts`: the weekly digest from the last seven days of daily briefs.
+- `chat-prompt.ts`, `chat-changes.ts`: the chat prompt and its output parser, and
+  `planChatChanges`, the rules for what of a model's change set lands, waits for a
+  confirm or is dropped. The companion and the hosted chat both use them.
 
 The companion runs core's code from `dist/core`: its build compiles core there, and
 `#core` in its `package.json` points at that copy. Its tests and `pnpm eval` run with the
@@ -55,8 +58,8 @@ The companion runs core's code from `dist/core`: its build compiles core there, 
   session with core's research prompt. It then assembles the sections with core's
   coverage rules and saves the brief.
 - `weekly.ts`: saves core's weekly digest into the brief history.
-- `chat.ts` (turn lifecycle), `chat-model.ts` (prompt and output parsing),
-  `chat-changes.ts` (the applier that validates what the model proposed),
+- `chat.ts` (turn lifecycle), `chat-model.ts` (core's prompt through `claude`),
+  `chat-changes.ts` (core's change rules, then the doc writes),
   `chat-transcript.ts`: the chat that edits interests and intent docs.
 - `state.ts`, `persistence.ts`, `docs.ts`: storage. `updateState` is the only writer of
   `state.json`: one queue per file, so writers inside the companion process never lose
@@ -65,6 +68,17 @@ The companion runs core's code from `dist/core`: its build compiles core there, 
 - `scheduler.ts`: the daily run, inside the companion process.
 - `service.ts`, `cli.ts`, `static.ts`: the `scout-agent` command, the macOS launchd
   service and the static file server for the bundled web app.
+
+### Hosted functions (`packages/hosted/src`)
+
+Host-neutral logic of the hosted version's functions (see `docs/HOSTED-PLAN.md`): no
+Supabase or Deno code. Each function injects its Claude client (`new Anthropic()`, or a
+stub in tests) and its store. Server only: the web app never imports it.
+
+- `chat.ts`: `createChat({claude, store})` gives `turn(userId, message)` and
+  `confirm(userId, action)`. A turn sends core's chat prompt, with matching public
+  interests, to Haiku 5.5 as structured output; core's `planChatChanges` decides what
+  lands; deletes, full rewrites and follows wait for a confirm of the stored proposal.
 
 ### Web app (`src`)
 
@@ -102,6 +116,9 @@ The companion runs core's code from `dist/core`: its build compiles core there, 
 ## Testing
 
 - `packages/core/test`: core's unit tests. No network, no filesystem.
+- `packages/hosted/test`: the hosted functions through their interface, with a stub
+  Claude client that answers with recorded responses (`test/fixtures`) and an
+  in-memory store. No network.
 - `packages/agent/test`: the companion's unit and HTTP contract tests (`node:test`). They
   use a stub `claude`, a temporary state directory and port 0, so they need no network
   and no model quota. A guard makes any test that points at the real `~/.config/scout`
