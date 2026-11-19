@@ -77,7 +77,7 @@ test("a tick researches each claimed run and records its section and cost", asyn
   assert.ok(outcome.costUsd > 0.02, "the searches are priced in");
   assert.equal(outcome.error, undefined);
   // The plan's searches_per_run caps the search tool.
-  const search = claude.requests[0].tools.find((t) => t.name === "web_search");
+  const search = claude.requests[0].tools?.find((t) => t.name === "web_search");
   assert.equal(search?.max_uses, 3);
 });
 

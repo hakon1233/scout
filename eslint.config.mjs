@@ -28,6 +28,8 @@ const eslintConfig = defineConfig([
     "e2e/.artifact/**",
     "packages/agent/webroot/**",
     "packages/agent/dist/**",
+    // Agent worktrees: other checkouts, with their own builds.
+    ".claude/worktrees/**",
   ]),
 ]);
 
