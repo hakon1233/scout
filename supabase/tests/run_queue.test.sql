@@ -1,5 +1,5 @@
 -- Run queue tests: due times, claiming, the ceiling, the kill switch, retries,
--- the reaper and "run now". Run with `pnpm test:rls` against `supabase start`.
+-- the reaper and "run now". Per-reader limits are in limits.test.sql. Run with `pnpm test:rls` against `supabase start`.
 --
 -- Ticks pass an explicit p_now (Friday 20 Nov 2026, 12:00 UTC; 13:00 in Oslo),
 -- so due times do not depend on the clock. Everything rolls back at the end.
@@ -21,8 +21,9 @@ insert into auth.users (id, email, aud, role) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'anna@example.test', 'authenticated', 'authenticated'),
   ('bbbbbbbb-0000-0000-0000-000000000002', 'ben@example.test', 'authenticated', 'authenticated');
 
--- Sign-up already made both profiles (free, UTC).
-update public.profiles set timezone = 'Europe/Oslo'
+-- Sign-up already made both profiles (free, UTC). Anna is on Plus: her two
+-- daily interests (one public, which counts like any other) fit its quota.
+update public.profiles set timezone = 'Europe/Oslo', plan = 'plus'
 where id = 'aaaaaaaa-0000-0000-0000-000000000001';
 
 insert into public.interests
@@ -30,9 +31,9 @@ insert into public.interests
   -- Due: 07:00 Oslo today = 06:00 UTC.
   ('00000000-0000-0000-0000-0000000000d1', 'aaaaaaaa-0000-0000-0000-000000000001',
    'Anna daily', 'daily', '07:00', 1, 'private', '2026-11-01'),
-  -- Due, and public, so claimed first.
+  -- Due at 12:30 Oslo = 11:30 UTC; public gets no priority, so claimed last.
   ('00000000-0000-0000-0000-0000000000a3', 'aaaaaaaa-0000-0000-0000-000000000001',
-   'House public', 'daily', '08:00', 1, 'public', '2026-11-01'),
+   'House public', 'daily', '12:30', 1, 'public', '2026-11-01'),
   -- Not due: Monday's slot already has a run.
   ('00000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-0000-0000-0000-000000000001',
    'Anna weekly', 'weekly', '07:00', 1, 'private', '2026-11-01'),
@@ -49,9 +50,9 @@ insert into public.interests
   ('00000000-0000-0000-0000-0000000000b3', 'bbbbbbbb-0000-0000-0000-000000000002',
    'Ben new weekly', 'weekly', '09:00', 5, 'private', '2026-11-20 10:00+00');
 
-insert into public.runs (interest_id, status, scheduled_for, started_at, finished_at) values
-  ('00000000-0000-0000-0000-0000000000a2', 'ready', '2026-11-16 06:00+00', '2026-11-16 06:00+00', '2026-11-16 06:02+00'),
-  ('00000000-0000-0000-0000-0000000000b1', 'ready', '2026-11-19 14:00+00', '2026-11-19 14:00+00', '2026-11-19 14:02+00');
+insert into public.runs (interest_id, status, scheduled_for, started_at, finished_at, cost_usd) values
+  ('00000000-0000-0000-0000-0000000000a2', 'ready', '2026-11-16 06:00+00', '2026-11-16 06:00+00', '2026-11-16 06:02+00', 0),
+  ('00000000-0000-0000-0000-0000000000b1', 'ready', '2026-11-19 14:00+00', '2026-11-19 14:00+00', '2026-11-19 14:02+00', 0);
 
 create temp table tick (run_id uuid, topic text, doc text, searches_per_run integer);
 
@@ -85,10 +86,11 @@ update public.settings set paused = false;
 
 insert into public.chat_turns (user_id, message, cost_usd, created_at) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'expensive', 10.00, '2026-11-20 11:00+00');
-select is(public.spend_today('2026-11-20 12:00+00') - current_setting('scout.spend_noon')::numeric, 10.00::numeric, 'chat cost counts today');
+select is(public.spend_today('2026-11-20 12:00+00') - current_setting('scout.spend_noon')::numeric, 10.00::numeric, 'chat cost counts for 24 hours');
 select is((select count(*)::int from public.claim_runs(10, '2026-11-20 12:00+00')), 0,
   'ceiling reached: no runs claimed');
-select ok(public.spending_open('2026-11-21 12:00+00'), 'the ceiling resets on the next UTC day');
+select ok(not public.spending_open('2026-11-21 10:59+00'), 'the ceiling holds for 24 hours');
+select ok(public.spending_open('2026-11-21 11:01+00'), 'and then rolls off');
 delete from public.chat_turns where user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
 
 -- ---------------------------------------------------------------------------
@@ -96,8 +98,8 @@ delete from public.chat_turns where user_id = 'aaaaaaaa-0000-0000-0000-000000000
 -- ---------------------------------------------------------------------------
 
 insert into tick select * from public.claim_runs(2, '2026-11-20 12:00+00');
-select ok(exists(select 1 from tick where topic = 'House public'),
-  'public interests are claimed first');
+select results_eq('select topic from tick order by topic', array['Anna daily', 'Ben weekly'],
+  'the earliest slots are claimed first; public gets no priority');
 select is((select count(*)::int from tick), 2, 'a tick claims at most its batch');
 select is((select searches_per_run from tick limit 1), 5, 'searches come from the owner''s plan');
 select results_eq(
@@ -126,7 +128,9 @@ select is(
   (select status || ' ' || cost_usd || ' ' || searches from public.runs
    where interest_id = '00000000-0000-0000-0000-0000000000a3' and section_md is not null),
   'ready 0.0600 4', 'a ready run keeps its cost and searches');
-select is(public.spend_today('2026-11-20 12:04+00') - current_setting('scout.spend_1204')::numeric, 0.06::numeric, 'run cost counts today');
+-- House public cost 0.06; Anna daily and Ben weekly are running with no cost yet.
+select is(public.spend_today('2026-11-20 12:04+00') -current_setting('scout.spend_1204')::numeric, 0.26::numeric,
+  'run costs count for 24 hours; a claimed run with no cost yet counts $0.10');
 
 -- Ben weekly fails once: queued again; then fails for good with a notification.
 select ok(public.finish_run(

@@ -1,7 +1,7 @@
 // The Supabase side of the run queue, over PostgREST with plain fetch (no
 // supabase-js: less to bundle and less CPU per tick). Host-neutral.
 
-import type { PushStore, PushTarget } from "./push.ts";
+import type { OutboxPush, PushStore } from "./push.ts";
 import type { ClaimedRun, RunOutcome, RunQueue } from "./run-due.ts";
 
 type Fetch = typeof fetch;
@@ -53,8 +53,8 @@ export function supabaseQueue(opts: {
   };
 }
 
-// The service-role push store: push_targets, and deleting gone devices
-// (supabase/migrations/*_push.sql).
+// The service-role push store: claim_outbox, and deleting gone devices
+// (supabase/migrations/*_push_outbox.sql).
 export function supabasePushStore(opts: {
   url: string;
   serviceKey: string;
@@ -64,10 +64,10 @@ export function supabasePushStore(opts: {
   const rpc = rpcCaller(opts.url, doFetch);
   const auth = { apikey: opts.serviceKey, bearer: opts.serviceKey };
   return {
-    async targets(runId) {
+    async claim(limit) {
       return (
-        ((await rpc("push_targets", { p_run: runId }, auth)) as
-          | PushTarget[]
+        ((await rpc("claim_outbox", { p_limit: limit }, auth)) as
+          | OutboxPush[]
           | null) ?? []
       );
     },
@@ -90,6 +90,25 @@ export function supabasePushStore(opts: {
       if (!res.ok) throw new Error(`push_subscriptions delete: ${res.status}`);
     },
   };
+}
+
+// The daily job (the "17 3 * * *" cron): delete runs over 30 days old (each
+// interest keeps its latest brief) and stale outbox rows; on Mondays, queue
+// the weekly digest pushes.
+export async function dailyJobs(opts: {
+  url: string;
+  serviceKey: string;
+  now?: Date;
+  fetch?: Fetch;
+}): Promise<{ runsDeleted: number; weeklyQueued: number }> {
+  const rpc = rpcCaller(opts.url, opts.fetch);
+  const auth = { apikey: opts.serviceKey, bearer: opts.serviceKey };
+  const runsDeleted = (await rpc("cleanup_runs", {}, auth)) as number;
+  const monday = (opts.now ?? new Date()).getUTCDay() === 1;
+  const weeklyQueued = monday
+    ? ((await rpc("queue_weekly_pushes", {}, auth)) as number)
+    : 0;
+  return { runsDeleted, weeklyQueued };
 }
 
 export class RpcError extends Error {

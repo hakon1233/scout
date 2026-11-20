@@ -1,16 +1,17 @@
-// "Your brief is ready" pushes through their interface: the notifier over a
-// stub store and a stub fetch that plays the push services, and the Supabase
-// push store over a stub fetch. No network, no database.
+// Pushes from the outbox through their interface: sendOutbox over a stub store
+// and a stub fetch that plays the push services, and the Supabase push store
+// over a stub fetch. No network, no database.
 
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  briefReadyNotifier,
   briefReadyPayload,
+  sendOutbox,
+  weeklyPayload,
+  type OutboxPush,
   type PushStore,
-  type PushTarget,
 } from "../src/push.ts";
-import { supabasePushStore } from "../src/supabase.ts";
+import { dailyJobs, supabasePushStore } from "../src/supabase.ts";
 
 const b64url = (bytes: ArrayBuffer | Uint8Array) =>
   Buffer.from(bytes as ArrayBuffer).toString("base64url");
@@ -38,19 +39,19 @@ async function keys() {
   };
 }
 
-function stubStore(targets: PushTarget[]) {
-  const asked: string[] = [];
+function stubStore(items: OutboxPush[]) {
+  const claimed: number[] = [];
   const dropped: string[][] = [];
   const store: PushStore = {
-    async targets(runId) {
-      asked.push(runId);
-      return targets;
+    async claim(limit) {
+      claimed.push(limit);
+      return items.slice(0, limit);
     },
     async drop(endpoints) {
       dropped.push(endpoints);
     },
   };
-  return { store, asked, dropped };
+  return { store, claimed, dropped };
 }
 
 // Answers each push with the status its endpoint names (…/gone-410 → 410).
@@ -69,33 +70,38 @@ function pushServices() {
   return { fetch, sent };
 }
 
-const target = (
+const ready = (
   k: Awaited<ReturnType<typeof keys>>,
   endpoint: string,
-): PushTarget => ({
+): OutboxPush => ({
   endpoint,
   p256dh: k.p256dh,
   auth: k.auth,
-  topic: "Trondheim events",
+  kind: "push",
+  payload: { run_id: "run-1", topic: "Trondheim events" },
 });
 
-test("a ready run's readers each get one encrypted push, signed with the VAPID key", async () => {
+test("each queued push goes out encrypted, signed with the VAPID key", async () => {
   const k = await keys();
-  const { store, asked } = stubStore([
-    target(k, "https://push.example.test/hana"),
-    target(k, "https://push.example.test/ben"),
+  const { store, claimed } = stubStore([
+    ready(k, "https://push.example.test/hana"),
+    {
+      ...ready(k, "https://push.example.test/ben"),
+      kind: "weekly",
+      payload: { count: 1, topics: ["Oslo jazz"], popular: [] },
+    },
   ]);
   const { fetch, sent } = pushServices();
-  const notify = briefReadyNotifier({
+  const n = await sendOutbox({
     store,
     vapid: k.vapid,
     subject: "https://scout.example.test",
+    budget: 39,
     fetch,
   });
 
-  await notify("run-1");
-
-  assert.deepEqual(asked, ["run-1"]);
+  assert.equal(n, 2);
+  assert.deepEqual(claimed, [37]);
   assert.deepEqual(sent.map((s) => s.url).sort(), [
     "https://push.example.test/ben",
     "https://push.example.test/hana",
@@ -120,25 +126,43 @@ test("the push says the brief is ready and names the topic", () => {
   });
 });
 
+test("the weekly push names the reader's topics and what is popular", () => {
+  assert.deepEqual(
+    weeklyPayload({
+      count: 7,
+      topics: ["A", "B", "C", "D", "E"],
+      popular: [{ title: "Oslo jazz" }, { title: "Fjord kayaking" }],
+    }),
+    {
+      title: "New this week in your topics",
+      body: "New stories on A, B, C, D, E and 2 more. Popular now: Oslo jazz, Fjord kayaking.",
+    },
+  );
+  assert.equal(
+    weeklyPayload({ count: 1, topics: ["A"], popular: [] }).body,
+    "New stories on A.",
+  );
+});
+
 test("a device the push service no longer knows (404, 410) is deleted; other failures are left alone", async () => {
   const k = await keys();
   const { store, dropped } = stubStore([
-    target(k, "https://push.example.test/ok"),
-    target(k, "https://push.example.test/gone-410"),
-    target(k, "https://push.example.test/unknown-404"),
-    target(k, "https://push.example.test/busy-429"),
-    target(k, "https://push.example.test/down-599"),
+    ready(k, "https://push.example.test/ok"),
+    ready(k, "https://push.example.test/gone-410"),
+    ready(k, "https://push.example.test/unknown-404"),
+    ready(k, "https://push.example.test/busy-429"),
+    ready(k, "https://push.example.test/down-599"),
   ]);
   const { fetch } = pushServices();
-  const notify = briefReadyNotifier({
+  const n = await sendOutbox({
     store,
     vapid: k.vapid,
     subject: "https://scout.example.test",
+    budget: 39,
     fetch,
   });
 
-  await notify("run-1");
-
+  assert.equal(n, 1);
   assert.deepEqual(
     dropped.map((d) => [...d].sort()),
     [
@@ -150,15 +174,16 @@ test("a device the push service no longer knows (404, 410) is deleted; other fai
   );
 });
 
-test("no readers to tell means no pushes and no deletes", async () => {
+test("an empty outbox means no pushes and no deletes", async () => {
   const { store, dropped } = stubStore([]);
   const { fetch, sent } = pushServices();
-  await briefReadyNotifier({
+  await sendOutbox({
     store,
     vapid: { publicKey: "", privateKey: "" },
     subject: "https://scout.example.test",
+    budget: 39,
     fetch,
-  })("run-1");
+  });
   assert.equal(sent.length, 0);
   assert.equal(dropped.length, 0);
 });
@@ -166,25 +191,47 @@ test("no readers to tell means no pushes and no deletes", async () => {
 test("pushes stay within the tick's subrequest budget", async () => {
   const k = await keys();
   const many = Array.from({ length: 10 }, (_, n) =>
-    target(k, `https://push.example.test/d${n}`),
+    ready(k, `https://push.example.test/d${n}`),
   );
-  const { store } = stubStore(many);
+  const { store, claimed } = stubStore(many);
   const { fetch, sent } = pushServices();
-  const notify = briefReadyNotifier({
+  const opts = {
     store,
     vapid: k.vapid,
     subject: "https://scout.example.test",
     fetch,
-    budget: 5,
-  });
+  };
 
-  await notify("run-1"); // 1 for the targets, 4 pushes
-  await notify("run-2"); // nothing left
-
+  await sendOutbox({ ...opts, budget: 6 }); // 1 claim, 4 pushes, 1 delete
   assert.equal(sent.length, 4);
+  await sendOutbox({ ...opts, budget: 2 }); // no room for a push
+  assert.deepEqual(claimed, [4]);
 });
 
-test("the Supabase push store lists targets and deletes gone devices with the service key", async () => {
+test("the daily job cleans up every day and queues the weekly push on Mondays", async () => {
+  const called: string[] = [];
+  const fetch = (async (url: string) => {
+    called.push(new URL(url).pathname);
+    return new Response("3");
+  }) as unknown as typeof globalThis.fetch;
+  const opts = { url: "https://ref.supabase.test", serviceKey: "k", fetch };
+
+  assert.deepEqual(
+    await dailyJobs({ ...opts, now: new Date("2026-11-24T03:17:00Z") }),
+    { runsDeleted: 3, weeklyQueued: 0 },
+  );
+  assert.deepEqual(
+    await dailyJobs({ ...opts, now: new Date("2026-11-23T03:17:00Z") }),
+    { runsDeleted: 3, weeklyQueued: 3 },
+  );
+  assert.deepEqual(called, [
+    "/rest/v1/rpc/cleanup_runs",
+    "/rest/v1/rpc/cleanup_runs",
+    "/rest/v1/rpc/queue_weekly_pushes",
+  ]);
+});
+
+test("the Supabase push store claims the outbox and deletes gone devices with the service key", async () => {
   const calls: { method: string; url: string; headers: Headers }[] = [];
   const fetch = (async (url: string, init: RequestInit) => {
     calls.push({
@@ -192,10 +239,16 @@ test("the Supabase push store lists targets and deletes gone devices with the se
       url,
       headers: new Headers(init.headers),
     });
-    return url.includes("/rpc/push_targets")
+    return url.includes("/rpc/claim_outbox")
       ? new Response(
           JSON.stringify([
-            { endpoint: "https://e/1", p256dh: "p", auth: "a", topic: "T" },
+            {
+              endpoint: "https://e/1",
+              p256dh: "p",
+              auth: "a",
+              kind: "push",
+              payload: { run_id: "r", topic: "T" },
+            },
           ]),
         )
       : new Response(null, { status: 204 });
@@ -206,14 +259,20 @@ test("the Supabase push store lists targets and deletes gone devices with the se
     fetch,
   });
 
-  assert.deepEqual(await store.targets("run-1"), [
-    { endpoint: "https://e/1", p256dh: "p", auth: "a", topic: "T" },
+  assert.deepEqual(await store.claim(5), [
+    {
+      endpoint: "https://e/1",
+      p256dh: "p",
+      auth: "a",
+      kind: "push",
+      payload: { run_id: "r", topic: "T" },
+    },
   ]);
   await store.drop(["https://e/1,x", 'https://e/"2"']);
 
   assert.equal(
     calls[0].url,
-    "https://ref.supabase.test/rest/v1/rpc/push_targets",
+    "https://ref.supabase.test/rest/v1/rpc/claim_outbox",
   );
   assert.equal(calls[0].headers.get("authorization"), "Bearer service-key");
   assert.equal(calls[1].method, "DELETE");

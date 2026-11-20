@@ -19,6 +19,10 @@ export function quotaMessage(err: {
       return `Your plan has room for ${plural(limit, "interest")}, and they're in use. Delete one first.`;
     case "max_doc_chars":
       return "That interest's description is too long for your plan.";
+    case "max_public_interests":
+      return `Your plan has room for ${plural(limit, "public interest")}, and they're in use. Make one shared or private first.`;
+    case "spend_per_day_usd":
+      return "You have reached today's spending limit. Try again tomorrow.";
     default:
       return null;
   }

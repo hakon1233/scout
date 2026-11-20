@@ -31,7 +31,7 @@ insert into public.interests (id, owner_id, topic, doc, visibility, share_slug, 
   ('00000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-0000-0000-0000-000000000001',
    'Anna shared', 'shared doc', 'shared', 'shared-slug-aaaaaaaaaaaaaaaa', 'off'),
   ('00000000-0000-0000-0000-0000000000a3', 'aaaaaaaa-0000-0000-0000-000000000001',
-   'House public', 'public doc', 'public', 'public-slug-aaaaaaaaaaaaaaaa', 'daily'),
+   'House public', 'public doc', 'public', 'public-slug-aaaaaaaaaaaaaaaa', 'off'),
   ('00000000-0000-0000-0000-0000000000a4', 'aaaaaaaa-0000-0000-0000-000000000001',
    'Deleted public', 'gone', 'public', 'public-slug-deleted-aaaaaaaa', 'off');
 update public.interests set deleted_at = now() where id = '00000000-0000-0000-0000-0000000000a4';
@@ -72,14 +72,20 @@ select is((select count(*)::int from public.settings), 1, 'settings has one row'
 set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
+select throws_ok('select * from public.interests', '42501', null,
+  'anon cannot read the interests table');
+select throws_ok('select * from public.runs', '42501', null, 'anon cannot read the runs table');
 select results_eq(
-  'select topic from public.interests where id::text like ''00000000-%'' order by topic',
+  $$select c ->> 'title' from public.public_topics() c where c ->> 'id' like '00000000-%'$$,
   array['House public'],
-  'anon reads only live public interests');
+  'anon lists only live public interests, through public_topics');
 select results_eq(
-  'select section_md from public.runs where interest_id::text like ''00000000-%'' order by section_md',
+  $$select b ->> 'section_md' from public.public_topics() c, jsonb_array_elements(c -> 'briefs') b
+    where c ->> 'id' like '00000000-%'$$,
   array['public section'],
-  'anon reads only runs of live public interests');
+  'with only their ready briefs');
+select ok(not exists (select 1 from public.public_topics() c where c ? 'doc' or c ? 'topic'),
+  'the intent doc is never public');
 select throws_ok('select * from public.profiles', '42501', null, 'anon cannot read profiles');
 select throws_ok('select * from public.follows', '42501', null, 'anon cannot read follows');
 select throws_ok('select * from public.chat_turns', '42501', null, 'anon cannot read chat turns');
@@ -100,14 +106,15 @@ select ok(
   not exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
-      and ((p.proname <> 'interest_by_slug'
+      and ((p.proname not in ('interest_by_slug', 'public_topics', 'interest_is_listed')
             and has_function_privilege('anon', p.oid, 'execute'))
            or (p.proname not in ('allowance', 'is_time_zone', 'request_run',
-                                 'set_visibility', 'follow', 'interest_by_slug', 'host_copy',
-                                 'save_push_subscription')
+                                 'set_sharing', 'follow', 'interest_by_slug', 'host_copy',
+                                 'public_topics', 'interest_is_listed', 'hide_interest',
+                                 'save_push_subscription', 'set_topic_push', 'set_timezone',
+                                 'default_run_at')
                and has_function_privilege('authenticated', p.oid, 'execute')))),
-  'anon may call only interest_by_slug; signed-in readers only allowance, is_time_zone, '
-  'request_run, the sharing calls and save_push_subscription');
+  'anon may call only the public reads; signed-in readers only their own calls');
 
 -- ---------------------------------------------------------------------------
 -- Ben, who follows nothing yet
@@ -119,12 +126,12 @@ select set_config('request.jwt.claims',
 
 select results_eq(
   'select topic from public.interests where id::text like ''00000000-%'' order by topic',
-  array['House public'],
-  'Ben sees only the public interest before following');
+  array[]::text[],
+  'Ben reads no one else''s interest from the table before following');
 select results_eq(
   'select section_md from public.runs where interest_id::text like ''00000000-%'' order by section_md',
-  array['public section'],
-  'Ben sees only public runs before following');
+  array[]::text[],
+  'Ben reads no one else''s runs before following');
 select results_eq(
   'select id::text from public.profiles',
   array['bbbbbbbb-0000-0000-0000-000000000002'],
@@ -137,7 +144,7 @@ select results_eq(
   'select kind from public.notifications',
   array['over_quota'],
   'Ben reads only his own notifications');
-select is((select count(*)::int from public.plans), 1, 'Ben reads the plans');
+select is((select count(*)::int from public.plans where id in ('free', 'plus')), 2, 'Ben reads the plans');
 select throws_ok('select * from public.settings', '42501', null, 'Ben cannot read settings');
 
 -- Writes Ben must not make.
@@ -180,10 +187,20 @@ select throws_ok(
   'Ben cannot read Anna''s allowance');
 
 -- Allowed for Ben.
-select lives_ok($$update public.profiles set timezone = 'America/New_York'$$,
-  'Ben changes his own time zone');
-select throws_ok($$update public.profiles set timezone = 'Mars/Olympus'$$, '23514', null,
+select throws_ok($$update public.profiles set timezone = 'America/New_York'$$, '42501', null,
+  'the time zone has no column grant: set_timezone changes it');
+select is(public.set_timezone('Europe/Oslo', true), 'Europe/Oslo',
+  'sign-up sets the time zone once from the browser');
+select is(public.set_timezone('Asia/Tokyo', true), 'Europe/Oslo',
+  'a later first-time call changes nothing');
+select is(public.set_timezone('America/New_York'), 'America/New_York',
+  'Settings changes the time zone');
+select throws_ok($$select public.set_timezone('Mars/Olympus')$$, '22023', null,
   'an unknown time zone is refused');
+select lives_ok($$update public.profiles set display_name = 'Ben B'$$,
+  'Ben sets his display name');
+select throws_ok($$update public.profiles set display_name = 'Scout team'$$, '23514', null,
+  'a display name may not pose as Scout');
 select lives_ok(
   $$update public.notifications set read_at = now()
     where id = '00000000-0000-0000-0000-0000000000f2'$$,
@@ -213,11 +230,11 @@ select set_config('request.jwt.claims',
 
 select results_eq(
   'select topic from public.interests where id::text like ''00000000-%'' order by topic',
-  array['Anna shared', 'House public'],
+  array['Anna shared'],
   'Ben reads the shared interest he follows, never a private one even with a follow row');
 select results_eq(
   'select section_md from public.runs where interest_id::text like ''00000000-%'' order by section_md',
-  array['public section', 'shared section'],
+  array['shared section'],
   'Ben reads runs of the shared interest he follows');
 update public.interests set doc = 'edited' where id = '00000000-0000-0000-0000-0000000000a2';
 select lives_ok(
@@ -225,7 +242,7 @@ select lives_ok(
   'Ben unfollows');
 select results_eq(
   'select topic from public.interests where id::text like ''00000000-%'' order by topic',
-  array['House public'],
+  array[]::text[],
   'after unfollowing, the shared interest is gone from Ben''s view');
 
 reset role;
@@ -252,9 +269,8 @@ select results_eq(
   'Anna reads the runs of all her interests');
 select is((select count(*)::int from public.follows), 0, 'Anna cannot see Ben''s follows');
 
--- The public daily interest is on no one's quota, so Anna's one daily slot is free.
-select is((public.allowance() -> 'used' ->> 'daily_interests')::int, 0,
-  'a public interest does not count against the owner');
+select is((public.allowance() -> 'used' ->> 'public_interests')::int, 1,
+  'a public interest counts against its owner');
 select lives_ok(
   $$insert into public.interests (topic, cadence) values ('daily one', 'daily')$$,
   'Anna adds her one daily interest');
@@ -308,11 +324,11 @@ select lives_ok(
 
 select is(
   public.allowance() -> 'used',
-  '{"interests": 8, "daily_interests": 1, "weekly_interests": 3, "on_demand_runs_today": 0, "chat_turns_today": 1}'::jsonb,
+  '{"interests": 9, "daily_interests": 1, "weekly_interests": 3, "public_interests": 1, "on_demand_runs_today": 0, "chat_turns_today": 1, "runs_24h": 0, "spend_24h_usd": 0}'::jsonb,
   'allowance counts what Anna uses');
 select is(
   public.allowance() -> 'limits',
-  '{"daily_interests": 1, "weekly_interests": 3, "on_demand_runs_per_day": 3, "chat_turns_per_day": 40, "searches_per_run": 5, "max_doc_chars": 4000, "max_interests": 15}'::jsonb,
+  '{"daily_interests": 1, "weekly_interests": 3, "on_demand_runs_per_day": 3, "chat_turns_per_day": 40, "searches_per_run": 5, "max_doc_chars": 4000, "max_interests": 15, "spend_per_day_usd": 0.40, "runs_per_day": 8, "max_public_interests": 3}'::jsonb,
   'allowance reads the limits from the plans table');
 
 reset role;

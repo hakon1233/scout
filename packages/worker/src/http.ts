@@ -4,6 +4,11 @@
 //   POST /chat {message}         one setup chat turn; 200 ChatTurn.
 //   POST /chat/confirm <confirm> confirm what the last turn proposed (a
 //                                ChatConfirm); 200 ChatTurn, 409 if nothing waits.
+//   POST /account/delete         delete the reader's account: their topics
+//                                first (followers are told), then the auth
+//                                user, whose rows cascade; 200 {deleted: true}.
+// Bodies over 16 KB are refused (413) unread. The service-role routes verify
+// the JWT with Supabase Auth before reading the body.
 // Host-neutral: Request and Response only.
 
 import { quotaMessage } from "@scout/core";
@@ -26,7 +31,10 @@ export type HttpDeps = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_MESSAGE_CHARS = 4000;
-const ROUTES = new Set(["/runs", "/chat", "/chat/confirm"]);
+const MAX_BODY_BYTES = 16 * 1024;
+const ROUTES = new Set(["/runs", "/chat", "/chat/confirm", "/account/delete"]);
+// The routes that act with the service role, for a reader Auth has verified.
+const SERVICE_ROUTES = new Set(["/chat", "/chat/confirm", "/account/delete"]);
 
 export async function handleRequest(
   request: Request,
@@ -61,15 +69,98 @@ export async function handleRequest(
   )?.[1];
   if (!jwt) return json(401, { error: "sign in first" });
 
+  let userId: string | null = null;
+  if (SERVICE_ROUTES.has(path)) {
+    if (!deps.serviceKey || !deps.claude)
+      return json(404, { error: "not found" });
+    try {
+      userId = await verifiedUserId({
+        url: deps.supabaseUrl,
+        anonKey: deps.anonKey,
+        userJwt: jwt,
+        fetch: deps.fetch,
+      });
+    } catch {
+      return json(502, {
+        error: "Scout couldn't check your sign-in. Try again.",
+      });
+    }
+    if (!userId) return json(401, { error: "sign in first" });
+  }
+
+  const text = await readCapped(request, MAX_BODY_BYTES);
+  if (text === null) return json(413, { error: "that request is too large" });
   let body: unknown;
   try {
-    body = await request.json();
+    body = text ? JSON.parse(text) : undefined;
   } catch {
     body = undefined;
   }
 
   if (path === "/runs") return runNow(body, jwt, deps, json);
-  return chatRoute(path, body, jwt, deps, json);
+  if (path === "/account/delete")
+    return deleteAccount(userId as string, deps, json);
+  return chatRoute(path, body, userId as string, deps, json);
+}
+
+// The body as text, or null when it is over `max` bytes. Stops reading there.
+async function readCapped(
+  request: Request,
+  max: number,
+): Promise<string | null> {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > max) return null;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+
+async function deleteAccount(
+  userId: string,
+  deps: HttpDeps,
+  json: Json,
+): Promise<Response> {
+  const serviceKey = deps.serviceKey as string;
+  const doFetch = deps.fetch ?? globalThis.fetch;
+  try {
+    await rpcCaller(deps.supabaseUrl, doFetch)(
+      "prepare_account_delete",
+      { p_user: userId },
+      { apikey: serviceKey, bearer: serviceKey },
+    );
+    const res = await doFetch(
+      `${deps.supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`,
+      {
+        method: "DELETE",
+        headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}` },
+      },
+    );
+    if (!res.ok) throw new Error(`auth user delete: ${res.status}`);
+    return json(200, { deleted: true });
+  } catch (err) {
+    console.error("[account] delete failed:", err);
+    return json(502, {
+      error: "Scout couldn't delete your account. Try again.",
+    });
+  }
 }
 
 type Json = (status: number, body: unknown) => Response;
@@ -95,7 +186,15 @@ async function runNow(
     return json(202, { runId });
   } catch (err) {
     if (err instanceof RpcError) {
-      if (err.code === "P0001") return json(429, { error: err.message });
+      if (err.code === "P0001")
+        return json(429, {
+          error:
+            quotaMessage({
+              code: err.code,
+              hint: err.hint,
+              message: err.message,
+            }) ?? err.message,
+        });
       if (err.code === "P0002") return json(404, { error: err.message });
       if (err.status === 401 || err.code === "42501" || err.code === "PGRST301")
         return json(401, { error: "sign in first" });
@@ -107,12 +206,12 @@ async function runNow(
 async function chatRoute(
   path: string,
   body: unknown,
-  jwt: string,
+  userId: string,
   deps: HttpDeps,
   json: Json,
 ): Promise<Response> {
-  const { serviceKey, claude } = deps;
-  if (!serviceKey || !claude) return json(404, { error: "not found" });
+  const serviceKey = deps.serviceKey as string;
+  const claude = deps.claude as ClaudeClient;
 
   let input: { message: string } | { confirm: ChatConfirm } | null;
   if (path === "/chat") {
@@ -130,22 +229,27 @@ async function chatRoute(
   if (!input) return json(400, { error: "that request isn't one Scout reads" });
 
   try {
-    const userId = await verifiedUserId({
-      url: deps.supabaseUrl,
-      anonKey: deps.anonKey,
-      userJwt: jwt,
-      fetch: deps.fetch,
-    });
-    if (!userId) return json(401, { error: "sign in first" });
-
     const service = { apikey: serviceKey, bearer: serviceKey };
     const rpc = rpcCaller(deps.supabaseUrl, deps.fetch);
-    const blocked = (await rpc(
-      "chat_block_reason",
-      { p_user: userId },
-      service,
-    )) as string | null;
-    if (blocked) return json(429, { error: blocked });
+    // A message reserves its turn (a pending row, under the reader's lock)
+    // before Claude is called, so parallel requests cannot pass the limit.
+    let turnId: string | undefined;
+    if ("message" in input) {
+      const begun = (await rpc(
+        "begin_chat_turn",
+        { p_user: userId, p_message: input.message },
+        service,
+      )) as { blocked?: string; id?: string };
+      if (begun.blocked) return json(429, { error: begun.blocked });
+      turnId = begun.id;
+    } else {
+      const blocked = (await rpc(
+        "chat_block_reason",
+        { p_user: userId },
+        service,
+      )) as string | null;
+      if (blocked) return json(429, { error: blocked });
+    }
 
     const chat = createChat({
       claude,
@@ -156,7 +260,7 @@ async function chatRoute(
       }),
     });
     if ("message" in input)
-      return json(200, await chat.turn(userId, input.message));
+      return json(200, await chat.turn(userId, input.message, { turnId }));
     const turn = await chat.confirm(userId, input.confirm);
     return turn
       ? json(200, turn)

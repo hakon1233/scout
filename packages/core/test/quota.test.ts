@@ -23,6 +23,22 @@ test("each quota hint reads as a sentence with the plan's number", () => {
     quotaMessage({ code: "P0001", hint: "max_doc_chars" }) ?? "",
     /too long/,
   );
+  assert.equal(
+    quotaMessage({
+      code: "P0001",
+      hint: "max_public_interests",
+      message: "quota: 3 of 3 public interests used",
+    }),
+    "Your plan has room for 3 public interests, and they're in use. Make one shared or private first.",
+  );
+  assert.equal(
+    quotaMessage({
+      code: "P0001",
+      hint: "spend_per_day_usd",
+      message: "quota: spend limit of $0.40 reached",
+    }),
+    "You have reached today's spending limit. Try again tomorrow.",
+  );
 });
 
 test("anything that is not a quota refusal gives null", () => {

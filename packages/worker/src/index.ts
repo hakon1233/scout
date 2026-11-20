@@ -1,13 +1,15 @@
-// The Cloudflare Worker: wiring only. The cron tick runs runDue with the
-// Supabase queue and the Anthropic client; fetch serves run-now and the chat.
+// The Cloudflare Worker: wiring only. The minute tick runs runDue with the
+// Supabase queue and the Anthropic client, then sends queued pushes with the
+// subrequests left; the daily cron cleans up and, on Mondays, queues the
+// weekly push. fetch serves run-now, the chat and delete account.
 // Secrets (SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, SUPABASE_ANON_KEY,
 // VAPID_PRIVATE_KEY) come from `wrangler secret put`, never from a file.
 
 import { anthropicClient } from "@scout/research";
 import { handleRequest } from "./http.ts";
-import { briefReadyNotifier } from "./push.ts";
+import { sendOutbox } from "./push.ts";
 import { DEFAULT_BATCH, notifyBudget, runDue } from "./run-due.ts";
-import { supabasePushStore, supabaseQueue } from "./supabase.ts";
+import { dailyJobs, supabasePushStore, supabaseQueue } from "./supabase.ts";
 
 export {
   runDue,
@@ -29,34 +31,39 @@ export type Env = {
   VAPID_SUBJECT?: string;
 };
 
+// wrangler.toml's daily trigger.
+export const DAILY_CRON = "17 3 * * *";
+
 const worker = {
-  async scheduled(_controller: unknown, env: Env): Promise<void> {
+  async scheduled(controller: { cron?: string }, env: Env): Promise<void> {
+    const supabase = {
+      url: env.SUPABASE_URL,
+      serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
+    };
+    if (controller.cron === DAILY_CRON) {
+      console.log("daily jobs", await dailyJobs(supabase));
+      return;
+    }
+
     const batchSize = Number(env.RUN_BATCH ?? DEFAULT_BATCH);
     const summary = await runDue({
-      queue: supabaseQueue({
-        url: env.SUPABASE_URL,
-        serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
-      }),
+      queue: supabaseQueue(supabase),
       claude: anthropicClient({ apiKey: env.ANTHROPIC_API_KEY }),
       batchSize,
-      notify:
-        env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY
-          ? briefReadyNotifier({
-              store: supabasePushStore({
-                url: env.SUPABASE_URL,
-                serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
-              }),
-              vapid: {
-                publicKey: env.VAPID_PUBLIC_KEY,
-                privateKey: env.VAPID_PRIVATE_KEY,
-              },
-              subject:
-                env.VAPID_SUBJECT ?? "https://hakon1233.github.io/scout/",
-              budget: notifyBudget(batchSize),
-            })
-          : undefined,
     });
     if (summary.claimed) console.log("run queue tick", summary);
+
+    if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
+      await sendOutbox({
+        store: supabasePushStore(supabase),
+        vapid: {
+          publicKey: env.VAPID_PUBLIC_KEY,
+          privateKey: env.VAPID_PRIVATE_KEY,
+        },
+        subject: env.VAPID_SUBJECT ?? "https://scout-ideas.pages.dev/",
+        budget: notifyBudget(batchSize),
+      }).catch((err) => console.error("[push] outbox failed:", err));
+    }
   },
 
   fetch(request: Request, env: Env): Promise<Response> {
