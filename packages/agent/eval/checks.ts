@@ -10,6 +10,7 @@ import { applyChatChanges } from "../src/chat-changes.js";
 import {
   MAX_TAGS,
   cadenceInWords,
+  feedbackOf,
   normalizeTags,
   normalizeTopic,
   parseBrief,
@@ -255,6 +256,9 @@ export async function checkChatOutput(
       pendingDelete?: string;
       pendingRewrite?: string;
       page?: string;
+      // The kind of a feedback card the turn drafts (hosted chat with
+      // `feedback_on`). Absent: the feedback op is unknown here.
+      feedback?: string;
     };
   },
 ): Promise<Check[]> {
@@ -274,6 +278,7 @@ export async function checkChatOutput(
       pendingDelete: result.pendingDeletes[0]?.topic,
       pendingRewrite: result.pendingRewrites[0]?.topic,
       page: output.page,
+      feedback: feedbackOf(output.changes)?.kind,
     };
     const askedPage = rawPage(raw);
     // A create's reply confirms what was set up: the topic, and the cadence
@@ -304,14 +309,23 @@ export async function checkChatOutput(
       check(
         "known-ops",
         ops.every((op) =>
-          ["create", "update", "rewrite", "delete"].includes(String(op)),
+          [
+            "create",
+            "update",
+            "rewrite",
+            "delete",
+            ...(opts.expect.feedback ? ["feedback"] : []),
+          ].includes(String(op)),
         ),
         `ops: ${JSON.stringify(ops)}`,
       ),
       check(
         "owned-ids",
         output.changes.every(
-          (c) => c.op === "create" || ids.has(String(c.interestId)),
+          (c) =>
+            c.op === "create" ||
+            c.op === "feedback" ||
+            ids.has(String(c.interestId)),
         ),
         "update, rewrite and delete must name a listed interest id",
       ),
@@ -331,6 +345,12 @@ export async function checkChatOutput(
         `reply must name the new topic${said ? ` and say ${said}` : ""}`,
       ),
       check(
+        "feedback-reply-pending",
+        !ops.includes("feedback") ||
+          !/\b(sent|forwarded|passed (it )?on|reported)\b/i.test(output.reply),
+        "a feedback turn's reply asks for Confirm; nothing is sent yet",
+      ),
+      check(
         "one-subject-per-topic",
         mixed.length === 0 && offersSplit,
         mixed.length > 0
@@ -345,6 +365,7 @@ export async function checkChatOutput(
             pendingDelete: opts.expect.pendingDelete,
             pendingRewrite: opts.expect.pendingRewrite,
             page: opts.expect.page,
+            feedback: opts.expect.feedback,
           }),
         `got ${JSON.stringify(effect)}`,
       ),

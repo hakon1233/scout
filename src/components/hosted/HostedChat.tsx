@@ -222,6 +222,8 @@ function Proposals({
   const delKey = `${turn.id}:delete`;
   const rewrite = turn.pending_rewrite;
   const rwKey = `${turn.id}:rewrite`;
+  const feedback = turn.pending_feedback;
+  const fbKey = `${turn.id}:feedback`;
   return (
     <>
       {deletes.length > 0 && (
@@ -267,6 +269,17 @@ function Proposals({
           />
         );
       })}
+      {feedback && (
+        <ChatRewriteProposal
+          pr={{ interestId: "", topic: feedback.summary, doc: feedback.text }}
+          prev={null}
+          feedback
+          resolved={rewriteResolution(resolved[fbKey])}
+          disabled={busy}
+          onApply={() => run(fbKey, { kind: "feedback" })}
+          onDiscard={() => run(fbKey, null)}
+        />
+      )}
       {(turn.pending_follows ?? []).map((f) => {
         const key = `${turn.id}:follow:${f.interestId}`;
         return (

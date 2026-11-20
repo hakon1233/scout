@@ -4,7 +4,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import type { ChatTurn, Interest, InterestSnapshot } from "@scout/core";
+import type {
+  ChatTurn,
+  Interest,
+  InterestSnapshot,
+  PendingFeedback,
+} from "@scout/core";
 import type {
   ClaudeClient,
   MessagesRequest,
@@ -50,12 +55,17 @@ const AI: InterestSnapshot = {
 const AI_POLICY: Interest = { id: "pub_ai_policy", topic: "AI policy" };
 
 // The store as the hosted function's database would behave, in memory.
-function memoryStore(interests: InterestSnapshot[] = [AI], dailyInterests = 1) {
+function memoryStore(
+  interests: InterestSnapshot[] = [AI],
+  dailyInterests = 1,
+  feedback: { on: boolean; blocked?: string } = { on: false },
+) {
   const state = {
     interests: interests.map((i) => ({ ...i })),
     transcript: [] as ChatTurn[],
     follows: [] as string[],
     costUsd: 0,
+    feedback: [] as { cardTurnId: string; feedback: PendingFeedback }[],
   };
   const store: ChatStore = {
     async load() {
@@ -63,7 +73,14 @@ function memoryStore(interests: InterestSnapshot[] = [AI], dailyInterests = 1) {
         interests: state.interests.map((i) => ({ ...i })),
         transcript: [...state.transcript],
         limits: { maxInterests: 15, maxDocChars: 4000, dailyInterests },
+        feedbackOn: feedback.on,
       };
+    },
+    async sendFeedback(_userId, { cardTurnId, feedback: sent, turn }) {
+      if (!feedback.blocked)
+        state.feedback.push({ cardTurnId, feedback: sent });
+      state.transcript.push({ ...turn, reply: feedback.blocked ?? turn.reply });
+      return feedback.blocked ?? null;
     },
     async findPublicInterests(_userId, message) {
       return /policy|regulation/i.test(message) ? [AI_POLICY] : [];
@@ -104,9 +121,10 @@ function setup(
   answers: (MessagesResponse | Error)[],
   interests?: InterestSnapshot[],
   dailyInterests?: number,
+  feedback?: { on: boolean; blocked?: string },
 ) {
   const { claude, requests } = stubClaude(answers);
-  const { store, state } = memoryStore(interests, dailyInterests);
+  const { store, state } = memoryStore(interests, dailyInterests, feedback);
   let n = 0;
   const chat = createChat({
     claude,
@@ -350,4 +368,87 @@ test("a refusal, a cut-off answer or an API error fails the turn and changes not
     await chat.confirm("u1", { kind: "delete", interestIds: ["int_ai"] }),
     null,
   );
+});
+
+// A model answer with this JSON text, on the create fixture's envelope.
+function answer(text: string): MessagesResponse {
+  return {
+    ...recorded("create"),
+    content: [{ type: "text", text, citations: null }],
+  };
+}
+
+const BUG_REPORT = JSON.stringify({
+  reply:
+    "Sorry, that sounds like a bug. I can send it to the Scout team. Check the note below and press Confirm.",
+  changes: [
+    {
+      op: "feedback",
+      kind: "bug",
+      summary: "Feed is blank on a phone",
+      text: "After sign-in the feed shows nothing on my phone.",
+    },
+  ],
+});
+
+test("with feedback off, the prompt and schema have no feedback and a feedback op is dropped", async () => {
+  const { chat, requests, state } = setup([answer(BUG_REPORT)]);
+  const turn = await chat.turn("u1", "The feed is blank on my phone");
+  assert.doesNotMatch(promptOf(requests[0]), /feedback/i);
+  const schema = JSON.stringify(requests[0].output_config?.format?.schema);
+  assert.doesNotMatch(schema, /feedback|summary/);
+  assert.equal(turn.pending_feedback, undefined);
+  assert.equal(await chat.confirm("u1", { kind: "feedback" }), null);
+  assert.deepEqual(state.feedback, []);
+});
+
+test("with feedback on, a report waits on its card and the confirm sends the stored copy once", async () => {
+  const { chat, requests, state } = setup([answer(BUG_REPORT)], [AI], 1, {
+    on: true,
+  });
+  const turn = await chat.turn("u1", "The feed is blank on my phone");
+  assert.match(promptOf(requests[0]), /"op": "feedback"/);
+  const schema = requests[0].output_config?.format?.schema as {
+    properties: {
+      changes: {
+        items: { properties: { op: { enum: string[] }; kind: unknown } };
+      };
+    };
+  };
+  assert.ok(
+    schema.properties.changes.items.properties.op.enum.includes("feedback"),
+  );
+  assert.ok(schema.properties.changes.items.properties.kind);
+  const card = {
+    kind: "bug",
+    summary: "Feed is blank on a phone",
+    text: "After sign-in the feed shows nothing on my phone.",
+  };
+  assert.deepEqual(turn.pending_feedback, card);
+  assert.deepEqual(state.feedback, []);
+
+  const sent = await chat.confirm("u1", { kind: "feedback" });
+  assert.equal(sent?.status, "ready");
+  assert.equal(sent?.message, "Send feedback: Feed is blank on a phone");
+  assert.match(sent?.reply ?? "", /Sent to the Scout team/);
+  assert.deepEqual(sent?.changes, []);
+  assert.deepEqual(state.feedback, [{ cardTurnId: turn.id, feedback: card }]);
+  assert.equal(state.costUsd > 0, true);
+
+  // The card is spent: a second confirm finds nothing waiting.
+  assert.equal(await chat.confirm("u1", { kind: "feedback" }), null);
+  assert.equal(state.feedback.length, 1);
+});
+
+test("over a feedback limit the chat says so plainly and nothing is sent", async () => {
+  const limit =
+    "You have sent 5 notes to the Scout team today. Try again tomorrow.";
+  const { chat, state } = setup([answer(BUG_REPORT)], [AI], 1, {
+    on: true,
+    blocked: limit,
+  });
+  await chat.turn("u1", "The feed is blank on my phone");
+  const said = await chat.confirm("u1", { kind: "feedback" });
+  assert.equal(said?.reply, limit);
+  assert.deepEqual(state.feedback, []);
 });

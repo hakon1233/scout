@@ -130,6 +130,11 @@ price table also gives each turn's cost. Server only: the web app never imports 
   `confirm(userId, action)`. A turn sends core's chat prompt, with matching public
   interests, to Haiku 5.5 as structured output; core's `planChatChanges` decides what
   lands; deletes, full rewrites and follows wait for a confirm of the stored proposal.
+  With `settings.feedback_on`, the prompt also offers a `feedback` op (core's
+  `feedback.ts`): a note to the Scout team waits on a "Send feedback" card, and its
+  confirm goes to the store's `sendFeedback` (SQL `send_feedback`,
+  `*_feedback.sql`: 5 a reader and 200 overall a day, a free turn that skips the chat
+  limit). Only admins read the `feedback` table, in Supabase. Off: the prompt is unchanged.
 - `publish.ts`: `createPublish({claude, store}).publish(userId, interestId)`. The
   store's `start` checks owner and limits and opens a check; the plain checks, then one
   Haiku 5.5 call; `finish` records the verdict and, on approve, sets the tags and makes

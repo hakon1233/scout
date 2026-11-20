@@ -218,7 +218,8 @@ async function chatRoute(
       )) as { blocked?: string; id?: string };
       if (begun.blocked) return json(429, { error: begun.blocked });
       turnId = begun.id;
-    } else {
+    } else if (input.confirm.kind !== "feedback") {
+      // A feedback confirm is free; send_feedback has its own limits.
       const blocked = (await rpc(
         "chat_block_reason",
         { p_user: userId },
@@ -345,5 +346,6 @@ function parseConfirm(body: unknown): ChatConfirm | null {
     typeof b.interestId === "string"
   )
     return { kind: b.kind, interestId: b.interestId };
+  if (b.kind === "feedback") return { kind: "feedback" };
   return null;
 }

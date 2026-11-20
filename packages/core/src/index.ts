@@ -11,6 +11,7 @@ export type {
   Interest,
   PendingDelete,
   PendingCreate,
+  PendingFeedback,
   PendingFollow,
   PendingRewrite,
   ScheduleRunStatus,
@@ -95,6 +96,14 @@ export {
   chatTurnToRow,
   type ChatTurnRow,
 } from "./chat-rows.ts";
+export {
+  FEEDBACK_SCHEMA_PROPERTIES,
+  FEEDBACK_SENT_REPLY,
+  MAX_FEEDBACK_SUMMARY_CHARS,
+  MAX_FEEDBACK_TEXT_CHARS,
+  feedbackOf,
+  type FeedbackKind,
+} from "./feedback.ts";
 export {
   buildChatPrompt,
   parseChatOutput,

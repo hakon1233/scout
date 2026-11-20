@@ -1,0 +1,15 @@
+{
+  "message": "Please tell the team I want a dark mode.",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    }
+  ],
+  "output": "{\"reply\": \"Done, I sent it to the team.\", \"changes\": [{\"op\": \"feedback\", \"kind\": \"wish\", \"summary\": \"Dark mode\", \"text\": \"Please add a dark mode.\"}]}",
+  "expect": {
+    "applied": [],
+    "feedback": "wish"
+  },
+  "expectFail": ["feedback-reply-pending"]
+}

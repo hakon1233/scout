@@ -134,13 +134,24 @@ export type PendingCreate = {
   cadence?: "daily" | "weekly";
 };
 
+// A note to the Scout team a hosted turn drafted but did not send. It waits for
+// the reader's confirm, which sends the stored copy (core's feedback.ts).
+// Hosted chat only, and only while the `feedback_on` setting is on.
+export type PendingFeedback = {
+  kind: "bug" | "wish" | "other";
+  // One line for the card's header.
+  summary: string;
+  text: string;
+};
+
 // The hosted Worker's POST /chat/confirm body: which proposal of the reader's
 // last chat turn they accept. The Worker checks it against the stored turn.
 export type ChatConfirm =
   | { kind: "delete"; interestIds: string[] }
   | { kind: "rewrite"; interestId: string }
   | { kind: "follow"; interestId: string }
-  | { kind: "create"; interestId: string };
+  | { kind: "create"; interestId: string }
+  | { kind: "feedback" };
 
 // One chat turn. Kicked with POST /v0/chat and polled with GET /v0/chat, like
 // a brief run. A `ready` turn's `changes` are already on disk.
@@ -160,6 +171,7 @@ export type ChatTurn = {
   pending_rewrite?: PendingRewrite;
   pending_follows?: PendingFollow[];
   pending_creates?: PendingCreate[];
+  pending_feedback?: PendingFeedback;
   // A page of the app the reply offers to open (core's APP_PAGES).
   page?: AppPage;
   error_msg?: string;

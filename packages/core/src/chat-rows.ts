@@ -9,6 +9,7 @@ import type {
   ChatTurn,
   PendingCreate,
   PendingDelete,
+  PendingFeedback,
   PendingFollow,
   PendingRewrite,
 } from "./contract.ts";
@@ -25,6 +26,7 @@ export type ChatTurnRow = {
     rewrite?: PendingRewrite;
     follows?: PendingFollow[];
     creates?: PendingCreate[];
+    feedback?: PendingFeedback;
     page?: AppPage;
   } | null;
   error_msg: string | null;
@@ -36,6 +38,7 @@ export function chatTurnToRow(turn: ChatTurn): ChatTurnRow {
   if (turn.pending_rewrite) pending.rewrite = turn.pending_rewrite;
   if (turn.pending_follows?.length) pending.follows = turn.pending_follows;
   if (turn.pending_creates?.length) pending.creates = turn.pending_creates;
+  if (turn.pending_feedback) pending.feedback = turn.pending_feedback;
   if (turn.page) pending.page = turn.page;
   return {
     id: turn.id,
@@ -67,6 +70,9 @@ export function chatTurnFromRow(row: ChatTurnRow): ChatTurn {
       : {}),
     ...(row.pending?.creates?.length
       ? { pending_creates: row.pending.creates }
+      : {}),
+    ...(row.pending?.feedback
+      ? { pending_feedback: row.pending.feedback }
       : {}),
     ...(row.pending?.page ? { page: row.pending.page } : {}),
     ...(row.error_msg !== null ? { error_msg: row.error_msg } : {}),
