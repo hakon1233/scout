@@ -4,29 +4,36 @@ Research on which public interests Scout should run, and how to write each one s
 runs give good briefs. Start with Trondheim and Norway, then the Nordics, then the
 biggest niches elsewhere. The first-users plan is in `../MARKETING.md`.
 
-| File                         | What it holds                                          |
-| ---------------------------- | ------------------------------------------------------ |
-| [trondheim.md](trondheim.md) | Trondheim sub-niches                                   |
-| [norway.md](norway.md)       | Norway-wide sub-niches                                 |
-| [nordics.md](nordics.md)     | Sweden, Denmark, Finland, Iceland                      |
-| [world.md](world.md)         | Big niches in other countries                          |
-| [intent-docs/](intent-docs/) | Ready-to-use intent docs for the best picks, and tests |
-| [sources.md](sources.md)     | Readable stand-ins for sites that block Scout          |
+| File                                   | What it holds                                          |
+| -------------------------------------- | ------------------------------------------------------ |
+| [trondheim.md](trondheim.md)           | Trondheim sub-niches                                   |
+| [norway.md](norway.md)                 | Norway-wide sub-niches                                 |
+| [nordics.md](nordics.md)               | Sweden, Denmark, Finland, Iceland                      |
+| [world.md](world.md)                   | Big niches in other countries                          |
+| [intent-docs/](intent-docs/)           | Ready-to-use intent docs for the best picks, and tests |
+| [sources.md](sources.md)               | Readable stand-ins for sites that block Scout          |
+| [conditions.md](conditions.md)         | Place-and-weather niches: aurora, ski, ice, surf       |
+| [saved-searches.md](saved-searches.md) | Niches people now keep a saved search for              |
 
 ## Tested intent docs (20 Nov 2026)
 
-Each was run twice through web search and fetch, scored, fixed and run again.
+Each was run twice by hand with web search and fetch (no API), scored, fixed and run again.
 
-| Doc                                                                               | Final score | Run how often   |
-| --------------------------------------------------------------------------------- | ----------- | --------------- |
-| [AtB route changes](intent-docs/atb-route-changes.md)                             | 6/6         | Daily           |
-| [Trondheim kids and family events](intent-docs/trondheim-kids-events.md)          | 6/6         | Fridays         |
-| [AAP, sykepenger og uføretrygd](intent-docs/aap-sykepenger-ufore.md)              | 6/6         | Weekly          |
-| [Bambu Lab firmware and policy](intent-docs/bambu-lab-firmware.md)                | 6/6         | Weekly          |
-| [Trondheim council decisions](intent-docs/trondheim-council-decisions.md)         | 5/6         | Weekly          |
-| [Norwegian test dates](intent-docs/norwegian-test-dates.md)                       | 5/6         | Every two weeks |
-| [UK settlement (ILR)](intent-docs/uk-settlement-ilr.md)                           | 5/6\*       | Weekly          |
-| [Home Assistant breaking changes](intent-docs/home-assistant-breaking-changes.md) | 5/6\*       | Weekly          |
+| Doc                                                                                             | Final score | Run how often    |
+| ----------------------------------------------------------------------------------------------- | ----------- | ---------------- |
+| [AtB route changes](intent-docs/atb-route-changes.md)                                           | 6/6         | Daily            |
+| [Trondheim kids and family events](intent-docs/trondheim-kids-events.md)                        | 6/6         | Fridays          |
+| [AAP, sykepenger og uføretrygd](intent-docs/aap-sykepenger-ufore.md)                            | 6/6         | Weekly           |
+| [Bambu Lab firmware and policy](intent-docs/bambu-lab-firmware.md)                              | 6/6         | Weekly           |
+| [Northern lights, Tromsø and Trondheim](intent-docs/northern-lights-tromso-trondheim.md)        | 6/6         | Daily in season  |
+| [Ski openings, southern Norway and Trøndelag](intent-docs/norway-ski-openings.md)               | 6/6         | Weekly in season |
+| [Jæren surf this weekend](intent-docs/surf-jaeren.md)                                           | 6/6         | Fridays          |
+| [PhD and postdoc jobs in CS and AI, Norway](intent-docs/phd-postdoc-cs-ai-norway.md)            | 6/6         | Weekly           |
+| [Høringer on nature, outdoor life and hunting](intent-docs/hoeringer-natur-friluftsliv-jakt.md) | 6/6         | Weekly           |
+| [Trondheim council decisions](intent-docs/trondheim-council-decisions.md)                       | 5/6         | Weekly           |
+| [Norwegian test dates](intent-docs/norwegian-test-dates.md)                                     | 5/6         | Every two weeks  |
+| [UK settlement (ILR)](intent-docs/uk-settlement-ilr.md)                                         | 5/6\*       | Weekly           |
+| [Home Assistant breaking changes](intent-docs/home-assistant-breaking-changes.md)               | 5/6\*       | Weekly           |
 
 \* Doc changed after the run; not re-tested.
 
@@ -141,6 +148,12 @@ long read / long-read. Any of them switches off the 30-day freshness cutoff
     bulletin and invitation round within days: the best fallback for visa niches.
 13. **A first failure may be a wrong path.** Re-check the homepage and follow its links
     before dropping a source (BAMF, nav.no).
+14. **Conditions niches need a verdict.** One official forecast plus a factor the reader
+    can't see (cloud with the aurora, two resort lists that disagree), turned into
+    "go / maybe / no" for a named place and day. A copy of a dashboard adds nothing.
+15. **Saved-search niches merge lists.** Use URLs with a relative date filter
+    (arbeidsplassen's `published=now-7d`), a dated register, plus one source the big
+    portals miss. Web search mostly returns last season's closed ads.
 
 ## Run changes recommended to chief (20 Nov 2026)
 
