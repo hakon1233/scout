@@ -22,6 +22,7 @@ import {
   type HostedHome as Home,
   type NoticeKind,
 } from "@/lib/hosted";
+import { BusinessStep, businessStepSkipped } from "./BusinessStep";
 import { HostedChat } from "./HostedChat";
 import { scheduleNew, useHostedHome } from "./useHostedHome";
 
@@ -40,6 +41,11 @@ export function HostedHome() {
     confirm,
     transcribe,
   } = useHostedHome({ chat: true });
+  // The business step: shown to a reader with no topics until skipped; once
+  // it adds a topic, the first-run screen stays until "Done".
+  const [business, setBusiness] = React.useState<"hidden" | "open" | "adding">(
+    () => (businessStepSkipped() ? "hidden" : "open"),
+  );
 
   // `data` is null only while prerendering (no window); the client's first
   // render must match it, so both show the skeleton.
@@ -60,7 +66,7 @@ export function HostedHome() {
     );
   }
 
-  const firstRun = home.interests.length === 0;
+  const firstRun = home.interests.length === 0 || business === "adding";
   return (
     <AppShell menu={hostedMenu(home)}>
       {loadError && <Banner tone="danger">{loadError}</Banner>}
@@ -83,6 +89,16 @@ export function HostedHome() {
             label="Your topic"
             autoFocus
           />
+          {business !== "hidden" && (
+            <BusinessStep
+              data={data}
+              onAdded={async () => {
+                setBusiness("adding");
+                await reload();
+              }}
+              onClose={() => setBusiness("hidden")}
+            />
+          )}
         </section>
       ) : (
         <Feed data={data} home={home} reload={reload} signedOut={signedOut} />

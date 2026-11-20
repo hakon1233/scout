@@ -95,6 +95,8 @@ export interface HostedData {
   // A recorded clip as text for the chat input (the Worker's POST /voice).
   // At a voice limit it throws a `limit` HostedError saying to type instead.
   transcribe(audio: Blob): Promise<string>;
+  // A new paused topic of the reader's own with this intent doc; its id.
+  createTopic(topic: string, doc: string): Promise<string>;
   setCadence(interestId: string, cadence: Cadence): Promise<void>;
   // Changes only the given fields; the next run uses them.
   setBriefSettings(

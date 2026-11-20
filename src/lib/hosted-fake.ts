@@ -45,6 +45,8 @@ export const FAKE_CONFIG = { url: "http://fake.invalid", anonKey: "fake" };
 
 const USER = { id: "fake-reader", email: "reader@example.com" };
 const SIGNED_OUT = "scout.fake.signedOut";
+// Set to "1" (e2e, screenshots) to start as a new reader with no topics.
+export const FRESH = "scout.fake.fresh";
 
 function storage(): Storage | null {
   try {
@@ -321,7 +323,8 @@ const reply = (message: string, text: string): ChatTurn => ({
 
 /** An in-memory HostedData: edits stick until the page reloads. */
 export function createFakeHostedData(): HostedData {
-  let interests = seedInterests();
+  const fresh = storage()?.getItem(FRESH) === "1";
+  let interests = fresh ? [] : seedInterests();
   const brief = seedBrief();
   const removed = new Map<string, HostedInterest>();
   const pushOn = new Set<string>();
@@ -371,7 +374,7 @@ export function createFakeHostedData(): HostedData {
     async home(): Promise<HostedHome> {
       return {
         interests: interests.map((i) => ({ ...i })),
-        brief,
+        brief: fresh ? null : brief,
         allowance: {
           plan: "free",
           daily: { used: count("daily"), limit: 2 },
@@ -389,6 +392,15 @@ export function createFakeHostedData(): HostedData {
       return turn;
     },
     confirm: async () => reply("", "Done."),
+    async createTopic(topic, doc) {
+      if (!topic.trim() || !doc.trim()) throw new Error("Empty topic.");
+      const id = `new-${interests.length + removed.size + 1}`;
+      interests = [
+        ...interests,
+        interest({ id, topic, cadence: "off", updatedAt: null }),
+      ];
+      return id;
+    },
     async setCadence(id, cadence) {
       patch(id, { cadence });
       // Like due_interests: a scheduled topic that never ran gets its first brief.

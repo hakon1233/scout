@@ -32,6 +32,7 @@ export function homeData(
 ): Pick<
   HostedData,
   | "home"
+  | "createTopic"
   | "setCadence"
   | "setBriefSettings"
   | "remove"
@@ -128,6 +129,17 @@ export function homeData(
           createdAt: n.created_at,
         })),
       };
+    },
+
+    async createTopic(topic, doc) {
+      const rows = await rest<{ id: string }[]>("interests?select=id", {
+        method: "POST",
+        body: { topic, doc },
+        prefer: "return=representation",
+      });
+      const id = rows[0]?.id;
+      if (!id) throw new HostedError("failed", "Couldn't add that topic.");
+      return id;
     },
 
     async setCadence(interestId, cadence) {
