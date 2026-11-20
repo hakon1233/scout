@@ -99,10 +99,13 @@ select is(public.finish_picks('aaaaaaaa-0000-0000-0000-0000000000e1',
     {"interest_id":"not-a-uuid","reason":"Bad."},
     {"interest_id":"00000000-0000-0000-0000-0000000000f3","reason":"Kayaks, faster."},
     {"interest_id":"00000000-0000-0000-0000-0000000000f2","reason":"Popular."}]'::jsonb,
-  0.0007, null), 3, 'owned, link-only, repeated and unknown picks are dropped');
+  0.0007, null, public.picks_version()), 3, 'owned, link-only, repeated and unknown picks are dropped');
 select is((select cost_usd from public.pick_runs
            where id = (select (c -> 0 ->> 'run_id')::bigint from claimed)), 0.0007,
   'the cost is recorded');
+select is((select version from public.reader_picks
+           where user_id = 'aaaaaaaa-0000-0000-0000-0000000000e1'), public.picks_version(),
+  'picks carry the version that made them');
 select is(public.finish_picks('aaaaaaaa-0000-0000-0000-0000000000e1', 0, null, 0, 'timeout'), 0,
   'a failed call keeps the cached picks');
 
@@ -130,6 +133,10 @@ insert into public.follows (user_id, interest_id) values
 set local role authenticated;
 select results_eq($$select title from public.my_picks()$$, array['Fjord kayaking'],
   'dismissed and followed topics drop out');
+select ok((select public.my_picks_reader()) @> '{"profile": {"likedTags": ["outdoors"]},
+          "reading": [{"title": "Ski touring", "how": "follow"}, {"title": "Pia''s own", "how": "own"}]}',
+  'my_picks_reader: what a reason may cite about the reader');
+select is((select public.my_picks_reader()) -> 'candidates', null, 'and no candidates');
 select is((select count(*)::int from public.dismissed_picks), 1, 'a reader sees their dismissals');
 select is((select count(*)::int from public.reader_picks), 1, 'a reader sees their picks row');
 select throws_ok($$ select public.claim_picks(5) $$, '42501', null, 'readers cannot claim');
@@ -151,6 +158,39 @@ select results_eq(
   array['Fjord kayaking'], 'dismissed and followed topics are not candidates');
 
 -- ---------------------------------------------------------------------------
+-- Picks made by an older picks prompt are stale: never served, made again
+-- ---------------------------------------------------------------------------
+
+update public.reader_picks set version = public.picks_version() - 1,
+  attempted_at = now() - interval '2 hours', requested_at = null, weekly_due_at = null
+where user_id = 'aaaaaaaa-0000-0000-0000-0000000000e1';
+set local role authenticated;
+select set_config('request.jwt.claims',
+  '{"sub":"aaaaaaaa-0000-0000-0000-0000000000e1","role":"authenticated"}', true);
+select is((select count(*)::int from public.my_picks()), 0, 'stale picks are never served');
+reset role;
+create temp table stale as select public.claim_picks(5, now()) as c;
+select is((select jsonb_array_length(c) from stale), 1, 'a stale reader is claimed on the next tick');
+select is((select c -> 0 ->> 'kind' from stale), 'stale', 'as a stale refresh');
+select is(jsonb_array_length(public.claim_picks(5, now() + interval '30 minutes')), 0,
+  'a stale reader is retried at most once an hour');
+select is(public.finish_picks('aaaaaaaa-0000-0000-0000-0000000000e1',
+  (select (c -> 0 ->> 'run_id')::bigint from stale),
+  '[{"interest_id":"00000000-0000-0000-0000-0000000000f1","reason":"Like ski touring."}]', 0.0007, null,
+  public.picks_version() - 1), 1, 'an older worker''s picks are stored');
+select is(jsonb_array_length(public.claim_picks(5, now() + interval '2 hours')), 1,
+  'but stay stale');
+select is(public.finish_picks('aaaaaaaa-0000-0000-0000-0000000000e1',
+  (select max(id) from public.pick_runs), '[{"interest_id":"00000000-0000-0000-0000-0000000000f1","reason":"Like ski touring."}]',
+  0.0007, null, public.picks_version()), 1, 'current picks are stored');
+set local role authenticated;
+select results_eq($$select title from public.my_picks()$$, array['Fjord kayaking'],
+  'and served');
+reset role;
+select is(jsonb_array_length(public.claim_picks(5, now() + interval '4 hours')), 0,
+  'and not claimed again');
+
+-- ---------------------------------------------------------------------------
 -- Monday: the weekly push waits for the refresh
 -- ---------------------------------------------------------------------------
 
@@ -166,7 +206,8 @@ create temp table weekly as select public.claim_picks(5, now()) as c;
 select is((select c -> 0 ->> 'kind' from weekly), 'weekly', 'a weekly refresh is claimed');
 select is(public.finish_picks('aaaaaaaa-0000-0000-0000-0000000000e1',
   (select (c -> 0 ->> 'run_id')::bigint from weekly),
-  '[{"interest_id":"00000000-0000-0000-0000-0000000000f2","reason":"New to you."}]', 0.0007, null),
+  '[{"interest_id":"00000000-0000-0000-0000-0000000000f2","reason":"New to you."}]', 0.0007, null,
+  public.picks_version()),
   1, 'stored');
 select is((select payload -> 'picks' from public.outbox
            where kind = 'weekly' and user_id = 'aaaaaaaa-0000-0000-0000-0000000000e1'),

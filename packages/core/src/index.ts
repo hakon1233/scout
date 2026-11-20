@@ -123,9 +123,12 @@ export {
   MAX_PICKS,
   MAX_PICK_REASON,
   PICKS_SCHEMA,
+  PICKS_VERSION,
   buildPicksPrompt,
   parsePicks,
   pickKey,
+  pickReasonGrounded,
   type Pick,
   type PicksInput,
+  type PicksReader,
 } from "./picks-prompt.ts";

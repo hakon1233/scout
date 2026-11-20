@@ -3,6 +3,8 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { PICKS_VERSION } from "@scout/core";
 import { createPicks } from "@scout/hosted";
 import { recordedClient } from "@scout/research";
 import { picksBatch } from "../src/run-due.ts";
@@ -67,6 +69,23 @@ test("a tick claims at most its picks batch and records each reader's picks", as
       p_picks: [{ interest_id: "i-fjord", reason: "You like the outdoors." }],
       p_cost: "number",
       p_error: null,
+      p_version: PICKS_VERSION,
     },
   );
+});
+
+test("the database's picks_version() is core's PICKS_VERSION", () => {
+  const dir = new URL("../../../supabase/migrations/", import.meta.url);
+  const last = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+    .map((f) => readFileSync(new URL(f, dir), "utf8"))
+    .flatMap((sql) => [
+      ...sql.matchAll(
+        /function public\.picks_version\(\)[\s\S]*?\$\$\s*select (\d+)\s*\$\$/g,
+      ),
+    ])
+    .at(-1);
+  assert.ok(last, "a migration defines picks_version()");
+  assert.equal(Number(last[1]), PICKS_VERSION);
 });

@@ -4,6 +4,7 @@ import {
   MAX_PICKS,
   buildPicksPrompt,
   parsePicks,
+  pickReasonGrounded,
   type PicksInput,
 } from "../src/index.ts";
 
@@ -92,4 +93,38 @@ test("parsePicks fails closed and keeps at most 5", () => {
     picks: many.map((_, i) => ({ topic: `c${i + 1}`, reason: "Fits." })),
   });
   assert.equal(parsePicks(text, many).length, MAX_PICKS);
+});
+
+test("pickReasonGrounded checks a cached reason against the reader as they are now", () => {
+  const reader = {
+    profile: { likedTags: ["dev-tools"] },
+    reading: [
+      {
+        title: "Home Assistant Zigbee",
+        tags: ["smart-home"],
+        how: "own" as const,
+      },
+    ],
+  };
+  const tags = ["self-hosting", "maker"];
+  assert.equal(
+    pickReasonGrounded("You follow Home Assistant changelogs.", reader, tags),
+    false,
+  );
+  assert.equal(
+    pickReasonGrounded(
+      "Fits your dev-tools and self-hosting interests.",
+      reader,
+      tags,
+    ),
+    false,
+  );
+  assert.equal(
+    pickReasonGrounded("Fits your dev-tools interest.", reader, tags),
+    true,
+  );
+  assert.equal(
+    pickReasonGrounded("Close to your Home Assistant topic.", reader, tags),
+    true,
+  );
 });

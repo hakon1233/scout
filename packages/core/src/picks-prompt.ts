@@ -4,7 +4,12 @@
 // the model returns that is not a clean list of known candidates is dropped:
 // the parse fails closed to no picks. A reason may only cite what the input
 // says about the reader: one that claims a follow or an interest they don't
-// have is dropped with its pick.
+// have is dropped with its pick, when the pick is made and again when cached
+// picks are shown (pickReasonGrounded), since the reader may have changed.
+//
+// PICKS_VERSION: bump it whenever the prompt or the filter changes what a pick
+// may say, with a migration that bumps public.picks_version() to match. Cached
+// picks from an older version are never served and are made again.
 
 import { SEED_TAGS } from "./tags.ts";
 
@@ -31,8 +36,11 @@ export type PicksInput = {
 /** One pick: a candidate's id and the reason shown on its card. */
 export type Pick = { interestId: string; reason: string };
 
+/** The version of this prompt and filter; see the note at the top. */
+export const PICKS_VERSION = 2;
+
 /** What a reason may cite about the reader. */
-type PicksReader = {
+export type PicksReader = {
   profile: PicksInput["profile"];
   reading: PicksInput["reading"];
 };
@@ -151,7 +159,16 @@ export function parsePicks(
     const id = byKey.get(topic.trim());
     const why = reason.replace(/\s+/g, " ").trim().slice(0, MAX_PICK_REASON);
     if (!id || seen.has(id) || !why) continue;
-    if (reader && !grounded(why, reader, candidates)) continue;
+    if (
+      reader &&
+      !pickReasonGrounded(
+        why,
+        reader,
+        candidates.flatMap((c) => c.tags ?? []),
+      )
+    ) {
+      continue;
+    }
     seen.add(id);
     out.push({ interestId: id, reason: why });
   }
@@ -169,14 +186,17 @@ function words(text: string): Set<string> {
   );
 }
 
-// Whether a reason claims only what the input says about the reader. "You
-// follow X" needs a followed topic sharing a word with X. A reason about the
-// reader's interests or likes may name only tags the reader has: their liked
-// tags, their topics' tags or words of their topics' titles.
-function grounded(
+/**
+ * Whether a reason claims only what we know about the reader. "You follow X"
+ * needs a followed topic sharing a word with X. A reason about the reader's
+ * interests or likes may name only tags the reader has (their liked tags,
+ * their topics' tags or words of their topics' titles), checked against the
+ * seed tags and `tags` (the candidates' tags).
+ */
+export function pickReasonGrounded(
   reason: string,
   reader: PicksReader,
-  candidates: readonly { tags?: string[] }[],
+  tags: readonly string[] = [],
 ): boolean {
   const follow =
     /\byou(?:'re| are)? (?:already )?follow(?:ing)?\s+([^.,;!?]+)/i.exec(
@@ -204,11 +224,7 @@ function grounded(
       ...reader.reading.flatMap((r) => [...words(r.title)]),
     ].map((t) => t.toLowerCase()),
   );
-  const known = new Set(
-    [...SEED_TAGS, ...candidates.flatMap((c) => c.tags ?? [])].map((t) =>
-      t.toLowerCase(),
-    ),
-  );
+  const known = new Set([...SEED_TAGS, ...tags].map((t) => t.toLowerCase()));
   return [...known].every(
     (tag) =>
       own.has(tag) ||

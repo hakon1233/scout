@@ -176,8 +176,9 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   (`supabasePicksStore` over `claim_picks`/`finish_picks`, `*_picks.sql`). On Mondays
   the daily job marks readers active in the last 30 days (`start_weekly_picks`); their
   weekly push waits until their picks are made (at most 12 h) and then names them. A
-  profile change asks for new picks, at most once a day. Readers over their spend cap
-  are skipped and get the push with their old picks.
+  profile change asks for new picks, at most once a day. Picks made by an older
+  `PICKS_VERSION` are stale and made again on the next tick (at most hourly). Readers
+  over their spend cap are skipped and get the push with their old picks.
 - `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`;
   without `VAPID_PRIVATE_KEY` no pushes are sent.
 - `team.ts`: the `/team` routes (paths in core's `team.ts`), with no CORS and their own
@@ -306,7 +307,9 @@ views, seconds per story; own insert only, 300 an hour, deleted after 30 days by
 student, role and liked tags, and `is_reserved_name` for display names.
 `*_picks.sql`: `reader_picks` (one cached ranking per reader, up to 5 topics with a
 reason), `dismissed_picks`, and `pick_runs`, whose cost counts toward the spend caps.
-`my_picks` returns only topics still public, not owned, followed or dismissed.
+`my_picks` returns only topics still public, not owned, followed or dismissed, from
+picks of the current `picks_version()` (core's `PICKS_VERSION`; bump both together).
+The web app checks each cached reason again against `my_picks_reader` before showing it.
 `*_payments.sql`: plan prices and a `subscriptions` table, unused until payments.
 The plans table and `src/lib/plans.ts` (what the screens show) hold the same prices and
 limits; `test/plans-parity.test.mjs` fails when they differ, so a change to one needs

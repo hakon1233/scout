@@ -856,6 +856,12 @@ test("browse reads the catalog signed out with the anon key", async () => {
 
 test("picks come from my_picks as the reader; dismissPick hides one", async () => {
   const { fetch, calls } = stubFetch({
+    "rpc/my_picks_reader": {
+      body: {
+        profile: { likedTags: ["dev-tools"] },
+        reading: [{ title: "Ski touring", tags: [], how: "follow" }],
+      },
+    },
     "rpc/my_picks": {
       body: [
         {
@@ -885,8 +891,42 @@ test("picks come from my_picks as the reader; dismissPick hides one", async () =
   ]);
   assert.equal(calls[0].headers.authorization, "Bearer jwt-anna");
   await d.dismissPick("i1");
-  assert.equal(calls[1].method, "POST");
-  assert.deepEqual(calls[1].body, { p_interest: "i1" });
+  assert.equal(calls.at(-1)?.method, "POST");
+  assert.deepEqual(calls.at(-1)?.body, { p_interest: "i1" });
+});
+
+test("cached picks whose reason the reader no longer backs are not shown", async () => {
+  const pick = (id: string, reason: string) => ({
+    id,
+    slug: id,
+    title: `Topic ${id}`,
+    tags: ["self-hosting", "maker"],
+    owner_name: null,
+    team: true,
+    reason,
+  });
+  const { fetch } = stubFetch({
+    "rpc/my_picks_reader": {
+      body: {
+        profile: { likedTags: ["dev-tools"] },
+        reading: [
+          { title: "Home Assistant Zigbee", tags: ["smart-home"], how: "own" },
+        ],
+      },
+    },
+    "rpc/my_picks": {
+      body: [
+        pick("a", "You follow Home Assistant changelogs."),
+        pick("b", "Fits your dev-tools and self-hosting interests."),
+        pick("c", "Fits your maker and hardware interests."),
+        pick("d", "Close to your Home Assistant topic."),
+      ],
+    },
+  });
+  assert.deepEqual(
+    (await data(fetch).picks()).map((p) => p.id),
+    ["d"],
+  );
 });
 
 test("tags, reports and the profile go through their RPCs and rows", async () => {

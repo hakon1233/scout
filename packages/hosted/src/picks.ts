@@ -21,7 +21,9 @@ const PICKS_TIMEOUT_MS = 30_000;
 export type PicksJob = {
   userId: string;
   runId: number;
-  kind: "weekly" | "profile";
+  // weekly: the Monday refresh; profile: a profile change; stale: the cached
+  // picks were made by an older PICKS_VERSION.
+  kind: "weekly" | "profile" | "stale";
   input: PicksInput;
 };
 

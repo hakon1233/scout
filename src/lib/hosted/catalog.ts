@@ -1,7 +1,12 @@
 // The public catalog: publishing through Scout's check, the owner's tags,
 // browse and tag counts (signed in or out), reports, and the reader's picks.
 
-import { PUBLISH_PATH, type PublishResponse } from "@scout/core";
+import {
+  PUBLISH_PATH,
+  pickReasonGrounded,
+  type PicksReader,
+  type PublishResponse,
+} from "@scout/core";
 import type { HostedClient } from "./client";
 import type { HostedData, TopicCard } from "./types";
 
@@ -75,12 +80,28 @@ export function catalogData(
     },
 
     async picks() {
-      const rows = await rest<
-        (Omit<TopicCardRow, "briefs" | "followers"> & {
-          reason: string | null;
-        })[]
-      >("rpc/my_picks", { method: "POST", body: {} });
-      return rows.map((r) => ({
+      // Picks are cached for a week; the reader may have unfollowed a topic or
+      // changed their profile since, so each reason is checked again now.
+      const [rows, reader] = await Promise.all([
+        rest<
+          (Omit<TopicCardRow, "briefs" | "followers"> & {
+            reason: string | null;
+          })[]
+        >("rpc/my_picks", { method: "POST", body: {} }),
+        rest<Partial<PicksReader> | null>("rpc/my_picks_reader", {
+          method: "POST",
+          body: {},
+        }),
+      ]);
+      const now: PicksReader = {
+        profile: reader?.profile ?? {},
+        reading: reader?.reading ?? [],
+      };
+      const tags = rows.flatMap((r) => r.tags ?? []);
+      const kept = rows.filter((r) =>
+        pickReasonGrounded(r.reason ?? "", now, tags),
+      );
+      return kept.map((r) => ({
         id: r.id,
         slug: r.slug,
         title: r.title,

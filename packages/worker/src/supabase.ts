@@ -2,6 +2,7 @@
 // supabase-js: less to bundle and less CPU per tick). Host-neutral.
 
 import {
+  PICKS_VERSION,
   claimedRunFromRow,
   type ClaimedRunRow,
   type PicksInput,
@@ -125,6 +126,7 @@ export function supabasePicksStore(opts: {
             })) ?? null,
           p_cost: costUsd,
           p_error: error,
+          p_version: PICKS_VERSION,
         },
         auth,
       );
