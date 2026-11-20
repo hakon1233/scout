@@ -170,6 +170,39 @@ test("a create lands at once with a minted id, and the turn's cost is kept", asy
   assert.doesNotMatch(prompt, /Public interests/);
 });
 
+test("a create gets the cadence the reader named, whatever the model said", async () => {
+  const daily: MessagesResponse = {
+    ...recorded("create"),
+    content: [
+      {
+        type: "text",
+        text: '{"reply":"Created \\"Zigbee\\" — Daily, private.","changes":[{"op":"create","topic":"Zigbee","doc":"# Zigbee","cadence":"daily"}]}',
+        citations: null,
+      },
+    ],
+  };
+  const { chat, requests } = setup([daily, recorded("create")]);
+  const turn = await chat.turn("u1", "My own private topic on Zigbee. Weekly.");
+  assert.equal(turn.changes?.[0].cadence, "weekly");
+
+  const prompt = promptOf(requests[0]);
+  assert.match(prompt, /"cadence"/);
+  assert.match(prompt, /private/);
+  const schema = requests[0].output_config?.format?.schema as {
+    properties: {
+      changes: { items: { properties: Record<string, { enum?: string[] }> } };
+    };
+  };
+  assert.deepEqual(schema.properties.changes.items.properties.cadence.enum, [
+    "daily",
+    "weekly",
+  ]);
+
+  // Named nowhere: no cadence, and the client takes the first free slot.
+  const unsaid = await chat.turn("u1", "Follow Rust releases for me");
+  assert.equal(unsaid.changes?.[0].cadence, undefined);
+});
+
 test("a delete waits for the confirm, which removes the interest once", async () => {
   const { chat, state } = setup([recorded("delete")]);
   const turn = await chat.turn("u1", "drop AI");

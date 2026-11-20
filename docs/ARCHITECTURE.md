@@ -54,7 +54,7 @@ as `@scout/core`, the companion as `#core`.
 - `chat-prompt.ts`, `chat-changes.ts`: the chat prompt and its output parser, and
   `planChatChanges`, the rules for what of a model's change set lands, waits for a
   confirm or is dropped. The companion and the hosted chat both use them.
-- `tags.ts`: the 30 seed tags (browse's chips, the publish check's first choice) and
+- `tags.ts`: the 38 seed tags (browse's chips, the publish check's first choice) and
   `normalizeTags`; the SQL's `tags_ok` enforces the same pattern
   (`test/sql-parity.test.mjs` feeds both the same cases).
 - `limits.ts`: the numbers more than one package needs: `MAX_TOPIC_CHARS` (also the

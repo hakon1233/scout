@@ -96,6 +96,9 @@ export type ChatChange = {
   topic?: string;
   // The full doc as persisted; absent on delete.
   doc?: string;
+  // On a create: the cadence the reader asked for, which the client sets
+  // when a slot is free. Absent: the first free slot.
+  cadence?: "daily" | "weekly";
 };
 
 // A delete a turn proposed but did not apply. It waits for

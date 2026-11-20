@@ -63,7 +63,9 @@ const DATE_RE = /^\s*[-*]\s+`(\d{4}-\d{2}-\d{2}|undated)`\s*(?:—|–|-)?\s*/;
 const BODY_RE = /^\s*>\s?(.*)$/;
 
 // Plain-text form of inline markdown, for summaries: images dropped, links
-// unwrapped to their label, emphasis and code markers removed.
+// unwrapped to their label, emphasis and code markers removed. A citation
+// ("[domain — Title](url)") on the bullet line is dropped whole: it is a
+// source, not part of the sentence.
 const STRIP_INNER = "(?:[^()]|\\([^()]*\\))*";
 const STRIP_IMAGE_RE = new RegExp(`!\\[[^\\]]*\\]\\(${STRIP_INNER}\\)`, "g");
 const STRIP_LINK_RE = new RegExp(`\\[([^\\]]+)\\]\\(${STRIP_INNER}\\)`, "g");
@@ -71,7 +73,9 @@ const STRIP_LINK_RE = new RegExp(`\\[([^\\]]+)\\]\\(${STRIP_INNER}\\)`, "g");
 function plainText(s: string): string {
   return s
     .replace(STRIP_IMAGE_RE, "")
-    .replace(STRIP_LINK_RE, "$1")
+    .replace(STRIP_LINK_RE, (_, label: string) =>
+      / — /.test(label) ? "" : label,
+    )
     .replace(/[*_`]+/g, "")
     .replace(/\s+/g, " ")
     .trim();

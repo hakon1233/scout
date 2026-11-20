@@ -39,6 +39,30 @@ test("the prompt gives candidates keys, not ids, and quotes everything as data",
   assert.match(data, /New fjord route/);
 });
 
+test("the prompt tells topics the reader owns from ones they follow", () => {
+  const prompt = buildPicksPrompt({
+    ...input,
+    reading: [
+      { title: "Home Assistant", tags: [], how: "own" },
+      { title: "Ski touring", tags: [], how: "follow" },
+    ],
+  });
+  const data = JSON.parse(
+    prompt.slice(prompt.indexOf("```json") + 7, prompt.lastIndexOf("```")),
+  ) as {
+    reader: { own_topics: { title: string }[]; follows: { title: string }[] };
+  };
+  assert.deepEqual(
+    data.reader.own_topics.map((t) => t.title),
+    ["Home Assistant"],
+  );
+  assert.deepEqual(
+    data.reader.follows.map((t) => t.title),
+    ["Ski touring"],
+  );
+  assert.match(prompt, /only for a topic in follows/);
+});
+
 test("parsePicks maps keys back to ids and drops anything unknown", () => {
   const picks = parsePicks(
     JSON.stringify({

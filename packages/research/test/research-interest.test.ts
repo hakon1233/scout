@@ -134,7 +134,7 @@ test("stories written without their bullet still parse as dated stories", async 
   // Haiku sometimes drops the `- ` before a story's date (seen in a real
   // run): the brief then parsed as zero stories yet counted as covered.
   const loose = (date: string, n: number) =>
-    `\`${date}\` — Story ${n} happened. [example.org — Story ${n}](https://example.org/${n})\n` +
+    `\`${date}\` — Story ${n} happened.\n[example.org — Story ${n} went as planned](https://example.org/${n})\n` +
     `![source image](https://example.org/${n}.jpg)\n\n` +
     `> **Lead ${n}.**\n>\n> One.\n>\n> Two.\n`;
   const result = await researchInterest(INTEREST, {
