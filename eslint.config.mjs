@@ -54,6 +54,8 @@ const eslintConfig = defineConfig([
       "src/components/hosted/HostedTopics.tsx",
       "src/components/hosted/HostedSettings.tsx",
       "src/components/hosted/HostedChat.tsx",
+      "src/components/hosted/SharingSection.tsx",
+      "src/components/PickCards.tsx",
       "src/app/app/profile/**",
       "src/app/app/browse/**",
       "src/app/app/liked/**",
