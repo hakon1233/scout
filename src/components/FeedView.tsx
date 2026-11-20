@@ -44,8 +44,11 @@ type FeedItem = {
 export function FeedView({
   brief,
   onDetailOpenChange,
+  backLabel = "Back to feed",
 }: {
   brief: Brief;
+  // The open story's way back names the page it was opened from.
+  backLabel?: string;
   // Notify the page when a single-story detail opens/closes so it can
   // hide everything else (brief header, coverage banners, the history pager) and
   // render ONLY the focused story. The feed itself already swaps grid→detail; the
@@ -139,7 +142,9 @@ export function FeedView({
   }
 
   if (selected) {
-    return <FeedDetail item={selected} onBack={closeDetail} />;
+    return (
+      <FeedDetail item={selected} onBack={closeDetail} backLabel={backLabel} />
+    );
   }
 
   if (items.length === 0) {
@@ -218,7 +223,15 @@ function FeedCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
   );
 }
 
-function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
+function FeedDetail({
+  item,
+  onBack,
+  backLabel,
+}: {
+  item: FeedItem;
+  onBack: () => void;
+  backLabel: string;
+}) {
   return (
     <article className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-2">
@@ -227,7 +240,7 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
           onClick={onBack}
           className="inline-flex min-h-9 items-center gap-1 rounded-md px-1 text-body-sm text-primary underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
         >
-          ← Back to feed
+          ← {backLabel}
         </button>
         <span className="flex items-center gap-2">
           <SaveButton story={likeInputFor(item)} />

@@ -4,8 +4,8 @@ import { HOSTED_PORT } from "./port";
 // Fixes from testing the hosted site, checked on the fake backend
 // (src/lib/hosted-fake.ts): no hydration errors, legal links at sign-in, back
 // links that fit a signed-out reader, a title per screen, a story that lives
-// in the URL, a bell that turns push on by itself, and Run now on a
-// topic's page.
+// in the URL, a bell that turns push on by itself, Run now on a topic's page
+// and a story that goes back to the page it was opened from.
 
 const ORIGIN = `http://127.0.0.1:${HOSTED_PORT}`;
 const STORY = "NO3 day-ahead price hits 142 øre/kWh";
@@ -128,4 +128,20 @@ test("a topic's page runs it now and shows the run until it ends", async ({
   await expect(page.getByRole("button", { name: "Running" })).toBeVisible();
   await expect(page.getByText("Waiting to start…")).toBeVisible();
   await expect(run).toBeVisible({ timeout: 15_000 });
+});
+
+test("a story opened from a topic's page goes back to that topic", async ({
+  page,
+}) => {
+  await blockNonLoopback(page);
+  await page.goto(`${ORIGIN}/app/topics/?id=power`);
+  await page.getByRole("button", { name: STORY }).click({ timeout: 60_000 });
+  const back = page.getByRole("button", { name: "← Back to topic" });
+  await expect(back).toBeVisible();
+  await back.click();
+  await expect(page).not.toHaveURL(/[?&]story=/);
+  await expect(page).toHaveURL(/[?&]id=power/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: TOPIC }),
+  ).toBeVisible();
 });

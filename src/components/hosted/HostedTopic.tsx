@@ -229,7 +229,7 @@ function TopicPage({
           </p>
         )}
         {brief ? (
-          <FeedView brief={brief} />
+          <FeedView brief={brief} backLabel="Back to topic" />
         ) : (
           <p className="px-1 text-body text-secondary">
             No stories yet. The next brief fills this in.
