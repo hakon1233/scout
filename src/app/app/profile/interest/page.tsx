@@ -46,7 +46,7 @@ export default function InterestScopePage() {
   useEffect(() => {
     if (!hydrated || mockSeed !== null) return;
     let cancelled = false;
-    (async () => {
+    void (async () => {
       const tok = await bootstrapCompanionToken();
       if (cancelled) return;
       const set = await fetchCompanionInterestSet(

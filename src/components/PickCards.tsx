@@ -145,10 +145,9 @@ function PickRow({
           variant="secondary"
           size="sm"
           loading={busy}
-          onClick={async () => {
+          onClick={() => {
             setBusy(true);
-            await onFollow();
-            setBusy(false);
+            void onFollow().finally(() => setBusy(false));
           }}
         >
           Follow

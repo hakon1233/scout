@@ -83,7 +83,7 @@ function TimeZoneGroup({ data }: { data: HostedData }) {
 
   React.useEffect(() => {
     let live = true;
-    data
+    void data
       .timeZone()
       .catch(() => null)
       .then(
@@ -202,7 +202,12 @@ function AccountGroup({ data }: { data: HostedData }) {
   return (
     <SettingsGroup title="Account" footer={error ?? undefined}>
       <SettingsRow label={email ?? "Signed in"}>
-        <Button variant="secondary" size="sm" loading={busy} onClick={signOut}>
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={busy}
+          onClick={() => void signOut()}
+        >
           Sign out
         </Button>
       </SettingsRow>
@@ -256,7 +261,7 @@ export function DeleteAccount() {
         others follow from you. It can&apos;t be undone.
       </PageHeader>
       <form
-        onSubmit={remove}
+        onSubmit={(e) => void remove(e)}
         className="flex max-w-md flex-col gap-4"
         data-main
       >

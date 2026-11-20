@@ -39,9 +39,13 @@ export function splitStatements(sql) {
       let depth = 1;
       i += 2;
       while (i < n && depth > 0) {
-        if (sql[i] === "/" && sql[i + 1] === "*") (depth++, (i += 2));
-        else if (sql[i] === "*" && sql[i + 1] === "/") (depth--, (i += 2));
-        else i++;
+        if (sql[i] === "/" && sql[i + 1] === "*") {
+          depth++;
+          i += 2;
+        } else if (sql[i] === "*" && sql[i + 1] === "/") {
+          depth--;
+          i += 2;
+        } else i++;
       }
     } else if (c === "'" || c === '"') {
       i++;

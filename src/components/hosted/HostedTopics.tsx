@@ -178,9 +178,9 @@ function TopicLists({
       busy={busy[i.id] ?? false}
       note={notes[i.id] ?? null}
       push={push}
-      onCadence={(c) => act(i.id, () => data.setCadence(i.id, c))}
-      onRunNow={() => act(i.id, () => data.runNow(i.id))}
-      onRemove={() => remove(i)}
+      onCadence={(c) => void act(i.id, () => data.setCadence(i.id, c))}
+      onRunNow={() => void act(i.id, () => data.runNow(i.id))}
+      onRemove={() => void remove(i)}
     />
   );
 

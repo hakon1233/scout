@@ -214,10 +214,9 @@ function Proposals({
   settle: (key: string, action: ChatConfirm | null) => Promise<void>;
 }) {
   const [busy, setBusy] = React.useState(false);
-  const run = async (key: string, action: ChatConfirm | null) => {
+  const run = (key: string, action: ChatConfirm | null) => {
     setBusy(true);
-    await settle(key, action);
-    setBusy(false);
+    void settle(key, action).finally(() => setBusy(false));
   };
   const deletes = turn.pending_deletes ?? [];
   const delKey = `${turn.id}:delete`;

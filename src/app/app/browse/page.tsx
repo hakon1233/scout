@@ -395,20 +395,18 @@ function BrowseRow({
               variant="secondary"
               size="sm"
               loading={busy}
-              onClick={async () => {
+              onClick={() => {
                 setBusy(true);
                 setError(null);
-                try {
-                  await onFollow();
-                } catch (err) {
-                  setError(
-                    err instanceof HostedError
-                      ? err.message
-                      : "Couldn't follow it. Try again.",
-                  );
-                } finally {
-                  setBusy(false);
-                }
+                onFollow()
+                  .catch((err: unknown) =>
+                    setError(
+                      err instanceof HostedError
+                        ? err.message
+                        : "Couldn't follow it. Try again.",
+                    ),
+                  )
+                  .finally(() => setBusy(false));
               }}
             >
               Follow

@@ -152,19 +152,19 @@ export function SharingSection({
         full={!hasPublicRoom(publicUsed, publicLimit)}
         limit={publicLimit}
         counts={counts}
-        onPublish={async () => {
+        onPublish={() => {
           setSheet({ kind: "checking" });
-          try {
-            setSheet(await checkAndPublish(data, interest.id));
-          } catch (err) {
-            setSheet(null);
-            onSignedOut(err);
-          }
+          checkAndPublish(data, interest.id)
+            .then(setSheet)
+            .catch((err: unknown) => {
+              setSheet(null);
+              onSignedOut(err);
+            });
         }}
         onTags={(tags) => data.setTags(interest.id, tags)}
-        onShareByLink={async () => {
+        onShareByLink={() => {
           setSheet(null);
-          await setVisibility("shared");
+          void setVisibility("shared");
         }}
         onEdit={
           onEdit &&
@@ -216,12 +216,12 @@ export function CopyButton({
       variant={variant}
       size="sm"
       className="min-w-20"
-      onClick={() =>
+      onClick={() => {
         navigator.clipboard
           .writeText(text)
           .then(() => setCopied(true))
-          .catch(() => window.prompt("Copy this link", text))
-      }
+          .catch(() => window.prompt("Copy this link", text));
+      }}
     >
       <span aria-live="polite">{copied ? "Copied" : label}</span>
     </Button>
