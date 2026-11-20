@@ -87,15 +87,42 @@ test("the plain checks refuse without a model call", async () => {
   assert.equal(claude.requests.length, 0);
 });
 
-test("a cut-off or refused answer fails closed", async () => {
-  for (const stop of ["max_tokens", "refusal"]) {
-    const claude = recordedClient([
-      answer({ verdict: "approve", reason: "", tags: ["ai"] }, stop),
-    ]);
-    const { store } = memoryStore();
-    const result = await createPublish({ claude, store }).publish("u1", "i1");
-    assert.equal(result.status, "refused", stop);
-  }
+test("a refused answer fails closed", async () => {
+  const claude = recordedClient([
+    answer({ verdict: "approve", reason: "", tags: ["ai"] }, "refusal"),
+  ]);
+  const { store } = memoryStore();
+  const result = await createPublish({ claude, store }).publish("u1", "i1");
+  assert.equal(result.status, "refused");
+});
+
+test("a reply cut off at max_tokens is a failed check, with its cost", async () => {
+  // Haiku thinks by default and the thinking counts against max_tokens: a
+  // cut-off reply says nothing about the topic, so it is not a refusal.
+  const claude = recordedClient([
+    {
+      content: [{ type: "thinking", thinking: "" }],
+      stop_reason: "max_tokens",
+      usage: { input_tokens: 1500, output_tokens: 4096 },
+    },
+  ]);
+  const { store, finished } = memoryStore();
+  await assert.rejects(
+    createPublish({ claude, store }).publish("u1", "i1"),
+    PublishCheckFailed,
+  );
+  assert.equal(finished.length, 1);
+  assert.equal(finished[0].verdict.approved, false);
+  assert.ok(finished[0].costUsd > 0);
+});
+
+test("the check leaves room for thinking before the answer", async () => {
+  const claude = recordedClient([
+    answer({ verdict: "refuse", reason: "No.", tags: [] }),
+  ]);
+  const { store } = memoryStore();
+  await createPublish({ claude, store }).publish("u1", "i1");
+  assert.ok(claude.requests[0].max_tokens >= 4096);
 });
 
 test("a check that cannot run is recorded as refused and thrown", async () => {

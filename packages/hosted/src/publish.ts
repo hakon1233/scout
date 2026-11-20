@@ -17,7 +17,9 @@ import {
 import { responseCostUsd, type ClaudeClient } from "@scout/research";
 
 export const PUBLISH_MODEL = HAIKU_MODEL;
-const MAX_OUTPUT_TOKENS = 1024;
+// Haiku 5.5 thinks by default (even at effort low), and its thinking counts
+// against max_tokens: leave it room before the answer.
+const MAX_OUTPUT_TOKENS = 4096;
 const CHECK_TIMEOUT_MS = 30_000;
 
 export type PublishStart = PublishInput & {
@@ -39,9 +41,16 @@ export type PublishStore = {
   ): Promise<string | null>;
 };
 
-/** Thrown when the check itself could not run (timeout, API error). */
+/** Thrown when the check itself could not run (timeout, API error, cut-off reply). */
 export class PublishCheckFailed extends Error {
   override name = "PublishCheckFailed";
+}
+
+// A reply cut off at max_tokens: the check did not run, but the call cost.
+class CutOffReply extends Error {
+  constructor(readonly costUsd: number) {
+    super("the reply was cut off at max_tokens");
+  }
 }
 
 export function createPublish(deps: {
@@ -68,9 +77,11 @@ export function createPublish(deps: {
       },
       AbortSignal.timeout(CHECK_TIMEOUT_MS),
     );
+    const costUsd = responseCostUsd(response.usage);
+    // A cut-off reply says nothing about the topic: a failed check, not a refusal.
+    if (response.stop_reason === "max_tokens") throw new CutOffReply(costUsd);
     const text =
-      response.stop_reason !== "refusal" &&
-      response.stop_reason !== "max_tokens"
+      response.stop_reason !== "refusal"
         ? response.content
             .flatMap((b) =>
               b.type === "text" && typeof b.text === "string" ? [b.text] : [],
@@ -79,7 +90,7 @@ export function createPublish(deps: {
         : "";
     return {
       verdict: parsePublishCheck(text),
-      costUsd: responseCostUsd(response.usage),
+      costUsd,
     };
   }
 
@@ -111,7 +122,7 @@ export function createPublish(deps: {
             userId,
             start.checkId,
             { approved: false, reason: "check failed" },
-            0,
+            err instanceof CutOffReply ? err.costUsd : 0,
           );
           throw new PublishCheckFailed("the publish check could not run");
         }
