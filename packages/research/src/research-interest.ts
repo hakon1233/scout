@@ -23,14 +23,17 @@ export const RESEARCH_MODEL = HAIKU_MODEL;
 
 // Room for adaptive thinking plus a long (~1100-word) section.
 const MAX_TOKENS = 16_000;
-// Each fetched page is cut to about this many tokens. Every step of the
-// server-tool loop re-reads earlier tool results, so long pages pushed real
-// runs to 84K-99.8K prompt tokens, just under the 100K line where Haiku's
-// long-prompt rates (5x) start. Article text sat in the first ~6-8K tokens.
-const MAX_FETCH_CONTENT_TOKENS = 6000;
-// The free plan's searches_per_run.
-const DEFAULT_MAX_SEARCHES = 5;
-const DEFAULT_MAX_FETCHES = 5;
+// The lean run, tested 20 Nov 2026 (plan/research/run-cost.md, section 7):
+// 3 searches and 2 fetches cut to 3,000 tokens keep the summed prompt under
+// the 100K line where Haiku's long-prompt rates (5x) start, so a run costs
+// about $0.03 instead of $0.05-0.09, with the same stories in 3 of 4 topics.
+// Effort stays at the API default: effort "low" gave up early and missed a
+// story. Change these here only.
+export const LEAN_RUN = {
+  maxSearches: 3,
+  maxFetches: 2,
+  maxFetchContentTokens: 3000,
+} as const;
 // The whole call, across every pause_turn continuation.
 const DEFAULT_TIMEOUT_MS = 300_000;
 // pause_turn resumes after the first request. The API pauses after 10
@@ -38,7 +41,7 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 // at most one or two.
 const MAX_CONTINUATIONS = 3;
 // A run stops before its next continuation once it has spent this much. A
-// healthy run costs a few cents (five searches plus cached prompt reads).
+// healthy lean run costs about three cents.
 export const DEFAULT_MAX_COST_USD = 0.25;
 // Tool error codes that mean a limit was hit: running again won't help.
 const LIMIT_TOOL_ERRORS = new Set(["max_uses_exceeded", "too_many_requests"]);
@@ -46,7 +49,9 @@ const LIMIT_TOOL_ERRORS = new Set(["max_uses_exceeded", "too_many_requests"]);
 export type ResearchDeps = {
   claude: ClaudeClient;
   now?: Date;
-  maxSearches?: number; // the plan's searches_per_run
+  // The plan's searches_per_run. A ceiling: a run never searches more than
+  // LEAN_RUN allows.
+  maxSearches?: number;
   maxFetches?: number;
   timeoutMs?: number;
   maxCostUsd?: number; // the per-run spend cap
@@ -99,7 +104,7 @@ function webTools(
       type: "web_fetch_20250910",
       name: API_RESEARCH_TOOLS.fetch,
       max_uses: maxFetches,
-      max_content_tokens: MAX_FETCH_CONTENT_TOKENS,
+      max_content_tokens: LEAN_RUN.maxFetchContentTokens,
     },
   ];
 }
@@ -136,8 +141,8 @@ export async function researchInterest(
     ],
   };
   const tools = webTools(
-    deps.maxSearches ?? DEFAULT_MAX_SEARCHES,
-    deps.maxFetches ?? DEFAULT_MAX_FETCHES,
+    Math.min(deps.maxSearches ?? LEAN_RUN.maxSearches, LEAN_RUN.maxSearches),
+    Math.min(deps.maxFetches ?? LEAN_RUN.maxFetches, LEAN_RUN.maxFetches),
     interest.settings?.searchLocale ?? null,
   );
 

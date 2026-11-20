@@ -76,9 +76,10 @@ test("a paused run resumes and returns the topic's section, newest first", async
   assert.deepEqual(failed, []);
 });
 
-test("the request: Haiku, capped web tools, cached prompt, resumed turn sent back unchanged", async () => {
+test("the request: Haiku, lean web tools, cached prompt, resumed turn sent back unchanged", async () => {
   const claude = recordedClient(pausedRun);
-  await researchInterest(INTEREST, { claude, now: NOW, maxSearches: 3 });
+  // The free plan's searches_per_run is 5; the lean run caps it at 3.
+  await researchInterest(INTEREST, { claude, now: NOW, maxSearches: 5 });
 
   assert.equal(claude.requests.length, 2);
   const [first, second] = claude.requests;
@@ -88,12 +89,14 @@ test("the request: Haiku, capped web tools, cached prompt, resumed turn sent bac
     {
       type: "web_fetch_20250910",
       name: "web_fetch",
-      max_uses: 5,
+      max_uses: 2,
       // Caps each fetched page so a run stays well under the 100K-token
       // prompt line where Haiku's long-prompt rates (5×) start.
-      max_content_tokens: 6000,
+      max_content_tokens: 3000,
     },
   ]);
+  // No effort setting: "low" gave up early and missed stories.
+  assert.equal(first.output_config, undefined);
   const prompt = first.messages[0].content[0];
   assert.deepEqual(prompt.cache_control, { type: "ephemeral" });
   assert.match(String(prompt.text), /<intent-doc>\nReleases and standards/);
