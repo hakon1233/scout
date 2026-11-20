@@ -161,7 +161,9 @@ export function createHostedData(deps: {
     } catch {
       throw new HostedError(
         "failed",
-        "Scout can't be reached. Check your connection and try again.",
+        apikey
+          ? "Scout can't be reached. Check your connection and try again."
+          : "Scout's server can't be reached right now. Try again later.",
       );
     }
     const text = await res.text();

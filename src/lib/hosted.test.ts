@@ -263,6 +263,17 @@ test("run now goes to the Worker; the daily limit comes back in plain words", as
   });
 });
 
+test("a Worker that can't be reached says so, not to check your connection", async () => {
+  const fetch = (async () => {
+    throw new TypeError("Failed to fetch");
+  }) as unknown as typeof globalThis.fetch;
+  const d = data(fetch);
+  await assert.rejects(d.runNow("i-rust"), {
+    name: "HostedError",
+    message: "Scout's server can't be reached right now. Try again later.",
+  });
+});
+
 test("chat and confirm go to the Worker and return its turn", async () => {
   const turn = {
     id: "t1",

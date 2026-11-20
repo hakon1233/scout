@@ -2,8 +2,10 @@ import type { NextConfig } from "next";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+// GitHub Pages serves the site under /<repo>; SCOUT_BASE_PATH overrides it
+// ("" for a site served from the root, as `pnpm deploy:ideas` does).
 const repo = process.env.GITHUB_REPOSITORY?.split("/")[1];
-const basePath = repo ? `/${repo}` : "";
+const basePath = process.env.SCOUT_BASE_PATH ?? (repo ? `/${repo}` : "");
 
 // Single-source the companion version from packages/agent/package.json so the
 // Connect page's tarball URL can never drift from the version the deploy

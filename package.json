@@ -29,7 +29,8 @@
     "eval": "tsx --conditions=source packages/agent/eval/run.ts",
     "test:rls": "supabase db reset --local && supabase test db",
     "db:push:hosted": "node scripts/supabase-hosted.mjs push",
-    "test:rls:hosted": "node scripts/supabase-hosted.mjs test"
+    "test:rls:hosted": "node scripts/supabase-hosted.mjs test",
+    "deploy:ideas": "node scripts/deploy-ideas.mjs"
   },
   "dependencies": {
     "@scout/core": "workspace:*",
