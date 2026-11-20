@@ -32,5 +32,5 @@ export const SCOUT_GUIDE = `How Scout works (answer how-to questions from this o
 - Push and the bell: turn on notifications for this device in Settings, then press a topic's bell on Topics to get a push when its brief lands. Each topic is off until its bell is on.
 - Settings (/app/settings/): appearance, notifications, time zone (daily briefs arrive in the morning there), your plan and what you have used, sign out, and Delete account (type DELETE to confirm; it removes everything).
 - Profile (/app/profile/): your liked stories.
-- Free plan: 15 topics (1 daily, 3 weekly), 3 Run now a day, 3 public topics, 5 voice messages a day. Plus (/app/upgrade/), 49 kr (about $5) a month: 30 topics (6 daily, 3 weekly), 3 Run now a day. Paying is not open yet.
+- Free plan: 15 topics (1 daily, 3 weekly), 3 Run now a day, 3 public topics, 5 voice messages a day. Plus (/app/upgrade/), 49 kr (about $5) a month: 30 topics (1 daily, 6 weekly), 3 Run now a day. Paying is not open yet.
 - Sharing, Browse, notifications, plans and accounts exist only in signed-in Scout on the web.`;

@@ -164,11 +164,11 @@ test("plan meters: own topics against the plan, follows don't count", () => {
   assert.equal(planFor("unknown").id, "free");
   assert.deepEqual(planLines(planFor("plus")).slice(0, 2), [
     "30 topics",
-    "6 daily and 3 weekly briefs",
+    "1 daily and 6 weekly briefs",
   ]);
   assert.deepEqual(planGains(planFor("plus")), [
     "30 topics",
-    "6 daily and 3 weekly briefs",
+    "1 daily and 6 weekly briefs",
     "Everything else in Free",
   ]);
   assert.equal(priceText(planFor("plus")), "49 kr a month");
