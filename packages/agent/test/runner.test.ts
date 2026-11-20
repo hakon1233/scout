@@ -164,10 +164,10 @@ test("the brief snapshots each topic's intent doc into `bases`", async () => {
   const seeded = bases.find((b) => b.topic === "ai");
   const bare = bases.find((b) => b.topic === "climate");
   assert.ok(seeded, "a basis snapshot exists for the seeded topic");
-  assert.equal(seeded!.doc, customDoc, "custom doc is snapshotted verbatim");
+  assert.equal(seeded.doc, customDoc, "custom doc is snapshotted verbatim");
   assert.ok(bare, "a basis snapshot exists for the docless topic");
   assert.equal(
-    bare!.doc,
+    bare.doc,
     defaultInterestDoc("climate"),
     "docless topic snapshots the backfilled default",
   );

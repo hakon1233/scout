@@ -124,8 +124,7 @@ test("ephemeral run produces a brief but never mutates the user's saved interest
     // test payload did NOT replace or shrink them.
     const state = await loadState(stateFile);
     assert.equal(
-      (state.last_brief as (Brief & { ephemeral?: boolean }) | undefined)
-        ?.ephemeral,
+      state.last_brief?.ephemeral,
       true,
       "the persisted last_brief slot must retain its ephemeral provenance",
     );

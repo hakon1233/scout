@@ -10,7 +10,7 @@ export function quotaMessage(err: {
 }): string | null {
   if (err.code !== "P0001") return null;
   const limit = /of (\d+)/.exec(err.message ?? "")?.[1];
-  switch (err.hint) {
+  switch (err.hint ?? "") {
     case "daily_interests":
       return `Your plan has room for ${plural(limit, "daily topic")}, and it's in use. Set one to weekly or pause it first.`;
     case "weekly_interests":

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Format check and lint on the staged files only. `pnpm check` stays the full
+# gate before a commit; this catches the quick misses. Skip with --no-verify.
+set -e
+
+files=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$files" ] && exit 0
+
+echo "$files" | tr '\n' '\0' | xargs -0 pnpm exec prettier --check --ignore-unknown
+
+lintable=$(echo "$files" | grep -E '\.(js|jsx|mjs|cjs|ts|tsx|mts|cts)$' || true)
+[ -z "$lintable" ] && exit 0
+echo "$lintable" | tr '\n' '\0' | xargs -0 pnpm exec eslint --no-warn-ignored

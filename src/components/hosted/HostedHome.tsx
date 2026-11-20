@@ -197,7 +197,7 @@ function Feed({
           loading={busy === n.id}
           disabled={busy !== null}
           onClick={() =>
-            act(n.id, async () => {
+            void act(n.id, async () => {
               const id = await data.hostCopy(n.id);
               await scheduleNew(data, [id], false);
             })
@@ -237,7 +237,7 @@ function Feed({
           size="sm"
           loading={busy === notice.id}
           disabled={busy !== null}
-          onClick={() => act(notice.id, () => data.runNow(interestId))}
+          onClick={() => void act(notice.id, () => data.runNow(interestId))}
         >
           Run now
         </Button>

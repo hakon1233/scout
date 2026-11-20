@@ -158,14 +158,17 @@ function CompanionHome() {
         const failure = ok && token ? await fetchRunFailure(token) : null;
         if (!scope.cancelled) setRunFailure(failure);
       };
-      check();
+      void check();
       // Back off the poll once the companion is confirmed ready. While
       // unpaired we poll fast (10s) so first pairing feels instant; once ready
       // we widen to 30s — steady background /healthz traffic and main-thread
       // wakeups drop 3x for no behaviour change. Drop-out is still detected
       // within one slow tick: the next check flips companionReady=false,
       // which re-runs this effect and restores the 10s cadence.
-      const id = setInterval(check, companionReady ? 30_000 : 10_000);
+      const id = setInterval(
+        () => void check(),
+        companionReady ? 30_000 : 10_000,
+      );
       return () => {
         clearInterval(id);
       };
@@ -180,7 +183,7 @@ function CompanionHome() {
       // example. Only adopt it when it's newer than whatever we cached locally,
       // and never while a generation is already in flight.
       if (!hydrated) return;
-      (async () => {
+      void (async () => {
         const token = await bootstrapCompanionToken();
         if (!token || scope.cancelled) return;
         const latest = await fetchLatestBrief(token);
@@ -214,7 +217,7 @@ function CompanionHome() {
       // that did follows interests added, removed or renamed in the profile
       // chat. The reader's name stays local.
       if (!hydrated) return;
-      (async () => {
+      void (async () => {
         const stored = loadSettings();
         const token = await bootstrapCompanionToken();
         const set = await fetchCompanionInterestSet(
@@ -540,7 +543,7 @@ function CompanionHome() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={retryMissingTopics}
+                          onClick={() => void retryMissingTopics()}
                         >
                           Retry{" "}
                           {missing.length === 1

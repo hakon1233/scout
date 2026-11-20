@@ -10,18 +10,19 @@ import { LazyMarkdown } from "./LazyMarkdown";
 
 function CopyButton({ getText }: { getText: () => string }) {
   const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(getText());
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      /* clipboard blocked — no-op, button stays idle */
+    }
+  }
   return (
     <button
       type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(getText());
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1400);
-        } catch {
-          /* clipboard blocked — no-op, button stays idle */
-        }
-      }}
+      onClick={() => void copy()}
       className="rounded-sm border border-border-default bg-surface px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] text-muted transition-colors hover:border-border-strong hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
       aria-label={copied ? "Copied" : "Copy code"}
     >

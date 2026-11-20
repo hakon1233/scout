@@ -3,7 +3,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { ClaudeClient, MessagesResponse } from "@scout/research";
+import type { ClaudeClient } from "@scout/research";
 import { handleRequest } from "../src/http.ts";
 
 const SUPABASE = "https://ref.supabase.test";
@@ -61,7 +61,7 @@ function stubClaude(answer: unknown) {
         content: [{ type: "text", text: JSON.stringify(answer) }],
         stop_reason: "end_turn",
         usage: { input_tokens: 900, output_tokens: 40 },
-      } as MessagesResponse;
+      };
     },
   };
   return { claude, calls: () => calls };

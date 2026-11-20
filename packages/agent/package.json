@@ -21,7 +21,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node ../../scripts/live-build-guard.mjs && tsc -p ../core/tsconfig.json --outDir dist/core && tsc -p tsconfig.json && node scripts/write-build-info.mjs",
+    "build": "node ../../scripts/live-build-guard.mjs && tsc -p ../core/tsconfig.json --outDir dist/core && tsc -p tsconfig.build.json && node scripts/write-build-info.mjs",
     "dev": "tsx --conditions=source src/cli.ts",
     "test": "tsx --conditions=source --test test/*.test.ts",
     "prepublishOnly": "npm run build"

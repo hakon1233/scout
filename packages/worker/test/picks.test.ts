@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPicks } from "@scout/hosted";
-import { recordedClient, type MessagesResponse } from "@scout/research";
+import { recordedClient } from "@scout/research";
 import { picksBatch } from "../src/run-due.ts";
 import { supabasePicksStore } from "../src/supabase.ts";
 
@@ -43,7 +43,7 @@ test("a tick claims at most its picks batch and records each reader's picks", as
       ],
       stop_reason: "end_turn",
       usage: { input_tokens: 4000, output_tokens: 300 },
-    } as MessagesResponse,
+    },
   ]);
   const store = supabasePicksStore({
     url: "https://ref.supabase.test",

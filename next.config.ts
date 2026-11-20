@@ -44,8 +44,8 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_AGENT_VERSION: agentVersion,
   },
   trailingSlash: true,
-  // The e2e and screenshot server (fake backend) never rewrites AGENTS.md.
-  ...(process.env.NEXT_PUBLIC_SCOUT_FAKE_HOSTED ? { agentRules: false } : {}),
+  // agentRules stays on: AGENTS.md carries the current block, so `next dev`
+  // leaves it alone. Turning it off makes Next 16.4+ delete the block.
 };
 
 export default nextConfig;
