@@ -16,7 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test && pnpm test:sql && pnpm build",
     "test": "node --test test/*.test.mjs && pnpm --filter @scout/core test && pnpm --filter @scout/agent test && pnpm --filter @scout/research test && pnpm --filter @scout/hosted test && pnpm --filter @scout/worker test && pnpm run test:web",
     "test:web": "tsx --test 'src/**/*.test.ts'",
     "build:agent-webroot": "node scripts/build-agent-webroot.mjs",
@@ -28,6 +28,7 @@
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "eval": "tsx --conditions=source packages/agent/eval/run.ts",
     "test:rls": "supabase db reset --local && supabase test db",
+    "test:sql": "node scripts/test-sql.mjs",
     "db:push:hosted": "node scripts/supabase-hosted.mjs push",
     "test:rls:hosted": "node scripts/supabase-hosted.mjs test",
     "deploy:ideas": "node scripts/deploy-ideas.mjs",
@@ -44,6 +45,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.2.17",
     "@playwright/test": "^1.48.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

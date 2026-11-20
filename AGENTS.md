@@ -14,7 +14,7 @@ code, tests and comments.
 
 ## Commands
 
-- `pnpm check`: format check, typecheck, lint, unit and contract tests, build. Run it before every commit.
+- `pnpm check`: format check, typecheck, lint, unit and contract tests, SQL tests, build. Run it before every commit.
 - `pnpm test:e2e`: Playwright against a companion built from source.
 - `pnpm demo`: the whole app on <http://127.0.0.1:47899/app/>, offline. Use it to try a
   change by hand.
@@ -30,6 +30,11 @@ code, tests and comments.
   topic once. See docs/ARCHITECTURE.md, "The Scout team runner".
 - `pnpm test:rls`: the hosted schema's RLS and quota tests (`supabase/tests`). Needs
   Docker and `supabase start`; resets the local database first. Not part of `pnpm check`.
+- `pnpm test:sql`: the same `supabase/tests` files in PGlite (Postgres in WebAssembly),
+  no Docker: each file gets a fresh database with `scripts/sql-test-prelude.sql` (roles,
+  `auth` stub, a small pgTAP stand-in) and every migration in order. Part of `pnpm check`;
+  `pnpm test:sql voice` runs only matching files. A new pgTAP function a test uses goes
+  into the prelude.
 - `pnpm test:rls:hosted`: the same tests against a hosted project over the Management
   API, no Docker. Needs `SUPABASE_PROJECT_REF` and `SUPABASE_ACCESS_TOKEN` (a personal
   access token; never `supabase login`). Each file runs in a transaction that is always
