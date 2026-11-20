@@ -508,6 +508,7 @@ test("a share link reads signed out with the anon key, and builds its brief", as
         visibility: "public",
         owned: false,
         following: false,
+        team: true,
         run: {
           id: "r3",
           section_md: RUST_SECTION,
@@ -521,6 +522,7 @@ test("a share link reads signed out with the anon key, and builds its brief", as
   assert.equal(calls[0].headers.authorization, "Bearer anon-key");
   assert.deepEqual(calls[0].body, { p_slug: "slug-1" });
   assert.equal(shared?.topic, "Rust releases");
+  assert.equal(shared?.team, true);
   assert.equal(shared?.brief?.id, "hosted-r3");
   assert.equal(shared?.brief?.generatedAt, "2026-11-20T07:03:00Z");
   assert.equal(

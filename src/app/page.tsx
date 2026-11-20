@@ -3,6 +3,10 @@ import { PairedEntryRedirect } from "@/components/PairedEntryRedirect";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { isHostedBuild } from "@/lib/auth";
 import { PLANS, priceText } from "@/lib/plans";
+import { pageRobots } from "@/lib/seo";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { robots: pageRobots("/") };
 
 // Direction A — Editorial / "Private Wire Service".
 // Masthead → hero (with sample brief filed alongside) → how-it-works →

@@ -83,6 +83,9 @@ export type SharedInterest = {
   visibility: Visibility;
   owned: boolean;
   following: boolean;
+  // A Scout team topic (the topic card's flag); search engines index only
+  // public team topics (lib/seo.ts).
+  team: boolean;
   brief: Brief | null;
 };
 

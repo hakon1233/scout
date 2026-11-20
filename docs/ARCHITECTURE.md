@@ -274,6 +274,12 @@ companion never imports it.
 - `components/FeedBody.tsx`: a story's body as markdown (GFM tables too) through
   rehype-sanitize, never raw HTML; body images are dropped (only the lead image shows,
   with no referrer) and links get `rel="nofollow ugc noopener"`.
+- `lib/seo.ts`: search indexing, decided only here. Every page is noindex (the root
+  layout) except the landing, Browse and `/i/`, and those only in a build with
+  `SCOUT_INDEXED_SITE` set to the real site's URL; `/i/` adds noindex on the client
+  unless the topic is a public Scout team topic. `pnpm deploy:ideas` clears the switch,
+  so the test site is noindex throughout. `app/robots.ts` and `app/sitemap.ts` (the
+  landing and Browse) come from it too.
 - `public/_headers`: the hosted site's Content-Security-Policy on Cloudflare Pages.
   `scripts/csp-headers.mjs` fills in the Supabase and Worker origins and a hash of each
   inline script after the build (`pnpm deploy:ideas`), so `script-src` has no

@@ -14,6 +14,7 @@ import { Button, buttonClasses } from "@/components/ui";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { hostedAuth } from "@/lib/auth";
 import { HostedError, type SharedInterest } from "@/lib/hosted";
+import { topicIndexable } from "@/lib/seo";
 import { startUsage } from "@/lib/usage";
 
 // A share link's page: `/i/?s=<slug>`. Anyone can read the interest's latest
@@ -84,6 +85,18 @@ function Shared() {
       live = false;
     };
   }, [data, slug]);
+
+  // Search engines index only public Scout team topics (lib/seo.ts); this
+  // page's HTML allows indexing on the real site, so any other topic, or a
+  // dead link, gets noindex here once it has loaded.
+  React.useEffect(() => {
+    if (view.kind === "loading" || (ready && topicIndexable(ready))) return;
+    const meta = document.createElement("meta");
+    meta.name = "robots";
+    meta.content = "noindex";
+    document.head.append(meta);
+    return () => meta.remove();
+  }, [view.kind, ready]);
 
   if (!data)
     return (

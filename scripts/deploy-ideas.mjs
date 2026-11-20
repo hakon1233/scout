@@ -60,6 +60,8 @@ function run(cmd, args, extraEnv = {}) {
 
 run("pnpm", ["build"], {
   SCOUT_BASE_PATH: "",
+  // The test site is never the real site: noindex on every page (src/lib/seo.ts).
+  SCOUT_INDEXED_SITE: "",
   NEXT_PUBLIC_SUPABASE_URL: `https://${REF}.supabase.co`,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: anon,
   NEXT_PUBLIC_SCOUT_WORKER_URL: subdomain

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter, JetBrains_Mono, Newsreader } from "next/font/google";
 import "./globals.css";
 import { ThemeBootstrap } from "@/components/ThemeToggle";
+import { pageRobots } from "@/lib/seo";
 
 // Direction A — Editorial / "Private Wire Service".
 // Fraunces: serif display for mastheads & titles.
@@ -42,6 +43,8 @@ export const metadata: Metadata = {
   // Each screen names itself ("Browse · Scout"); the landing keeps the full line.
   title: { default: title, template: "%s · Scout" },
   description,
+  // Noindex unless a page's own layout says otherwise (lib/seo.ts).
+  robots: pageRobots(null),
   openGraph: {
     type: "website",
     url: siteUrl,

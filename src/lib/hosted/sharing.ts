@@ -40,6 +40,7 @@ export function sharingData(
         visibility: row.visibility,
         owned: row.owned,
         following: row.following,
+        team: row.team ?? false,
         brief: run?.section_md
           ? briefFrom(
               [{ topic: row.topic, section: run.section_md }],
@@ -80,6 +81,8 @@ type SharedRow = {
   visibility: Visibility;
   owned: boolean;
   following: boolean;
+  // The topic card's Scout team flag.
+  team?: boolean;
   run: {
     id: string;
     section_md: string | null;
