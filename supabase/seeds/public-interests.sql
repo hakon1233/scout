@@ -13,8 +13,10 @@ values ('5c0a7000-0000-4000-8000-000000000001', 'catalog@scout.invalid',
         'authenticated', 'authenticated')
 on conflict (id) do nothing;
 
--- The profile trigger made the profile on first insert; this keeps it admin.
-update public.profiles set is_admin = true
+-- The profile trigger made the profile on first insert; this keeps it admin
+-- and the Scout team (profiles.is_team: the team badge, no interest or run
+-- caps, and its public topics run only on the team runner).
+update public.profiles set is_admin = true, is_team = true
 where id = '5c0a7000-0000-4000-8000-000000000001';
 
 insert into public.interests

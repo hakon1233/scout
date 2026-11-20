@@ -3,7 +3,8 @@
 // subrequests left; the daily cron cleans up and, on Mondays, queues the
 // weekly push. fetch serves run-now, the chat and delete account.
 // Secrets (SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, SUPABASE_ANON_KEY,
-// VAPID_PRIVATE_KEY) come from `wrangler secret put`, never from a file.
+// VAPID_PRIVATE_KEY, and optionally TEAM_RUNNER_TOKEN and MODERATION_TOKEN)
+// come from `wrangler secret put`, never from a file.
 
 import { anthropicClient } from "@scout/research";
 import { handleRequest } from "./http.ts";
@@ -29,6 +30,10 @@ export type Env = {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  // The Scout team runner's /team routes (team.ts). Unset, they do not exist.
+  TEAM_RUNNER_TOKEN?: string;
+  // /team/hide, for the weekly public topic check. Unset, it does not exist.
+  MODERATION_TOKEN?: string;
 };
 
 // wrangler.toml's daily trigger.
@@ -73,6 +78,8 @@ const worker = {
       allowedOrigin: env.ALLOWED_ORIGIN,
       serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
       claude: anthropicClient({ apiKey: env.ANTHROPIC_API_KEY }),
+      teamToken: env.TEAM_RUNNER_TOKEN,
+      moderationToken: env.MODERATION_TOKEN,
     });
   },
 };

@@ -92,6 +92,20 @@ test("a web-research run can use WebSearch and WebFetch and nothing else", async
   ]);
 });
 
+test("a capped run passes its turn limit to the CLI", async () => {
+  const stub = stubSpawn({ stdout: "## ai\n" });
+  await runClaude("prompt", {
+    tools: "web-research",
+    spawnFn: stub.spawnFn,
+    maxTurns: 12,
+  });
+
+  const { args } = stub.calls[0];
+  const at = args.indexOf("--max-turns");
+  assert.deepEqual(args.slice(at, at + 2), ["--max-turns", "12"]);
+  assert.equal(args.lastIndexOf("--max-turns"), at, "one turn limit only");
+});
+
 test("a no-tools run gets an empty tool set", async () => {
   const stub = stubSpawn({ stdout: "{}" });
   await runClaude("prompt", { tools: "none", spawnFn: stub.spawnFn });

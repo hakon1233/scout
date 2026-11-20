@@ -30,7 +30,14 @@ export type ClaudeRunOptions = {
   timeoutMs?: number;
   // Kills the child and rejects with an AbortError.
   signal?: AbortSignal;
+  // Caps a web-research session's agentic turns (`--max-turns`): each search
+  // or fetch takes one. Unset, MAX_RESEARCH_TURNS.
+  maxTurns?: number;
 };
+
+// A research run that keeps searching ends instead of looping. A real run
+// takes 5-15 turns.
+const MAX_RESEARCH_TURNS = 25;
 
 const TOOL_ARGS: Record<ClaudeTools, string[]> = {
   "web-research": [
@@ -39,10 +46,6 @@ const TOOL_ARGS: Record<ClaudeTools, string[]> = {
     // Pre-approve both so `--print` never stops at a permission prompt.
     "--allowed-tools",
     "WebSearch,WebFetch",
-    // A run that keeps searching ends instead of looping. A real run takes
-    // 5-15 turns.
-    "--max-turns",
-    "25",
   ],
   none: ["--tools", ""],
 };
@@ -129,6 +132,9 @@ export function runClaude(
         "--output-format",
         "text",
         ...TOOL_ARGS[opts.tools],
+        ...(opts.tools === "web-research"
+          ? ["--max-turns", String(opts.maxTurns ?? MAX_RESEARCH_TURNS)]
+          : []),
         "--strict-mcp-config",
         "--safe-mode",
         "--setting-sources",
