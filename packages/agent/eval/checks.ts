@@ -35,6 +35,35 @@ const EMPTY_LINE_RE = /^\s*_?\s*No (?:change|news)\b/im;
 const NO_CHANGE_SINCE_RE = /No change since (\d{4}-\d{2}-\d{2})/i;
 // The research agent writes as a news service, never about itself.
 const FIRST_PERSON_RE = /\b(?:I|I'm|I've|I'd|[Ww]e|[Mm]y|[Oo]ur)\b/g;
+// A count in prose, as digits or a small number word.
+const NUMBER_WORDS = [
+  "zero",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+];
+const COUNT_RE = new RegExp(
+  `\\b(?:\\d[\\d,.]*|${NUMBER_WORDS.join("|")})\\b`,
+  "gi",
+);
+// The counts in a text, digits and words alike ("two" and "2" match).
+function counts(text: string): Set<string> {
+  return new Set(
+    (text.match(COUNT_RE) ?? []).map((m) => {
+      const word = NUMBER_WORDS.indexOf(m.toLowerCase());
+      return word >= 0 ? String(word) : m.replace(/[,.]$/, "");
+    }),
+  );
+}
 // A "[domain — Title](url)" citation.
 const CITATION_ON_LINE_RE = /\[[^\]]* — [^\]]*\]\(/;
 
@@ -70,6 +99,13 @@ export function checkResearchOutput(
   const words = raw.split(/\s+/).filter(Boolean).length;
   const prose = stories.map((s) => `${s.summary}\n${s.body ?? ""}`).join("\n");
   const firstPerson = prose.match(FIRST_PERSON_RE) ?? [];
+  // A summary's counts the body never bears out (UT-024: "Two npm packages"
+  // over a body about one). "One" is too common a word to hold to this.
+  const unsupported = stories.flatMap((s) => {
+    const body = counts(s.body ?? "");
+    const summary = s.summary.replace(DATE_MARKER_RE, "");
+    return [...counts(summary)].filter((n) => n !== "1" && !body.has(n));
+  });
   const titles = stories.flatMap((s) =>
     s.links.filter((l) => l.label.includes(" — ")).map((l) => l.label),
   );
@@ -153,6 +189,11 @@ export function checkResearchOutput(
     check(
       "source-images-https",
       stories.every((s) => s.image === null || s.image.startsWith("https://")),
+    ),
+    check(
+      "summary-in-body",
+      unsupported.length === 0,
+      `summary counts the body doesn't bear out: ${unsupported.join(", ")}`,
     ),
     check(
       "third-person",

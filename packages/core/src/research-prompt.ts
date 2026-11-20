@@ -265,6 +265,9 @@ export function buildResearchPrompt(
     `  ${length.paragraphs} paragraph(s): the short 1-2 sentence lead (the UI renders it in`,
     `  bold), then ${length.extra}, each adding a concrete, checkable`,
     "  detail grounded in the same sources.",
+    "- A story's bullet summary and its body say only what that story's cited",
+    "  sources say: no count, name or claim from another story or source. A count",
+    '  in the summary ("two packages") is one the body bears out, naming each.',
   );
   if (settings.evergreen) {
     lines.push(
