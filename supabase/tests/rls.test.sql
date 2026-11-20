@@ -96,10 +96,13 @@ select ok(
   not exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
-      and (has_function_privilege('anon', p.oid, 'execute')
-           or (p.proname not in ('allowance', 'is_time_zone', 'request_run')
+      and ((p.proname <> 'interest_by_slug'
+            and has_function_privilege('anon', p.oid, 'execute'))
+           or (p.proname not in ('allowance', 'is_time_zone', 'request_run',
+                                 'set_visibility', 'follow', 'interest_by_slug', 'host_copy')
                and has_function_privilege('authenticated', p.oid, 'execute')))),
-  'anon may call nothing; signed-in readers only allowance, is_time_zone and request_run');
+  'anon may call only interest_by_slug; signed-in readers only allowance, is_time_zone, '
+  'request_run and the sharing calls');
 
 -- ---------------------------------------------------------------------------
 -- Ben, who follows nothing yet

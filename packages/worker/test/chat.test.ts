@@ -24,7 +24,14 @@ function recorded(name: string): MessagesResponse {
 type Call = { method: string; url: string; auth: string; body: unknown };
 
 // A stub Supabase: answers by path, and records each call.
-function stubSupabase(over: { blocked?: string; userOk?: boolean } = {}) {
+function stubSupabase(
+  over: {
+    blocked?: string;
+    userOk?: boolean;
+    commitError?: unknown;
+    publicInterests?: { id: string; topic: string }[];
+  } = {},
+) {
   const calls: Call[] = [];
   const fetch = (async (url: string, init: RequestInit) => {
     const headers = init.headers as Record<string, string>;
@@ -45,10 +52,18 @@ function stubSupabase(over: { blocked?: string; userOk?: boolean } = {}) {
       return ok(over.blocked ?? null);
     if (path === "/rest/v1/rpc/allowance")
       return ok({ limits: { max_interests: 15, max_doc_chars: 4000 } });
-    if (path === "/rest/v1/interests") return ok([]);
+    if (path === "/rest/v1/interests")
+      return ok(
+        url.includes("visibility=eq.public")
+          ? (over.publicInterests ?? [])
+          : [],
+      );
     if (path === "/rest/v1/chat_turns") return ok([]);
     if (path === "/rest/v1/follows") return ok([]);
-    if (path === "/rest/v1/rpc/commit_chat_turn") return ok(null);
+    if (path === "/rest/v1/rpc/commit_chat_turn")
+      return over.commitError
+        ? new Response(JSON.stringify(over.commitError), { status: 400 })
+        : ok(null);
     return new Response("unknown", { status: 404 });
   }) as unknown as typeof globalThis.fetch;
   return { fetch, calls };
@@ -56,15 +71,17 @@ function stubSupabase(over: { blocked?: string; userOk?: boolean } = {}) {
 
 function stubClaude(answers: MessagesResponse[]) {
   let calls = 0;
+  const prompts: string[] = [];
   const claude: ClaudeClient = {
-    async createMessage() {
+    async createMessage(request) {
       calls += 1;
+      prompts.push(JSON.stringify(request));
       const next = answers.shift();
       if (!next) throw new Error("no recorded response left");
       return next;
     },
   };
-  return { claude, calls: () => calls };
+  return { claude, calls: () => calls, prompts };
 }
 
 function post(
@@ -132,6 +149,46 @@ test("a chat turn is refused with the SQL's own words when the reader is out of 
     error: "You have used today's 40 chat messages. Try again tomorrow.",
   });
   assert.equal(stub.calls(), 0);
+});
+
+test("a chat turn that hits the interest cap in the database says so in plain words", async () => {
+  const db = stubSupabase({
+    commitError: {
+      code: "P0001",
+      message: "quota: 15 of 15 interests used",
+      hint: "max_interests",
+      details: null,
+    },
+  });
+  const { claude } = stubClaude([recorded("create")]);
+  const res = await post(
+    "/chat",
+    { message: "Rust releases" },
+    db.fetch,
+    claude,
+  );
+  assert.equal(res.status, 429);
+  assert.deepEqual(await res.json(), {
+    error:
+      "Your plan has room for 15 interests, and they're in use. Delete one first.",
+  });
+});
+
+test("the chat sees the public catalog even when no word matches, best matches first", async () => {
+  const db = stubSupabase({
+    publicInterests: [
+      { id: "p1", topic: "NTNU and Trondheim events" },
+      { id: "p2", topic: "Rust language releases" },
+    ],
+  });
+  const stub = stubClaude([recorded("create")]);
+  await post("/chat", { message: "Rust releases" }, db.fetch, stub.claude);
+  const prompt = stub.prompts[0];
+  assert.match(prompt, /NTNU and Trondheim events/);
+  assert.ok(
+    prompt.indexOf("Rust language releases") <
+      prompt.indexOf("NTNU and Trondheim events"),
+  );
 });
 
 test("a chat turn needs a live session and a message", async () => {
