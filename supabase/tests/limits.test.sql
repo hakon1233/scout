@@ -27,6 +27,9 @@ insert into auth.users (id, email, aud, role) values
   ('dddddddd-0000-0000-0000-0000000000c4', 'tor@example.test', 'authenticated', 'authenticated'),
   ('eeeeeeee-0000-0000-0000-0000000000c5', 'eve@example.test', 'authenticated', 'authenticated');
 update public.profiles set plan = 'plus' where id = 'aaaaaaaa-0000-0000-0000-0000000000c1';
+-- Ben and Cleo (Free) each run a daily interest here; Free has none
+-- (rls.test.sql tests that), so this file lends it one.
+update public.plans set daily_interests = 1 where id = 'free';
 update public.profiles set is_team = true where id = 'dddddddd-0000-0000-0000-0000000000c4';
 
 insert into public.interests (id, owner_id, topic, cadence, run_at, paused) values

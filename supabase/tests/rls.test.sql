@@ -61,8 +61,8 @@ select is(
 
 select is(
   (select count(*)::int from public.plans where id = 'free'
-     and daily_interests = 1 and weekly_interests = 3),
-  1, 'free plan is 1 daily + 3 weekly');
+     and daily_interests = 0 and weekly_interests = 3),
+  1, 'free plan is 3 weekly, no daily');
 select is((select count(*)::int from public.settings), 1, 'settings has one row');
 
 -- ---------------------------------------------------------------------------
@@ -256,7 +256,7 @@ select is(
   'shared doc', 'a follower cannot edit what he follows');
 
 -- ---------------------------------------------------------------------------
--- Anna: her own rows, and quotas (free: 1 daily + 3 weekly, doc <= 4000)
+-- Anna: her own rows, and quotas (free: 3 weekly, no daily, doc <= 4000)
 -- ---------------------------------------------------------------------------
 
 set local role authenticated;
@@ -275,16 +275,13 @@ select is((select count(*)::int from public.follows), 0, 'Anna cannot see Ben''s
 
 select is((public.allowance() -> 'used' ->> 'public_interests')::int, 1,
   'a public interest counts against its owner');
-select lives_ok(
-  $$insert into public.interests (topic, cadence) values ('daily one', 'daily')$$,
-  'Anna adds her one daily interest');
 select throws_ok(
-  $$insert into public.interests (topic, cadence) values ('daily two', 'daily')$$,
-  'P0001', 'quota: 1 of 1 daily interests used', 'a second daily interest is refused');
+  $$insert into public.interests (topic, cadence) values ('daily one', 'daily')$$,
+  'P0001', 'quota: 0 of 0 daily interests used', 'the free plan has no daily interest');
 select throws_ok(
   $$update public.interests set cadence = 'daily'
     where id = '00000000-0000-0000-0000-0000000000a1'$$,
-  'P0001', null, 'switching an interest to daily past the quota is refused');
+  'P0001', null, 'switching an interest to daily on the free plan is refused');
 select lives_ok(
   $$insert into public.interests (topic, cadence) values
     ('weekly one', 'weekly'), ('weekly two', 'weekly'), ('weekly three', 'weekly')$$,
@@ -296,18 +293,18 @@ select lives_ok(
   $$insert into public.interests (topic, cadence) values ('paused', 'off')$$,
   'interests that are off are not limited');
 select lives_ok(
-  $$update public.interests set run_at = '08:30', topic = 'daily one, renamed'
-    where topic = 'daily one'$$,
+  $$update public.interests set run_at = '08:30', topic = 'weekly two, renamed'
+    where topic = 'weekly two'$$,
   'editing an interest that already counts is not re-checked');
 
 -- Freeing a slot: switch off, or soft-delete.
 select lives_ok(
-  $$update public.interests set cadence = 'off' where topic = 'daily one, renamed'$$,
-  'Anna pauses her daily interest');
+  $$update public.interests set cadence = 'off' where topic = 'weekly two, renamed'$$,
+  'Anna pauses a weekly interest');
 select lives_ok(
-  $$update public.interests set cadence = 'daily'
+  $$update public.interests set cadence = 'weekly'
     where id = '00000000-0000-0000-0000-0000000000a1'$$,
-  'the freed daily slot can be used again');
+  'the freed weekly slot can be used again');
 select lives_ok(
   $$update public.interests set deleted_at = now() where topic = 'weekly one'$$,
   'Anna soft-deletes a weekly interest');
@@ -328,11 +325,11 @@ select lives_ok(
 
 select is(
   public.allowance() -> 'used',
-  '{"interests": 9, "daily_interests": 1, "weekly_interests": 3, "public_interests": 1, "on_demand_runs_today": 0, "chat_turns_today": 1, "runs_24h": 0, "spend_24h_usd": 0}'::jsonb,
+  '{"interests": 8, "daily_interests": 0, "weekly_interests": 3, "public_interests": 1, "on_demand_runs_today": 0, "chat_turns_today": 1, "runs_24h": 0, "spend_24h_usd": 0}'::jsonb,
   'allowance counts what Anna uses');
 select is(
   public.allowance() -> 'limits',
-  '{"daily_interests": 1, "weekly_interests": 3, "on_demand_runs_per_day": 3, "chat_turns_per_day": 40, "searches_per_run": 5, "max_doc_chars": 4000, "max_interests": 15, "spend_per_day_usd": 0.40, "runs_per_day": 8, "max_public_interests": 3, "publishes_per_day": 5, "price_nok": 0, "price_usd_cents": 0, "purchasable": false}'::jsonb,
+  '{"daily_interests": 0, "weekly_interests": 3, "on_demand_runs_per_day": 3, "chat_turns_per_day": 40, "searches_per_run": 5, "max_doc_chars": 4000, "max_interests": 15, "spend_per_day_usd": 0.40, "runs_per_day": 8, "max_public_interests": 3, "publishes_per_day": 5, "price_nok": 0, "price_usd_cents": 0, "purchasable": false}'::jsonb,
   'allowance reads the limits from the plans table');
 
 reset role;

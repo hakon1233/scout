@@ -162,6 +162,10 @@ test("plan meters: own topics against the plan, follows don't count", () => {
     { label: "Run now today", used: 2, limit: 3 },
   ]);
   assert.equal(planFor("unknown").id, "free");
+  assert.deepEqual(planLines(planFor("free")).slice(0, 2), [
+    "15 topics",
+    "3 weekly briefs",
+  ]);
   assert.deepEqual(planLines(planFor("plus")).slice(0, 2), [
     "30 topics",
     "1 daily and 6 weekly briefs",

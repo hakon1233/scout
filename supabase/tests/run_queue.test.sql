@@ -25,6 +25,8 @@ insert into auth.users (id, email, aud, role) values
 -- to two daily interests (one public, which counts like any other); this file
 -- tests the queue, not the quota (limits.test.sql does).
 update public.plans set daily_interests = 2 where id = 'plus';
+-- Ben (Free) runs a daily interest too; Free has none, so it is lent one here.
+update public.plans set daily_interests = 1 where id = 'free';
 update public.profiles set timezone = 'Europe/Oslo', plan = 'plus'
 where id = 'aaaaaaaa-0000-0000-0000-000000000001';
 

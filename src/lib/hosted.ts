@@ -50,8 +50,12 @@ export function allowanceLine(a: Allowance): string {
   const left = (x: { used: number; limit: number }) =>
     Math.max(0, x.limit - x.used);
   const plan = a.plan.charAt(0).toUpperCase() + a.plan.slice(1);
+  const daily =
+    a.daily.limit === 0
+      ? ""
+      : `${left(a.daily)} of ${a.daily.limit} daily and `;
   return (
-    `${plan} plan: ${left(a.daily)} of ${a.daily.limit} daily and ` +
+    `${plan} plan: ${daily}` +
     `${left(a.weekly)} of ${a.weekly.limit} weekly slots free. ` +
     `${plural(left(a.runsToday), "run")} left today.`
   );

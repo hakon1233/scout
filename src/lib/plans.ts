@@ -35,7 +35,7 @@ export const PLANS: Record<PlanId, Plan> = {
     priceNok: 0,
     priceUsdCents: 0,
     topics: 15,
-    dailyTopics: 1,
+    dailyTopics: 0,
     weeklyTopics: 3,
     runNowPerDay: 3,
     publicTopics: 3,
@@ -73,8 +73,8 @@ export function priceAbroadText(p: Plan): string | null {
 /** What a plan gives, as short lines for the Upgrade page. */
 export function planLines(p: Plan): string[] {
   const schedule =
-    p.weeklyTopics === 0
-      ? `${p.dailyTopics} daily briefs`
+    p.dailyTopics === 0
+      ? `${p.weeklyTopics} weekly briefs`
       : `${p.dailyTopics} daily and ${p.weeklyTopics} weekly briefs`;
   return [
     `${p.topics} topics`,

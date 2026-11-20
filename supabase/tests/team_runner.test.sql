@@ -17,6 +17,8 @@ insert into auth.users (id, email, aud, role) values
 
 update public.profiles set is_admin = true, is_team = true
 where id = '7ea70000-0000-4000-8000-000000000001';
+-- Anna is on Plus so her public topic may run daily (Free has no daily topic).
+update public.profiles set plan = 'plus' where id = 'aaaaaaaa-0000-0000-0000-000000000001';
 update public.settings set team_runner_on = false, paused = false;
 -- Other rows of the hosted project stay out of the Worker's claims below.
 update public.settings set daily_ceiling_usd = daily_ceiling_usd + 1000;
@@ -38,7 +40,7 @@ insert into public.interests
 
 select is((select count(*)::int from public.interests
            where owner_id = '7ea70000-0000-4000-8000-000000000001' and cadence = 'daily'), 3,
-  'a team account has no interest caps (the free plan allows one daily topic)');
+  'a team account has no interest caps (the free plan allows no daily topic)');
 
 create temp table tick (run_id uuid, topic text, doc text, searches_per_run integer);
 -- What a team claim or start hands the runner: the same row claim_runs hands the Worker.

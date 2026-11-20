@@ -8,9 +8,10 @@ import { PLANS } from "./plans";
 test("the chat guide names the plans' current limits", () => {
   const f = PLANS.free;
   const p = PLANS.plus;
+  assert.equal(f.dailyTopics, 0);
   assert.ok(
     SCOUT_GUIDE.includes(
-      `${f.topics} topics (${f.dailyTopics} daily, ${f.weeklyTopics} weekly), ${f.runNowPerDay} Run now a day, ${f.publicTopics} public topics`,
+      `${f.topics} topics (${f.weeklyTopics} weekly, no daily), ${f.runNowPerDay} Run now a day, ${f.publicTopics} public topics`,
     ),
   );
   assert.ok(SCOUT_GUIDE.includes(`at most ${f.publicTopics} of yours`));
