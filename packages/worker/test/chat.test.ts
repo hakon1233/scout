@@ -32,6 +32,9 @@ function stubSupabase(
     commitError?: unknown;
     publicInterests?: { id: string; topic: string }[];
     deleteStatus?: number;
+    feedbackOn?: boolean;
+    turns?: unknown[];
+    feedbackBlocked?: string;
   } = {},
 ) {
   const calls: Call[] = [];
@@ -67,7 +70,11 @@ function stubSupabase(
           ? (over.publicInterests ?? [])
           : [],
       );
-    if (path === "/rest/v1/chat_turns") return ok([]);
+    if (path === "/rest/v1/chat_turns") return ok(over.turns ?? []);
+    if (path === "/rest/v1/settings")
+      return ok([{ feedback_on: over.feedbackOn ?? false }]);
+    if (path === "/rest/v1/rpc/send_feedback")
+      return ok(over.feedbackBlocked ?? null);
     if (path === "/rest/v1/follows") return ok([]);
     if (path === "/rest/v1/rpc/commit_chat_turn")
       return over.commitError
@@ -325,4 +332,82 @@ test("delete account needs a live session, and says so when Supabase fails", asy
     (await post("/account/delete", {}, failing.fetch, claude)).status,
     502,
   );
+});
+
+test("a feedback confirm is free: it skips the chat limit and sends the stored card through send_feedback", async () => {
+  const card = {
+    kind: "wish",
+    summary: "Dark mode",
+    text: "Please add a dark mode to the feed.",
+  };
+  const db = stubSupabase({
+    // The reader has used today's chat messages; feedback still goes.
+    blocked: "You have used today's 40 chat messages. Try again tomorrow.",
+    feedbackOn: true,
+    turns: [
+      {
+        id: TURN,
+        created_at: "2026-11-20T08:00:00.000Z",
+        status: "ready",
+        message: "I wish it had dark mode",
+        reply: "Send it to the Scout team? Confirm below.",
+        changes: [],
+        pending: { feedback: card },
+        error_msg: null,
+      },
+    ],
+  });
+  const { claude, calls } = stubClaude([]);
+  const res = await post(
+    "/chat/confirm",
+    { kind: "feedback" },
+    db.fetch,
+    claude,
+  );
+  assert.equal(res.status, 200);
+  const turn = (await res.json()) as ChatTurn;
+  assert.match(turn.reply ?? "", /Sent to the Scout team/);
+  assert.equal(calls(), 0);
+  assert.ok(!db.calls.some((c) => c.url.endsWith("/rpc/chat_block_reason")));
+  assert.ok(!db.calls.some((c) => c.url.endsWith("/rpc/commit_chat_turn")));
+  const send = db.calls.find((c) => c.url.endsWith("/rpc/send_feedback"));
+  assert.equal(send?.auth, "Bearer service-key");
+  const args = send?.body as {
+    p_user: string;
+    p_card_turn: string;
+    p_feedback: unknown;
+    p_turn: { message: string; reply: string; pending: unknown };
+  };
+  assert.equal(args.p_user, USER);
+  assert.equal(args.p_card_turn, TURN);
+  assert.deepEqual(args.p_feedback, card);
+  assert.equal(args.p_turn.message, "Send feedback: Dark mode");
+  assert.equal(args.p_turn.pending, null);
+});
+
+test("a feedback confirm with the switch off answers 409 and sends nothing", async () => {
+  const db = stubSupabase({
+    feedbackOn: false,
+    turns: [
+      {
+        id: TURN,
+        created_at: "2026-11-20T08:00:00.000Z",
+        status: "ready",
+        message: "I wish it had dark mode",
+        reply: "Confirm below.",
+        changes: [],
+        pending: { feedback: { kind: "wish", summary: "a", text: "b" } },
+        error_msg: null,
+      },
+    ],
+  });
+  const { claude } = stubClaude([]);
+  const res = await post(
+    "/chat/confirm",
+    { kind: "feedback" },
+    db.fetch,
+    claude,
+  );
+  assert.equal(res.status, 409);
+  assert.ok(!db.calls.some((c) => c.url.endsWith("/rpc/send_feedback")));
 });

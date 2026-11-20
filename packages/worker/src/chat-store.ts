@@ -3,7 +3,8 @@
 // query names the reader's id itself. The transcript leaves out pending turns
 // (reserved by begin_chat_turn, still waiting for Claude); the catalog is the
 // listed public interests (interest_is_listed, a computed column). Writes go through commit_chat_turn, one
-// transaction per turn (supabase/migrations/20261120030000_chat.sql).
+// transaction per turn (supabase/migrations/20261120030000_chat.sql), and a
+// sent feedback card through send_feedback (20261122000000_feedback.sql).
 
 import {
   chatTurnFromRow,
@@ -51,7 +52,7 @@ export function supabaseChatStore(opts: {
   return {
     async load(userId) {
       const user = encodeURIComponent(userId);
-      const [interests, turns, allowance] = await Promise.all([
+      const [interests, turns, allowance, settings] = await Promise.all([
         select<{ id: string; topic: string; doc: string }>(
           "interests",
           `select=id,topic,doc&owner_id=eq.${user}&deleted_at=is.null&order=created_at.asc`,
@@ -67,6 +68,7 @@ export function supabaseChatStore(opts: {
             daily_interests: number;
           };
         }>,
+        select<{ feedback_on: boolean }>("settings", "select=feedback_on"),
       ]);
       return {
         interests,
@@ -76,6 +78,7 @@ export function supabaseChatStore(opts: {
           maxDocChars: allowance.limits.max_doc_chars,
           dailyInterests: allowance.limits.daily_interests,
         },
+        feedbackOn: settings[0]?.feedback_on === true,
       };
     },
 
@@ -115,6 +118,20 @@ export function supabaseChatStore(opts: {
         },
         auth,
       );
+    },
+
+    async sendFeedback(userId, { cardTurnId, feedback, turn }) {
+      const reason = await rpc(
+        "send_feedback",
+        {
+          p_user: userId,
+          p_card_turn: cardTurnId,
+          p_feedback: feedback,
+          p_turn: chatTurnToRow(turn),
+        },
+        auth,
+      );
+      return typeof reason === "string" ? reason : null;
     },
   };
 }

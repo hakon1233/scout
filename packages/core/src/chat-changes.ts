@@ -21,6 +21,10 @@ export type ProposedChange = {
   doc?: unknown;
   // On a create: how often the reader wants a brief.
   cadence?: unknown;
+  // On a feedback (core's feedback.ts).
+  kind?: unknown;
+  summary?: unknown;
+  text?: unknown;
 };
 
 export type ChatCadence = "daily" | "weekly";

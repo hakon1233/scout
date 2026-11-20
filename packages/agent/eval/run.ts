@@ -95,6 +95,7 @@ type ChatCase = {
     pendingDelete?: string;
     pendingRewrite?: string;
     page?: string;
+    feedback?: string;
   };
   expectFail: string[];
 };

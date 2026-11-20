@@ -1,0 +1,15 @@
+{
+  "message": "The feed is completely blank on my phone since this morning.",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    }
+  ],
+  "output": "{\"reply\": \"Sorry, that sounds like a bug. Here is a note for the Scout team: confirm below to send it.\", \"changes\": [{\"op\": \"feedback\", \"kind\": \"bug\", \"summary\": \"Feed is blank on a phone\", \"text\": \"The feed is completely blank on my phone since this morning.\"}]}",
+  "expect": {
+    "applied": [],
+    "feedback": "bug"
+  },
+  "expectFail": []
+}

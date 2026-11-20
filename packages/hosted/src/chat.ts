@@ -9,13 +9,17 @@
 
 import {
   APP_PAGES,
+  FEEDBACK_SCHEMA_PROPERTIES,
+  FEEDBACK_SENT_REPLY,
   buildChatPrompt,
+  feedbackOf,
   parseChatOutput,
   planChatChanges,
   type ChatChange,
   type ChatConfirm,
   type ChatTurn,
   type Interest,
+  type PendingFeedback,
   type InterestSnapshot,
   HAIKU_MODEL,
   MAX_TOPIC_CHARS,
@@ -41,6 +45,8 @@ export type ChatStore = {
       maxDocChars: number;
       dailyInterests?: number;
     };
+    // The `feedback_on` setting: the chat may draft notes to the Scout team.
+    feedbackOn?: boolean;
   }>;
   // Up to `limit` public interests, best matches for `message` first, leaving
   // out the reader's own and those they already follow.
@@ -55,6 +61,14 @@ export type ChatStore = {
     userId: string,
     commit: { turn: ChatTurn; follows: string[]; costUsd: number },
   ): Promise<void>;
+  // In one transaction: store `feedback` from the card in turn `cardTurnId`
+  // unless a feedback limit is reached, and append `turn` as a free turn (it
+  // does not count toward the daily chat limit). Returns null when sent, or
+  // the reason it was not, which also becomes the stored turn's reply.
+  sendFeedback(
+    userId: string,
+    send: { cardTurnId: string; feedback: PendingFeedback; turn: ChatTurn },
+  ): Promise<string | null>;
 };
 
 // The confirm body is part of the Worker's HTTP contract, so it lives in core.
@@ -67,34 +81,45 @@ const MAX_OUTPUT_TOKENS = 8192;
 const TURN_TIMEOUT_MS = 60_000;
 
 // The change set's shape, enforced by the API's structured output. It only
-// guarantees well-formed JSON: planChatChanges still checks every field.
-const CHAT_OUTPUT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["reply", "changes"],
-  properties: {
-    reply: { type: "string" },
-    changes: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["op"],
-        properties: {
-          op: {
-            type: "string",
-            enum: ["create", "update", "rewrite", "delete", "follow"],
+// guarantees well-formed JSON: planChatChanges and feedbackOf still check
+// every field. The feedback op is in it only while feedback is on.
+function chatOutputSchema(feedback: boolean) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["reply", "changes"],
+    properties: {
+      reply: { type: "string" },
+      changes: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["op"],
+          properties: {
+            op: {
+              type: "string",
+              enum: [
+                "create",
+                "update",
+                "rewrite",
+                "delete",
+                "follow",
+                ...(feedback ? ["feedback"] : []),
+              ],
+            },
+            interestId: { type: "string" },
+            topic: { type: "string" },
+            doc: { type: "string" },
+            cadence: { type: "string", enum: ["daily", "weekly"] },
+            ...(feedback ? FEEDBACK_SCHEMA_PROPERTIES : {}),
           },
-          interestId: { type: "string" },
-          topic: { type: "string" },
-          doc: { type: "string" },
-          cadence: { type: "string", enum: ["daily", "weekly"] },
         },
       },
+      page: { type: "string", enum: Object.keys(APP_PAGES) },
     },
-    page: { type: "string", enum: Object.keys(APP_PAGES) },
-  },
-};
+  };
+}
 
 export function createChat(deps: {
   claude: ClaudeClient;
@@ -116,7 +141,9 @@ export function createChat(deps: {
     message: string,
     opts: { turnId?: string } = {},
   ): Promise<ChatTurn> {
-    const { interests, transcript, limits } = await store.load(userId);
+    const { interests, transcript, limits, feedbackOn } =
+      await store.load(userId);
+    const feedback = feedbackOn === true;
     const base = {
       id: opts.turnId ?? newId(),
       created_at: now().toISOString(),
@@ -136,7 +163,10 @@ export function createChat(deps: {
           max_tokens: MAX_OUTPUT_TOKENS,
           output_config: {
             effort: "low",
-            format: { type: "json_schema", schema: CHAT_OUTPUT_SCHEMA },
+            format: {
+              type: "json_schema",
+              schema: chatOutputSchema(feedback),
+            },
           },
           messages: [
             {
@@ -149,6 +179,7 @@ export function createChat(deps: {
                     publicInterests,
                     cadences: true,
                     noDaily: limits.dailyInterests === 0,
+                    feedback,
                   }),
                 },
               ],
@@ -167,6 +198,7 @@ export function createChat(deps: {
         message,
       });
       const { pendingDeletes, pendingRewrites, pendingFollows } = plan;
+      const pendingFeedback = feedback ? feedbackOf(output.changes) : undefined;
       // A new topic waits for the reader's confirm, so they see its title
       // and cadence before it is saved and its first brief is queued.
       // On a plan with no daily topics, a daily ask is made weekly.
@@ -208,6 +240,7 @@ export function createChat(deps: {
           ...(pendingCreates.length > 0
             ? { pending_creates: pendingCreates }
             : {}),
+          ...(pendingFeedback ? { pending_feedback: pendingFeedback } : {}),
         },
       };
     } catch (err) {
@@ -227,9 +260,27 @@ export function createChat(deps: {
     userId: string,
     action: ChatConfirm,
   ): Promise<ChatTurn | null> {
-    const { interests, transcript } = await store.load(userId);
+    const { interests, transcript, feedbackOn } = await store.load(userId);
     const last = transcript.at(-1);
     if (!last || last.status !== "ready") return null;
+    if (action.kind === "feedback") {
+      const feedback = last.pending_feedback;
+      if (feedbackOn !== true || !feedback) return null;
+      const turn: ChatTurn = {
+        id: newId(),
+        created_at: now().toISOString(),
+        status: "ready",
+        message: `Send feedback: ${feedback.summary}`,
+        reply: FEEDBACK_SENT_REPLY,
+        changes: [],
+      };
+      const blocked = await store.sendFeedback(userId, {
+        cardTurnId: last.id,
+        feedback,
+        turn,
+      });
+      return blocked === null ? turn : { ...turn, reply: blocked };
+    }
     const outcome = confirmOutcome(last, interests, action);
     if (!outcome) return null;
     const turn: ChatTurn = {
@@ -250,7 +301,7 @@ export function createChat(deps: {
 function confirmOutcome(
   last: ChatTurn,
   interests: InterestSnapshot[],
-  action: ChatConfirm,
+  action: Exclude<ChatConfirm, { kind: "feedback" }>,
 ): {
   message: string;
   reply: string;

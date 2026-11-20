@@ -387,11 +387,33 @@ export function createFakeHostedData(): HostedData {
     },
     transcript: async () => [...turns],
     async chat(message) {
-      const turn = reply(message, "This preview can't set up topics.");
+      // A bug report drafts a note to the Scout team, as the live chat does
+      // with the `feedback_on` setting on.
+      const turn = /\b(bug|broken|feedback)\b/i.test(message)
+        ? {
+            ...reply(
+              message,
+              "Sorry about that. Here is a note for the Scout team: confirm below to send it.",
+            ),
+            pending_feedback: {
+              kind: "bug" as const,
+              summary: "Feed is blank on a phone",
+              text: message,
+            },
+          }
+        : reply(message, "This preview can't set up topics.");
       turns.push(turn);
       return turn;
     },
-    confirm: async () => reply("", "Done."),
+    async confirm(action) {
+      if (action.kind !== "feedback") return reply("", "Done.");
+      const turn = reply(
+        "Send feedback: Feed is blank on a phone",
+        "Sent to the Scout team. Thank you.",
+      );
+      turns.push(turn);
+      return turn;
+    },
     async createTopic(topic, doc) {
       if (!topic.trim() || !doc.trim()) throw new Error("Empty topic.");
       const id = `new-${interests.length + removed.size + 1}`;

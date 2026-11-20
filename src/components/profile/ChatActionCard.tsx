@@ -156,7 +156,9 @@ export type RewriteResolution = "applied" | "discarded" | undefined;
 //
 // The hosted chat reuses it for a proposed new topic (`create`): the same
 // card with the new doc as all-adds, a line saying how it will run, and
-// [Confirm]/[Discard]. Nothing is saved until Confirm.
+// [Confirm]/[Discard]. Nothing is saved until Confirm. It also shows a note to
+// the Scout team (`feedback`): `pr.topic` is the note's one-line summary and
+// `pr.doc` its text, shown as written. Nothing is sent until Confirm.
 export function ChatRewriteProposal({
   pr,
   prev,
@@ -166,8 +168,10 @@ export function ChatRewriteProposal({
   onDiscard,
   disabled,
   create,
+  feedback = false,
 }: {
   pr: PendingRewrite;
+  feedback?: boolean;
   // Set for a proposed new topic: how it will run, e.g. "Weekly · Private".
   create?: { schedule: string };
   // The doc body before the proposal, when known. Null (e.g. a card re-rendered
@@ -210,17 +214,22 @@ export function ChatRewriteProposal({
           aria-hidden="true"
           className="grid size-[18px] place-items-center rounded-sm bg-signal font-mono text-[11px] font-semibold leading-none text-[color:var(--accent-fg)]"
         >
-          {create ? "+" : "~"}
+          {feedback ? "→" : create ? "+" : "~"}
         </span>
         <span
           id={labelId}
           className="font-mono text-[10px] uppercase tracking-[0.05em] text-secondary"
         >
-          {create ? "New topic" : "Proposed rewrite"} · {pr.topic}
+          {feedback
+            ? "Send feedback"
+            : create
+              ? "New topic"
+              : "Proposed rewrite"}{" "}
+          · {pr.topic}
         </span>
         {resolved === "applied" ? (
           <span className="ml-auto rounded-pill border border-success-border bg-success-bg px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.05em] text-success">
-            {create ? "Saved" : "Applied"}
+            {feedback ? "Sent" : create ? "Saved" : "Applied"}
           </span>
         ) : resolved === "discarded" ? (
           <span className="ml-auto rounded-pill border border-border-default bg-surface-muted px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
@@ -239,18 +248,33 @@ export function ChatRewriteProposal({
         </p>
       )}
 
-      <DiffLines diff={diff} />
+      {feedback ? (
+        <div className="space-y-2 px-2.5 py-2">
+          <p className="whitespace-pre-wrap text-body-sm text-primary">
+            {pr.doc}
+          </p>
+          <p className="text-body-sm text-muted">
+            Don’t include personal details.
+          </p>
+        </div>
+      ) : (
+        <DiffLines diff={diff} />
+      )}
 
       <div className="flex items-center gap-2 border-t border-border-default px-2.5 py-2">
         {resolved ? (
           <span className="font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
-            {create
+            {feedback
               ? resolved === "applied"
-                ? "Topic saved"
-                : "Nothing saved"
-              : resolved === "applied"
-                ? "Rewrite written to the doc"
-                : "Proposal discarded — doc untouched"}
+                ? "Sent to the Scout team"
+                : "Nothing sent"
+              : create
+                ? resolved === "applied"
+                  ? "Topic saved"
+                  : "Nothing saved"
+                : resolved === "applied"
+                  ? "Rewrite written to the doc"
+                  : "Proposal discarded — doc untouched"}
           </span>
         ) : (
           <>
@@ -260,7 +284,7 @@ export function ChatRewriteProposal({
               onClick={onApply}
               className={buttonClass}
             >
-              {create ? "Confirm" : "Apply"}
+              {create || feedback ? "Confirm" : "Apply"}
             </button>
             <button
               ref={discardRef}

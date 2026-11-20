@@ -4,6 +4,7 @@
 
 import type { ProposedChange, InterestSnapshot } from "./chat-changes.ts";
 import type { AppPage, ChatTurn, Interest } from "./contract.ts";
+import { FEEDBACK_PROMPT_OP, FEEDBACK_PROMPT_RULES } from "./feedback.ts";
 import { APP_PAGES, SCOUT_GUIDE, appPage } from "./scout-guide.ts";
 
 export type ChatModelOutput = {
@@ -31,6 +32,8 @@ export function buildChatPrompt(
     publicInterests?: Interest[];
     cadences?: boolean;
     noDaily?: boolean;
+    // Offer the feedback op (core's feedback.ts). Off: the prompt is unchanged.
+    feedback?: boolean;
   },
 ): string {
   const { maxInterests } = opts;
@@ -150,6 +153,7 @@ export function buildChatPrompt(
     lines.push("    // Offer to follow a public interest listed above:");
     lines.push('    { "op": "follow", "interestId": "<public interest id>" },');
   }
+  if (opts.feedback) lines.push(FEEDBACK_PROMPT_OP);
   lines.push("    // Delete an interest:");
   lines.push('    { "op": "delete", "interestId": "<existing id>" }');
   lines.push("  ],");
@@ -337,6 +341,7 @@ export function buildChatPrompt(
     "    `reply`. When a page would help, set `page` to exactly one of:",
   );
   lines.push(`    ${Object.keys(APP_PAGES).join(", ")}. Otherwise omit it.`);
+  if (opts.feedback) lines.push(FEEDBACK_PROMPT_RULES);
   lines.push("- Do not use any tools. Output only the JSON object.");
   return lines.join("\n");
 }
