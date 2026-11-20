@@ -47,6 +47,12 @@ Left out: drug shortages (medically risky to summarise), GPU and Steam Deck rest
 (bots do it better), conference CFP deadlines (aideadlin.es covers them), SiT housing
 (sit.no blocks fetches), electricity prices (Norwegian media cover them heavily).
 
+## More niches
+
+The wider niche research (Trondheim, Norway, the Nordics, the rest of the world), the
+intent doc template and the test checklist are in
+[public-interests/](public-interests/README.md).
+
 ## Trondheim event sources
 
 - **Scout can read:** Samfundet (samfundet.no/arrangement), TIHLDE (tihlde.org/arrangementer),
