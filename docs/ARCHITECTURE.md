@@ -63,6 +63,9 @@ as `@scout/core`, the companion as `#core`.
 - `scout-guide.ts`: `SCOUT_GUIDE`, how Scout works in plain words, which the chat
   prompt carries so the chat answers how-to questions; and `APP_PAGES`, the only pages a
   reply may offer to open (`ChatTurn.page`). The parser drops any other page.
+- `picks-prompt.ts`: a reader's picks: `buildPicksPrompt` (profile, reading, likes and
+  up to 40 candidate topics as JSON data, each under a short key) and `parsePicks`
+  (at most 5 known candidates, each with a reason; fails closed).
 
 The companion runs core's code from `dist/core`: its build compiles core there, and
 `#core` in its `package.json` points at that copy. Its tests and `pnpm eval` run with the
@@ -124,6 +127,9 @@ price table also gives each turn's cost. Server only: the web app never imports 
   store's `start` checks owner and limits and opens a check; the plain checks, then one
   Haiku 5.5 call; `finish` records the verdict and, on approve, sets the tags and makes
   the topic public. A check that cannot run is recorded as refused and thrown.
+- `picks.ts`: `createPicks({claude, store}).refresh(limit)`: claims up to `limit`
+  readers, one Haiku 5.5 call each with core's picks prompt, and stores their picks
+  (none without candidates, no model call). A failed call keeps the old picks.
 
 ### Run queue (`packages/worker/src`, `supabase/migrations/*_run_queue.sql`)
 
@@ -156,6 +162,12 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   subrequest budget leaves, and deletes devices the push service calls gone (404/410).
   A push failure never fails or retries a run. Tables and RPCs: `*_push.sql`,
   `*_push_outbox.sql`.
+- Picks: each tick, after the runs, refreshes `picksBatch` readers' picks
+  (`supabasePicksStore` over `claim_picks`/`finish_picks`, `*_picks.sql`). On Mondays
+  the daily job marks readers active in the last 30 days (`start_weekly_picks`); their
+  weekly push waits until their picks are made (at most 12 h) and then names them. A
+  profile change asks for new picks, at most once a day. Readers over their spend cap
+  are skipped and get the push with their old picks.
 - `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`;
   without `VAPID_PRIVATE_KEY` no pushes are sent.
 - `team.ts`: the `/team` routes (paths in core's `team.ts`), with no CORS and their own
@@ -223,7 +235,8 @@ companion never imports it.
   `hostCopy(notice)` and `dismiss(notice)`, and `pushStatus`, `pushEnable`,
   `pushDisable` for this device's notifications, `publish`, `setTags`, `browse`,
   `tagCounts`, `report`, `profile`, `setProfile`, `marks`/`mark`/`unmark` (likes and
-  saves) and `sendEvents` (usage, in batches of 50), over Supabase REST (as the reader,
+  saves), `sendEvents` (usage, in batches of 50), and `picks`/`dismissPick` (the
+  reader's cached picks), over Supabase REST (as the reader,
   under RLS) and the Worker. `shared` and `browse` also work signed out, with the anon key. Limits come
   back as `HostedError` with a plain sentence (core's `quotaMessage`, shared with the
   Worker). `components/hosted/` renders it; in a hosted build `app/app/page.tsx` shows
@@ -266,6 +279,9 @@ views, seconds per story; own insert only, 300 an hour, deleted after 30 days by
 (full-text on title and tags, tag filter, popular or new), `tag_counts`, and
 `report_topic` into the admin-only `topic_reports`. `*_profile.sql`: optional location,
 student, role and liked tags, and `is_reserved_name` for display names.
+`*_picks.sql`: `reader_picks` (one cached ranking per reader, up to 5 topics with a
+reason), `dismissed_picks`, and `pick_runs`, whose cost counts toward the spend caps.
+`my_picks` returns only topics still public, not owned, followed or dismissed.
 `*_payments.sql`: plan prices and a `subscriptions` table, unused until payments.
 `config.toml` turns on Google (client
 id and secret read from env by name) and the email link, and lists the sign-in page's

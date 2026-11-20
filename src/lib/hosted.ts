@@ -178,7 +178,23 @@ export interface HostedData {
   unmark(kind: MarkKind, storyKey: string): Promise<void>;
   // Usage events, sent in batches of at most MAX_EVENT_BATCH.
   sendEvents(events: UsageEvent[]): Promise<void>;
+  // Up to 5 public topics picked for the signed-in reader, best first, each
+  // with a one-line reason. Refreshed weekly and after a profile change.
+  picks(): Promise<PickCard[]>;
+  // "Not for me": the topic is never picked for this reader again.
+  dismissPick(interestId: string): Promise<void>;
 }
+
+/** A topic picked for the reader (the SQL's my_picks). */
+export type PickCard = {
+  id: string;
+  slug: string;
+  title: string;
+  tags: string[];
+  ownerName: string | null;
+  team: boolean;
+  reason: string;
+};
 
 export type BrowseQuery = {
   q?: string;
@@ -771,6 +787,30 @@ export function createHostedData(deps: {
       await rest("rpc/report_topic", {
         method: "POST",
         body: { p_interest: interestId, p_reason: reason.trim() },
+      });
+    },
+
+    async picks() {
+      const rows = await rest<
+        (Omit<TopicCardRow, "briefs" | "followers"> & {
+          reason: string | null;
+        })[]
+      >("rpc/my_picks", { method: "POST", body: {} });
+      return rows.map((r) => ({
+        id: r.id,
+        slug: r.slug,
+        title: r.title,
+        tags: r.tags ?? [],
+        ownerName: r.owner_name,
+        team: r.team,
+        reason: r.reason ?? "",
+      }));
+    },
+
+    async dismissPick(interestId) {
+      await rest("rpc/dismiss_pick", {
+        method: "POST",
+        body: { p_interest: interestId },
       });
     },
 

@@ -1,7 +1,12 @@
 // The Supabase side of the run queue, over PostgREST with plain fetch (no
 // supabase-js: less to bundle and less CPU per tick). Host-neutral.
 
-import { briefSettingsFromRow, type BriefSettingsRow } from "@scout/core";
+import {
+  briefSettingsFromRow,
+  type BriefSettingsRow,
+  type PicksInput,
+} from "@scout/core";
+import type { PicksJob, PicksStore } from "@scout/hosted";
 import type { OutboxPush, PushStore } from "./push.ts";
 import type { ClaimedRun, RunOutcome, RunQueue } from "./run-due.ts";
 
@@ -103,23 +108,73 @@ export function supabasePushStore(opts: {
   };
 }
 
+// The service-role picks store: claim_picks and finish_picks
+// (supabase/migrations/*_picks.sql).
+export function supabasePicksStore(opts: {
+  url: string;
+  serviceKey: string;
+  fetch?: Fetch;
+}): PicksStore {
+  const rpc = rpcCaller(opts.url, opts.fetch);
+  const auth = { apikey: opts.serviceKey, bearer: opts.serviceKey };
+  return {
+    async claim(limit) {
+      const rows = ((await rpc("claim_picks", { p_limit: limit }, auth)) ??
+        []) as Array<{
+        user_id: string;
+        run_id: number;
+        kind: PicksJob["kind"];
+        input: PicksInput;
+      }>;
+      return rows.map((r) => ({
+        userId: r.user_id,
+        runId: r.run_id,
+        kind: r.kind,
+        input: r.input,
+      }));
+    },
+    async finish(job, picks, costUsd, error) {
+      await rpc(
+        "finish_picks",
+        {
+          p_user: job.userId,
+          p_run: job.runId,
+          p_picks:
+            picks?.map((p) => ({
+              interest_id: p.interestId,
+              reason: p.reason,
+            })) ?? null,
+          p_cost: costUsd,
+          p_error: error,
+        },
+        auth,
+      );
+    },
+  };
+}
+
 // The daily job (the "17 3 * * *" cron): delete runs over 30 days old (each
-// interest keeps its latest brief) and stale outbox rows; on Mondays, queue
-// the weekly digest pushes.
+// interest keeps its latest brief) and stale outbox rows; on Mondays, mark
+// active readers for a picks refresh, then queue the weekly digest pushes of
+// everyone else (a marked reader's goes out once their picks are made).
 export async function dailyJobs(opts: {
   url: string;
   serviceKey: string;
   now?: Date;
   fetch?: Fetch;
-}): Promise<{ runsDeleted: number; weeklyQueued: number }> {
+}): Promise<{
+  runsDeleted: number;
+  weeklyPicks: number;
+  weeklyQueued: number;
+}> {
   const rpc = rpcCaller(opts.url, opts.fetch);
   const auth = { apikey: opts.serviceKey, bearer: opts.serviceKey };
   const runsDeleted = (await rpc("cleanup_runs", {}, auth)) as number;
   const monday = (opts.now ?? new Date()).getUTCDay() === 1;
-  const weeklyQueued = monday
-    ? ((await rpc("queue_weekly_pushes", {}, auth)) as number)
-    : 0;
-  return { runsDeleted, weeklyQueued };
+  if (!monday) return { runsDeleted, weeklyPicks: 0, weeklyQueued: 0 };
+  const weeklyPicks = (await rpc("start_weekly_picks", {}, auth)) as number;
+  const weeklyQueued = (await rpc("queue_weekly_pushes", {}, auth)) as number;
+  return { runsDeleted, weeklyPicks, weeklyQueued };
 }
 
 export class RpcError extends Error {

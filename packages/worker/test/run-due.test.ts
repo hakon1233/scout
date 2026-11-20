@@ -8,6 +8,7 @@ import { recordedClient, type MessagesResponse } from "@scout/research";
 import {
   MAX_BATCH,
   notifyBudget,
+  picksBatch,
   runDue,
   type ClaimedRun,
   type RunOutcome,
@@ -152,10 +153,20 @@ test("the batch stays within the free plan's 50 subrequests", async () => {
 
   assert.equal(MAX_BATCH, 9);
   assert.deepEqual(queue.limits, [9, 2, 2]);
-  // Pushes get what the claim and the runs leave.
-  assert.equal(notifyBudget(2), 39);
-  assert.equal(notifyBudget(100), 4);
-  assert.equal(notifyBudget(Number("garbled")), 39);
+  // Picks get up to 3 readers (2 each, plus a claim) of what the runs leave;
+  // pushes get the rest.
+  assert.equal(picksBatch(2), 3);
+  assert.equal(picksBatch(100), 1);
+  assert.equal(picksBatch(Number("garbled")), 3);
+  assert.equal(notifyBudget(2), 32);
+  assert.equal(notifyBudget(100), 1);
+  assert.equal(notifyBudget(Number("garbled")), 32);
+  // Every tick fits the 50: claim + runs + picks claim + picks + pushes.
+  for (const b of [0, 1, 2, 5, 9, 100]) {
+    const runs = Math.min(9, b) * 5;
+    const picks = picksBatch(b);
+    assert.ok(1 + runs + (picks ? 1 + picks * 2 : 0) + notifyBudget(b) <= 50);
+  }
 });
 
 test("a batch of 0 claims nothing", async () => {

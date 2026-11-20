@@ -854,6 +854,41 @@ test("browse reads the catalog signed out with the anon key", async () => {
   assert.deepEqual(await d.tagCounts(), [{ tag: "travel", topics: 1 }]);
 });
 
+test("picks come from my_picks as the reader; dismissPick hides one", async () => {
+  const { fetch, calls } = stubFetch({
+    "rpc/my_picks": {
+      body: [
+        {
+          id: "i1",
+          slug: "s1",
+          title: "Fjord kayaking",
+          tags: null,
+          owner_name: null,
+          team: true,
+          reason: "You follow ski touring.",
+        },
+      ],
+    },
+    "rpc/dismiss_pick": { body: null },
+  });
+  const d = data(fetch);
+  assert.deepEqual(await d.picks(), [
+    {
+      id: "i1",
+      slug: "s1",
+      title: "Fjord kayaking",
+      tags: [],
+      ownerName: null,
+      team: true,
+      reason: "You follow ski touring.",
+    },
+  ]);
+  assert.equal(calls[0].headers.authorization, "Bearer jwt-anna");
+  await d.dismissPick("i1");
+  assert.equal(calls[1].method, "POST");
+  assert.deepEqual(calls[1].body, { p_interest: "i1" });
+});
+
 test("tags, reports and the profile go through their RPCs and rows", async () => {
   const { fetch, calls } = stubFetch({
     "rpc/set_topic_tags": { body: ["ai", "kayaking"] },

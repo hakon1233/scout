@@ -144,6 +144,30 @@ test("the weekly push names the reader's topics and what is popular", () => {
   );
 });
 
+test("the weekly push names the reader's picks in place of popular topics", () => {
+  const picks = [{ title: "Fjord kayaking" }, { title: "Ski touring" }];
+  assert.deepEqual(
+    weeklyPayload({
+      count: 2,
+      topics: ["A", "B"],
+      popular: [{ title: "Oslo jazz" }],
+      picks,
+    }),
+    {
+      title: "New this week in your topics",
+      body: "New stories on A, B. Picked for you: Fjord kayaking, Ski touring.",
+    },
+  );
+  // Picks alone (no fresh briefs) still make one push.
+  assert.deepEqual(
+    weeklyPayload({ count: 0, topics: [], popular: [], picks }),
+    {
+      title: "Picked for you this week",
+      body: "Picked for you: Fjord kayaking, Ski touring.",
+    },
+  );
+});
+
 test("a device the push service no longer knows (404, 410) is deleted; other failures are left alone", async () => {
   const k = await keys();
   const { store, dropped } = stubStore([
@@ -218,15 +242,17 @@ test("the daily job cleans up every day and queues the weekly push on Mondays", 
 
   assert.deepEqual(
     await dailyJobs({ ...opts, now: new Date("2026-11-24T03:17:00Z") }),
-    { runsDeleted: 3, weeklyQueued: 0 },
+    { runsDeleted: 3, weeklyPicks: 0, weeklyQueued: 0 },
   );
   assert.deepEqual(
     await dailyJobs({ ...opts, now: new Date("2026-11-23T03:17:00Z") }),
-    { runsDeleted: 3, weeklyQueued: 3 },
+    { runsDeleted: 3, weeklyPicks: 3, weeklyQueued: 3 },
   );
+  // Monday marks active readers for picks first, so their push waits.
   assert.deepEqual(called, [
     "/rest/v1/rpc/cleanup_runs",
     "/rest/v1/rpc/cleanup_runs",
+    "/rest/v1/rpc/start_weekly_picks",
     "/rest/v1/rpc/queue_weekly_pushes",
   ]);
 });
