@@ -18,6 +18,7 @@ biggest niches elsewhere. The first-users plan is in `../MARKETING.md`.
 | [business-more.md](business-more.md)   | Other business watches and a starter pack per trade       |
 | [use-cases.md](use-cases.md)           | Every group that wants something watched, and watch types |
 | [gaps.md](gaps.md)                     | What the first sweeps missed                              |
+| [source-first.md](source-first.md)     | Use cases found by going through public registers         |
 
 ## Tested intent docs (20 Nov 2026)
 
