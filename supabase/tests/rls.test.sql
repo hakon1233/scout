@@ -116,7 +116,7 @@ select ok(
                                  'default_run_at', 'browse_topics', 'tag_counts',
                                  'set_topic_tags', 'report_topic', 'tags_ok',
                                  'topic_search_doc', 'is_reserved_name', 'liked_tags_ok',
-                                 'my_picks', 'dismiss_pick')
+                                 'my_picks', 'my_picks_reader', 'dismiss_pick')
                and has_function_privilege('authenticated', p.oid, 'execute')))),
   'anon may call only the public reads; signed-in readers only their own calls');
 
