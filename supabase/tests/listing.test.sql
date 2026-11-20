@@ -9,6 +9,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 
+-- The hosted project has its own catalog; hide it here (rolled back) so only this
+-- file's topics count.
+update public.interests set hidden_at = now() where visibility = 'public' and hidden_at is null;
+
 -- ---------------------------------------------------------------------------
 -- Setup (as postgres): Hana publishes, Ben follows, Ada is an admin.
 -- ---------------------------------------------------------------------------

@@ -93,8 +93,10 @@ update public.runs set status = 'ready', finished_at = '2026-11-21 12:01+00'
 where id in (select run_id from tick);
 delete from tick;
 
+-- Only this file's topics: the hosted project has its own team topics.
 select results_eq(
-  $$select topic || ' ' || due from public.team_topics('2026-11-21 12:00+00')$$,
+  $$select topic || ' ' || due from public.team_topics('2026-11-21 12:00+00')
+    where topic like 'Team %'$$,
   array['Team daily true', 'Team paused false'],
   'team_topics lists the team''s public topics and which are due, claiming nothing');
 select is(pg_temp.queued_topics(), '{}'::text[], 'team_topics queues nothing');

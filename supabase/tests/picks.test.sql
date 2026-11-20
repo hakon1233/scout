@@ -9,6 +9,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 
+-- The hosted project has its own catalog; hide it here (rolled back) so only this
+-- file's topics count.
+update public.interests set hidden_at = now() where visibility = 'public' and hidden_at is null;
+
 -- Pia reads; Tor hosts public topics; Una is another reader.
 insert into auth.users (id, email, aud, role) values
   ('aaaaaaaa-0000-0000-0000-0000000000e1', 'pia@example.test', 'authenticated', 'authenticated'),

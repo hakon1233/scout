@@ -11,6 +11,9 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 
+-- The schema's default ceiling: the hosted project's may be lower than this file spends.
+update public.settings set daily_ceiling_usd = 10;
+
 -- ---------------------------------------------------------------------------
 -- Setup (as postgres)
 -- ---------------------------------------------------------------------------
