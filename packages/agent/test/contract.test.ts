@@ -759,3 +759,89 @@ test("PUT /v0/interests applies the same wipe guard as POST", async () => {
     await fs.rm(tmp, { recursive: true, force: true });
   }
 });
+
+test("PUT /v0/interest-settings shapes the next run's research prompt", async () => {
+  const { tmp, stateFile, token } = await seededServer();
+  const prior: Brief = {
+    id: "brief_old",
+    generated_at: "2026-11-19T07:00:00.000Z",
+    status: "ready",
+    summary_md:
+      "# Your brief\n\n## ai safety\n- `2026-11-18` — Old item.\n  [example.com — Old alignment story](https://example.com/old)\n",
+    topics: [{ topic: "ai safety", status: "covered" }],
+  };
+  await saveState(
+    {
+      pairing_token: token,
+      interests: [{ id: "int_a", topic: "ai safety" }],
+      briefs: [prior],
+      last_brief: prior,
+    },
+    stateFile,
+  );
+  const recorder = makeSpawnRecorder({ autoClose: true });
+  const { server, port } = await startServer(0, {
+    stateFile,
+    spawnFn: recorder.spawnFn,
+  });
+  const base = `http://127.0.0.1:${port}`;
+  const headers = {
+    "content-type": "application/json",
+    authorization: `Bearer ${token}`,
+  };
+  const put = (body: unknown) =>
+    fetch(`${base}/v0/interest-settings`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(body),
+    });
+  try {
+    const ok = await put({
+      interestId: "int_a",
+      settings: { stories: 2, searchLocale: "nb-NO" },
+    });
+    assert.equal(ok.status, 200);
+    const saved = (await ok.json()) as { settings: { stories: number } };
+    assert.equal(saved.settings.stories, 2);
+    assert.equal((await put({ interestId: "nope", settings: {} })).status, 404);
+    assert.equal(
+      (await put({ interestId: "int_a", settings: { stories: 9 } })).status,
+      400,
+    );
+
+    const list = (await (
+      await fetch(`${base}/v0/interests`, { headers })
+    ).json()) as {
+      interests: Array<{ settings: { stories: number; length: string } }>;
+    };
+    assert.deepEqual(
+      [list.interests[0].settings.stories, list.interests[0].settings.length],
+      [2, "normal"],
+    );
+
+    const run = await fetch(`${base}/v0/interests`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ interests: ["ai safety"] }),
+    });
+    assert.equal(run.status, 202);
+    const deadline = Date.now() + 10_000;
+    while (recorder.calls.length === 0 || !recorder.calls[0].stdin) {
+      assert.ok(Date.now() < deadline, "the run never spawned claude");
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const prompt = recorder.calls[0].stdin;
+    assert.match(prompt, /0-2 story bullets/);
+    assert.match(prompt, /Norwegian/);
+    assert.match(prompt, /Stories already posted[\s\S]*Old alignment story/);
+    assert.match(prompt, /Last posted story: 2026-11-19/);
+    // Let the run land before the temp dir goes.
+    while ((await loadState(stateFile)).last_brief?.status === "pending") {
+      assert.ok(Date.now() < deadline, "the run never finished");
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});

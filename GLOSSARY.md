@@ -62,8 +62,15 @@ and an in-depth body.
 _Avoid_: article (the UI's type name), item, post
 
 **Coverage**:
-Whether each topic of a run came back covered (has stories), empty (the model found no fresh
-news) or missing (its session failed or the section was dropped).
+Whether each topic of a run came back covered (has stories), empty (nothing cleared the
+relevance bar, so the section says "No change since <date>." or "No news yet.") or missing
+(its session failed or the section was dropped).
+
+**Brief settings**:
+Per interest: how long its section is, how many stories it may carry (a number, or only
+the relevant ones), whether old items still count (evergreen), and which locale to search
+in and language to write in. Every run's prompt uses them.
+_Avoid_: preferences, options
 
 **Basis**:
 The exact topic and intent doc a run used for one interest, kept with the brief.
@@ -71,6 +78,10 @@ The exact topic and intent doc a run used for one interest, kept with the brief.
 **Search skills**:
 The fixed research rules given to the model on every run (recency, dates, source quality,
 story format).
+
+**Relevance skills**:
+The fixed rules for when a story earns a place in a section. A run that finds nothing
+relevant enough posts nothing rather than pad.
 
 **Assembly skills**:
 The plain-language description of how sections become one ordered brief; enforced in code,

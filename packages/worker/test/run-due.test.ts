@@ -3,6 +3,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { DEFAULT_BRIEF_SETTINGS } from "@scout/core";
 import { recordedClient, type MessagesResponse } from "@scout/research";
 import {
   MAX_BATCH,
@@ -60,6 +61,10 @@ const run = (n: number): ClaimedRun => ({
   topic: `Topic ${n}`,
   doc: "",
   searchesPerRun: 3,
+  settings: DEFAULT_BRIEF_SETTINGS,
+  prior: [],
+  cadence: "daily",
+  lastStoryAt: null,
 });
 
 test("a tick researches each claimed run and records its section and cost", async () => {
@@ -93,6 +98,35 @@ test("a failed research is recorded as a failed attempt with its cost", async ()
   assert.equal(outcome.sectionMd, null);
   assert.equal(outcome.coverage.status, "missing");
   assert.match(outcome.error ?? "", /no recorded response/);
+  assert.equal(outcome.retry, true, "a broken connection may run once more");
+});
+
+test("a run's settings and earlier sections reach the research prompt", async () => {
+  const queue = stubQueue([
+    {
+      ...run(1),
+      settings: { ...DEFAULT_BRIEF_SETTINGS, stories: 2 },
+      prior: [
+        {
+          date: "2026-11-19T07:00:00Z",
+          markdown:
+            "## Topic 1\n- `2026-11-18` — Old.\n  [example.org — Old story](https://example.org/old)\n",
+        },
+      ],
+    },
+  ]);
+  const claude = recordedClient([answer("Topic 1")]);
+  await runDue({ queue, claude });
+  const prompt = JSON.stringify(claude.requests[0].messages[0].content);
+  assert.match(prompt, /0-2 story bullets/);
+  assert.match(prompt, /Stories already posted/);
+  assert.match(prompt, /Old story/);
+  assert.match(prompt, /Cadence: daily/);
+  assert.equal(
+    queue.finished[0][1].retry,
+    undefined,
+    "a ready run has no retry flag",
+  );
 });
 
 test("a result the queue cannot record leaves that run for the reaper, not the others", async () => {

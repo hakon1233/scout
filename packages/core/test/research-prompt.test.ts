@@ -8,6 +8,8 @@ import {
   buildResearchPrompt,
 } from "../src/research-prompt.ts";
 import { SEARCH_SKILLS, STORY_DATE_RE } from "../src/search-skills.ts";
+import { DEFAULT_BRIEF_SETTINGS } from "../src/brief-settings.ts";
+import { RELEVANCE_SKILLS } from "../src/relevance-skills.ts";
 
 test("the built prompt contains the shared search-skills fragment VERBATIM", () => {
   const prompt = buildResearchPrompt({ topic: "ai", doc: "track ai" });
@@ -92,8 +94,8 @@ test("the prompt scopes the session to the single topic and its output section",
   // exactly-one `## <topic>` output section the assembler later extracts.
   assert.match(prompt, /single topic: "claude code"/);
   assert.match(prompt, /## claude code/);
-  // The empty-topic marker is still mandated so coverage stays honest.
-  assert.match(prompt, /_no fresh news_/);
+  // The empty-topic line is still mandated so coverage stays honest.
+  assert.match(prompt, /`No news yet\.`/);
 });
 
 test("the prompt names the web tools of the session that runs it", () => {
@@ -105,4 +107,110 @@ test("the prompt names the web tools of the session that runs it", () => {
   assert.match(api, /Use the web_search tool/);
   assert.match(api, /Use web_fetch on the/);
   assert.doesNotMatch(api, /WebSearch|WebFetch/);
+});
+
+test("brief settings shape the output rules", () => {
+  const base = { topic: "ai", doc: "track ai" };
+  const normal = buildResearchPrompt(base);
+  assert.match(normal, /0-4 story bullets/);
+  assert.match(normal, /1-3 paragraph\(s\)/);
+  assert.match(normal, /under ~700 words/);
+  assert.doesNotMatch(normal, /marked evergreen/);
+  assert.doesNotMatch(normal, /Search in/);
+
+  const tuned = buildResearchPrompt({
+    ...base,
+    settings: {
+      length: "short",
+      stories: 2,
+      evergreen: true,
+      searchLocale: "nb-NO",
+      briefLanguage: "en",
+    },
+  });
+  assert.match(tuned, /0-2 story bullets \(never more than 2\)/);
+  assert.match(tuned, /1 paragraph\(s\)/);
+  assert.match(tuned, /under ~350 words/);
+  assert.match(tuned, /marked evergreen/);
+  assert.match(
+    tuned,
+    /Search in Norwegian Bokmål \(Norway\).*write the section in English/,
+  );
+
+  const relevant = buildResearchPrompt({
+    ...base,
+    settings: {
+      ...DEFAULT_BRIEF_SETTINGS,
+      stories: "relevant",
+      length: "long",
+    },
+  });
+  assert.match(relevant, /0-4 story bullets/);
+  assert.match(relevant, /3-5 paragraph\(s\)/);
+});
+
+test("the last two briefs' stories reach the prompt as already reported", () => {
+  const brief = (date: string, n: number) => ({
+    date,
+    markdown: [
+      "# Your brief",
+      "",
+      "## ai",
+      `- \`${date}\` — Story ${n}.`,
+      `  [example.org — Title ${n}](https://example.org/${n})`,
+      "",
+      "## other topic",
+      "- `2026-06-01` — Not this topic.",
+      "  [example.org — Elsewhere](https://example.org/x)",
+    ].join("\n"),
+  });
+  const prompt = buildResearchPrompt({
+    topic: "ai",
+    doc: "track ai",
+    prior: [
+      brief("2026-06-09", 3),
+      brief("2026-06-02", 2),
+      brief("2026-05-26", 1),
+    ],
+  });
+  assert.match(prompt, /Stories already posted/);
+  assert.match(prompt, /2 of the last 2 briefs posted a story/);
+  assert.match(
+    prompt,
+    /`2026-06-09` example.org — Title 3 — https:\/\/example.org\/3/,
+  );
+  assert.match(prompt, /Title 2/);
+  assert.doesNotMatch(prompt, /Title 1/, "only the last two briefs");
+  assert.doesNotMatch(prompt, /Elsewhere/, "only this topic's stories");
+  assert.match(prompt, /`No change since 2026-06-09\.`/);
+  assert.doesNotMatch(prompt, /^  `No news yet\.`$/m);
+});
+
+test("a doc with Sources, check first is read before searching", () => {
+  const plain = buildResearchPrompt({ topic: "ai", doc: "track ai" });
+  assert.doesNotMatch(plain, /Sources, check first/);
+  const doc = "# ai\n\n## Sources, check first\n- https://example.org/news\n";
+  const prompt = buildResearchPrompt({ topic: "ai", doc });
+  assert.match(prompt, /Use WebFetch on each of those\s+sources FIRST/);
+});
+
+test("every prompt carries the shared relevance rules, the cadence and the silence", () => {
+  const now = new Date(2026, 10, 20, 9);
+  const quiet = buildResearchPrompt(
+    { topic: "Sea ice", doc: "x", cadence: "weekly", lastPosted: "2026-11-06" },
+    now,
+  );
+  assert.ok(
+    quiet.includes(RELEVANCE_SKILLS),
+    "the rules are injected verbatim",
+  );
+  assert.match(quiet, /Cadence: weekly\./);
+  assert.match(quiet, /Last posted story: 2026-11-06 \(14 days ago\)/);
+  assert.match(quiet, /`No change since 2026-11-06\.`/);
+  const fresh = buildResearchPrompt(
+    { topic: "Sea ice", doc: "x", cadence: "daily", lastPosted: null },
+    now,
+  );
+  assert.match(fresh, /Last posted story: never/);
+  assert.match(fresh, /`No news yet\.`/);
 });

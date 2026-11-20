@@ -54,7 +54,10 @@ insert into public.runs (interest_id, status, scheduled_for, started_at, finishe
   ('00000000-0000-0000-0000-0000000000a2', 'ready', '2026-11-16 06:00+00', '2026-11-16 06:00+00', '2026-11-16 06:02+00', 0),
   ('00000000-0000-0000-0000-0000000000b1', 'ready', '2026-11-19 14:00+00', '2026-11-19 14:00+00', '2026-11-19 14:02+00', 0);
 
-create temp table tick (run_id uuid, topic text, doc text, searches_per_run integer);
+create temp table tick (run_id uuid, topic text, doc text, searches_per_run integer,
+  brief_length text, story_count smallint, stories_relevant_only boolean, evergreen boolean,
+  search_locale text, brief_language text, prior jsonb, cadence text,
+  last_story_at timestamptz);
 
 -- ---------------------------------------------------------------------------
 -- Due times
@@ -102,6 +105,8 @@ select results_eq('select topic from tick order by topic', array['Anna daily', '
   'the earliest slots are claimed first; public gets no priority');
 select is((select count(*)::int from tick), 2, 'a tick claims at most its batch');
 select is((select searches_per_run from tick limit 1), 5, 'searches come from the owner''s plan');
+select is((select brief_length || ' ' || story_count || ' ' || prior::text from tick limit 1),
+  'normal 4 []', 'brief settings come with each run; no earlier sections yet');
 select results_eq(
   $$select i.topic from public.runs r join public.interests i on i.id = r.interest_id
     where r.status in ('queued', 'running') order by i.topic$$,
@@ -157,6 +162,25 @@ select ok(not public.finish_run(
    and status = 'failed'), '## late', null, 0, 0, null, '2026-11-20 12:06+00'),
   'a run no longer running is not finished again');
 
+-- House public runs again: the claim carries its settings and last section;
+-- a failure that cannot help on retry (p_retry false) is final at once.
+update public.interests set brief_length = 'short', search_locale = 'nb-NO'
+  where id = '00000000-0000-0000-0000-0000000000a3';
+insert into public.runs (interest_id, scheduled_for)
+  values ('00000000-0000-0000-0000-0000000000a3', '2026-11-20 12:06+00');
+delete from tick;
+insert into tick select * from public.claim_runs(10, '2026-11-20 12:07+00');
+select is(
+  (select brief_length || ' ' || search_locale || ' ' || (prior -> 0 ->> 'section_md') from tick),
+  'short nb-NO ## House public', 'the claim carries settings and the last ready section');
+select ok(public.finish_run(
+  (select run_id from tick), null, null, 0, 0.01, 'Claude API 429', '2026-11-20 12:08+00', false),
+  'a limit failure');
+select is(
+  (select status || ' ' || attempts from public.runs
+   where interest_id = '00000000-0000-0000-0000-0000000000a3' and scheduled_for = '2026-11-20 12:06+00'),
+  'failed 1', 'a failure marked not retryable is final on the first attempt');
+
 -- Anna daily has been running since 12:00; at 12:12 the reaper takes it back.
 select is((select count(*)::int from public.claim_runs(0, '2026-11-20 12:12+00')), 0,
   'a batch of 0 claims nothing');
@@ -178,7 +202,7 @@ select is((select status from public.runs where interest_id = '00000000-0000-000
 select ok(not has_function_privilege('authenticated', 'public.claim_runs(integer, timestamptz)', 'execute'),
   'readers cannot claim runs');
 select ok(not has_function_privilege('authenticated',
-  'public.finish_run(uuid, text, jsonb, integer, numeric, text, timestamptz)', 'execute'),
+  'public.finish_run(uuid, text, jsonb, integer, numeric, text, timestamptz, boolean)', 'execute'),
   'readers cannot finish runs');
 select ok(not has_function_privilege('anon', 'public.request_run(uuid)', 'execute'),
   'signed-out visitors cannot request runs');

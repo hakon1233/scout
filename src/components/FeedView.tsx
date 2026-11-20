@@ -257,11 +257,11 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
         <a
           href={item.url}
           target="_blank"
-          rel="noopener noreferrer"
+          rel="nofollow ugc noopener"
           className="inline-flex items-center gap-2 text-body-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
         >
-          <SourceBadge host={item.source} />
-          Read the full story at {item.source} ↗
+          <SourceBadge host={hostname(item.url)} />
+          Read the full story at {hostname(item.url)} ↗
         </a>
       </div>
     </article>

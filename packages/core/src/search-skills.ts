@@ -24,15 +24,14 @@
 // image) is the third part of that contract: the parser reads those
 // blockquote lines into Article.body — the few concise paragraphs the detail
 // view renders on click. Its first paragraph is the bold lead summary; later
-// paragraphs carry deeper insight. It must be plain prose (no links/images) so
-// it never collides with the citation or source-image parse, and the feed
-// bullet's one-sentence summary stays the SHORT card blurb.
+// paragraphs carry deeper insight. It may hold lists, tables and emphasis but
+// never links or images, so it never collides with the citation or
+// source-image parse, and the feed bullet's one-sentence summary stays the
+// SHORT card blurb.
 //
-// Detail-view bodies came out shallow across EVERY topic, not just broad ones —
-// so the fix is a straight quality/length bump to this one rule (3-5
-// substantive paragraphs, each required to add a concrete detail), not a
-// topic-breadth branch. Applies uniformly; there is deliberately no "general vs
-// specific topic" distinction anywhere in these rules.
+// Bodies are 1-3 paragraphs by default, each required to add a concrete
+// detail; an interest's brief settings (brief-settings.ts) may ask for
+// shorter or longer ones in the output requirements.
 
 export const STORY_DATE_RE = /`(\d{4}-\d{2}-\d{2}|undated)`/;
 
@@ -45,19 +44,21 @@ how to find it and how fresh it must be.
 RECENCY (the whole point of this brief):
 - Strongly prefer items published in the LAST 7 DAYS. A fresh, smaller story
   beats a stale, bigger one — the reader wants to know what is happening NOW.
-- If a topic has nothing worth reporting from the last 7 days, widen the window
-  to the LAST 30 DAYS and say so explicitly: make the FIRST line under that
-  topic's heading exactly \`_Nothing notable in the last week — showing older items._\`
-  (on its own line), then list the older items below it.
+- A quiet topic may look back further only as the relevance bar below allows
+  (to anything published since its last posted story). Never pad a quiet topic
+  with older items to fill space.
 - NEVER silently present months-old articles as if they were current news.
-- Do NOT include anything published more than ~30 days ago unless the topic
-  explicitly asks for background / evergreen / historical context.
+- Do NOT include anything published more than ~30 days ago unless the output
+  requirements below mark this topic as evergreen.
 
 PUBLISH DATES (one per item, mandatory, captured as a field — not buried in link text):
 - Each story is ONE specific dated item: an article, post, release or
   announcement page. A homepage, front page, section, listing, event calendar
   or index page is not a story; leave it out (it may only point you to the
   specific item). Never give such a page today's date.
+- The page for ONE specific event or announcement (a conference, a hearing, a
+  consultation, a launch) IS a story. Date it by its publish date, and state
+  the event's own date in the summary ("takes place 2026-12-03").
 - Every story item MUST carry its real publish date. Verify it from the source;
   if the search snippet doesn't show a date, fetch the page to confirm it.
   Use the article's own publish/updated date — never substitute today's date.
@@ -98,8 +99,8 @@ IN-DEPTH BODY (one per item, shown when the reader opens the story):
   paragraph in bold, so write it as the crisp lead, not as background.
 - Follow-on paragraphs must be deeper insight/analysis: concrete specifics,
   implications, context, what changed, what remains uncertain, and why it matters
-  for this interest. Aim for 3-5 additional paragraphs — this applies to EVERY
-  topic equally, general/broad or narrow. EACH follow-on paragraph must earn its
+  for this interest. Keep the whole body SHORT: 1-3 paragraphs in all unless the
+  output requirements below set another length. EACH follow-on paragraph must earn its
   place with at least one concrete, checkable detail not already in the lead — a
   number, a name, a quote, a mechanism, a specific consequence — never a
   paragraph that just restates the lead in different words or pads with generic
@@ -118,11 +119,16 @@ IN-DEPTH BODY (one per item, shown when the reader opens the story):
     > Second paragraph: deeper insight, implications, and key specifics.
     >
     > Third paragraph: another concrete detail — a number, a name, a quote.
-    >
-    > Fourth paragraph: useful context, tradeoffs, or what to watch next.
 - The blockquote is the ONLY place depth goes — keep the bullet's summary to one
-  sentence so the feed card stays short. Do not put links or images inside the
-  blockquote; keep it plain prose.
+  sentence so the feed card stays short. Inside it you may use a short list, a
+  small table, **bold**, or \`code\` when that reads better than prose. Never put
+  links or images inside the blockquote.
+
+RULES, LAWS AND REGULATIONS:
+- When the intent doc asks for a rule's status or effective date, each story
+  about a rule states its status — proposed, laid (before parliament) or in
+  force — and its effective date when one is known ("in force from
+  2027-01-01"). Write "effective date not yet set" rather than guess.
 
 SOURCES & QUALITY:
 - Prefer primary / original sources — the company's own announcement, the filing,

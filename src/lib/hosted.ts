@@ -12,6 +12,12 @@
 
 import {
   assembleBrief,
+  BRIEF_SETTINGS_COLUMNS,
+  type BriefSettings,
+  type BriefSettingsRow,
+  briefSettingsFromRow,
+  briefSettingsToRow,
+  parseBriefSettings,
   type ChatConfirm,
   type ChatTurn,
   type ChatTurnRow,
@@ -34,6 +40,8 @@ export type HostedInterest = {
   id: string;
   topic: string;
   cadence: Cadence;
+  // How its brief section is written (length, story count, locale...).
+  settings: BriefSettings;
   // Someone else's shared or public interest the reader follows: no schedule
   // of its own to set, no run-now and no sharing, only unfollow.
   following: boolean;
@@ -87,6 +95,11 @@ export interface HostedData {
   chat(message: string): Promise<ChatTurn>;
   confirm(action: ChatConfirm): Promise<ChatTurn>;
   setCadence(interestId: string, cadence: Cadence): Promise<void>;
+  // Changes only the given fields; the next run uses them.
+  setBriefSettings(
+    interestId: string,
+    change: Partial<BriefSettings>,
+  ): Promise<void>;
   // Soft delete, and its undo.
   remove(interestId: string): Promise<void>;
   restore(interestId: string): Promise<void>;
@@ -398,6 +411,12 @@ export function createHostedData(deps: {
       await patchInterest(interestId, { cadence });
     },
 
+    async setBriefSettings(interestId, change) {
+      const parsed = parseBriefSettings(change);
+      if (!parsed.ok) throw new HostedError("failed", parsed.error);
+      await patchInterest(interestId, briefSettingsToRow(change));
+    },
+
     async remove(interestId) {
       await patchInterest(interestId, { deleted_at: new Date().toISOString() });
     },
@@ -496,9 +515,9 @@ export function createHostedData(deps: {
   };
 }
 
-const INTEREST_COLUMNS = "id,topic,cadence,visibility,share_slug";
+const INTEREST_COLUMNS = `id,topic,cadence,visibility,share_slug,${BRIEF_SETTINGS_COLUMNS}`;
 
-type InterestRow = {
+type InterestRow = Partial<BriefSettingsRow> & {
   id: string;
   topic: string;
   cadence: Cadence;
@@ -580,6 +599,7 @@ function assembleHome(
       id: row.id,
       topic: row.topic,
       cadence: row.cadence,
+      settings: briefSettingsFromRow(row),
       following: row.following,
       visibility: row.visibility,
       shareSlug: row.share_slug,

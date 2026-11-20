@@ -1,0 +1,7 @@
+# Cloudflare Pages response headers for the hosted site (pnpm deploy:ideas).
+# scripts/csp-headers.mjs fills in the placeholder slots after the build: the
+# Supabase and Worker origins, and a hash of every inline script Next wrote.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' {{SCRIPT_HASHES}}; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self'; connect-src 'self' {{SUPABASE_ORIGIN}} {{WORKER_ORIGIN}}; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff

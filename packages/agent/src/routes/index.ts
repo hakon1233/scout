@@ -15,6 +15,7 @@ import {
   handleGetInterests,
   handlePostInterests,
   handlePutInterests,
+  handlePutInterestSettings,
 } from "./interests.js";
 import { handleGetBriefs, handlePostWeeklyBrief } from "./briefs.js";
 import { handleGetSchedule, handlePutSchedule } from "./schedule.js";
@@ -42,6 +43,9 @@ export const V0_ROUTES: Record<
     GET: { auth: "bearer", handle: handleGetInterests },
     POST: { auth: "bearer", handle: handlePostInterests },
     PUT: { auth: "bearer", handle: handlePutInterests },
+  },
+  [PATHS.interestSettings]: {
+    PUT: { auth: "bearer", handle: handlePutInterestSettings },
   },
   [PATHS.briefs]: {
     GET: { auth: "bearer", handle: handleGetBriefs },

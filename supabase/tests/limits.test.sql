@@ -69,7 +69,7 @@ from (values ('00000000-0000-0000-0000-00000000c004'::uuid, 'cccccccc-0000-0000-
 select is(public.user_spend_since('cccccccc-0000-0000-0000-0000000000c3', '2030-01-01 00:00+00'),
   0.40::numeric, 'a claimed run with no cost counts $0.10');
 
-insert into tick select * from public.claim_runs(10, '2030-01-01 08:00+00');
+insert into tick select run_id, topic, doc, searches_per_run from public.claim_runs(10, '2030-01-01 08:00+00');
 select results_eq($$ select topic from tick order by topic $$,
   array['Lia daily', 'Tor daily'],
   'Ben is at his runs per day and Cleo at her spend; Tor (team) is not capped; paused never queues');
@@ -83,7 +83,7 @@ select results_eq($$ select i.topic || ' ' || r.status from public.runs r
 delete from tick;
 update public.runs set status = 'ready', finished_at = '2030-01-01 08:05+00', cost_usd = 0.05
 where status = 'running' and scheduled_for = '2030-01-01 07:00+00';
-insert into tick select * from public.claim_runs(10, '2030-01-02 00:30+00');
+insert into tick select run_id, topic, doc, searches_per_run from public.claim_runs(10, '2030-01-02 00:30+00');
 select results_eq($$ select topic from tick order by topic $$,
   array['Ben daily', 'Cleo daily'], 'once their last day rolls off, capped owners run');
 
@@ -93,10 +93,10 @@ select results_eq($$ select topic from tick order by topic $$,
 
 delete from tick;
 update public.interests set run_at = '20:00' where id = '00000000-0000-0000-0000-00000000c001';
-insert into tick select * from public.claim_runs(10, '2030-01-01 21:00+00');
+insert into tick select run_id, topic, doc, searches_per_run from public.claim_runs(10, '2030-01-01 21:00+00');
 select is((select count(*)::int from tick where topic = 'Lia daily'), 0,
   'moving the run time later the same day gives no second run');
-insert into tick select * from public.claim_runs(10, '2030-01-02 21:00+00');
+insert into tick select run_id, topic, doc, searches_per_run from public.claim_runs(10, '2030-01-02 21:00+00');
 select is((select count(*)::int from tick where topic = 'Lia daily'), 1,
   'the next day runs at the new time');
 select is((select count(*)::int from public.runs where interest_id = '00000000-0000-0000-0000-00000000c002'),

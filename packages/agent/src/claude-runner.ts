@@ -39,6 +39,10 @@ const TOOL_ARGS: Record<ClaudeTools, string[]> = {
     // Pre-approve both so `--print` never stops at a permission prompt.
     "--allowed-tools",
     "WebSearch,WebFetch",
+    // A run that keeps searching ends instead of looping. A real run takes
+    // 5-15 turns.
+    "--max-turns",
+    "25",
   ],
   none: ["--tools", ""],
 };

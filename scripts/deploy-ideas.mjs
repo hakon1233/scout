@@ -10,6 +10,7 @@
 // and run now say the server can't be reached.
 
 import { spawnSync } from "node:child_process";
+import { fillHeaders } from "./csp-headers.mjs";
 
 const REF = "qctcuajvefuicasakgkq";
 const PAGES_PROJECT = "scout-ideas";
@@ -65,6 +66,13 @@ run("pnpm", ["build"], {
     ? `https://${WORKER_NAME}.${subdomain}.workers.dev`
     : "",
   NEXT_PUBLIC_VAPID_PUBLIC_KEY: VAPID_PUBLIC_KEY,
+});
+
+// The Content-Security-Policy (public/_headers) names this build's inline
+// scripts and the two origins the app calls.
+fillHeaders("out", {
+  supabase: `https://${REF}.supabase.co`,
+  worker: subdomain ? `https://${WORKER_NAME}.${subdomain}.workers.dev` : "",
 });
 
 const projects = await getJson(

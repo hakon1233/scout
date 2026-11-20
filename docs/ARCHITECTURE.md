@@ -33,13 +33,21 @@ as `@scout/core`, the companion as `#core`.
 
 - `contract.ts`: every path and JSON shape crossing the HTTP boundary. Types and
   constants only.
-- `search-skills.ts`, `assembly-skills.ts`: the rules every research session gets, and
-  how sections become a brief. The web app's skills page shows them verbatim.
-- `research-prompt.ts`: one interest's research prompt (search rules, then its intent
-  doc verbatim, then today's date), and the clean-up of the model's lead-in. It names
-  the session's web tools: `CLI_RESEARCH_TOOLS` (companion) or `API_RESEARCH_TOOLS`.
+- `search-skills.ts`, `relevance-skills.ts`, `assembly-skills.ts`: the rules every
+  research session gets (how to search; when a story earns a place, so a run posts
+  nothing rather than pad, `plan/research/relevance.md`), and how sections become a
+  brief. Plain text, no thresholds in code. The web app's skills page shows them.
+- `research-prompt.ts`: one interest's research prompt (search and relevance rules,
+  then its intent doc verbatim, then today's date and facts: cadence, the date of the
+  topic's last story, the last two briefs' stories as already posted, the brief
+  settings), and the clean-up of the model's lead-in. It names the session's web tools:
+  `CLI_RESEARCH_TOOLS` (companion) or `API_RESEARCH_TOOLS`.
+- `brief-settings.ts`: per-interest brief settings (length, story count or "relevant",
+  evergreen, search locale, brief language): defaults, the one check every writer uses
+  (`parseBriefSettings`) and the mapping to the hosted `interests` columns.
 - `coverage.ts`: a run's assembly. It cuts each topic's section, sorts stories newest
-  first, drops stale ones and records coverage.
+  first, drops stale ones (unless the interest is evergreen) and records coverage; a
+  section of only "No change since …" or "No news yet." is empty.
 - `brief-document.ts`: the brief's markdown grammar, read side (topics, stories,
   citations), used by the web app's feed.
 - `weekly.ts`: the weekly digest from the last seven days of daily briefs.
@@ -58,7 +66,7 @@ The companion runs core's code from `dist/core`: its build compiles core there, 
   `routes/index.ts` is the table of routes. `http-util.ts` holds the origin allowlist and
   the size-limited body reader.
 - `claude-runner.ts`: the only place a `claude` child process starts. It sets the tool
-  list (web research or none), the timeout, the abort signal and the working directory,
+  list (web research or none), `--max-turns`, the timeout, the abort signal and the working directory,
   and starts the child without the reader's own Claude Code setup or full environment.
 - `runner.ts`, `research.ts`: a run. The runner researches one interest at a time, each
   session with core's research prompt. It then assembles the sections with core's
@@ -71,7 +79,10 @@ The companion runs core's code from `dist/core`: its build compiles core there, 
   `state.json`: one queue per file, so writers inside the companion process never lose
   each other's changes (the `pair` command is a separate process). Writes are atomic
   (temp file, then rename).
-- `scheduler.ts`: the daily run, inside the companion process.
+- `scheduler.ts`: the daily run, inside the companion process. A failed run is retried
+  once, never after a usage limit.
+- `routes/interests.ts`: the interest list (with each one's brief settings) and
+  `PUT /v0/interest-settings`; settings live in `state.json` under `brief_settings`.
 - `service.ts`, `cli.ts`, `static.ts`: the `scout-agent` command, the macOS launchd
   service and the static file server for the bundled web app.
 
@@ -83,6 +94,8 @@ it (`src/lib/boundaries.test.ts` checks this). Plain TypeScript with `fetch`.
 - `research-interest.ts`: `researchInterest(interest, {claude})`, one interest's research
   as one Claude API call on Haiku with web search and web fetch. It returns the section,
   its coverage and the cost. Prompt, freshness and coverage come from core.
+  Guardrails: tool versions with `max_uses`, web_fetch capped at 6K tokens, a per-run
+  spend cap (`DEFAULT_MAX_COST_USD`), and `retryable: false` on a 4xx or a limit.
 - `claude-client.ts`: the `ClaudeClient` seam, with a `fetch` adapter and a recorded-
   response adapter for tests. `pricing.ts`: the price table. Every hosted function
   uses these two: no other package defines its own Claude client or prices.
@@ -106,7 +119,10 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
 - SQL owns every rule: `claim_runs` reaps stale runs, stops on the kill switch
   (`settings.paused`) or the daily ceiling (`spend_today` against `daily_ceiling_usd`),
   queues due scheduled interests, and claims a batch (public interests first).
-  `finish_run` records a result and its cost; a failed first attempt is queued again.
+  `finish_run` records a result and its cost; a failed first attempt is queued again
+  unless the result says a retry can't help (`p_retry`). `claim_runs` also hands each
+  run its brief settings, the last two ready sections, the cadence and the date of the
+  last story (`*_brief_settings.sql`).
   `request_run` is a reader's "run now", limited by `allowance()`.
 - `run-due.ts`: `runDue({queue, claude})`, one tick: claim, research each run with
   `researchInterest`, finish each. Host-neutral; tests use a stub queue.
@@ -145,7 +161,8 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   client), so the static export needs no callback route. Errors reach the page as
   plain sentences.
 - `lib/hosted.ts`: the hosted app's one data module. `hostedData()` returns `home`,
-  `transcript`, `chat`, `confirm`, `setCadence`, `remove`, `restore`, `unfollow`,
+  `transcript`, `chat`, `confirm`, `setCadence`, `setBriefSettings`, `remove`,
+  `restore`, `unfollow`,
   `runNow`, and for sharing `setVisibility`, `shared(slug)`, `follow(slug)`,
   `hostCopy(notice)` and `dismiss(notice)`, and `pushStatus`, `pushEnable`,
   `pushDisable` for this device's notifications, over Supabase REST (as the reader, under
@@ -155,6 +172,13 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   `HostedHome` instead of the companion feed. `app/i` is a share link's page
   (`/i/?s=<slug>`, read on the client because the site is a static export): the
   interest's latest brief for anyone, and Follow for a signed-in reader.
+- `components/FeedBody.tsx`: a story's body as markdown (GFM tables too) through
+  rehype-sanitize, never raw HTML; body images are dropped (only the lead image shows,
+  with no referrer) and links get `rel="nofollow ugc noopener"`.
+- `public/_headers`: the hosted site's Content-Security-Policy on Cloudflare Pages.
+  `scripts/csp-headers.mjs` fills in the Supabase and Worker origins and a hash of each
+  inline script after the build (`pnpm deploy:ideas`), so `script-src` has no
+  `'unsafe-inline'`.
 - `public/manifest.webmanifest` and `public/sw.js`: installing Scout as a web app (iPhones
   get pushes only from the Home Screen) and the service worker that shows pushes and
   opens `app/` on a tap. Both use relative URLs, so they work under any base path. No

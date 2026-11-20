@@ -88,7 +88,7 @@ function LikedCard({ story }: { story: LikedStory }) {
       <a
         href={story.url}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="nofollow ugc noopener"
         className="flex h-full flex-col focus:outline-none"
       >
         {story.imageUrl && (

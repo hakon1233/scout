@@ -2,4 +2,4 @@
 
 ## Fusion energy
 
-_no fresh news_
+No news yet.

@@ -37,8 +37,9 @@ function result(
   return { kind, name, checks, expectFail, ok };
 }
 
-// Research case: first line `<!-- topic: … | today: YYYY-MM-DD | expect-fail: a, b -->`,
-// the rest is the session's raw output.
+// Research case: first line `<!-- topic: … | today: YYYY-MM-DD | last-story:
+// YYYY-MM-DD | past: url-or-title ; … | expect-fail: a, b -->` (last-story and
+// past optional), the rest is the session's raw output.
 async function researchCases(): Promise<CaseResult[]> {
   const dir = path.join(CASES_DIR, "research");
   const results: CaseResult[] = [];
@@ -49,7 +50,10 @@ async function researchCases(): Promise<CaseResult[]> {
       header
         .replace(/^<!--|-->$/g, "")
         .split("|")
-        .map((part) => part.split(":").map((s) => s.trim())),
+        .map((part) => {
+          const at = part.indexOf(":");
+          return [part.slice(0, at).trim(), part.slice(at + 1).trim()];
+        }),
     ) as Record<string, string>;
     const expectFail = (meta["expect-fail"] ?? "")
       .split(",")
@@ -58,6 +62,11 @@ async function researchCases(): Promise<CaseResult[]> {
     const checks = checkResearchOutput(rest.join("\n"), {
       topic: meta.topic,
       today: meta.today,
+      lastStory: meta["last-story"] || undefined,
+      past: (meta.past ?? "")
+        .split(";")
+        .map((s) => s.trim())
+        .filter(Boolean),
     });
     results.push(
       result("research", file.replace(/\.md$/, ""), checks, expectFail),
