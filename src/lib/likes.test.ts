@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isLiked, likeKey, toggleLike } from "./likes";
+import {
+  isLiked,
+  type LikedStory,
+  likeKey,
+  type LikesSync,
+  setLikesUser,
+  toggleLike,
+} from "./likes";
 
-// The device-local likes store: likes persist, a swallowed persist still holds
-// for the session, and a corrupt stored value reads as an empty store.
+// The likes store: likes persist, a swallowed persist still holds for the
+// session, a corrupt stored value reads as an empty store, and a signed-in
+// reader's likes live in the database without device likes leaking in.
 
 const LIKES_KEY = "scout.likes.v1";
 
@@ -161,3 +169,81 @@ for (const { name, raw } of [
     }
   });
 }
+
+function memorySync(stories: LikedStory[] = []) {
+  const sent: string[] = [];
+  const sync: LikesSync = {
+    async list() {
+      return stories;
+    },
+    async add(story) {
+      sent.push(`add ${story.key}`);
+    },
+    async remove(key) {
+      sent.push(`remove ${key}`);
+    },
+  };
+  return { sync, sent };
+}
+
+const story = (url: string) => ({
+  url,
+  headline: "H",
+  source: "example.com",
+  topic: "AI",
+});
+
+test("signed in, likes load from the database and each toggle is sent there", async () => {
+  const { backing, restore } = installStorage({ failWrites: false });
+  const saved = "https://example.com/saved-in-db";
+  const db = memorySync([
+    { ...story(saved), key: likeKey(saved), likedAt: "2026-11-20T10:00:00Z" },
+  ]);
+  try {
+    await setLikesUser("user-anna", db.sync);
+    assert.equal(isLiked(likeKey(saved)), true);
+    const fresh = "https://example.com/fresh";
+    toggleLike(story(fresh));
+    toggleLike(story(saved));
+    assert.deepEqual(db.sent, [
+      `add ${likeKey(fresh)}`,
+      `remove ${likeKey(saved)}`,
+    ]);
+    assert.ok(backing.has(`${LIKES_KEY}:user-anna`));
+    assert.equal(backing.has(LIKES_KEY), false);
+  } finally {
+    await setLikesUser(null);
+    restore();
+  }
+});
+
+test("device likes are never uploaded, and a reader's likes leave with them", async () => {
+  const { backing, restore } = installStorage({ failWrites: false });
+  const local = "https://example.com/liked-signed-out";
+  const annas = "https://example.com/annas";
+  try {
+    await setLikesUser(null);
+    toggleLike(story(local));
+
+    // Anna signs in: her likes come from the database, not the device's.
+    const anna = memorySync();
+    await setLikesUser("user-anna", anna.sync);
+    assert.equal(isLiked(likeKey(local)), false);
+    assert.deepEqual(anna.sent, []);
+    toggleLike(story(annas));
+
+    // Switching to Ben drops Anna's local copy; Ben sees none of hers.
+    const ben = memorySync();
+    await setLikesUser("user-ben", ben.sync);
+    assert.equal(backing.has(`${LIKES_KEY}:user-anna`), false);
+    assert.equal(isLiked(likeKey(annas)), false);
+    assert.deepEqual(ben.sent, []);
+
+    // Signed out again: Ben's copy is gone and the device's likes are back.
+    await setLikesUser(null);
+    assert.equal(backing.has(`${LIKES_KEY}:user-ben`), false);
+    assert.equal(isLiked(likeKey(local)), true);
+  } finally {
+    restore();
+  }
+});

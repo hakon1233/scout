@@ -5,13 +5,16 @@ import * as React from "react";
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 import { canonicalUrl } from "@scout/core";
 
-// Device-local "liked stories" store. A brand-new localStorage store,
-// fully separate from the interests store and from every companion endpoint.
+// "Liked stories": a localStorage store, fully separate from the interests
+// store and from every companion endpoint. It never calls the companion, so it
+// cannot reach the destructive replace-all `POST /v0/interests`.
 //
-// HARD SAFETY: this feature makes NO network calls at all — so it
-// physically cannot reach the destructive replace-all `POST /v0/interests`.
-// Likes are pure client state for v1; the constraint is satisfied by
-// construction, not by discipline. No account/sync in v1.
+// SIGNED IN (hosted): `setLikesUser(userId, sync)` keys the store by the
+// reader's id and loads their likes from the database (story_marks); each
+// toggle is then also sent through `sync`. Signed out, likes stay on the
+// device under the plain key and are never uploaded: signing in does not move
+// them into an account, so on a shared device one reader's likes cannot land
+// in another's. Signing out drops the signed-in reader's local copy.
 //
 // WHY WE KEY ON CANONICAL URL, NOT THE ARTICLE ID: article ids are generated as
 // `${briefId}-${idx}` (companion.ts) — brief-scoped, so the SAME story gets a
@@ -26,6 +29,19 @@ import { canonicalUrl } from "@scout/core";
 // at like-time rather than a pointer into a brief.
 
 const LIKES_KEY = "scout.likes.v1";
+
+/** Where a signed-in reader's likes live (hosted: story_marks). */
+export type LikesSync = {
+  list(): Promise<LikedStory[]>;
+  add(story: LikedStory): Promise<void>;
+  remove(key: string): Promise<void>;
+};
+
+let user: { id: string; sync: LikesSync | null } | null = null;
+
+function storeKey(): string {
+  return user ? `${LIKES_KEY}:${user.id}` : LIKES_KEY;
+}
 
 export type LikedStory = {
   // canonicalUrl(url) — the stable cross-brief identity and the store map key.
@@ -111,7 +127,7 @@ function parse(raw: string | null): LikesStore {
 }
 
 function read(): LikesStore {
-  const raw = getLocalStorage()?.getItem(LIKES_KEY) ?? null;
+  const raw = getLocalStorage()?.getItem(storeKey()) ?? null;
   if (!isClient()) return EMPTY;
   if (raw === cacheRaw) return cache;
   cacheRaw = raw;
@@ -126,14 +142,53 @@ function write(next: LikesStore): void {
   // Quota / private-mode failures are swallowed by safeSetItem: the in-memory
   // cache above still reflects the toggle for this session so the UI stays
   // responsive; it just won't persist.
-  safeSetItem(LIKES_KEY, raw);
+  safeSetItem(storeKey(), raw);
   // Point cacheRaw at what localStorage ACTUALLY holds now, not at what we tried
   // to write. On a successful persist that's `raw`; on a swallowed persist it's
   // the pre-toggle value. Either way read()'s `raw === cacheRaw` guard now keeps
   // the optimistic `cache` above instead of re-parsing storage and silently
   // reverting the toggle for the session (Safari private mode / quota exceeded).
-  cacheRaw = getLocalStorage()?.getItem(LIKES_KEY) ?? null;
+  cacheRaw = getLocalStorage()?.getItem(storeKey()) ?? null;
   notify();
+}
+
+/**
+ * Who is reading: their id and where their likes live, or null when signed
+ * out. Call it on every sign-in and sign-out (Auth.onAuthChange). Switching
+ * readers never carries likes across; signing out drops the last reader's
+ * local copy. Resolves once the reader's likes are loaded.
+ */
+export async function setLikesUser(
+  userId: string | null,
+  sync: LikesSync | null = null,
+): Promise<void> {
+  const previous = user;
+  if ((previous?.id ?? null) === userId && (previous?.sync ?? null) === sync)
+    return;
+  if (previous && previous.id !== userId) {
+    try {
+      getLocalStorage()?.removeItem(`${LIKES_KEY}:${previous.id}`);
+    } catch {
+      // Storage unavailable: nothing to drop.
+    }
+  }
+  user = userId ? { id: userId, sync } : null;
+  cacheRaw = null;
+  cache = EMPTY;
+  notify();
+  const mine = user;
+  if (!mine?.sync) return;
+  let stories: LikedStory[];
+  try {
+    stories = await mine.sync.list();
+  } catch (err) {
+    console.warn("[likes] could not load likes:", err);
+    return;
+  }
+  if (user !== mine) return; // signed out or switched meanwhile
+  const likes: Record<string, LikedStory> = {};
+  for (const s of stories) if (isLikedStory(s)) likes[s.key] = s;
+  write({ version: 1, likes });
 }
 
 function notify(): void {
@@ -147,7 +202,7 @@ function subscribe(fn: () => void): () => void {
     // Cross-tab consistency: another tab wrote likes → drop our cache so the
     // next read() re-parses, then re-render subscribers.
     window.addEventListener("storage", (e) => {
-      if (e.key === LIKES_KEY) {
+      if (e.key === storeKey()) {
         cacheRaw = null;
         notify();
       }
@@ -180,6 +235,13 @@ export function toggleLike(input: LikeInput): boolean {
     liked = true;
   }
   write({ version: 1, likes });
+  // Signed in: the database too. A failed send keeps the local toggle for
+  // this session; the next sign-in reloads from the database.
+  const sync = user?.sync;
+  if (sync) {
+    const sent = liked ? sync.add(likes[key]) : sync.remove(key);
+    sent.catch((err: unknown) => console.warn("[likes] not saved:", err));
+  }
   return liked;
 }
 

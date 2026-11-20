@@ -21,6 +21,17 @@ export function quotaMessage(err: {
       return "That interest's description is too long for your plan.";
     case "max_public_interests":
       return `Your plan has room for ${plural(limit, "public interest")}, and they're in use. Make one shared or private first.`;
+    case "publishes_per_day":
+      return `You can publish ${plural(limit, "time")} a day. Try again tomorrow.`;
+    case "republish_wait":
+      return "This topic left public less than a day ago. Try again tomorrow.";
+    case "reports_per_day":
+      return "You've sent a lot of reports today. Try again tomorrow.";
+    case "already_reported":
+      return "You've already reported this.";
+    case "usage_events":
+    case "story_marks":
+      return "That's more than Scout keeps for one reader. Try again later.";
     case "spend_per_day_usd":
       return "You have reached today's spending limit. Try again tomorrow.";
     default:

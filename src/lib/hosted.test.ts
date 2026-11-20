@@ -687,3 +687,199 @@ test("brief settings are read with the interests and changed field by field", as
   );
   assert.equal(calls.length, 0, "a bad value never reaches Supabase");
 });
+
+test("publish goes to the Worker; a refusal is a result and a limit an error", async () => {
+  let answer: Answer = {
+    body: { status: "public", slug: "s1", tags: ["ai"] },
+  };
+  const { fetch, calls } = stubFetch({ "/publish": () => answer });
+  const d = data(fetch);
+  assert.deepEqual(await d.publish("i-rust"), {
+    status: "public",
+    slug: "s1",
+    tags: ["ai"],
+  });
+  assert.equal(calls[0].url, `${WORKER}/publish`);
+  assert.deepEqual(calls[0].body, { interest: "i-rust" });
+  assert.equal(calls[0].headers.authorization, "Bearer jwt-anna");
+
+  answer = { body: { status: "refused", reason: "Pick a subject." } };
+  assert.deepEqual(await d.publish("i-rust"), {
+    status: "refused",
+    reason: "Pick a subject.",
+  });
+
+  answer = {
+    status: 429,
+    body: {
+      error: "limit",
+      message: "You can publish 5 times a day. Try again tomorrow.",
+    },
+  };
+  await assert.rejects(d.publish("i-rust"), {
+    name: "HostedError",
+    kind: "limit",
+    message: "You can publish 5 times a day. Try again tomorrow.",
+  });
+
+  answer = { status: 409, body: { error: "This topic is already public." } };
+  await assert.rejects(d.publish("i-rust"), {
+    message: "This topic is already public.",
+  });
+});
+
+test("browse reads the catalog signed out with the anon key", async () => {
+  const card = {
+    id: "i1",
+    slug: "s1",
+    title: "Fjord kayaking",
+    tags: ["travel"],
+    owner_name: "Kari",
+    team: false,
+    followers: 4,
+    briefs: [],
+  };
+  const { fetch, calls } = stubFetch({
+    "rpc/browse_topics": { body: [card] },
+    "rpc/tag_counts": { body: [{ tag: "travel", topics: 1 }] },
+  });
+  const d = data(fetch, false);
+  assert.deepEqual(
+    await d.browse({ q: " kayak ", tags: ["travel"], sort: "new", limit: 99 }),
+    [
+      {
+        id: "i1",
+        slug: "s1",
+        title: "Fjord kayaking",
+        tags: ["travel"],
+        ownerName: "Kari",
+        team: false,
+        followers: 4,
+        briefs: [],
+      },
+    ],
+  );
+  assert.equal(calls[0].headers.authorization, "Bearer anon-key");
+  assert.deepEqual(calls[0].body, {
+    p_q: "kayak",
+    p_tags: ["travel"],
+    p_sort: "new",
+    p_limit: 50,
+    p_offset: 0,
+  });
+  assert.deepEqual(await d.tagCounts(), [{ tag: "travel", topics: 1 }]);
+});
+
+test("tags, reports and the profile go through their RPCs and rows", async () => {
+  const { fetch, calls } = stubFetch({
+    "rpc/set_topic_tags": { body: ["ai", "kayaking"] },
+    "rpc/report_topic": {
+      status: 400,
+      body: { code: "P0001", hint: "already_reported", message: "reported" },
+    },
+    "profiles?": () =>
+      calls.at(-1)?.method === "PATCH"
+        ? { body: null }
+        : {
+            body: [
+              {
+                display_name: "Anna",
+                location: null,
+                student: true,
+                role: null,
+                liked_tags: ["ai"],
+              },
+            ],
+          },
+  });
+  const d = data(fetch);
+  assert.deepEqual(await d.setTags("i1", ["AI", "kayaking"]), [
+    "ai",
+    "kayaking",
+  ]);
+  assert.deepEqual(calls[0].body, {
+    p_interest: "i1",
+    p_tags: ["AI", "kayaking"],
+  });
+  await assert.rejects(d.report("i1", "spam"), {
+    kind: "limit",
+    message: "You've already reported this.",
+  });
+  assert.deepEqual(await d.profile(), {
+    displayName: "Anna",
+    location: null,
+    student: true,
+    role: null,
+    likedTags: ["ai"],
+  });
+  await d.setProfile({ location: "  Bergen ", role: "" });
+  const patch = calls.at(-1);
+  assert.equal(patch?.method, "PATCH");
+  assert.match(patch?.url ?? "", /profiles\?id=eq\.user-anna/);
+  assert.deepEqual(patch?.body, { location: "Bergen", role: null });
+});
+
+test("likes and saves are rows of the reader's; events go in capped batches", async () => {
+  const { fetch, calls } = stubFetch({
+    "story_marks?kind=eq.like&select": {
+      body: [
+        {
+          story_key: "https://a.no/x",
+          interest_id: null,
+          story: { headline: "X" },
+          created_at: "2026-11-20T10:00:00Z",
+        },
+      ],
+    },
+    story_marks: { status: 201, body: null },
+    usage_events: { status: 201, body: null },
+  });
+  const d = data(fetch);
+  assert.deepEqual(await d.marks("like"), [
+    {
+      storyKey: "https://a.no/x",
+      interestId: null,
+      story: { headline: "X" },
+      createdAt: "2026-11-20T10:00:00Z",
+    },
+  ]);
+  await d.mark("save", {
+    storyKey: "https://a.no/y",
+    interestId: "i1",
+    story: null,
+  });
+  const insert = calls.at(-1);
+  assert.equal(insert?.method, "POST");
+  assert.match(insert?.headers.prefer ?? "", /ignore-duplicates/);
+  assert.deepEqual(insert?.body, {
+    kind: "save",
+    story_key: "https://a.no/y",
+    interest_id: "i1",
+    story: null,
+  });
+  await d.unmark("save", "https://a.no/y");
+  assert.equal(calls.at(-1)?.method, "DELETE");
+  assert.match(
+    calls.at(-1)?.url ?? "",
+    /story_key=eq\.https%3A%2F%2Fa\.no%2Fy/,
+  );
+
+  const before = calls.length;
+  await d.sendEvents([
+    ...Array.from({ length: 60 }, () => ({
+      kind: "brief_view" as const,
+      interestId: "i1",
+    })),
+    { kind: "story_seconds", interestId: "i1", storyKey: "k", seconds: 9999 },
+  ]);
+  const sent = calls.slice(before);
+  assert.equal(sent.length, 2);
+  assert.equal((sent[0].body as unknown[]).length, 50);
+  assert.deepEqual((sent[1].body as unknown[]).at(-1), {
+    kind: "story_seconds",
+    interest_id: "i1",
+    run_id: null,
+    story_key: "k",
+    seconds: 3600,
+  });
+});

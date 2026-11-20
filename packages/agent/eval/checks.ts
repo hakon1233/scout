@@ -1,17 +1,21 @@
 // Offline checks for model output. Each check is one rule from the prompts the
-// companion sends (search-skills.ts, research.ts, chat.ts), applied to a
-// hand-written example output with the same parsers the product uses. No model
-// is called.
+// companion sends (search-skills.ts, research.ts, chat.ts) and the publish
+// check (core publish-check.ts), applied to a hand-written example output with
+// the same parsers the product uses. No model is called.
 
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { applyChatChanges } from "../src/chat-changes.js";
 import {
+  MAX_TAGS,
+  normalizeTags,
   normalizeTopic,
   parseBrief,
   parseChatOutput,
+  parsePublishCheck,
   type Interest,
+  type PublishInput,
 } from "#core";
 
 export type Check = { name: string; pass: boolean; detail?: string };
@@ -197,4 +201,71 @@ export async function checkChatOutput(
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+}
+
+// The publish check (core publish-check.ts): one JSON verdict. A good approve
+// has 1 to 5 valid tags, at most one outside the seed list; a refuse has no
+// tags and one short reason that repeats no full name from the topic.
+export function checkPublishOutput(
+  output: string,
+  ctx: { input: PublishInput; expect: "approve" | "refuse" },
+): Check[] {
+  type Raw = { verdict?: unknown; reason?: unknown; tags?: unknown };
+  const raw = ((): Raw | null => {
+    try {
+      const parsed: unknown = JSON.parse(output);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Raw)
+        : null;
+    } catch {
+      return null;
+    }
+  })();
+  const checks: Check[] = [check("json-object", raw !== null)];
+  const got = parsePublishCheck(output).approved ? "approve" : "refuse";
+  checks.push(
+    check(
+      "verdict",
+      raw?.verdict === ctx.expect && got === ctx.expect,
+      `expected ${ctx.expect}, got ${String(raw?.verdict)}`,
+    ),
+  );
+  if (raw?.verdict === "approve") {
+    const tags: unknown[] = Array.isArray(raw.tags) ? raw.tags : [];
+    const kept = normalizeTags(tags, { maxFree: 1 });
+    checks.push(
+      check(
+        "tags",
+        tags.length >= 1 &&
+          tags.length <= MAX_TAGS &&
+          kept.length === tags.length &&
+          kept.every((t, i) => t === tags[i]),
+        `tags ${JSON.stringify(tags)}; usable ${JSON.stringify(kept)}`,
+      ),
+    );
+  }
+  if (raw?.verdict === "refuse") {
+    const reason = typeof raw.reason === "string" ? raw.reason.trim() : "";
+    const names =
+      [ctx.input.displayName ?? "", ctx.input.title, ctx.input.doc]
+        .join("\n")
+        .match(/[A-ZÆØÅ][a-zæøå]+(?: [A-ZÆØÅ][a-zæøå]+)+/g) ?? [];
+    const repeated = names.filter((n) => reason.includes(n));
+    const noTags = Array.isArray(raw.tags) && raw.tags.length === 0;
+    checks.push(
+      check(
+        "reason",
+        reason.length > 0 &&
+          reason.length <= 200 &&
+          repeated.length === 0 &&
+          noTags,
+        !reason
+          ? "no reason"
+          : repeated.length
+            ? `repeats ${repeated.join(", ")}`
+            : "too long or has tags",
+      ),
+    );
+  }
+  return checks;
 }
