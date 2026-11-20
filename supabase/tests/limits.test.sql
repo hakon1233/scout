@@ -27,13 +27,16 @@ insert into auth.users (id, email, aud, role) values
   ('dddddddd-0000-0000-0000-0000000000c4', 'tor@example.test', 'authenticated', 'authenticated'),
   ('eeeeeeee-0000-0000-0000-0000000000c5', 'eve@example.test', 'authenticated', 'authenticated');
 update public.profiles set plan = 'plus' where id = 'aaaaaaaa-0000-0000-0000-0000000000c1';
+-- Ben and Cleo (Free) each run a daily interest here; Free has none
+-- (rls.test.sql tests that), so this file lends it one.
+update public.plans set daily_interests = 1 where id = 'free';
 update public.profiles set is_team = true where id = 'dddddddd-0000-0000-0000-0000000000c4';
 
 insert into public.interests (id, owner_id, topic, cadence, run_at, paused) values
   ('00000000-0000-0000-0000-00000000c001', 'aaaaaaaa-0000-0000-0000-0000000000c1',
    'Lia daily', 'daily', '07:00', false),
   ('00000000-0000-0000-0000-00000000c002', 'aaaaaaaa-0000-0000-0000-0000000000c1',
-   'Lia paused', 'daily', '07:00', true),
+   'Lia paused', 'weekly', '07:00', true),
   ('00000000-0000-0000-0000-00000000c003', 'bbbbbbbb-0000-0000-0000-0000000000c2',
    'Ben daily', 'daily', '07:00', false),
   ('00000000-0000-0000-0000-00000000c004', 'cccccccc-0000-0000-0000-0000000000c3',
@@ -178,6 +181,21 @@ select lives_ok($$ insert into public.interests (owner_id, topic, visibility, sh
     select 'dddddddd-0000-0000-0000-0000000000c4', 'Tor public ' || n, 'public',
            'torpublictorpublictor' || n
     from generate_series(1, 4) n $$, 'the Scout team has no public cap');
+
+-- ---------------------------------------------------------------------------
+-- Plus: 1 daily and 6 weekly interests (src/lib/plans.ts)
+-- ---------------------------------------------------------------------------
+
+-- Lia (Plus) has one daily and one weekly interest.
+select throws_ok($$ insert into public.interests (owner_id, topic, cadence)
+    values ('aaaaaaaa-0000-0000-0000-0000000000c1', 'Lia daily 2', 'daily') $$,
+  'P0001', 'quota: 1 of 1 daily interests used', 'Plus holds one daily interest');
+select lives_ok($$ insert into public.interests (owner_id, topic, cadence)
+    select 'aaaaaaaa-0000-0000-0000-0000000000c1', 'Lia weekly ' || n, 'weekly'
+    from generate_series(2, 6) n $$, 'Plus holds six weekly interests');
+select throws_ok($$ insert into public.interests (owner_id, topic, cadence)
+    values ('aaaaaaaa-0000-0000-0000-0000000000c1', 'Lia weekly 7', 'weekly') $$,
+  'P0001', 'quota: 6 of 6 weekly interests used', 'a seventh weekly interest is refused');
 
 select * from finish();
 rollback;

@@ -21,8 +21,12 @@ insert into auth.users (id, email, aud, role) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'anna@example.test', 'authenticated', 'authenticated'),
   ('bbbbbbbb-0000-0000-0000-000000000002', 'ben@example.test', 'authenticated', 'authenticated');
 
--- Sign-up already made both profiles (free, UTC). Anna is on Plus: her two
--- daily interests (one public, which counts like any other) fit its quota.
+-- Sign-up already made both profiles (free, UTC). Anna is on Plus, raised here
+-- to two daily interests (one public, which counts like any other); this file
+-- tests the queue, not the quota (limits.test.sql does).
+update public.plans set daily_interests = 2 where id = 'plus';
+-- Ben (Free) runs a daily interest too; Free has none, so it is lent one here.
+update public.plans set daily_interests = 1 where id = 'free';
 update public.profiles set timezone = 'Europe/Oslo', plan = 'plus'
 where id = 'aaaaaaaa-0000-0000-0000-000000000001';
 

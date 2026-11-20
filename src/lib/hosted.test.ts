@@ -606,6 +606,15 @@ test("allowanceLine says what is left in plain words", () => {
     }),
     "Free plan: 0 of 1 daily and 2 of 3 weekly slots free. 1 run left today.",
   );
+  assert.equal(
+    allowanceLine({
+      plan: "free",
+      daily: { used: 0, limit: 0 },
+      weekly: { used: 1, limit: 3 },
+      runsToday: { used: 2, limit: 3 },
+    }),
+    "Free plan: 2 of 3 weekly slots free. 1 run left today.",
+  );
 });
 
 function ownRow(id: string, topic: string, cadence: string) {
