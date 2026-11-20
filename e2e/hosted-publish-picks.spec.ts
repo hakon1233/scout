@@ -88,3 +88,27 @@ test("Browse searches the public topics", async ({ page }) => {
     page.getByRole("link", { name: "European energy markets" }),
   ).toHaveCount(0);
 });
+
+test("on a phone the brief comes first, picks below it", async ({ page }) => {
+  await blockNonLoopback(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${ORIGIN}/app/`);
+  const picks = page.getByRole("heading", { name: "Picked for you" });
+  await expect(picks).toBeVisible({ timeout: 60_000 });
+  const brief = page.locator("[data-main]").first();
+  const briefTop = (await brief.boundingBox())!.y;
+  const picksTop = (await picks.boundingBox())!.y;
+  expect(briefTop).toBeLessThan(picksTop);
+  // The brief starts in the top third of the first screen.
+  expect(briefTop).toBeLessThan(844 / 3);
+});
+
+test("Settings marks its groups as the page's main content", async ({
+  page,
+}) => {
+  await blockNonLoopback(page);
+  await page.goto(`${ORIGIN}/app/settings/`);
+  await expect(
+    page.locator("[data-main]").getByRole("heading", { name: "Appearance" }),
+  ).toBeVisible({ timeout: 60_000 });
+});

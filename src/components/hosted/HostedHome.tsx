@@ -272,7 +272,6 @@ function Feed({
   return (
     <>
       <FeedNotices items={items} />
-      <PickCards picks={picks} max={3} />
       {error && (
         <p role="alert" className="text-body-sm text-danger">
           {error}
@@ -304,6 +303,7 @@ function Feed({
           </p>
         </section>
       )}
+      <PickCards picks={picks} max={3} />
     </>
   );
 }

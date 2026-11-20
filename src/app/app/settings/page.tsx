@@ -12,18 +12,20 @@ export default function SettingsPage() {
   return (
     <AppShell>
       <PageHeader title="Settings" back={{ href: "/app/", label: "Brief" }} />
-      <SettingsGroup title="Appearance">
-        <SettingsRow label="Theme">
-          <ThemeToggle showLabels />
-        </SettingsRow>
-      </SettingsGroup>
-      <ScheduleSettings />
-      <SettingsGroup
-        title="Research"
-        footer="How Scout finds and writes your stories."
-      >
-        <SettingsLinkRow href="/app/skills/">Skills</SettingsLinkRow>
-      </SettingsGroup>
+      <div className="flex flex-col gap-6" data-main>
+        <SettingsGroup title="Appearance">
+          <SettingsRow label="Theme">
+            <ThemeToggle showLabels />
+          </SettingsRow>
+        </SettingsGroup>
+        <ScheduleSettings />
+        <SettingsGroup
+          title="Research"
+          footer="How Scout finds and writes your stories."
+        >
+          <SettingsLinkRow href="/app/skills/">Skills</SettingsLinkRow>
+        </SettingsGroup>
+      </div>
     </AppShell>
   );
 }

@@ -40,39 +40,41 @@ export function HostedSettings() {
         </p>
       )}
 
-      <SettingsGroup title="Appearance">
-        <SettingsRow label="Theme">
-          <ThemeToggle showLabels />
-        </SettingsRow>
-      </SettingsGroup>
-
-      {data && (
-        <SettingsGroup
-          title="Notifications"
-          footer={
-            push.error ??
-            "Each topic is off until you turn on its bell. Bells work once this device is on."
-          }
-        >
-          <div className="px-4 py-3">
-            <PushSwitch data={data} onChange={push.deviceChanged} />
-          </div>
-          {home?.interests.map((t) => (
-            <SettingsRow key={t.id} label={t.topic}>
-              <PushBell
-                topic={t.topic}
-                on={push.isOn(t.id)}
-                onChange={(on) => push.set(t.id, on)}
-                deviceOn={push.deviceOn}
-              />
-            </SettingsRow>
-          ))}
+      <div className="flex flex-col gap-6" data-main>
+        <SettingsGroup title="Appearance">
+          <SettingsRow label="Theme">
+            <ThemeToggle showLabels />
+          </SettingsRow>
         </SettingsGroup>
-      )}
 
-      {data && <TimeZoneGroup data={data} />}
-      {home && <PlanGroup home={home} />}
-      {data && <AccountGroup data={data} />}
+        {data && (
+          <SettingsGroup
+            title="Notifications"
+            footer={
+              push.error ??
+              "Each topic is off until you turn on its bell. Bells work once this device is on."
+            }
+          >
+            <div className="px-4 py-3">
+              <PushSwitch data={data} onChange={push.deviceChanged} />
+            </div>
+            {home?.interests.map((t) => (
+              <SettingsRow key={t.id} label={t.topic}>
+                <PushBell
+                  topic={t.topic}
+                  on={push.isOn(t.id)}
+                  onChange={(on) => push.set(t.id, on)}
+                  deviceOn={push.deviceOn}
+                />
+              </SettingsRow>
+            ))}
+          </SettingsGroup>
+        )}
+
+        {data && <TimeZoneGroup data={data} />}
+        {home && <PlanGroup home={home} />}
+        {data && <AccountGroup data={data} />}
+      </div>
     </AppShell>
   );
 }
