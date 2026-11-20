@@ -42,6 +42,10 @@ export function supabaseQueue(opts: {
           p_cost_usd: outcome.costUsd,
           p_error: outcome.error ?? null,
           p_retry: outcome.retry ?? true,
+          p_input_tokens: outcome.inputTokens,
+          p_output_tokens: outcome.outputTokens,
+          p_cache_read_tokens: outcome.cacheReadTokens,
+          p_cache_write_tokens: outcome.cacheWriteTokens,
         },
         auth,
       );

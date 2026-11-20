@@ -145,7 +145,8 @@ select is(public.spend_today('2026-11-20 12:04+00') -current_setting('scout.spen
 -- Ben weekly fails once: queued again; then fails for good with a notification.
 select ok(public.finish_run(
   (select id from public.runs where interest_id = '00000000-0000-0000-0000-0000000000b2'),
-  null, '{"topic":"Ben weekly","status":"missing"}', 1, 0.01, 'Claude API 529', '2026-11-20 12:03+00'),
+  null, '{"topic":"Ben weekly","status":"missing"}', 1, 0.01, 'Claude API 529', '2026-11-20 12:03+00',
+  true, 1000, 100, 50, 10),
   'finish_run records a failed attempt');
 select is((select status from public.runs where interest_id = '00000000-0000-0000-0000-0000000000b2'),
   'queued', 'a first failure is queued again');
@@ -154,11 +155,21 @@ insert into tick select * from public.claim_runs(10, '2026-11-20 12:04+00');
 select results_eq('select topic from tick', array['Ben weekly'], 'the retry is claimed');
 select ok(public.finish_run(
   (select id from public.runs where interest_id = '00000000-0000-0000-0000-0000000000b2'),
-  null, null, 1, 0.01, 'Claude API 529', '2026-11-20 12:05+00'), 'second failure');
+  null, null, 1, 0.01, 'Claude API 529', '2026-11-20 12:05+00', true, 2000, 200, 0, 20),
+  'second failure');
 select is(
   (select status || ' ' || attempts || ' ' || cost_usd from public.runs
    where interest_id = '00000000-0000-0000-0000-0000000000b2' and scheduled_for > '2026-11-20'),
   'failed 2 0.0200', 'a second failure is final and the cost adds up');
+select is(
+  (select concat_ws(' ', input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
+   from public.runs
+   where interest_id = '00000000-0000-0000-0000-0000000000b2' and scheduled_for > '2026-11-20'),
+  '3000 300 50 30', 'the token usage of both attempts adds up');
+select is(
+  (select input_tokens from public.runs
+   where interest_id = '00000000-0000-0000-0000-0000000000a3' and section_md is not null),
+  null::bigint, 'a run finished without token usage keeps null tokens');
 select is((select count(*)::int from public.notifications
            where user_id = 'bbbbbbbb-0000-0000-0000-000000000002' and kind = 'run_failed'),
   1, 'the owner is told the run failed');
@@ -207,7 +218,7 @@ select is((select status from public.runs where interest_id = '00000000-0000-000
 select ok(not has_function_privilege('authenticated', 'public.claim_runs(integer, timestamptz)', 'execute'),
   'readers cannot claim runs');
 select ok(not has_function_privilege('authenticated',
-  'public.finish_run(uuid, text, jsonb, integer, numeric, text, timestamptz, boolean)', 'execute'),
+  'public.finish_run(uuid, text, jsonb, integer, numeric, text, timestamptz, boolean, bigint, bigint, bigint, bigint)', 'execute'),
   'readers cannot finish runs');
 select ok(not has_function_privilege('anon', 'public.request_run(uuid)', 'execute'),
   'signed-out visitors cannot request runs');

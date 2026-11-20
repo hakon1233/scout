@@ -193,6 +193,10 @@ test("the queue adapter calls claim_runs and finish_run with the service key", a
     coverage: { topic: "AI policy", status: "missing" },
     searches: 1,
     costUsd: 0.012,
+    inputTokens: 1200,
+    outputTokens: 300,
+    cacheReadTokens: 50,
+    cacheWriteTokens: 10,
     error: "timed out after 300 s",
     retry: false,
   });
@@ -204,6 +208,10 @@ test("the queue adapter calls claim_runs and finish_run with the service key", a
     p_cost_usd: 0.012,
     p_error: "timed out after 300 s",
     p_retry: false,
+    p_input_tokens: 1200,
+    p_output_tokens: 300,
+    p_cache_read_tokens: 50,
+    p_cache_write_tokens: 10,
   });
 
   const down = stubFetch(500, { message: "boom" });

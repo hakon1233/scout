@@ -148,7 +148,7 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   A scheduled interest that has never run is due at once (`due_interests`), so a new
   topic gets its first brief on the next tick as a scheduled run, never spending the
   reader's Run now.
-  `finish_run` records a result and its cost; a failed first attempt is queued again
+  `finish_run` records a result, its cost and its token usage; a failed first attempt is queued again
   unless the result says a retry can't help (`p_retry`). `claim_runs` also hands each
   run its brief settings, the last two ready sections, the cadence and the date of the
   last story: `run_facts` (`*_team_run_facts.sql`), which the team's claims use too.

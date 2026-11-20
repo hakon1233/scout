@@ -88,6 +88,43 @@ test("a tick researches each claimed run and records its section and cost", asyn
   assert.equal(search?.max_uses, 3);
 });
 
+test("a run records the token usage of all its Claude calls, summed", async () => {
+  const queue = stubQueue([run(1)]);
+  const paused: MessagesResponse = {
+    content: [{ type: "text", text: "Searching…" }],
+    stop_reason: "pause_turn",
+    usage: {
+      input_tokens: 4_000,
+      output_tokens: 200,
+      cache_read_input_tokens: 3_000,
+      cache_creation_input_tokens: 500,
+    },
+  };
+  const done: MessagesResponse = {
+    ...answer("Topic 1"),
+    usage: {
+      input_tokens: 6_000,
+      output_tokens: 800,
+      cache_read_input_tokens: 1_000,
+    },
+  };
+  const claude = recordedClient([paused, done]);
+
+  await runDue({ queue, claude });
+
+  const [[, outcome]] = queue.finished;
+  assert.equal(claude.requests.length, 2);
+  assert.deepEqual(
+    [
+      outcome.inputTokens,
+      outcome.outputTokens,
+      outcome.cacheReadTokens,
+      outcome.cacheWriteTokens,
+    ],
+    [10_000, 1_000, 4_000, 500],
+  );
+});
+
 test("a failed research is recorded as a failed attempt with its cost", async () => {
   const queue = stubQueue([run(1)]);
   const claude = recordedClient([]); // the first call throws

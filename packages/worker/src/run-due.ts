@@ -20,6 +20,11 @@ export type RunOutcome = {
   coverage: ResearchResult["coverage"];
   searches: number;
   costUsd: number;
+  // API token usage, summed over the session's Claude calls.
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   error?: string;
   // A failed attempt only: false when another attempt cannot help (a 4xx,
   // a rate or spend limit, a timeout), so the run fails at once.
@@ -122,6 +127,10 @@ export async function runDue(deps: RunDueDeps): Promise<TickSummary> {
         coverage: result.coverage,
         searches: result.usage.webSearches,
         costUsd: result.usage.costUsd,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        cacheReadTokens: result.usage.cacheReadTokens,
+        cacheWriteTokens: result.usage.cacheWriteTokens,
         ...(result.error ? { error: result.error } : {}),
         ...(result.sectionMd === null
           ? { retry: result.retryable ?? true }
