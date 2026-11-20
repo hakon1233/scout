@@ -38,6 +38,10 @@ export default function PrivacyPage() {
         <li>Supabase stores your account and data.</li>
         <li>Cloudflare hosts the app and runs the code that sends pushes.</li>
         <li>
+          Resend sends the brief emails you turn on. It gets your email address
+          and the brief.
+        </li>
+        <li>
           Anthropic&apos;s Claude researches and writes the briefs. It sees your
           topics, not your email.
         </li>

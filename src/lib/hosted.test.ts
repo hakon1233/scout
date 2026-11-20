@@ -475,6 +475,19 @@ test("push per topic goes through set_topic_push", async () => {
   assert.deepEqual(calls[0].body, { p_interest: "i-rust", p_on: true });
 });
 
+test("email per topic: my_topic_email (null while switched off) and set_topic_email", async () => {
+  const off = stubFetch({ "/rest/v1/rpc/my_topic_email": { body: null } });
+  assert.equal(await data(off.fetch).topicEmail(), null);
+
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/rpc/my_topic_email": { body: ["i-rust"] },
+    "/rest/v1/rpc/set_topic_email": { body: true },
+  });
+  assert.deepEqual(await data(fetch).topicEmail(), ["i-rust"]);
+  await data(fetch).setTopicEmail("i-rust", false);
+  assert.deepEqual(calls.at(-1)?.body, { p_interest: "i-rust", p_on: false });
+});
+
 test("Settings reads the saved time zone and the topics with push on", async () => {
   const { fetch, calls } = stubFetch({
     "/rest/v1/profiles": { body: [{ timezone: "Europe/Oslo" }] },

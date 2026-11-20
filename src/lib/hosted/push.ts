@@ -1,5 +1,6 @@
 // Notifications: this device's push subscription ("Notify me when a brief
-// is ready") and the per-topic switch, plus the browser's push side.
+// is ready") and the per-topic switch, plus the browser's push side; and the
+// per-topic "Email me new briefs" switch.
 
 import type { HostedClient } from "./client";
 import {
@@ -20,6 +21,8 @@ export function pushData(
   | "pushDisable"
   | "topicPush"
   | "setTopicPush"
+  | "topicEmail"
+  | "setTopicEmail"
   | "muteSuggestions"
 > {
   const { deps, session, rest } = c;
@@ -95,6 +98,22 @@ export function pushData(
 
     async setTopicPush(interestId, on) {
       await rest("rpc/set_topic_push", {
+        method: "POST",
+        body: { p_interest: interestId, p_on: on },
+      });
+    },
+
+    async topicEmail() {
+      return (
+        (await rest<string[] | null>("rpc/my_topic_email", {
+          method: "POST",
+          body: {},
+        })) ?? null
+      );
+    },
+
+    async setTopicEmail(interestId, on) {
+      await rest("rpc/set_topic_email", {
         method: "POST",
         body: { p_interest: interestId, p_on: on },
       });

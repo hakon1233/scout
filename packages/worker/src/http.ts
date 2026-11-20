@@ -40,6 +40,11 @@ import {
 import { requestRun, RpcError, rpcCaller } from "./supabase.ts";
 import { handleTeamRequest, isTeamPath, type TeamDeps } from "./team.ts";
 import { handleVoiceRequest, type VoiceAi } from "./voice.ts";
+import {
+  handleUnsubscribe,
+  supabaseEmailStore,
+  UNSUBSCRIBE_PATH,
+} from "./email.ts";
 
 export type HttpDeps = {
   supabaseUrl: string;
@@ -77,6 +82,17 @@ export async function handleRequest(
   const path = new URL(request.url).pathname;
   if (isTeamPath(path)) return handleTeamRequest(request, deps);
   if (path === "/voice") return handleVoiceRequest(request, deps);
+  // A brief email's one-click unsubscribe link (email.ts): signed, no sign-in.
+  if (path === UNSUBSCRIBE_PATH && deps.serviceKey) {
+    return handleUnsubscribe(request, {
+      signingKey: deps.serviceKey,
+      store: supabaseEmailStore({
+        url: deps.supabaseUrl,
+        serviceKey: deps.serviceKey,
+        fetch: deps.fetch,
+      }),
+    });
+  }
 
   const cors = corsHeaders(request, deps.allowedOrigin);
   const json = jsonResponder(cors);

@@ -184,6 +184,17 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   on, names up to 3 bell-on topics, least read first. The feed's notice card reads it
   through `my_mute_suggestions` (`components/hosted/MutePushes.tsx`, muting is the
   topic's bell), and the weekly push's payload carries the same titles as `mute`.
+- `email.ts`: "Email me new briefs", per topic and reader (`interests.email_enabled`
+  for the owner, `follows.email_enabled` for a follower, `set_topic_email`). Off until
+  `settings.email_on`: then `my_topic_email` answers null and the web app hides the
+  envelope toggles. A trigger on `runs` queues one `email_outbox` row per opted-in
+  reader when a covered run becomes ready (finish_run and team_finish_run alike); the
+  cron's `sendEmails` claims them (`claim_emails`, address from `auth.users`), holds
+  each reader to 20 a day, and sends the brief as HTML and text through the
+  `EmailSender` seam (Resend over fetch; no `RESEND_API_KEY`, `EMAIL_FROM` or
+  `WORKER_URL`, no emails). Each email carries a signed one-click unsubscribe link,
+  `GET|POST /email/unsubscribe` (HMAC keyed by the service key, `email_unsubscribe`).
+  `*_email.sql`.
 - Picks: each tick, after the runs, refreshes `picksBatch` readers' picks
   (`supabasePicksStore` over `claim_picks`/`finish_picks`, `*_picks.sql`). On Mondays
   the daily job marks readers active in the last 30 days (`start_weekly_picks`); their
@@ -277,7 +288,7 @@ companion never imports it.
   `chat.ts`, `sharing.ts` (links, follows, notices), `catalog.ts` (publish, tags,
   browse, reports, picks), `account.ts` (profile, time zone, usage, delete),
   `marks.ts` (likes and saves, `likesSync`), `push.ts` (this device and per-topic
-  push, and `muteSuggestions`) and `types.ts`. Each method lives in exactly one area
+  push and email, and `muteSuggestions`) and `types.ts`. Each method lives in exactly one area
   (`lib/hosted-split.test.ts`); `lib/hosted-fake.ts` implements the same
   `HostedData` for screenshots and e2e.
 - `components/FeedBody.tsx`: a story's body as markdown (GFM tables too) through

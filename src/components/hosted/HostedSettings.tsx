@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
+import { EmailToggle } from "@/components/EmailToggle";
 import { PushBell } from "@/components/PushBell";
 import { AppShell, PageHeader } from "@/components/shell/AppShell";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -12,6 +13,7 @@ import {
   SettingsLinkRow,
   SettingsRow,
 } from "@/components/ui";
+import { useTopicEmail } from "@/hooks/useTopicEmail";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { hostedAuth } from "@/lib/auth";
 import type { HostedData, HostedHome } from "@/lib/hosted";
@@ -30,6 +32,7 @@ import { useHostedHome } from "./useHostedHome";
 export function HostedSettings() {
   const { data, home, loadError } = useHostedHome();
   const push = useTopicPush(data);
+  const email = useTopicEmail(data);
 
   return (
     <AppShell menu={home ? hostedMenu(home) : undefined}>
@@ -52,7 +55,10 @@ export function HostedSettings() {
             title="Notifications"
             footer={
               push.error ??
-              "Each topic is off until you turn on its bell. Turning one on also turns on this device."
+              email.error ??
+              (email.enabled
+                ? "Each topic is off until you turn on its bell or its envelope (new briefs by email). Turning a bell on also turns on this device."
+                : "Each topic is off until you turn on its bell. Turning one on also turns on this device.")
             }
           >
             <div className="px-4 py-3">
@@ -64,13 +70,22 @@ export function HostedSettings() {
             </div>
             {home?.interests.map((t) => (
               <SettingsRow key={t.id} label={t.topic}>
-                <PushBell
-                  topic={t.topic}
-                  on={push.isOn(t.id)}
-                  onChange={(on) => push.set(t.id, on)}
-                  deviceOn={push.deviceOn}
-                  blocked={push.blocked}
-                />
+                <span className="inline-flex">
+                  {email.enabled && (
+                    <EmailToggle
+                      topic={t.topic}
+                      on={email.isOn(t.id)}
+                      onChange={(on) => email.set(t.id, on)}
+                    />
+                  )}
+                  <PushBell
+                    topic={t.topic}
+                    on={push.isOn(t.id)}
+                    onChange={(on) => push.set(t.id, on)}
+                    deviceOn={push.deviceOn}
+                    blocked={push.blocked}
+                  />
+                </span>
               </SettingsRow>
             ))}
           </SettingsGroup>

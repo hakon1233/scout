@@ -6,9 +6,11 @@ import type { BriefSettings } from "@scout/core";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { BriefSettingsGroup } from "@/components/BriefSettingsGroup";
 import { FeedView } from "@/components/FeedView";
+import { EmailToggle } from "@/components/EmailToggle";
 import { PushBell } from "@/components/PushBell";
 import { AppShell, PageHeader } from "@/components/shell/AppShell";
 import { Button, Segmented, SettingsGroup, SettingsRow } from "@/components/ui";
+import { useTopicEmail } from "@/hooks/useTopicEmail";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { formatDate } from "@/lib/format-date";
 import { dailyOffered, planFor } from "@/lib/plans";
@@ -93,6 +95,7 @@ function TopicPage({
   push: ReturnType<typeof useTopicPush>;
 }) {
   const router = useRouter();
+  const email = useTopicEmail(data);
   const [runsError, setRunsError] = React.useState<string | null>(null);
   const [running, setRunning] = React.useState(false);
   const [runError, setRunError] = React.useState<string | null>(null);
@@ -186,20 +189,29 @@ function TopicPage({
         title={i.topic}
         back={{ href: "/app/topics/", label: "Topics" }}
         action={
-          <PushBell
-            topic={i.topic}
-            on={push.isOn(i.id)}
-            onChange={(on) => push.set(i.id, on)}
-            deviceOn={push.deviceOn}
-            blocked={push.blocked}
-          />
+          <span className="inline-flex">
+            {email.enabled && (
+              <EmailToggle
+                topic={i.topic}
+                on={email.isOn(i.id)}
+                onChange={(on) => email.set(i.id, on)}
+              />
+            )}
+            <PushBell
+              topic={i.topic}
+              on={push.isOn(i.id)}
+              onChange={(on) => push.set(i.id, on)}
+              deviceOn={push.deviceOn}
+              blocked={push.blocked}
+            />
+          </span>
         }
       >
         {owner} · {status}
       </PageHeader>
-      {push.error && (
+      {(push.error ?? email.error) && (
         <p role="alert" className="text-body-sm text-danger">
-          {push.error}
+          {push.error ?? email.error}
         </p>
       )}
 

@@ -12,6 +12,10 @@
 #                              (src/team.ts, `pnpm team:run`); unset, they 404
 #   MODERATION_TOKEN           optional: POST /team/hide for the weekly public
 #                              topic check; unset, it 404s
+#   RESEND_API_KEY             optional: sends brief emails (src/email.ts) with
+#                              the EMAIL_FROM and WORKER_URL vars; unset, none
+#                              are sent. The database switch settings.email_on
+#                              must be on too.
 name = "scout-runs"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"

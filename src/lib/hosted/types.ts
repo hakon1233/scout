@@ -134,6 +134,11 @@ export interface HostedData {
   // topicPush lists the topic ids with it on.
   topicPush(): Promise<string[]>;
   setTopicPush(interestId: string, on: boolean): Promise<void>;
+  // "Email me new briefs": a topic's new brief by email, per topic, owned or
+  // followed; off by default. topicEmail lists the topic ids with it on, or
+  // answers null while email is switched off for Scout (the toggles hide).
+  topicEmail(): Promise<string[] | null>;
+  setTopicEmail(interestId: string, on: boolean): Promise<void>;
   // "Lots of pushes, mute some?": this week's pushes and up to 3 bell-on
   // topics to mute, least read first. Null under 10 pushes a week.
   muteSuggestions(): Promise<MuteSuggestions | null>;

@@ -47,6 +47,8 @@ const USER = { id: "fake-reader", email: "reader@example.com" };
 const SIGNED_OUT = "scout.fake.signedOut";
 // Set to "1" (e2e, screenshots) to start as a new reader with no topics.
 export const FRESH = "scout.fake.fresh";
+// Set to "1" to switch brief emails on (settings.email_on); off by default.
+export const EMAIL_ON = "scout.fake.emailOn";
 
 function storage(): Storage | null {
   try {
@@ -328,6 +330,8 @@ export function createFakeHostedData(): HostedData {
   const brief = seedBrief();
   const removed = new Map<string, HostedInterest>();
   const pushOn = new Set<string>();
+  const emailOn = new Set<string>();
+  const emailSwitch = storage()?.getItem(EMAIL_ON) === "1";
   let device: PushState = "off";
   let timeZone: string | null = "Europe/Oslo";
   const turns: ChatTurn[] = [];
@@ -475,6 +479,12 @@ export function createFakeHostedData(): HostedData {
     async setTopicPush(id, on) {
       if (on) pushOn.add(id);
       else pushOn.delete(id);
+    },
+    topicEmail: async () => (emailSwitch ? [...emailOn] : null),
+    async setTopicEmail(id, on) {
+      if (!emailSwitch) throw new Error("Email is switched off.");
+      if (on) emailOn.add(id);
+      else emailOn.delete(id);
     },
     // As if every daily topic pushed each day and every other once a week.
     async muteSuggestions() {
