@@ -30,40 +30,40 @@ from the new rows below.
 
 ## New watch types
 
-| Watch type               | Principle                                                   | Example                                                     | Score |
-| ------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------- | ----- |
-| Slip watch               | A promised date or pledge: say when it slips, or is kept    | E6 section opening; a game's release date; a party pledge   | 3–4   |
-| Claim window             | Money I may be owed, and the date the claim closes          | Class-action settlements; compensation schemes; disaster aid | 3–4   |
-| Report-card watch        | A new inspection result for one named institution           | Care home, kindergarten, school (Ofsted, CQC, Helsetilsynet) | 3     |
-| Peer-practice watch      | What organisations like mine did about X                    | How other kommuner handled school phone bans                | 3     |
-| Gone quiet               | A regular signal stops: no release, no post, no update      | An open-source project or game studio goes silent           | 3     |
-| Myself in public records | My own name, company or property shows up in a record       | New roles registered on my company (brreg); a lien on my home | 2–3   |
+| Watch type               | Principle                                                | Example                                                       | Score |
+| ------------------------ | -------------------------------------------------------- | ------------------------------------------------------------- | ----- |
+| Slip watch               | A promised date or pledge: say when it slips, or is kept | E6 section opening; a game's release date; a party pledge     | 3–4   |
+| Claim window             | Money I may be owed, and the date the claim closes       | Class-action settlements; compensation schemes; disaster aid  | 3–4   |
+| Report-card watch        | A new inspection result for one named institution        | Care home, kindergarten, school (Ofsted, CQC, Helsetilsynet)  | 3     |
+| Peer-practice watch      | What organisations like mine did about X                 | How other kommuner handled school phone bans                  | 3     |
+| Gone quiet               | A regular signal stops: no release, no post, no update   | An open-source project or game studio goes silent             | 3     |
+| Myself in public records | My own name, company or property shows up in a record    | New roles registered on my company (brreg); a lien on my home | 2–3   |
 
-"All-clear" (a fire ban, boil-water notice or strike ends) is a near-duplicate of *Wait
-for an event*. It belongs in that row's examples, not as a new type.
+"All-clear" (a fire ban, boil-water notice or strike ends) is a near-duplicate of _Wait
+for an event_. It belongs in that row's examples, not as a new type.
 
 ## New groups
 
-| Group                                    | Watch                                                 | Example topic                                        | Source                                   | Score |
-| ---------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------- | ----- |
-| Commuters and parents                    | Strikes that could hit me, with the mediation deadline | "Will a strike close kindergartens or flights?"     | Riksmekleren ✓ (parties and deadlines)   | 4     |
-| Grown children of older parents          | New scams in Norway this week                         | "Scams aimed at my parents' age group"               | Finanstilsynet warnings ✓, bank pages    | 4     |
-| Rural residents, cabin owners, Sámi      | Energy and land concessions near me                   | "Wind, power line or hydro cases in Tydal"           | NVE news ~ (case table is JavaScript)    | 3–4   |
-| Off-plan home buyers, builder customers  | My developer's or builder's solvency                  | "Is my new-build developer in trouble?"              | brreg ✓; news                            | 3–4   |
-| US consumers                             | Class-action claim deadlines                          | "Open settlements I may qualify for"                 | topclassactions ✓ (sorted by deadline)   | 3–4   |
-| Poultry keepers, beekeepers, horse owners | Animal-disease zones                                 | "Bird-flu zones in Trøndelag"                        | Mattilsynet ✓ (zones undated)            | 3     |
-| Cross-border commuters, travellers       | Internal Schengen border controls                     | "NO/SE/DK checks, 12 Nov 2026 – 11 May 2027"         | EU Commission list ✓                     | 3     |
-| Holders of weak passports                | Visa-free list changes for my passport                | "Countries added or lost for Indian passports"      | News ✓                                   | 3     |
-| Genealogists                             | New digitised records for my parishes and surnames    | "New Norwegian church records"                       | FamilySearch monthly ✓; Digitalarkivet ✗ | 3     |
-| Exporters, compliance staff              | Sanctions and export-control changes                  | "New Russia sanctions that touch my goods"           | OFAC ✓; EU news                          | 3     |
-| Sport shooters, gun owners               | Gun-law hearings and changes                          | "Magazine rules for sport shooters"                  | regjeringen.no ✓; jeger.no               | 3     |
-| US disaster-hit households               | Disaster declarations and aid deadlines               | "FEMA aid deadline for my county"                    | OpenFEMA API ✓                           | 3     |
-| Voters                                   | Candidate lists and programmes before an election     | "Kommunevalg 2027 in Trondheim"                      | Party and kommune pages, news            | 3     |
-| B2B salespeople                          | Trigger events at prospects                           | "New CEO or funding at my top 20 accounts"           | brreg ✓; news                            | 3     |
-| Data analysts, journalists               | Releases due from the statistics office               | "SSB releases next week in my field"                 | ssb.no/kalender ✓                        | 2–3   |
-| US recruiters, at-risk workers           | WARN layoff notices                                   | "Layoff notices in my county"                        | State pages ~ (XLSX); paid trackers      | 2–3   |
-| Open-source maintainers, indie founders  | Mentions on Hacker News                               | "Threads about my project"                           | HN Algolia ✓; Reddit ✗; F5Bot is free    | 2–3   |
-| Quality and compliance managers          | Revisions to the standards I certify against          | "ISO 9001 revision status"                           | Unchecked                                | 2–3   |
+| Group                                     | Watch                                                  | Example topic                                   | Source                                   | Score |
+| ----------------------------------------- | ------------------------------------------------------ | ----------------------------------------------- | ---------------------------------------- | ----- |
+| Commuters and parents                     | Strikes that could hit me, with the mediation deadline | "Will a strike close kindergartens or flights?" | Riksmekleren ✓ (parties and deadlines)   | 4     |
+| Grown children of older parents           | New scams in Norway this week                          | "Scams aimed at my parents' age group"          | Finanstilsynet warnings ✓, bank pages    | 4     |
+| Rural residents, cabin owners, Sámi       | Energy and land concessions near me                    | "Wind, power line or hydro cases in Tydal"      | NVE news ~ (case table is JavaScript)    | 3–4   |
+| Off-plan home buyers, builder customers   | My developer's or builder's solvency                   | "Is my new-build developer in trouble?"         | brreg ✓; news                            | 3–4   |
+| US consumers                              | Class-action claim deadlines                           | "Open settlements I may qualify for"            | topclassactions ✓ (sorted by deadline)   | 3–4   |
+| Poultry keepers, beekeepers, horse owners | Animal-disease zones                                   | "Bird-flu zones in Trøndelag"                   | Mattilsynet ✓ (zones undated)            | 3     |
+| Cross-border commuters, travellers        | Internal Schengen border controls                      | "NO/SE/DK checks, 12 Nov 2026 – 11 May 2027"    | EU Commission list ✓                     | 3     |
+| Holders of weak passports                 | Visa-free list changes for my passport                 | "Countries added or lost for Indian passports"  | News ✓                                   | 3     |
+| Genealogists                              | New digitised records for my parishes and surnames     | "New Norwegian church records"                  | FamilySearch monthly ✓; Digitalarkivet ✗ | 3     |
+| Exporters, compliance staff               | Sanctions and export-control changes                   | "New Russia sanctions that touch my goods"      | OFAC ✓; EU news                          | 3     |
+| Sport shooters, gun owners                | Gun-law hearings and changes                           | "Magazine rules for sport shooters"             | regjeringen.no ✓; jeger.no               | 3     |
+| US disaster-hit households                | Disaster declarations and aid deadlines                | "FEMA aid deadline for my county"               | OpenFEMA API ✓                           | 3     |
+| Voters                                    | Candidate lists and programmes before an election      | "Kommunevalg 2027 in Trondheim"                 | Party and kommune pages, news            | 3     |
+| B2B salespeople                           | Trigger events at prospects                            | "New CEO or funding at my top 20 accounts"      | brreg ✓; news                            | 3     |
+| Data analysts, journalists                | Releases due from the statistics office                | "SSB releases next week in my field"            | ssb.no/kalender ✓                        | 2–3   |
+| US recruiters, at-risk workers            | WARN layoff notices                                    | "Layoff notices in my county"                   | State pages ~ (XLSX); paid trackers      | 2–3   |
+| Open-source maintainers, indie founders   | Mentions on Hacker News                                | "Threads about my project"                      | HN Algolia ✓; Reddit ✗; F5Bot is free    | 2–3   |
+| Quality and compliance managers           | Revisions to the standards I certify against           | "ISO 9001 revision status"                      | Unchecked                                | 2–3   |
 
 ## Top 5 to add to the marketing list
 

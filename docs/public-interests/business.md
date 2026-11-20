@@ -31,19 +31,19 @@ notices above the EU threshold.
 
 ## All candidates
 
-| Sub-niche | Business type and place | How many | Sources | Cadence | Score |
-| --- | --- | --- | --- | --- | --- |
-| Landed cost: freight, krone, toll | Online shops and wholesalers that import, Norway | Thousands of firms in nettbutikk and wholesale (SSB NACE 47.91, 46) | Norges Bank ✓, Freightos ✓, toll.no ✓, Loadstar ✓, Drewry ✗ | Weekly | 4 |
-| Building tenders and plans | Building, electrical, plumbing and engineering SMEs, Trøndelag | Several thousand firms in NACE 41–43 and 71 in Trøndelag | TED RSS ✓, TED /html ✓, Trondheim arealplan ✓, Doffin ✗, bygg.no ✗ | Weekly | 4 |
-| China-sourcing freight and tariffs | Small Shopify and Amazon sellers, world | Very many | Freightos ✓, Loadstar ✓, splash247 ✓, freightwaves ✓ | Weekly | 4 |
-| Building-material costs | Builders and carpenters, Norway | NACE 41–43, about 70,000 firms | SSB building cost index ✓, Byggevareindustrien ✓, EU steel rules (search) | Monthly | 3 |
-| Bakery and food inputs | Bakeries and small food producers, Trøndelag | Hundreds | Landbruksdirektoratet ✓, Norgesmøllene ✓, toll.no ✓, Tine ✗ | Monthly (quiet most weeks) | 3 |
-| New companies | Accountants and B2B services, Trondheim | About 25 new AS a week in Trondheim | brreg API ✓ (about 12 records fit in a run) | Weekly | 3 |
-| IT consultancy tenders | IT consultancies, Norway | About 10,000 firms in NACE 62 | TED RSS ✓ (CPV 72, 48), Doffin ✗ | Weekly | 3 |
-| Grocery market | Food suppliers to Norwegian chains | Hundreds | Konkurransetilsynet feed ✓, dagligvarehandelen ✗ | Weekly | 3 |
-| State-agency tenders | Suppliers to state agencies, Norway | Broad | eu-supply DFO Atom feed ✓ (about 9 a week) | Weekly | 2–3 |
-| Energy prices and grid tariffs | Energy-heavy SMEs, NO3 (Mid-Norway) | Broad | hvakosterstrommen ✓, Nord Pool ✗ | Weekly | 2–3 |
-| Aquaculture market | Seafood suppliers, Norway | Hundreds | Well served by iLaks and Intrafish | Daily | 2 |
+| Sub-niche                          | Business type and place                                        | How many                                                            | Sources                                                                   | Cadence                    | Score |
+| ---------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------- | ----- |
+| Landed cost: freight, krone, toll  | Online shops and wholesalers that import, Norway               | Thousands of firms in nettbutikk and wholesale (SSB NACE 47.91, 46) | Norges Bank ✓, Freightos ✓, toll.no ✓, Loadstar ✓, Drewry ✗               | Weekly                     | 4     |
+| Building tenders and plans         | Building, electrical, plumbing and engineering SMEs, Trøndelag | Several thousand firms in NACE 41–43 and 71 in Trøndelag            | TED RSS ✓, TED /html ✓, Trondheim arealplan ✓, Doffin ✗, bygg.no ✗        | Weekly                     | 4     |
+| China-sourcing freight and tariffs | Small Shopify and Amazon sellers, world                        | Very many                                                           | Freightos ✓, Loadstar ✓, splash247 ✓, freightwaves ✓                      | Weekly                     | 4     |
+| Building-material costs            | Builders and carpenters, Norway                                | NACE 41–43, about 70,000 firms                                      | SSB building cost index ✓, Byggevareindustrien ✓, EU steel rules (search) | Monthly                    | 3     |
+| Bakery and food inputs             | Bakeries and small food producers, Trøndelag                   | Hundreds                                                            | Landbruksdirektoratet ✓, Norgesmøllene ✓, toll.no ✓, Tine ✗               | Monthly (quiet most weeks) | 3     |
+| New companies                      | Accountants and B2B services, Trondheim                        | About 25 new AS a week in Trondheim                                 | brreg API ✓ (about 12 records fit in a run)                               | Weekly                     | 3     |
+| IT consultancy tenders             | IT consultancies, Norway                                       | About 10,000 firms in NACE 62                                       | TED RSS ✓ (CPV 72, 48), Doffin ✗                                          | Weekly                     | 3     |
+| Grocery market                     | Food suppliers to Norwegian chains                             | Hundreds                                                            | Konkurransetilsynet feed ✓, dagligvarehandelen ✗                          | Weekly                     | 3     |
+| State-agency tenders               | Suppliers to state agencies, Norway                            | Broad                                                               | eu-supply DFO Atom feed ✓ (about 9 a week)                                | Weekly                     | 2–3   |
+| Energy prices and grid tariffs     | Energy-heavy SMEs, NO3 (Mid-Norway)                            | Broad                                                               | hvakosterstrommen ✓, Nord Pool ✗                                          | Weekly                     | 2–3   |
+| Aquaculture market                 | Seafood suppliers, Norway                                      | Hundreds                                                            | Well served by iLaks and Intrafish                                        | Daily                      | 2     |
 
 ## Dropped
 
