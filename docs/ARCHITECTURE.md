@@ -257,6 +257,15 @@ companion never imports it.
   `HostedHome` instead of the companion feed. `app/i` is a share link's page
   (`/i/?s=<slug>`, read on the client because the site is a static export): the
   interest's latest brief for anyone, and Follow for a signed-in reader.
+  `lib/hosted.ts` is only the entry callers import: it composes `lib/hosted/`, one
+  module per area over one client. `client.ts` (session, REST as the reader, Worker
+  calls, `HostedError` wording), `home.ts` (the feed and one interest's edits),
+  `chat.ts`, `sharing.ts` (links, follows, notices), `catalog.ts` (publish, tags,
+  browse, reports, picks), `account.ts` (profile, time zone, usage, delete),
+  `marks.ts` (likes and saves, `likesSync`), `push.ts` (this device and per-topic
+  push) and `types.ts`. Each method lives in exactly one area
+  (`lib/hosted-split.test.ts`); `lib/hosted-fake.ts` implements the same
+  `HostedData` for screenshots and e2e.
 - `components/FeedBody.tsx`: a story's body as markdown (GFM tables too) through
   rehype-sanitize, never raw HTML; body images are dropped (only the lead image shows,
   with no referrer) and links get `rel="nofollow ugc noopener"`.
