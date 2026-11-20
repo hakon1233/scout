@@ -174,7 +174,11 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   sends them (aes128gcm, VAPID, via `@block65/webcrypto-web-push`) within what the tick's
   subrequest budget leaves, and deletes devices the push service calls gone (404/410).
   A push failure never fails or retries a run. Tables and RPCs: `*_push.sql`,
-  `*_push_outbox.sql`.
+  `*_push_outbox.sql`. "Lots of pushes, mute some?": `mute_suggestions`
+  (`*_mute_suggestions.sql`) counts a reader's pushes in the last 7 days and, from 10
+  on, names up to 3 bell-on topics, least read first. The feed's notice card reads it
+  through `my_mute_suggestions` (`components/hosted/MutePushes.tsx`, muting is the
+  topic's bell), and the weekly push's payload carries the same titles as `mute`.
 - Picks: each tick, after the runs, refreshes `picksBatch` readers' picks
   (`supabasePicksStore` over `claim_picks`/`finish_picks`, `*_picks.sql`). On Mondays
   the daily job marks readers active in the last 30 days (`start_weekly_picks`); their
@@ -268,7 +272,7 @@ companion never imports it.
   `chat.ts`, `sharing.ts` (links, follows, notices), `catalog.ts` (publish, tags,
   browse, reports, picks), `account.ts` (profile, time zone, usage, delete),
   `marks.ts` (likes and saves, `likesSync`), `push.ts` (this device and per-topic
-  push) and `types.ts`. Each method lives in exactly one area
+  push, and `muteSuggestions`) and `types.ts`. Each method lives in exactly one area
   (`lib/hosted-split.test.ts`); `lib/hosted-fake.ts` implements the same
   `HostedData` for screenshots and e2e.
 - `components/FeedBody.tsx`: a story's body as markdown (GFM tables too) through

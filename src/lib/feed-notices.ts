@@ -2,7 +2,7 @@
 
 // The notice cards at the top of the feed. Every kind Scout already knows (a
 // topic hidden, stopped, unshared or deleted; a run failed; briefs stopped
-// coming) becomes one FeedNotice. The server's topic notices are dismissed on
+// coming; lots of pushes) becomes one FeedNotice. The server's topic notices are dismissed on
 // the server; the rest are dismissed on this device, by id, so a new failure
 // shows again.
 
@@ -11,7 +11,7 @@ import { getLocalStorage, safeSetItem } from "./safe-storage";
 
 export type FeedNotice = {
   id: string;
-  kind: NoticeKind | "run_failed" | "run_stale";
+  kind: NoticeKind | "run_failed" | "run_stale" | "mute_pushes";
   /** The topic it is about, when there is one. */
   topic: string | null;
   /** ISO time it happened, when known. */
@@ -57,4 +57,13 @@ export function dismissLocally(id: string): Set<string> {
   const kept = ids.slice(-KEEP);
   safeSetItem(KEY, JSON.stringify(kept));
   return new Set(kept);
+}
+
+/** "Lots of pushes, mute some?" gets one id per week (from Monday, local
+ *  time), so dismissing it hides it until the next week. */
+export function muteNoticeId(now: Date): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `mute_pushes:${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }

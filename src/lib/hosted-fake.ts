@@ -454,6 +454,18 @@ export function createFakeHostedData(): HostedData {
       if (on) pushOn.add(id);
       else pushOn.delete(id);
     },
+    // As if every daily topic pushed each day and every other once a week.
+    async muteSuggestions() {
+      const topics = interests
+        .filter((i) => pushOn.has(i.id))
+        .map((i) => ({
+          id: i.id,
+          title: i.topic,
+          pushes: i.cadence === "daily" ? 7 : 1,
+        }));
+      const pushes = topics.reduce((n, t) => n + t.pushes, 0);
+      return pushes >= 10 ? { pushes, topics: topics.slice(0, 3) } : null;
+    },
     async deleteAccount() {
       interests = [];
     },

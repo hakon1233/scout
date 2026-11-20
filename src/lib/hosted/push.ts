@@ -5,6 +5,7 @@ import type { HostedClient } from "./client";
 import {
   HostedError,
   type HostedData,
+  type MuteSuggestions,
   type PushDevice,
   type PushKeys,
   type PushState,
@@ -14,7 +15,12 @@ export function pushData(
   c: HostedClient,
 ): Pick<
   HostedData,
-  "pushStatus" | "pushEnable" | "pushDisable" | "topicPush" | "setTopicPush"
+  | "pushStatus"
+  | "pushEnable"
+  | "pushDisable"
+  | "topicPush"
+  | "setTopicPush"
+  | "muteSuggestions"
 > {
   const { deps, session, rest } = c;
   async function pushStatus(): Promise<PushState> {
@@ -92,6 +98,15 @@ export function pushData(
         method: "POST",
         body: { p_interest: interestId, p_on: on },
       });
+    },
+
+    async muteSuggestions() {
+      return (
+        (await rest<MuteSuggestions | null>("rpc/my_mute_suggestions", {
+          method: "POST",
+          body: {},
+        })) ?? null
+      );
     },
   };
 }

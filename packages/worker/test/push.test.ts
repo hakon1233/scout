@@ -144,6 +144,19 @@ test("the weekly push names the reader's topics and what is popular", () => {
   );
 });
 
+test("the weekly push offers to mute the topics that push most", () => {
+  const mute = [{ title: "NO3 power prices" }, { title: "Oslo traffic" }];
+  assert.equal(
+    weeklyPayload({ count: 1, topics: ["A"], popular: [], mute }).body,
+    "New stories on A. Lots of pushes? Mute NO3 power prices or Oslo traffic in Scout.",
+  );
+  // Nothing else to say: the offer alone.
+  assert.deepEqual(weeklyPayload({ count: 0, topics: [], popular: [], mute }), {
+    title: "Lots of pushes this week",
+    body: "Lots of pushes? Mute NO3 power prices or Oslo traffic in Scout.",
+  });
+});
+
 test("the weekly push names the reader's picks in place of popular topics", () => {
   const picks = [{ title: "Fjord kayaking" }, { title: "Ski touring" }];
   assert.deepEqual(

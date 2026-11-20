@@ -489,6 +489,25 @@ test("Settings reads the saved time zone and the topics with push on", async () 
   );
 });
 
+test("lots of pushes: my_mute_suggestions names the topics to mute, or null", async () => {
+  const body = {
+    pushes: 12,
+    topics: [
+      { id: "i-no3", title: "NO3 power prices", pushes: 5 },
+      { id: "i-traffic", title: "Oslo traffic", pushes: 7 },
+    ],
+  };
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/rpc/my_mute_suggestions": { body },
+  });
+  assert.deepEqual(await data(fetch).muteSuggestions(), body);
+  assert.equal(calls[0].method, "POST");
+  const none = stubFetch({
+    "/rest/v1/rpc/my_mute_suggestions": { body: null },
+  });
+  assert.equal(await data(none.fetch).muteSuggestions(), null);
+});
+
 test("delete account asks the Worker with the reader's session", async () => {
   const { fetch, calls } = stubFetch({
     "/account/delete": { body: { deleted: true } },
