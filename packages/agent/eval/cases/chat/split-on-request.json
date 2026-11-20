@@ -1,0 +1,29 @@
+{
+  "message": "Split them",
+  "interests": [],
+  "subjects": [
+    [
+      "ai"
+    ],
+    [
+      "premier league"
+    ],
+    [
+      "oslo housing",
+      "housing"
+    ],
+    [
+      "bambu"
+    ]
+  ],
+  "output": "{\"reply\": \"Created \\\"AI news\\\", \\\"Premier League\\\", \\\"Oslo housing\\\" and \\\"Bambu firmware\\\" — private, each in the next free slot. Tell me what to change.\", \"changes\": [{\"op\": \"create\", \"topic\": \"AI news\", \"doc\": \"# AI news\\n\\nMajor AI model releases and research news.\"}, {\"op\": \"create\", \"topic\": \"Premier League\", \"doc\": \"# Premier League\\n\\nPremier League results, transfers and injuries.\"}, {\"op\": \"create\", \"topic\": \"Oslo housing\", \"doc\": \"# Oslo housing\\n\\nOslo housing prices, rent and new rules for buyers and renters.\"}, {\"op\": \"create\", \"topic\": \"Bambu firmware\", \"doc\": \"# Bambu firmware\\n\\nBambu Lab printer firmware releases and known issues.\"}]}",
+  "expect": {
+    "applied": [
+      "create:AI news",
+      "create:Premier League",
+      "create:Oslo housing",
+      "create:Bambu firmware"
+    ]
+  },
+  "expectFail": []
+}

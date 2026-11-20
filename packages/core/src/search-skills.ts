@@ -148,4 +148,7 @@ SOURCES & QUALITY:
   the paper, the official post — over second-hand aggregation or rewrites.
 - Deduplicate: collapse near-identical stories about the same event into a single
   item and cite the strongest source.
-- No speculation, no undated filler, no "here's some general background" padding.`;
+- No speculation, no undated filler, no "here's some general background" padding.
+- When a topic spans several unrelated subjects, cover the most important ones and
+  say which parts were skipped this time in one short line right under the
+  heading ("Skipped this time: Oslo housing."). Never drop one silently.`;

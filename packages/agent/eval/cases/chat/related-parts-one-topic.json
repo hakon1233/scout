@@ -1,0 +1,19 @@
+{
+  "message": "Track Bambu firmware and filament for my P1S. Weekly.",
+  "interests": [],
+  "subjects": [
+    [
+      "bambu",
+      "firmware",
+      "filament",
+      "p1s"
+    ]
+  ],
+  "output": "{\"reply\": \"Created \\\"Bambu P1S firmware and filament\\\" — Weekly, private. Tell me what to change.\", \"changes\": [{\"op\": \"create\", \"topic\": \"Bambu P1S firmware and filament\", \"doc\": \"# Bambu P1S firmware and filament\\n\\nNew P1S firmware releases and known issues, and new or changed Bambu filaments that work on it.\", \"cadence\": \"weekly\"}]}",
+  "expect": {
+    "applied": [
+      "create:Bambu P1S firmware and filament"
+    ]
+  },
+  "expectFail": []
+}

@@ -76,6 +76,9 @@ export function checkResearchOutput(
     today: string;
     lastStory?: string;
     past?: string[];
+    // A topic that spans several subjects: each must be covered or named as
+    // skipped (search-skills.ts), never dropped silently.
+    subjects?: string[];
   },
 ): Check[] {
   const firstLine = raw.trim().split("\n")[0] ?? "";
@@ -115,6 +118,7 @@ export function checkResearchOutput(
   const citedOnBullet = stories.filter((s) =>
     CITATION_ON_LINE_RE.test(s.raw.split("\n")[0]),
   );
+  const dropped = (opts.subjects ?? []).filter((s) => !mentions(raw, [s]));
 
   return [
     check(
@@ -211,7 +215,20 @@ export function checkResearchOutput(
       `${citedOnBullet.length} stories cite on the bullet line`,
     ),
     check("length", words <= 700, `${words} words`),
+    check(
+      "no-silent-drop",
+      dropped.length === 0,
+      `never mentioned: ${dropped.join(", ")}`,
+    ),
   ];
+}
+
+// Whether `text` names any of `keywords` (plain words), as whole words.
+function mentions(text: string, keywords: string[]): boolean {
+  const lower = text.toLowerCase();
+  return keywords.some((k) =>
+    new RegExp(`(^|\\W)${k.toLowerCase()}(\\W|$)`).test(lower),
+  );
 }
 
 // One chat turn's output, applied to a throwaway copy of the interests.
@@ -230,6 +247,9 @@ export async function checkChatOutput(
   opts: {
     message?: string;
     interests: Interest[];
+    // The unrelated subjects the message mixes, each as its keywords. No topic
+    // may hold two of them; a turn that saves nothing offers to split them.
+    subjects?: string[][];
     expect: {
       applied: string[];
       pendingDelete?: string;
@@ -266,6 +286,18 @@ export async function checkChatOutput(
         reply.includes((c.topic ?? "").toLowerCase()) &&
         (!said || new RegExp(`\\b${said}\\b`).test(reply)),
     );
+    const subjects = opts.subjects ?? [];
+    const mixed = output.changes.filter(
+      (c) =>
+        c.op !== "delete" &&
+        subjects.filter((keywords) =>
+          mentions(`${c.topic ?? ""}\n${c.doc ?? ""}`, keywords),
+        ).length >= 2,
+    );
+    const offersSplit =
+      subjects.length < 2 ||
+      output.changes.length > 0 ||
+      /\b(split|separate)\b/i.test(output.reply);
     return [
       check("json-object", true),
       check("reply", output.reply.trim().length > 0),
@@ -297,6 +329,13 @@ export async function checkChatOutput(
         "create-reply-confirms",
         confirms,
         `reply must name the new topic${said ? ` and say ${said}` : ""}`,
+      ),
+      check(
+        "one-subject-per-topic",
+        mixed.length === 0 && offersSplit,
+        mixed.length > 0
+          ? `mixes subjects: ${mixed.map((c) => c.topic ?? c.interestId).join(", ")}`
+          : "saves nothing but never offers to split",
       ),
       check(
         "expected-effect",

@@ -1,0 +1,24 @@
+{
+  "message": "Make me one topic: AI news, Premier League, Oslo housing and Bambu firmware. Weekly.",
+  "interests": [],
+  "subjects": [
+    [
+      "ai"
+    ],
+    [
+      "premier league"
+    ],
+    [
+      "oslo housing",
+      "housing"
+    ],
+    [
+      "bambu"
+    ]
+  ],
+  "output": "{\"reply\": \"Those are four separate subjects, and each run has only a few searches, so some would come out thin. Want me to split them into four topics, or keep the one or two that matter most? Only your plan's daily and weekly slots run on a schedule; the others run with Run now.\", \"changes\": []}",
+  "expect": {
+    "applied": []
+  },
+  "expectFail": []
+}

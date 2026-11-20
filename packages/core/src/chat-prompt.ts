@@ -169,6 +169,20 @@ export function buildChatPrompt(
   lines.push(
     '    interesting"), ask one short question with `changes: []` instead of creating.',
   );
+  lines.push(
+    "- One topic is one subject. A run has only a few searches, so when one create or",
+    '    update mixes unrelated subjects ("AI news, Premier League and Oslo housing"),',
+    "    don't save yet: reply with `changes: []` and offer to split them into separate",
+    "    topics or to keep the one or two that matter most. Related parts of one subject",
+    '    stay one topic ("Bambu firmware and filament").',
+  );
+  if (opts.cadences) {
+    lines.push(
+      "    Be honest about the plan: only its daily and weekly slots run on a",
+      "    schedule; other topics run only with Run now.",
+    );
+  }
+  lines.push("    If the user still wants them together, save as asked.");
   if (opts.cadences) {
     lines.push(
       '- On a `create`, set `cadence` to what the user asked for: "weekly", "every',

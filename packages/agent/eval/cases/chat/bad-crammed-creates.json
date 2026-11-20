@@ -1,0 +1,28 @@
+{
+  "message": "Make me one topic: AI news, Premier League, Oslo housing and Bambu firmware. Weekly.",
+  "interests": [],
+  "subjects": [
+    [
+      "ai"
+    ],
+    [
+      "premier league"
+    ],
+    [
+      "oslo housing",
+      "housing"
+    ],
+    [
+      "bambu"
+    ]
+  ],
+  "output": "{\"reply\": \"Created \\\"AI, football, housing and Bambu\\\" — Weekly, private. Tell me what to change.\", \"changes\": [{\"op\": \"create\", \"topic\": \"AI, football, housing and Bambu\", \"doc\": \"# AI, football, housing and Bambu\\n\\nAI news, Premier League results, Oslo housing prices and Bambu firmware releases.\", \"cadence\": \"weekly\"}]}",
+  "expect": {
+    "applied": [
+      "create:AI, football, housing and Bambu"
+    ]
+  },
+  "expectFail": [
+    "one-subject-per-topic"
+  ]
+}
