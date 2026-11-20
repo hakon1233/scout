@@ -166,5 +166,21 @@ select is((select count(*)::int from public.publish_checks), 0, 'readers do not 
 
 reset role;
 
+-- ---------------------------------------------------------------------------
+-- Publish checks count against the per-user and global spend caps
+-- ---------------------------------------------------------------------------
+
+create temp table spend_before as
+select public.user_spend_since('bbbbbbbb-0000-0000-0000-0000000000f2', now() - interval '24 hours') as mine,
+       public.spend_today(now()) as total;
+insert into public.publish_checks (user_id, interest_id, text_hash, outcome, cost_usd, finished_at)
+values ('bbbbbbbb-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000b1', 'h', 'refused', 0.40, now());
+select is(
+  public.user_spend_since('bbbbbbbb-0000-0000-0000-0000000000f2', now() - interval '24 hours')
+    - (select mine from spend_before),
+  0.40::numeric, 'a publish check counts toward the reader''s spend');
+select is(public.spend_today(now()) - (select total from spend_before),
+  0.40::numeric, 'and toward the global spend');
+
 select * from finish();
 rollback;

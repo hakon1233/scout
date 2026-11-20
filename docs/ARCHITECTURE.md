@@ -272,7 +272,8 @@ Scout team's paused test topics, both applied by hand. A hidden topic
 (`interests.hidden_at`) leaves the catalog, share links and the chat's suggestions.
 `*_publish.sql`: going public only through the Worker's check (`publish_checks`; at
 most 3 public, 5 checks a rolling day, 24 h before republishing); a topic or doc edit
-drops a public topic to shared, a tag edit (`set_topic_tags`) does not.
+drops a public topic to shared, a tag edit (`set_topic_tags`) does not. Each check's
+Haiku cost counts toward the spend caps (`*_publish_spend.sql`).
 `*_usage.sql`: `story_marks` (likes, saves) and `usage_events` (story clicks, brief
 views, seconds per story; own insert only, 300 an hour, deleted after 30 days by
 `cleanup_runs`), which feed `topic_popularity`. `*_browse.sql`: `browse_topics`
