@@ -35,7 +35,7 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const siteUrl = "https://hakon1233.github.io/scout/";
 const title = "Scout — Personalized AI news, delivered by agents.";
 const description =
-  "Set your interests, get a brief from agents covering only the news you care about.";
+  "Pick your topics, get a brief from agents covering only the news you care about.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -84,8 +84,8 @@ export const viewport: Viewport = {
   // in the chat composer so the input is never hidden behind the keyboard.
   interactiveWidget: "resizes-content",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f2ea" },
-    { media: "(prefers-color-scheme: dark)", color: "#16140f" },
+    { media: "(prefers-color-scheme: light)", color: "#f3eee4" },
+    { media: "(prefers-color-scheme: dark)", color: "#12141a" },
   ],
 };
 

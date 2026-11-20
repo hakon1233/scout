@@ -56,13 +56,15 @@ const ASSEMBLY = {
 // matter are "a group silently disappears" or "a card renders with no bullets"
 // (the parser dropped content but the heading survived, so the page lies).
 
-test("Skills is reachable from the profile menu", async ({ page }) => {
+test("Skills is reachable from Settings", async ({ page }) => {
   await blockNonLoopback(page);
 
   await page.goto(`${ORIGIN}/app/`);
   await expect(page).toHaveURL(`${ORIGIN}/app/`, { timeout: 15_000 });
 
-  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: "Menu" }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(page).toHaveURL(`${ORIGIN}/app/settings/`, { timeout: 15_000 });
   await page.getByRole("link", { name: "Skills" }).click();
 
   await expect(page).toHaveURL(`${ORIGIN}/app/skills/`, { timeout: 15_000 });

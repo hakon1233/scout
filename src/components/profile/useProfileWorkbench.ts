@@ -45,6 +45,7 @@ import {
   nextMsgId,
   resolveMessage,
   resolveRetryTarget,
+  scopedWire,
   transcriptMessages,
 } from "./useProfileWorkbench.helpers";
 
@@ -434,7 +435,7 @@ export function useProfileWorkbench() {
                     ? `Want me to remove ${pendingDeletes.map((d) => `“${d.topic}”`).join(" and ")}?`
                     : pendingRewrite
                       ? `Here's a proposed rewrite of “${pendingRewrite.topic}” — apply below.`
-                      : "Done — updated your interests."),
+                      : "Done — updated your topics."),
                 ts: replyAt,
                 changes,
                 prev,
@@ -482,9 +483,7 @@ export function useProfileWorkbench() {
       const focusTopic = focusKey
         ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
         : null;
-      const wire = focusTopic
-        ? `Regarding my interest "${focusTopic}": ${text}`
-        : text;
+      const wire = scopedWire(focusTopic, text);
 
       const at = new Date().toISOString();
       setMessages((prev) => [

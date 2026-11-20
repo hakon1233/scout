@@ -96,6 +96,7 @@ test("home lists the interests with their run state and builds one brief from th
           interests: {
             ...ownRow("p-space", "Space launches", "daily"),
             visibility: "public",
+            share_slug: "p".repeat(32),
           },
         },
       ],
@@ -106,10 +107,21 @@ test("home lists the interests with their run state and builds one brief from th
       body: [
         {
           id: "n1",
+          kind: "unshared",
           payload: { topic: "Oslo jazz", doc: "Gigs" },
           created_at: "2026-11-20T06:00:00Z",
         },
+        {
+          id: "n2",
+          kind: "hidden",
+          payload: { topic: "Crypto tips", reason: "Paid promotion" },
+          created_at: "2026-11-20T05:00:00Z",
+        },
       ],
+    },
+    // The followed topic's card: the team flag, and a name the label ignores.
+    "/rest/v1/rpc/interest_by_slug": {
+      body: { id: "p-space", owner_name: "Not the team", team: true },
     },
     "/rest/v1/runs": {
       body: [
@@ -136,18 +148,41 @@ test("home lists the interests with their run state and builds one brief from th
     [
       ["private", null],
       ["shared", "s".repeat(32)],
-      ["public", null],
+      ["public", "p".repeat(32)],
     ],
   );
   assert.equal(home.isAdmin, true);
   assert.deepEqual(home.notices, [
-    { id: "n1", topic: "Oslo jazz", createdAt: "2026-11-20T06:00:00Z" },
+    {
+      id: "n1",
+      kind: "unshared",
+      topic: "Oslo jazz",
+      reason: null,
+      createdAt: "2026-11-20T06:00:00Z",
+    },
+    {
+      id: "n2",
+      kind: "hidden",
+      topic: "Crypto tips",
+      reason: "Paid promotion",
+      createdAt: "2026-11-20T05:00:00Z",
+    },
   ]);
   const notices = calls.find((c) => c.url.includes("/rest/v1/notifications"));
   assert.match(
     notices?.url ?? "",
-    /kind=in\.\(unshared,deleted,stopped\)&read_at=is\.null/,
+    /kind=in\.\(hidden,stopped,unshared,deleted\)&read_at=is\.null/,
   );
+  assert.deepEqual(
+    home.interests.map((i) => [i.ownerName, i.team]),
+    [
+      [null, false],
+      [null, false],
+      ["Not the team", true],
+    ],
+  );
+  const card = calls.find((c) => c.url.includes("/rpc/interest_by_slug"));
+  assert.deepEqual(card?.body, { p_slug: "p".repeat(32) });
   assert.equal(home.interests[0].updatedAt, "2026-11-20T07:03:00Z");
   assert.equal(home.interests[1].updatedAt, null);
   assert.match(home.interests[2].failed ?? "", /failed/);
@@ -203,7 +238,7 @@ test("setting a schedule over the plan's limit says so in plain words", async ()
       assert.equal(e.kind, "limit");
       assert.equal(
         e.message,
-        "Your plan has room for 1 daily interest, and it's in use. Set one to weekly or pause it first.",
+        "Your plan has room for 1 daily topic, and it's in use. Set one to weekly or pause it first.",
       );
       return true;
     },
@@ -229,7 +264,7 @@ test("restoring past the plan's interest cap says so in plain words", async () =
     assert.equal(e.kind, "limit");
     assert.equal(
       e.message,
-      "Your plan has room for 15 interests, and they're in use. Delete one first.",
+      "Your plan has room for 15 topics, and they're in use. Delete one first.",
     );
     return true;
   });
@@ -391,6 +426,20 @@ test("push per topic goes through set_topic_push", async () => {
   assert.deepEqual(calls[0].body, { p_interest: "i-rust", p_on: true });
 });
 
+test("Settings reads the saved time zone and the topics with push on", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/profiles": { body: [{ timezone: "Europe/Oslo" }] },
+    "/rest/v1/interests": { body: [{ id: "i-rust" }] },
+    "/rest/v1/follows": { body: [{ interest_id: "p-space" }] },
+  });
+  assert.equal(await data(fetch).timeZone(), "Europe/Oslo");
+  assert.deepEqual(await data(fetch).topicPush(), ["i-rust", "p-space"]);
+  assert.match(calls[0].url, /profiles\?select=timezone&id=eq\.user-anna/);
+  assert.ok(
+    calls.slice(1).every((c) => c.url.includes("push_enabled=is.true")),
+  );
+});
+
 test("delete account asks the Worker with the reader's session", async () => {
   const { fetch, calls } = stubFetch({
     "/account/delete": { body: { deleted: true } },
@@ -484,7 +533,7 @@ test("hosting a stopped interest yourself respects the plan; dismiss marks it re
   await assert.rejects(d.hostCopy("n1"), (e: unknown) => {
     assert.ok(e instanceof HostedError);
     assert.equal(e.kind, "limit");
-    assert.match(e.message, /room for 15 interests/);
+    assert.match(e.message, /room for 15 topics/);
     return true;
   });
   await d.dismiss("n1");

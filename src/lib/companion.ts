@@ -344,7 +344,7 @@ async function postInterests(
       // elsewhere (another browser, or the chat).
       409: (refusal) =>
         Array.isArray(refusal.dropped)
-          ? "Your interests changed somewhere else (another browser or the chat). Reload this page to get the current list, then run again."
+          ? "Your topics changed somewhere else (another browser or the chat). Reload this page to get the current list, then run again."
           : undefined,
     },
   });

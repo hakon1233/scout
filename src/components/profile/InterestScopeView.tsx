@@ -93,14 +93,14 @@ export function InterestScopeView({
           onClick={onBack}
           className="transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
         >
-          ← Interests
+          ← Topics
         </button>
       </div>
 
       {!model ? (
         <EmptyState
-          title="Interest not found"
-          body="Return to Interests and open an interest from the list."
+          title="Topic not found"
+          body="Return to Topics and open a topic from the list."
         />
       ) : (
         <>
@@ -126,13 +126,13 @@ export function InterestScopeView({
               </div>
             ) : model.hasDoc ? (
               <p className="font-reading text-[16px] leading-relaxed text-secondary">
-                Scout has an assignment for this interest, but the companion did
+                Scout has an assignment for this topic, but the companion did
                 not return its markdown in this session.
               </p>
             ) : (
               <EmptyState
                 title="No assignment yet"
-                body="Refine this interest in chat to create the assignment Scout will follow."
+                body="Refine this topic in chat to create the assignment Scout will follow."
               />
             )}
           </section>

@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AgentProgressPanel } from "@/components/AgentProgressPanel";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/shell/AppShell";
+import { FeedNotices, type NoticeView } from "@/components/FeedNotices";
+import { TopicFilter } from "@/components/TopicFilter";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { BriefHistory } from "@/components/BriefHistory";
 import { BriefLayout } from "@/components/BriefLayout";
@@ -12,7 +14,7 @@ import { BriefSkeleton } from "@/components/BriefSkeleton";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { HostedHome } from "@/components/hosted/HostedHome";
 import { isHostedBuild } from "@/lib/auth";
-import { Banner, Button } from "@/components/ui";
+import { Banner, Button, NoticeCard } from "@/components/ui";
 import type { AgentProgress } from "@/lib/agent";
 import {
   bootstrapCompanionToken,
@@ -25,6 +27,11 @@ import {
 import { fetchRunFailure, type RunFailure } from "@/lib/run-failure";
 import { fetchCompanionInterestSet } from "@/lib/interest-docs";
 import { formatDate } from "@/lib/format-date";
+import {
+  dismissLocally,
+  readDismissed,
+  visibleNotices,
+} from "@/lib/feed-notices";
 import { classifyError, type ClassifiedError } from "@/lib/errors";
 import {
   useAbortableController,
@@ -120,6 +127,9 @@ function CompanionHome() {
   // Client-side interest filter. null = show all; string = show only
   // articles whose `interest` field matches that topic. Never mutates settings.
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const { startAbortable, clearAbortable, abortCurrent } =
     useAbortableController();
 
@@ -129,6 +139,7 @@ function CompanionHome() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSettings(loadSettings());
     setBrief(loadLastBrief());
+    setDismissed(readDismissed());
     setHydrated(true);
   }, []);
 
@@ -376,22 +387,16 @@ function CompanionHome() {
     // and route the single "Manage interests" affordance there.
     return (
       <Shell>
-        <header className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-          <div className="flex flex-col gap-2">
-            <p className="text-caption uppercase text-muted">Scout · MVP</p>
-            <h1 className="text-title-1 text-primary">Your brief</h1>
-            <p className="text-body-sm text-muted">
-              Tell Scout what you want to follow, then run your first brief.
-            </p>
-          </div>
-          <Button variant="primary" onClick={goToInterests}>
-            Manage interests
-          </Button>
-        </header>
-
-        <Banner tone="info">
-          Example brief — set up your interests to make your own.
-        </Banner>
+        <NoticeCard
+          label="Example brief"
+          action={
+            <Button variant="primary" size="sm" onClick={goToInterests}>
+              Add a topic
+            </Button>
+          }
+        >
+          Tell Scout what you want to follow, then run your first brief.
+        </NoticeCard>
         <BriefLayout brief={SAMPLE_BRIEF} name="" />
       </Shell>
     );
@@ -427,14 +432,23 @@ function CompanionHome() {
         }
       : brief;
 
+  // The topic filter sits beside the brief heading whenever there are topics,
+  // the example brief included, so it is always in the same place.
+  const topicFilter =
+    settings.interests.length > 0 ? (
+      <TopicFilter
+        topics={settings.interests.map((i) => ({ id: i.id, topic: i.topic }))}
+        activeFilter={effectiveFilter}
+        onFilterChange={setActiveFilter}
+      />
+    ) : undefined;
+
   return (
     <Shell
       onRunNow={runNow}
       onWeeklyBrief={() => void runWeekly()}
       running={running}
-      interests={settings.interests}
-      activeFilter={effectiveFilter}
-      onFilterChange={setActiveFilter}
+      topicCount={settings.interests.length}
     >
       {/* Every banner/skeleton here is page chrome that sits around the
           feed. In single-story mode the reader wants ONLY the story, so the
@@ -469,57 +483,11 @@ function CompanionHome() {
           session (the failure is already resolved), and when an error banner is
           already speaking for the current action. */}
           {runFailure && !running && !ranAt && !error && (
-            <Banner tone="warning">
-              <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <span>
-                  {runFailure.kind === "failed" ? (
-                    <>
-                      Today&apos;s brief failed
-                      {runFailure.reason ? (
-                        <>
-                          {" — "}
-                          <span className="font-medium">
-                            {runFailure.reason}
-                          </span>
-                        </>
-                      ) : (
-                        "."
-                      )}{" "}
-                      Scout retries automatically; you can also run it now.
-                      {runFailure.lastSuccessAt && (
-                        <>
-                          {" "}
-                          <span className="text-muted">
-                            Showing your last good brief from{" "}
-                            {formatDate(runFailure.lastSuccessAt)}.
-                          </span>
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      No fresh brief in over a day
-                      {runFailure.lastSuccessAt ? (
-                        <>
-                          {" "}
-                          — the last successful run was{" "}
-                          <span className="font-medium">
-                            {formatDate(runFailure.lastSuccessAt)}
-                          </span>
-                          .
-                        </>
-                      ) : (
-                        "."
-                      )}{" "}
-                      Scout may have stopped; try running it now.
-                    </>
-                  )}
-                </span>
-                <Button variant="secondary" size="sm" onClick={runNow}>
-                  Run now
-                </Button>
-              </span>
-            </Banner>
+            <FeedNotices
+              items={runFailureNotices(runFailure, dismissed, runNow, (id) =>
+                setDismissed(dismissLocally(id)),
+              )}
+            />
           )}
 
           {/* Explicit success state for an on-demand run — a fresh brief
@@ -610,6 +578,7 @@ function CompanionHome() {
               brief={filteredBrief}
               name=""
               onDetailOpenChange={setTodayStoryOpen}
+              filter={topicFilter}
             />
           )}
           {/* Previous editions, paged 3 at a time from the
@@ -635,10 +604,14 @@ function CompanionHome() {
         !error && (
           <div className="flex flex-col gap-3">
             <Banner tone="info">
-              Example brief — open Settings (top right) and click{" "}
+              Example brief — open the menu (top right) and choose{" "}
               <span className="font-medium">Run now</span> to make your own.
             </Banner>
-            <BriefLayout brief={SAMPLE_BRIEF} name={settings.name} />
+            <BriefLayout
+              brief={SAMPLE_BRIEF}
+              name={settings.name}
+              filter={topicFilter}
+            />
           </div>
         )
       )}
@@ -646,40 +619,100 @@ function CompanionHome() {
   );
 }
 
-// The Scout wordmark (top-left logo slot) and the profile
-// menu both live in AppNav. The feed view threads its Run-now wiring through so
-// the action shows inside the profile menu; other states omit it.
-// Also threads interest filter props through to AppNav.
+// The run-failure notice as a feed card. Dismissed on this device by id, so a
+// newer failure shows again.
+function runFailureNotices(
+  f: RunFailure,
+  dismissed: ReadonlySet<string>,
+  runNow: () => void,
+  dismiss: (id: string) => void,
+): NoticeView[] {
+  const notice = {
+    id: `run:${f.kind}:${f.at ?? f.lastSuccessAt ?? ""}`,
+    kind:
+      f.kind === "failed" ? ("run_failed" as const) : ("run_stale" as const),
+    topic: null,
+    at: f.at ?? null,
+  };
+  if (visibleNotices([notice], dismissed).length === 0) return [];
+  const body =
+    f.kind === "failed" ? (
+      <>
+        Today&apos;s brief failed
+        {f.reason ? (
+          <>
+            {" — "}
+            <span className="font-medium">{f.reason}</span>
+          </>
+        ) : (
+          "."
+        )}{" "}
+        Scout retries automatically; you can also run it now.
+        {f.lastSuccessAt && (
+          <span className="text-secondary">
+            {" "}
+            Showing your last good brief from {formatDate(f.lastSuccessAt)}.
+          </span>
+        )}
+      </>
+    ) : (
+      <>
+        No fresh brief in over a day
+        {f.lastSuccessAt ? (
+          <>
+            {" "}
+            — the last successful run was{" "}
+            <span className="font-medium">{formatDate(f.lastSuccessAt)}</span>.
+          </>
+        ) : (
+          "."
+        )}{" "}
+        Scout may have stopped; try running it now.
+      </>
+    );
+  return [
+    {
+      notice,
+      label: f.kind === "failed" ? "Run failed" : "Briefs stopped",
+      tone: "bad",
+      body,
+      action: (
+        <Button variant="secondary" size="sm" onClick={runNow}>
+          Run now
+        </Button>
+      ),
+      onDismiss: () => dismiss(notice.id),
+    },
+  ];
+}
+
+// The app shell's floating pills. The feed passes Run now and Weekly brief as
+// menu actions; other states show the menu without them.
 function Shell({
   children,
   onRunNow,
   onWeeklyBrief,
   running,
-  interests,
-  activeFilter,
-  onFilterChange,
+  topicCount,
 }: {
   children: React.ReactNode;
   onRunNow?: () => void;
   onWeeklyBrief?: () => void;
   running?: boolean;
-  interests?: import("@scout/core").Interest[];
-  activeFilter?: string | null;
-  onFilterChange?: (topic: string | null) => void;
+  topicCount?: number;
 }) {
-  return (
-    <main className="min-h-screen bg-page px-4 py-8 text-primary sm:px-6 sm:py-12">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-        <AppNav
-          onRunNow={onRunNow}
-          onWeeklyBrief={onWeeklyBrief}
-          running={running}
-          interests={interests}
-          activeFilter={activeFilter}
-          onFilterChange={onFilterChange}
-        />
-        {children}
-      </div>
-    </main>
-  );
+  const actions = [];
+  if (onRunNow)
+    actions.push({
+      label: running ? "Working…" : "Run now",
+      onSelect: onRunNow,
+      disabled: running,
+    });
+  if (onRunNow && onWeeklyBrief)
+    actions.push({
+      label: running ? "Working…" : "Weekly brief",
+      onSelect: onWeeklyBrief,
+      disabled: running,
+    });
+  return <AppShell menu={{ topicCount, actions }}>{children}</AppShell>;
 }

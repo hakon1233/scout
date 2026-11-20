@@ -171,7 +171,7 @@ function YouSaid({ text }: { text: string }) {
 // What the turn already changed, as one quiet line.
 function Changes({ turn }: { turn: ChatTurn }) {
   const parts = (turn.changes ?? []).map((c) => {
-    const topic = `“${c.topic ?? "interest"}”`;
+    const topic = `“${c.topic ?? "topic"}”`;
     if (c.op === "create") return `Added ${topic}`;
     if (c.op === "delete") return `Removed ${topic}`;
     return `Updated ${topic}`;

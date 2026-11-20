@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
-import { ScoutWordmark } from "@/components/AppNav";
+import { ScoutWordmark } from "@/components/shell/AppShell";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { BriefLayout } from "@/components/BriefLayout";
+import { PushBell } from "@/components/PushBell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button, buttonClasses } from "@/components/ui";
+import { useTopicPush } from "@/hooks/useTopicPush";
 import { hostedAuth } from "@/lib/auth";
 import { HostedError, hostedData, type SharedInterest } from "@/lib/hosted";
 
@@ -44,6 +46,8 @@ function Shared() {
   const [signedIn, setSignedIn] = React.useState(false);
   const [following, setFollowing] = React.useState(false);
   const [followError, setFollowError] = React.useState<string | null>(null);
+  // The topic's bell, for a signed-in reader who owns or follows it.
+  const push = useTopicPush(signedIn ? data : null);
 
   React.useEffect(() => {
     if (!data) return;
@@ -127,9 +131,19 @@ function Shared() {
               : "A Scout brief. Follow it to get each new one in your Scout, free."}
           </p>
           {yours ? (
-            <Link href="/app/" className={buttonClasses("secondary", "sm")}>
-              Open Scout
-            </Link>
+            <span className="flex items-center gap-2">
+              {signedIn && (
+                <PushBell
+                  topic={i.topic}
+                  on={push.isOn(i.id)}
+                  onChange={(on) => push.set(i.id, on)}
+                  deviceOn={push.deviceOn}
+                />
+              )}
+              <Link href="/app/" className={buttonClasses("secondary", "sm")}>
+                Open Scout
+              </Link>
+            </span>
           ) : signedIn ? (
             <FollowButton onFollow={follow} />
           ) : (
@@ -141,9 +155,9 @@ function Shared() {
             </Link>
           )}
         </div>
-        {followError && (
+        {(followError ?? push.error) && (
           <p role="alert" className="text-body-sm text-danger">
-            {followError}
+            {followError ?? push.error}
           </p>
         )}
       </section>

@@ -1,4 +1,4 @@
--- The Scout team's 20 test topics (plan/research/team-topics.md, plus five from
+-- The Scout team's 25 test topics (plan/research/team-topics.md, plus ten from
 -- the tested intent docs below): public, owned by the catalog account, and PAUSED, so the team
 -- runner's schedule never runs them (the Worker's cron never runs team topics). Run one by hand with
 --   SCOUT_TEAM_RUNNER=on pnpm team:run --only "<topic>"
@@ -10,11 +10,13 @@
 -- hand on the hosted project (as postgres). Idempotent: running it again
 -- rewrites each topic's doc and cadence and pauses it again.
 --
--- Eight docs are the marketing session's tested ones, copied word for word
+-- Thirteen docs are the marketing session's tested ones, copied word for word
 -- (docs/public-interests/intent-docs/ on its docs branch, 20 Nov 2026): UK
 -- settlement, Bambu Lab, Home Assistant, AtB, Trondheim kids events, AAP,
--- Trondheim council, Norwegian test dates. Their cadence follows its README;
--- "every two weeks" (test dates) is weekly here, as cadence has no such value.
+-- Trondheim council, Norwegian test dates, northern lights, ski openings,
+-- Jæren surf, PhD and postdoc jobs, høringer on nature. Their cadence follows
+-- its README; "every two weeks" (test dates) is weekly here, as cadence has no
+-- such value, and "in season" is left to the doc.
 
 insert into public.interests
   (id, owner_id, topic, doc, cadence, run_at, visibility, share_slug, paused)
@@ -715,7 +717,267 @@ The schedule changes a few times a year. If no window opens or closes in the nex
 ## Language and place
 
 Read Norwegian sources, write in English, simple words (many readers are learning Norwegian). Norway, test sites in Trondheim. Europe/Oslo.$doc$,
-   'weekly', '07:00', 'public', 'team-norwegian-test-dates-deadlines', true)
+   'weekly', '07:00', 'public', 'team-norwegian-test-dates-deadlines', true),
+
+  ('5c0a7000-0000-4000-8000-000000000121', '5c0a7000-0000-4000-8000-000000000001',
+   'Northern lights, Tromsø and Trondheim',
+$doc$# Northern lights chances in Tromsø and Trondheim
+
+## Reader
+
+People in or visiting Tromsø and Trondheim who want to know which of the next three nights is worth going out for the northern lights.
+
+## Report
+
+- A night in the next 3 days with enough activity and a gap in the cloud, per city:
+  - Tromsø: Kp 2 or more in the dark hours is often enough; Kp 4+ is a strong night.
+  - Trondheim: needs Kp 4 or more, low in the north; Kp 5+ (G1 storm) for a good show.
+- A NOAA geomagnetic storm watch (G1 or higher) or a CME expected to reach Earth, with the expected arrival in Norwegian time
+- A storm that has just begun, or a watch that was cancelled
+- On Thursdays only: the largest Kp the 27-day outlook gives for Friday to Sunday
+
+## Skip
+
+Aurora tours and ads, photo galleries, how-to guides, live Kp apps, articles older than 3 days, and storm news that only concerns the US.
+
+## Sources, check first
+
+- https://services.swpc.noaa.gov/text/3-day-forecast.txt : plain text. "Issued" line at the top; Kp per 3-hour block in UT for 3 days; the "Rationale" line says whether a G1+ storm is expected. Use it first for the next 3 nights.
+- https://www.spaceweather.com/ : daily dated news on CMEs and storms; the date is at the top. Use the news, not its storm percentages.
+- https://www.yr.no/nb/v%C3%A6rvarsel/daglig-tabell/1-305409/Norge/Troms/Troms%C3%B8/Troms%C3%B8 : Tromsø. A "Natt" and "Kveld" sky label per day (klarvær, delvis skyet, skyet, snøbyger).
+- https://www.yr.no/nb/v%C3%A6rvarsel/daglig-tabell/1-211102/Norge/Tr%C3%B8ndelag/Trondheim/Trondheim : the same for Trondheim.
+- https://services.swpc.noaa.gov/text/27-day-outlook.txt : largest Kp per day, rough. Only for the Thursday weekend line; the 3-day forecast wins where they differ.
+
+Traps: yr's "Andre forhold" page shows only the current hour, and site.uit.no/spaceweather has no dated posts. Kp blocks are in UT: Norway is UT+1 in winter, so 18-21 UT is 19-22 Norwegian time. Dark hours in winter: Tromsø about 15:00-07:00, Trondheim about 17:00-07:00.
+
+## Search terms
+
+NOAA geomagnetic storm watch, CME arrival Earth, G1 watch Kp, watchers.news geomagnetic storm, nordlysvarsel
+
+## Each story must state
+
+- The date in backticks: the forecast's issue date or the article's date
+- Which night (weekday and date) and which hours, in Norwegian time
+- The Kp forecast for those hours and the yr sky label for that night, per city
+- A one-line verdict per city: "go", "maybe, if the cloud breaks" or "no"
+- Link to the NOAA text or the news item
+
+## No change
+
+Open every brief with one verdict line per city for the next 3 nights. If no night meets the thresholds and there is no new watch or CME, write only: "No good aurora night in the next 3 days (max Kp <x>; <sky labels>)." Don't pad with tips or past storms.
+
+## Language and place
+
+Read English and Norwegian sources, write in English. Tromsø and Trondheim, Europe/Oslo.$doc$,
+   'daily', '07:00', 'public', 'team-northern-lights-tromso-trondheim', true),
+
+  ('5c0a7000-0000-4000-8000-000000000122', '5c0a7000-0000-4000-8000-000000000001',
+   'Ski openings, southern Norway and Trøndelag',
+$doc$# Ski openings and conditions in southern Norway and Trøndelag
+
+## Reader
+
+Downhill and cross-country skiers in southern Norway and Trøndelag deciding where to ski this weekend.
+
+## Report
+
+- A resort opening for the season this weekend or next, or putting its opening off
+- A resort closing early or for a day (wind, warm weather, too little snow), or its last day in spring
+- Cross-country tracks groomed for the first time in Oslomarka or at a big resort (Sjusjøen, Beitostølen, Trysil, Oppdal, Geilo)
+- Fresh snow of 20 cm or more at a named resort, or snowmaking started or stopped
+- Lift-pass or season-pass news that changes price or rules this season
+
+## Skip
+
+Summer ski centres (Juvass, Fonna, Stryn) unless they open or close; World Cup and races; gear tests; webcams; resorts abroad; holiday ads; any season-start date before today (the lists keep old ones).
+
+## Sources, check first
+
+- https://fnugg.no/anleggstype/nar-apner-ditt-anlegg-se-her/ : about 60 resorts, each with a planned "Sesongstart" date set by the resort.
+- https://fnugg.no/anleggstype/her-gar-heisen-na/ : resorts with lifts running now, each with an "Oppdatert" time.
+- https://www.skiinfo.no/norge/snoerapport : open resorts with snow depth and lifts open; closed ones with an expected opening. Its dates often differ from fnugg.
+- https://www.skiforeningen.no/utimarka/hovedforemelding/ : the Oslomarka trail report, written daily in season, with "Sist oppdatert".
+
+Confirm a big resort's date on the operator's own page: alpinco.com (Hafjell, Kvitfjell, Oppdal) or skistar.com (Trysil, Hemsedal). sporet.no is JavaScript-only. fnugg's region pages show "Snø siste døgn: -" with no figures.
+
+## Search terms
+
+åpner sesongen, sesongåpning, sesongstart utsatt, kunstsnø, nysnø skisenter, første løyper preparert, stenger for sesongen
+
+## Each story must state
+
+- The date in backticks and which date it is: opening day, closing day, or the report's update time
+- Where the date comes from: "confirmed by the resort" or "planned (fnugg)"; when fnugg and skiinfo differ, give both
+- What is open (lifts, slopes or km of tracks) and any pass needed
+- Link to the resort's page or the report
+
+## No change
+
+Cover this weekend and next. If nothing opens, closes or changes since the last brief, write one line: "No openings or changes before the weekend; next planned opening: <resort, date>."
+
+## Language and place
+
+Read Norwegian sources, write in English. Keep resort and place names in Norwegian. Norway, Europe/Oslo.$doc$,
+   'weekly', '07:00', 'public', 'team-norway-ski-openings', true),
+
+  ('5c0a7000-0000-4000-8000-000000000123', '5c0a7000-0000-4000-8000-000000000001',
+   'Jæren surf this weekend',
+$doc$# Jæren surf this weekend
+
+## Reader
+
+Surfers in Stavanger and Jæren deciding on Friday whether the weekend is worth it, and which spot and hours to aim for.
+
+## Report
+
+Up to 4 stories, in this order:
+
+- The best weekend window (Friday evening to Sunday): one story per spot that has one, best first
+- The week's biggest swell, if it comes later than Sunday: the forecast's "most powerful swell", up to 8 days ahead, marked "early forecast"
+- Jæren news from the last 7 days: a surf competition, club day or course with a date, or a change to beach rules or parking
+
+## Skip
+
+- Weekday windows, unless it is the week's biggest swell
+- Spots outside Jæren (Lista, Stad, Lofoten), kite and windsurf news
+- Surf schools' standing offers, gear, travel stories
+- Federation admin news (reporting, grants, staff), contests abroad
+
+## Sources, check first
+
+- https://www.surf-forecast.com/breaks/Bore/forecasts/latest/six_day : the top line "Bore surf forecast from <date>" is the issue date. Below it: "Best quality surf", "Most powerful swell", "Next surfable swell" with day, hour, height, period, wind. Then a table per day (AM / PM / Night): height, period, direction, rating, wind km/h.
+- https://www.surf-forecast.com/breaks/hellesto/forecasts/latest/six_day : same, for Hellestø.
+- https://www.surf-forecast.com/breaks/Reve-Havn/forecasts/latest/six_day : same, for Reve harbour; holds bigger swell.
+- https://www.brettforbundet.no/surf : surf federation news, dated d.m.yyyy, newest first. Most items are admin; keep only Jæren events and contests.
+
+The wind-state row in the tables does not line up with its columns. Take "offshore / cross-offshore" from the summary sentences, and only km/h and direction from the table. Windy, Surfline and yr show no numbers to the fetch tool.
+
+Winter rule: from 1 November to 31 March, surfing is banned in bird-protection areas (fuglefredingsområde), among them Reve hamn–Orre, which takes in Piggy just south of Reve harbour. Never point readers to Piggy in that period. Source: https://www.statsforvalteren.no/nn/rogaland/privatperson/natur-og-friluftsliv/nyheiter/2026/10/jarstrendene/
+
+## Search terms
+
+Search only for news, not forecasts: surfekonkurranse Jæren, Jæren surfklubb, Borestranda parkering
+
+## Each story must state
+
+- The date in backticks: the surf day and hours (CET) for a window; the publish date for news; the event day for an event
+- A one-line verdict first: "Worth the drive" (rating 3 or more, or period 10 s or more with offshore or cross-offshore wind), "Marginal" (rating 1–2), or "Not worth it" (rating 0, or onshore wind). An early forecast gets "Watch" instead
+- Spot, wave height in metres, period in seconds, swell direction, wind km/h and direction
+- Sea temperature, once per brief
+- The forecast's issue date, and a link to the spot page
+
+## No change
+
+If no Jæren spot has a window rated 1 or more from Friday evening to Sunday, write one line: "No surfable window on Jæren this weekend (<dates>); next swell: <day, spot, height, period> or none in 8 days." Don't pad with weekday or rating-0 windows.
+
+## Language and place
+
+Read English and Norwegian sources, write in English. Heights in metres. Jæren, Rogaland, Europe/Oslo.$doc$,
+   'weekly', '07:00', 'public', 'team-surf-jaeren-weekend', true),
+
+  ('5c0a7000-0000-4000-8000-000000000124', '5c0a7000-0000-4000-8000-000000000001',
+   'PhD and postdoc jobs in CS and AI, Norway',
+$doc$# PhD and postdoc jobs in computer science and AI in Norway
+
+## Reader
+
+People looking for a PhD (stipendiat) or postdoc position in computer science, AI or machine learning at a Norwegian university or research institute, who want new openings before the deadline passes.
+
+## Report
+
+- New PhD, stipendiat, postdoc or researcher positions whose title or first paragraph names a computing topic: AI, machine learning, data science, computer vision, robotics, autonomous systems, cybersecurity, software engineering, distributed systems, HPC
+- At Norwegian universities, university colleges, SINTEF, NORCE, Simula, NR and similar institutes
+- Industrial PhD (nærings-ph.d.) positions, if the ad names the university
+
+## Skip
+
+- Positions where AI is only a tool for another field (psychiatry, dentistry, ecology, biology, linguistics). Test: would a computer science graduate be the natural hire? If not, skip.
+- Professor, lecturer, engineer, "AI lead" and other industry jobs
+- Ads whose deadline has passed
+- Job-search tips, salary articles, university news
+
+## Sources, check first
+
+- https://arbeidsplassen.nav.no/stillinger?q=informatikk&published=now-7d&sort=published (NAV's job board, ads from the last 7 days; each ad shows employer, place, published date and "Søk senest")
+- https://arbeidsplassen.nav.no/stillinger?q=stipendiat%20kunstig%20intelligens&published=now-7d&sort=published
+- https://arbeidsplassen.nav.no/stillinger?q=PhD%20computer%20science&published=now-7d&sort=published
+- https://arbeidsplassen.nav.no/stillinger?q=machine%20learning&published=now-7d&sort=published
+- Each query catches ads the others miss; fetch all four. They also return off-field and industry ads: filter by title.
+- https://www.simula.no/careers/job-openings (Simula's own list, often not on arbeidsplassen; deadlines only, no publish date)
+- Ad links on arbeidsplassen are relative: prefix https://arbeidsplassen.nav.no.
+- Traps: web search mostly returns closed ads from earlier rounds; check the deadline before using any search hit. jobbnorge.no search needs JavaScript; jobbnorge "joblisting/pdf" links are PDFs; EURAXESS and karrierestart block the fetch tool.
+
+## Search terms
+
+Use search only if the lists above fail: "stipendiat" informatikk søknadsfrist <next month year>; PhD research fellow informatics UiO <year>; NTNU IDI PhD candidate <year>
+
+## Each story must state
+
+- Title, employer and department, city
+- Published date in backticks, and the deadline ("Søk senest") in backticks; write "deadline not given" if the ad has none
+- PhD, postdoc or researcher, and the topic in one line
+- Full link to the ad
+
+One story per position. If more than 4 match, report the 4 with the nearest deadline and add the rest as one line each under the last story.
+
+## No change
+
+Report positions published in the last 7 days (for Simula: positions not in the last brief). If none, write "No new PhD or postdoc positions in computer science or AI since <date>." Don't pad with older ads.
+
+## Language and place
+
+Read Norwegian and English ads. Write in English. Norway, Europe/Oslo.$doc$,
+   'weekly', '07:00', 'public', 'team-phd-postdoc-cs-ai-norway', true),
+
+  ('5c0a7000-0000-4000-8000-000000000125', '5c0a7000-0000-4000-8000-000000000001',
+   'Høringer on nature, outdoor life and hunting',
+$doc$# Høringer om natur, friluftsliv og jakt
+
+## Reader
+
+People in Norway active in nature and outdoor groups (turlag, jeger- og fiskeforeninger, naturvern, grunneiere) who want to know when the state asks for comments on rules for nature, outdoor life, hunting and fishing, so they can answer before the frist.
+
+## Report
+
+- New høringer on naturmangfold, verneområder, friluftsliv, motorferdsel i utmark, jakt, fangst, innlandsfiske, rovvilt, villrein and hytte/strandsone rules
+- From Klima- og miljødepartementet, Miljødirektoratet, Landbruks- og matdepartementet and Statsforvalteren
+- When a høring closes or the rule is adopted, one line with the result
+
+## Skip
+
+- Climate quotas, emissions, waste and pollution høringer with no nature or outdoor angle
+- News articles about a case unless they link the høring
+- Local reguleringsplaner
+
+## Sources, check first
+
+- https://www.regjeringen.no/no/dokument/hoyringar/id1763/?ownerid=668 (Klima- og miljødepartementet's høringer, newest first; each shows published date, frist and status)
+- https://www.regjeringen.no/no/dokument/hoyringar/id1763/?ownerid=627 (Landbruks- og matdepartementet: jakt, viltloven, utmark, statsallmenning)
+- Miljødirektoratet's list (miljodirektoratet.no/hoeringer) needs JavaScript and shows nothing. Find its høringer by search, then fetch the høring page itself: each page shows "Publisert" and "Frist". Most of its høringer are discharge permits for one plant; skip those.
+- Traps: Miljødirektoratet's homepage and year pages are empty without JavaScript; hoering.miljodirektoratet.no is empty; there is no RSS.
+
+## Search terms
+
+site:miljodirektoratet.no/hoeringer <current year> <current month name>; Miljødirektoratet høring verneområde <year>; høring jakttider <year>; høring motorferdsel utmark <year>; Statsforvalteren høring verneplan <year>; høring villrein <year>
+
+Search hits are often closed høringer from earlier years. Use only those with Publisert in the last 30 days or an open frist.
+
+## Each story must state
+
+- Title and who sent it
+- Published date and høringsfrist in backticks
+- Status: på høring / under behandling / ferdigbehandlet
+- What would change, in one or two lines
+- Link to the høring page
+
+## No change
+
+New høringer here come about once a month. If none was published since the last brief, write "Ingen nye høringer om natur, friluftsliv eller jakt siden <dato>." Then list, one line each, open høringer in scope with title, frist and link, so the reader still sees what can be answered. If none are open, say so.
+
+## Language and place
+
+Read Norwegian (bokmål and nynorsk). Write in Norwegian bokmål. Norway, Europe/Oslo.$doc$,
+   'weekly', '07:00', 'public', 'team-hoeringer-natur-friluftsliv-jakt', true)
 on conflict (id) do update
   set topic = excluded.topic,
       doc = excluded.doc,
@@ -723,9 +985,10 @@ on conflict (id) do update
       visibility = excluded.visibility,
       paused = true;
 
--- A weekend brief: Trondheim kids and family events runs on Fridays.
+-- Weekend briefs run on Fridays: Trondheim kids and family events, Jæren surf.
 update public.interests set run_weekday = 5
-where id = '5c0a7000-0000-4000-8000-000000000117';
+where id in ('5c0a7000-0000-4000-8000-000000000117',
+             '5c0a7000-0000-4000-8000-000000000123');
 
 -- Tags are data for the catalog (20261121000000_listing).
 update public.interests i set tags = t.tags
@@ -749,6 +1012,11 @@ update public.interests i set tags = t.tags
     ('5c0a7000-0000-4000-8000-000000000117'::uuid, array['local','nordic','events','family']),
     ('5c0a7000-0000-4000-8000-000000000118'::uuid, array['benefits','nordic','work']),
     ('5c0a7000-0000-4000-8000-000000000119'::uuid, array['local','nordic','housing','regulation']),
-    ('5c0a7000-0000-4000-8000-000000000120'::uuid, array['language','immigration','nordic'])
+    ('5c0a7000-0000-4000-8000-000000000120'::uuid, array['language','immigration','nordic']),
+    ('5c0a7000-0000-4000-8000-000000000121'::uuid, array['outdoors','nordic','weather']),
+    ('5c0a7000-0000-4000-8000-000000000122'::uuid, array['outdoors','sports','nordic']),
+    ('5c0a7000-0000-4000-8000-000000000123'::uuid, array['outdoors','sports','nordic']),
+    ('5c0a7000-0000-4000-8000-000000000124'::uuid, array['jobs','ai','nordic']),
+    ('5c0a7000-0000-4000-8000-000000000125'::uuid, array['regulation','outdoors','nordic'])
   ) as t(id, tags)
 where i.id = t.id;

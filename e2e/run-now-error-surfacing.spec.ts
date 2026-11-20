@@ -28,7 +28,7 @@ async function seedPairedSession(page: Page) {
 }
 
 async function clickRunNow(page: Page) {
-  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: "Menu" }).click();
   const runNow = page.getByRole("button", { name: "Run now" });
   await expect(runNow).toBeEnabled({ timeout: 15_000 });
   await runNow.click();
@@ -99,7 +99,7 @@ test("Run now's wipe-guard refusal tells the user what to do, not the API flag",
   await clickRunNow(page);
 
   await expect(
-    page.getByText(/Your interests changed somewhere else/),
+    page.getByText(/Your topics changed somewhere else/),
   ).toBeVisible();
   await expect(page.getByText(/confirm_replace/)).toHaveCount(0);
 });

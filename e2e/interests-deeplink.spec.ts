@@ -100,7 +100,7 @@ test.describe("interest doc deep-link, Back and Close", () => {
     ).toBeVisible();
     await expect(page).toHaveURL(/id=ai-policy/);
 
-    await page.getByRole("button", { name: "← Interests" }).click();
+    await page.getByRole("button", { name: "← Topics" }).click();
 
     // The replaceState branch cleared the id and restored the card list —
     // the OTHER query params (here `mock=1`) survive since it edits the URL

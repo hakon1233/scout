@@ -6,7 +6,14 @@ import type { HostedData, PushState } from "@/lib/hosted";
 
 // "Notify me when a brief is ready" for this device. Hidden where the browser
 // has no push; on an iPhone outside the Home Screen it says how to get it.
-export function PushSwitch({ data }: { data: HostedData }) {
+export function PushSwitch({
+  data,
+  onChange,
+}: {
+  data: HostedData;
+  /** Told the device's new state, so the topic bells can follow it. */
+  onChange?: (state: PushState) => void;
+}) {
   const [state, setState] = React.useState<PushState | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -28,8 +35,12 @@ export function PushSwitch({ data }: { data: HostedData }) {
     setError(null);
     // Called straight from the tap: the browser asks permission only then.
     (on ? data.pushEnable() : data.pushDisable())
-      .then(setState, () =>
-        setError("Couldn't change notifications. Try again."),
+      .then(
+        (s) => {
+          setState(s);
+          onChange?.(s);
+        },
+        () => setError("Couldn't change notifications. Try again."),
       )
       .finally(() => setBusy(false));
   }

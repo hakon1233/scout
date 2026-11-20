@@ -54,6 +54,11 @@ export type HostedInterest = {
   updatedAt: string | null;
   // Set when the newest run failed and nothing newer is ready: why, for the reader.
   failed: string | null;
+  // A followed topic's owner, from its topic card: their display name (null
+  // when they have none) and whether it is the Scout team. The "Scout team"
+  // label comes from `team`, never from the name.
+  ownerName: string | null;
+  team: boolean;
 };
 
 export type Allowance = {
@@ -70,13 +75,22 @@ export type HostedHome = {
   allowance: Allowance;
   // May make an interest public.
   isAdmin: boolean;
-  // Unread: interests the reader followed that were unshared, deleted or
-  // stopped by their host; each may be hosted as the reader's own.
+  // Unread notices about topics: a followed one its host unshared, deleted or
+  // stopped (each may be hosted as the reader's own), or one Scout hid.
   notices: Notice[];
 };
 
-/** A host stopped sharing an interest the reader followed. */
-export type Notice = { id: string; topic: string; createdAt: string };
+export type NoticeKind = "hidden" | "stopped" | "unshared" | "deleted";
+
+/** A topic went away or stopped. `reason` is set on the owner's own
+ *  "hidden" notice; a hidden topic has no copy to host. */
+export type Notice = {
+  id: string;
+  kind: NoticeKind;
+  topic: string;
+  reason: string | null;
+  createdAt: string;
+};
 
 /** What a share link shows. `brief` is the interest's latest, or null. */
 export type SharedInterest = {
@@ -119,10 +133,14 @@ export interface HostedData {
   // private, within their limits. Returns the new interest id.
   hostCopy(noticeId: string): Promise<string>;
   dismiss(noticeId: string): Promise<void>;
-  // The reader's time zone (IANA name), from Settings.
+  // The reader's saved time zone (IANA name), or null when never set; and
+  // Settings' change to it.
+  timeZone(): Promise<string | null>;
   setTimeZone(timeZone: string): Promise<void>;
   // "Notify me about this topic": push for one interest, owned or followed.
   // Off by default; topics with it off come in the Monday digest instead.
+  // topicPush lists the topic ids with it on.
+  topicPush(): Promise<string[]>;
   setTopicPush(interestId: string, on: boolean): Promise<void>;
   // Deletes the account: topics first (followers are told), then the user.
   deleteAccount(): Promise<void>;
@@ -270,6 +288,32 @@ export function createHostedData(deps: {
     throw new HostedError("failed", "Something went wrong. Try again.");
   }
 
+  // Followed topics' owners, from each one's topic card (profiles are
+  // private, so the card is the only place a name shows). A card that fails
+  // to load leaves the owner unnamed.
+  async function ownersOf(
+    followed: InterestRow[],
+  ): Promise<Map<string, { ownerName: string | null; team: boolean }>> {
+    const cards = await Promise.all(
+      followed
+        .filter((r) => r.share_slug)
+        .map((r) =>
+          rest<TopicCardRow | null>("rpc/interest_by_slug", {
+            method: "POST",
+            body: { p_slug: r.share_slug },
+          }).catch(() => null),
+        ),
+    );
+    return new Map(
+      cards
+        .filter((c): c is TopicCardRow => c !== null)
+        .map((c) => [
+          c.id,
+          { ownerName: c.owner_name ?? null, team: c.team === true },
+        ]),
+    );
+  }
+
   async function patchInterest(id: string, fields: Record<string, unknown>) {
     await rest(`interests?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
@@ -353,7 +397,7 @@ export function createHostedData(deps: {
           `profiles?select=is_admin,timezone_set&id=eq.${user}`,
         ),
         rest<NoticeRow[]>(
-          `notifications?select=id,payload,created_at&user_id=eq.${user}&kind=in.(unshared,deleted,stopped)&read_at=is.null&order=created_at.desc`,
+          `notifications?select=id,kind,payload,created_at&user_id=eq.${user}&kind=in.(hidden,stopped,unshared,deleted)&read_at=is.null&order=created_at.desc`,
         ),
       ]);
       // First sign-in: the browser's time zone, once. Later only Settings.
@@ -380,12 +424,20 @@ export function createHostedData(deps: {
                 .map((r) => encodeURIComponent(r.id))
                 .join(",")})&order=created_at.desc&limit=${RUN_HISTORY}`,
             );
+      const owners = await ownersOf(rows.filter((r) => r.following));
+      const assembled = assembleHome(rows, runs, allowance);
       return {
-        ...assembleHome(rows, runs, allowance),
+        ...assembled,
+        interests: assembled.interests.map((i) => ({
+          ...i,
+          ...owners.get(i.id),
+        })),
         isAdmin: profile[0]?.is_admin === true,
         notices: notices.map((n) => ({
           id: n.id,
-          topic: n.payload?.topic ?? "An interest",
+          kind: n.kind,
+          topic: n.payload?.topic ?? "A topic",
+          reason: n.payload?.reason ?? null,
           createdAt: n.created_at,
         })),
       };
@@ -495,11 +547,33 @@ export function createHostedData(deps: {
       });
     },
 
+    async timeZone() {
+      const s = await session();
+      const rows = await rest<{ timezone: string | null }[]>(
+        `profiles?select=timezone&id=eq.${encodeURIComponent(s.userId)}`,
+      );
+      return rows[0]?.timezone ?? null;
+    },
+
     async setTimeZone(timeZone) {
       await rest("rpc/set_timezone", {
         method: "POST",
         body: { p_tz: timeZone },
       });
+    },
+
+    async topicPush() {
+      const s = await session();
+      const user = encodeURIComponent(s.userId);
+      const [own, follows] = await Promise.all([
+        rest<{ id: string }[]>(
+          `interests?select=id&owner_id=eq.${user}&deleted_at=is.null&push_enabled=is.true`,
+        ),
+        rest<{ interest_id: string }[]>(
+          `follows?select=interest_id&user_id=eq.${user}&push_enabled=is.true`,
+        ),
+      ]);
+      return [...own.map((r) => r.id), ...follows.map((r) => r.interest_id)];
     },
 
     async setTopicPush(interestId, on) {
@@ -527,8 +601,15 @@ type InterestRow = Partial<BriefSettingsRow> & {
 
 type NoticeRow = {
   id: string;
-  payload: { topic?: string } | null;
+  kind: NoticeKind;
+  payload: { topic?: string; reason?: string | null } | null;
   created_at: string;
+};
+
+type TopicCardRow = {
+  id: string;
+  owner_name?: string | null;
+  team?: boolean;
 };
 
 type SharedRow = {
@@ -609,6 +690,8 @@ function assembleHome(
         lastDone?.status === "failed"
           ? "The last run failed. Run it again, or wait for the next one."
           : null,
+      ownerName: null,
+      team: false,
     };
   });
 

@@ -11,7 +11,7 @@ test.describe("responsive interest workbench", () => {
     await page.goto(`${ORIGIN}/app/interests/?mock=1`);
 
     await expect(
-      page.getByRole("heading", { name: "Interests" }).first(),
+      page.getByRole("heading", { name: "Topics" }).first(),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Skills setup" }),
@@ -43,9 +43,9 @@ test.describe("responsive interest workbench", () => {
     // Chat is the default view; the big pane is one tap away.
     await expect(page.getByLabel("Chat with Scout")).toBeVisible();
 
-    await page.getByRole("button", { name: /Interests & skills/ }).click();
+    await page.getByRole("button", { name: /Topics & skills/ }).click();
     await expect(
-      page.getByRole("heading", { name: "Interests" }).first(),
+      page.getByRole("heading", { name: "Topics" }).first(),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Skills setup" }),
@@ -100,7 +100,7 @@ test.describe("responsive interest workbench", () => {
     );
 
     // Back returns to the card list without losing the chat.
-    await page.getByRole("button", { name: "← Interests" }).click();
+    await page.getByRole("button", { name: "← Topics" }).click();
     await expect(
       page.getByRole("heading", { name: "Skills setup" }),
     ).toBeVisible();
@@ -113,7 +113,7 @@ test.describe("responsive interest workbench", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${ORIGIN}/app/interests/?mock=1`);
 
-    await page.getByRole("button", { name: /Interests & skills/ }).click();
+    await page.getByRole("button", { name: /Topics & skills/ }).click();
     await page
       .getByRole("link", { name: "AI policy & regulation" })
       .first()
@@ -129,7 +129,7 @@ test.describe("responsive interest workbench", () => {
     await expect(page.getByLabel("Chat with Scout")).toBeVisible();
 
     // …and toggling back returns to the doc detail, not the card list.
-    await page.getByRole("button", { name: /Interests & skills/ }).click();
+    await page.getByRole("button", { name: /Topics & skills/ }).click();
     await expect(page.getByText("Assignment", { exact: true })).toBeVisible();
   });
 });

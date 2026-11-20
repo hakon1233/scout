@@ -102,7 +102,7 @@ test("Run now while a story detail is open still shows run progress (not a blank
   ).toBeVisible();
 
   // Fire "Run now" from the profile menu WHILE the story is still open.
-  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: "Menu" }).click();
   const runNow = page.getByRole("button", { name: "Run now" });
   await expect(runNow).toBeEnabled({ timeout: 15_000 });
   await runNow.click();

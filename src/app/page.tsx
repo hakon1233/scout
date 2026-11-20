@@ -9,7 +9,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 const steps = [
   {
     n: "01",
-    title: "Pick your interests",
+    title: "Pick your topics",
     body: "Tell Scout the topics, beats, and questions you actually care about — in plain language.",
   },
   {
@@ -139,7 +139,7 @@ export default function Home() {
               <em className="italic text-signal">written</em> by agents.
             </h1>
             <p className="mb-7 max-w-[30em] font-reading text-[21px] leading-[1.5] text-secondary">
-              Set your interests once. Scout&apos;s agents read the open web,
+              Set your topics once. Scout&apos;s agents read the open web,
               dedupe the noise, and file one clean editorial brief — only the
               stories you asked for.
             </p>
@@ -221,7 +221,7 @@ export default function Home() {
         <section id="how-it-works" className="py-10 lg:py-16">
           <div className="mb-9 flex items-baseline justify-between border-b border-border-default pb-3.5">
             <h2 className="font-serif text-[26px] font-semibold tracking-[-0.02em] sm:text-[34px]">
-              From interests to brief, in three moves.
+              From topics to brief, in three moves.
             </h2>
             <span className="hidden font-mono text-[12px] uppercase tracking-[0.1em] text-muted sm:inline">
               How it works

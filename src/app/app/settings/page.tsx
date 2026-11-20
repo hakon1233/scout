@@ -1,33 +1,29 @@
 "use client";
 
+import { HostedSettings } from "@/components/hosted/HostedSettings";
 import { ScheduleSettings } from "@/components/ScheduleSettings";
+import { AppShell, PageHeader } from "@/components/shell/AppShell";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { ProfilePageShell } from "@/components/profile/ProfilePageShell";
+import { SettingsGroup, SettingsLinkRow, SettingsRow } from "@/components/ui";
+import { isHostedBuild } from "@/lib/auth";
 
 export default function SettingsPage() {
+  if (isHostedBuild()) return <HostedSettings />;
   return (
-    <ProfilePageShell
-      eyebrow="Settings"
-      title="Settings"
-      description="Control how Scout looks and when its local companion delivers briefs."
-    >
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:items-start">
-        <section className="space-y-4 border-t border-border-default pt-5">
-          <div>
-            <h2 className="font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-muted">
-              Theme
-            </h2>
-            <p className="mt-2 font-reading text-[15px] leading-relaxed text-secondary">
-              Pick a fixed theme or let Scout follow your operating system.
-            </p>
-          </div>
+    <AppShell>
+      <PageHeader title="Settings" back={{ href: "/app/", label: "Brief" }} />
+      <SettingsGroup title="Appearance">
+        <SettingsRow label="Theme">
           <ThemeToggle showLabels />
-        </section>
-
-        <section className="border-t border-border-default pt-5">
-          <ScheduleSettings />
-        </section>
-      </div>
-    </ProfilePageShell>
+        </SettingsRow>
+      </SettingsGroup>
+      <ScheduleSettings />
+      <SettingsGroup
+        title="Research"
+        footer="How Scout finds and writes your stories."
+      >
+        <SettingsLinkRow href="/app/skills/">Skills</SettingsLinkRow>
+      </SettingsGroup>
+    </AppShell>
   );
 }

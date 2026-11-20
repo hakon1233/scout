@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AppNav } from "@/components/AppNav";
+import { TopPills } from "@/components/shell/AppShell";
 import { ChatDock } from "@/components/profile/ChatDock";
 import { InterestDocCard } from "@/components/profile/InterestDocCard";
 import { InterestScopeView } from "@/components/profile/InterestScopeView";
@@ -100,16 +100,16 @@ export default function InterestsPage() {
       className="flex flex-col bg-page text-primary"
       style={{ height: "100svh" }}
     >
-      <header className="shrink-0 border-b border-border-default px-4 py-3 sm:px-6">
-        <AppNav />
-      </header>
+      <TopPills />
+      {/* Room for the floating pills; this page scrolls in its own panes. */}
+      <div aria-hidden="true" className="h-[68px] shrink-0 sm:h-[76px]" />
 
       {/* Segmented toggle — below the two-pane breakpoint only. Reaches BOTH
           the big interests+skills view and the chat. */}
       <div className="shrink-0 px-4 py-2 sm:px-6 lg:hidden">
         <div className="mx-auto flex w-full max-w-[720px] rounded-pill border border-border-default bg-surface-muted p-[3px]">
           <SegButton on={tab === "docs"} onClick={() => setTab("docs")}>
-            Interests &amp; skills
+            Topics &amp; skills
             {workbench.docCount > 0 ? (
               <span className="ml-1.5 text-signal">{workbench.docCount}</span>
             ) : null}
@@ -227,7 +227,7 @@ function PrimaryPane({
       <section>
         <div className="mb-4 flex items-baseline justify-between">
           <h2 className="font-mono text-[12px] uppercase tracking-[0.1em] text-muted">
-            Interests
+            Topics
           </h2>
           {hydrated && cards.length > 0 ? (
             <span className="font-mono text-[11px] text-muted">
@@ -239,7 +239,7 @@ function PrimaryPane({
           <ProfileSkeleton />
         ) : cards.length === 0 ? (
           <p className="font-reading text-[15px] leading-relaxed text-muted">
-            No interests yet. Tell Scout what to track and your docs will appear
+            No topics yet. Tell Scout what to track and your docs will appear
             here as it drafts them.
           </p>
         ) : (
@@ -268,8 +268,7 @@ function PrimaryPane({
           <p className="max-w-prose text-body-sm text-secondary">
             The general skills Scout applies to every brief — how it researches
             the news and how it assembles what it finds. They govern how news is
-            found and presented, while your interests decide what Scout looks
-            for.
+            found and presented, while your topics decide what Scout looks for.
           </p>
         </div>
         <SkillSection set={RESEARCH_SKILLS} />

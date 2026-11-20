@@ -30,7 +30,7 @@ async function deleteInterestByTopic(page: Page, topic: string) {
     .filter({ hasText: `Confirm delete · ${topic}` });
   await expect(confirm).toBeVisible({ timeout: 30_000 });
   await confirm.getByRole("button", { name: "Delete" }).click();
-  await expect(confirm.getByText("Removed from your interests")).toBeVisible({
+  await expect(confirm.getByText("Removed from your topics")).toBeVisible({
     timeout: 30_000,
   });
 }
@@ -53,8 +53,8 @@ test("chat delete targets the SPECIFIC interest named, not always the first in t
     page.locator(".group\\/msg", { hasText: `Created · ${SECOND}` }).first(),
   ).toBeVisible({ timeout: 30_000 });
 
-  const firstRail = page.getByRole("link", { name: `Interest: ${FIRST}` });
-  const secondRail = page.getByRole("link", { name: `Interest: ${SECOND}` });
+  const firstRail = page.getByRole("link", { name: `Topic: ${FIRST}` });
+  const secondRail = page.getByRole("link", { name: `Topic: ${SECOND}` });
   await expect(firstRail).toBeVisible();
   await expect(secondRail).toBeVisible();
 
@@ -70,9 +70,9 @@ test("chat delete targets the SPECIFIC interest named, not always the first in t
   await expect(page.getByText(`Confirm delete · ${FIRST}`)).toHaveCount(0);
 
   await confirmSecond.getByRole("button", { name: "Delete" }).click();
-  await expect(
-    confirmSecond.getByText("Removed from your interests"),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(confirmSecond.getByText("Removed from your topics")).toBeVisible(
+    { timeout: 30_000 },
+  );
 
   // The NAMED interest is gone; the untouched one survives.
   await expect(secondRail).toBeHidden({ timeout: 30_000 });
@@ -104,8 +104,8 @@ test("a single turn naming two deletions offers one card for both, and one Delet
     page.locator(".group\\/msg", { hasText: `Created · ${B}` }).first(),
   ).toBeVisible({ timeout: 30_000 });
 
-  const railA = page.getByRole("link", { name: `Interest: ${A}` });
-  const railB = page.getByRole("link", { name: `Interest: ${B}` });
+  const railA = page.getByRole("link", { name: `Topic: ${A}` });
+  const railB = page.getByRole("link", { name: `Topic: ${B}` });
   await expect(railA).toBeVisible();
   await expect(railB).toBeVisible();
 
@@ -120,7 +120,7 @@ test("a single turn naming two deletions offers one card for both, and one Delet
   await expect(railB).toBeVisible();
 
   await confirm.getByRole("button", { name: "Delete" }).click();
-  await expect(confirm.getByText("Removed from your interests")).toBeVisible({
+  await expect(confirm.getByText("Removed from your topics")).toBeVisible({
     timeout: 30_000,
   });
   await expect(railA).toBeHidden({ timeout: 30_000 });

@@ -123,7 +123,7 @@ export function InterestDocCard({
         // changed; this ring/tint sweep makes the moved card impossible to miss.
         beat ? "scout-doc-flash" : "",
       ].join(" ")}
-      aria-label={`Interest: ${topic}`}
+      aria-label={`Topic: ${topic}`}
       role="link"
       tabIndex={0}
       onClick={(event) => {
@@ -199,8 +199,8 @@ export function InterestDocCard({
         </div>
       ) : hasDoc ? (
         <p className="mt-3 border-t border-border-default pt-3 font-reading text-[13px] leading-relaxed text-muted">
-          Scout is tracking an assignment for this interest. Refine it in the
-          chat to see the latest draft here.
+          Scout is tracking an assignment for this topic. Refine it in the chat
+          to see the latest draft here.
         </p>
       ) : (
         <p className="mt-3 border-t border-border-default pt-3 font-reading text-[13px] leading-relaxed text-muted">

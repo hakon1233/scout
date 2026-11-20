@@ -11,7 +11,7 @@ import type { Brief } from "@/lib/types";
 // Scrolling past the current edition reveals previous editions, each rendered as
 // a full "Daily brief — <date>" feed (reusing BriefLayout/FeedView). It pages the
 // companion's rolling history via GET /v0/briefs?limit=&offset= — 3 at a time,
-// newest-first — with a "Load older briefs" button. "Manage interests" sits next
+// newest-first — with a "Load older briefs" button. "Manage topics" sits next
 // to it: this footer bar is the only place those two actions live.
 //
 // The current brief is shown by the page ABOVE this component, so the pager skips
@@ -120,7 +120,7 @@ export function BriefHistory({
   const hasMore = offset < total;
 
   // Nothing to show yet and still loading the first page → render nothing rather
-  // than a bare "Manage interests" bar that would flash then grow.
+  // than a bare "Manage topics" bar that would flash then grow.
   if (!loaded && briefs.length === 0) return null;
 
   // In single-story mode show ONLY the edition holding the open story;
@@ -185,7 +185,7 @@ export function BriefHistory({
               </Button>
             )}
             <Button variant="link" onClick={onManageInterests}>
-              Manage interests
+              Manage topics
             </Button>
           </div>
         </div>

@@ -9,7 +9,9 @@ reader's own machine through their Claude Code CLI; the website only shows the r
 
 **Interest**:
 Something the reader wants news about, with a stable id and a short **topic** (its headline).
-_Avoid_: subscription, feed item
+On screen it is called a **topic** ("Topics", "New topic", "Manage topics"); the word
+"interest" stays in code, the HTTP contract and the database only.
+_Avoid_: subscription, feed item; "interest" in any on-screen text
 
 **Topic**:
 The short headline of an interest, also used verbatim as the heading of its section in a brief.
