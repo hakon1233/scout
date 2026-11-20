@@ -58,6 +58,8 @@ export class RpcError extends Error {
     // The Postgres error code PostgREST passes on (P0001 quota, P0002 not found).
     readonly code: string | undefined,
     message: string,
+    // The Postgres hint: for a quota refusal, the limit's name (max_interests).
+    readonly hint?: string,
   ) {
     super(message);
   }
@@ -98,15 +100,21 @@ export function rpcCaller(baseUrl: string, doFetch: Fetch = globalThis.fetch) {
     const text = await res.text();
     if (!res.ok) {
       let code: string | undefined;
+      let hint: string | undefined;
       let message = text.slice(0, 300);
       try {
-        const err = JSON.parse(text) as { code?: string; message?: string };
+        const err = JSON.parse(text) as {
+          code?: string;
+          hint?: string | null;
+          message?: string;
+        };
         code = err.code;
+        hint = err.hint ?? undefined;
         if (err.message) message = err.message;
       } catch {
         // Not JSON: keep the raw start.
       }
-      throw new RpcError(res.status, code, `${fn}: ${message}`);
+      throw new RpcError(res.status, code, `${fn}: ${message}`, hint);
     }
     return text ? JSON.parse(text) : null;
   };

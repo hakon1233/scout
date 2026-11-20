@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allowanceLine, createHostedData, HostedError } from "./hosted";
+import {
+  allowanceLine,
+  createHostedData,
+  HostedError,
+  shareUrl,
+} from "./hosted";
 
 // The hosted data module over a stub fetch that plays Supabase's REST API and
 // the Worker. No network, no Supabase.
@@ -70,14 +75,35 @@ test("home lists the interests with their run state and builds one brief from th
   const { fetch, calls } = stubFetch({
     "/rest/v1/interests": {
       body: [
-        { id: "i-rust", topic: "Rust releases", cadence: "daily" },
-        { id: "i-eu", topic: "EU AI Act", cadence: "weekly" },
+        ownRow("i-rust", "Rust releases", "daily"),
+        {
+          ...ownRow("i-eu", "EU AI Act", "weekly"),
+          visibility: "shared",
+          share_slug: "s".repeat(32),
+        },
       ],
     },
     "/rest/v1/follows": {
-      body: [{ interests: { id: "p-space", topic: "Space launches" } }],
+      body: [
+        {
+          interests: {
+            ...ownRow("p-space", "Space launches", "daily"),
+            visibility: "public",
+          },
+        },
+      ],
     },
     "/rest/v1/rpc/allowance": { body: ALLOWANCE },
+    "/rest/v1/profiles": { body: [{ is_admin: true }] },
+    "/rest/v1/notifications": {
+      body: [
+        {
+          id: "n1",
+          payload: { topic: "Oslo jazz", doc: "Gigs" },
+          created_at: "2026-11-20T06:00:00Z",
+        },
+      ],
+    },
     "/rest/v1/runs": {
       body: [
         // Newest first.
@@ -98,6 +124,20 @@ test("home lists the interests with their run state and builds one brief from th
       ["Space launches", "off", true, null],
     ],
   );
+  assert.deepEqual(
+    home.interests.map((i) => [i.visibility, i.shareSlug]),
+    [
+      ["private", null],
+      ["shared", "s".repeat(32)],
+      ["public", null],
+    ],
+  );
+  assert.equal(home.isAdmin, true);
+  assert.deepEqual(home.notices, [
+    { id: "n1", topic: "Oslo jazz", createdAt: "2026-11-20T06:00:00Z" },
+  ]);
+  const notices = calls.find((c) => c.url.includes("/rest/v1/notifications"));
+  assert.match(notices?.url ?? "", /kind=eq\.stopped_sharing&read_at=is\.null/);
   assert.equal(home.interests[0].updatedAt, "2026-11-20T07:03:00Z");
   assert.equal(home.interests[1].updatedAt, null);
   assert.match(home.interests[2].failed ?? "", /failed/);
@@ -124,9 +164,13 @@ test("a first-time reader has no interests, no brief and asks for no runs", asyn
     "/rest/v1/interests": { body: [] },
     "/rest/v1/follows": { body: [] },
     "/rest/v1/rpc/allowance": { body: ALLOWANCE },
+    "/rest/v1/profiles": { body: [] },
+    "/rest/v1/notifications": { body: [] },
   });
   const home = await data(fetch).home();
   assert.deepEqual(home.interests, []);
+  assert.equal(home.isAdmin, false);
+  assert.deepEqual(home.notices, []);
   assert.equal(home.brief, null);
   assert.ok(!calls.some((c) => c.url.includes("/runs")));
 });
@@ -275,6 +319,116 @@ test("signed out or a dead session is a signed-out error", async () => {
   });
 });
 
+test("sharing sets visibility through the RPC and returns the link's slug", async () => {
+  const slug = "a".repeat(32);
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/rpc/set_visibility": { body: slug },
+  });
+  assert.equal(await data(fetch).setVisibility("i-rust", "shared"), slug);
+  assert.deepEqual(calls[0].body, {
+    p_interest: "i-rust",
+    p_visibility: "shared",
+  });
+  assert.equal(calls[0].headers.authorization, "Bearer jwt-anna");
+});
+
+test("a share link reads signed out with the anon key, and builds its brief", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/rpc/interest_by_slug": {
+      body: {
+        id: "i-rust",
+        topic: "Rust releases",
+        visibility: "public",
+        owned: false,
+        following: false,
+        run: {
+          id: "r3",
+          section_md: RUST_SECTION,
+          coverage: { topic: "Rust releases", status: "covered" },
+          finished_at: "2026-11-20T07:03:00Z",
+        },
+      },
+    },
+  });
+  const shared = await data(fetch, false).shared("slug-1");
+  assert.equal(calls[0].headers.authorization, "Bearer anon-key");
+  assert.deepEqual(calls[0].body, { p_slug: "slug-1" });
+  assert.equal(shared?.topic, "Rust releases");
+  assert.equal(shared?.brief?.id, "hosted-r3");
+  assert.equal(shared?.brief?.generatedAt, "2026-11-20T07:03:00Z");
+  assert.equal(
+    shared?.brief?.articles[0].url,
+    "https://blog.rust-lang.org/1.92",
+  );
+});
+
+test("a share link signed in uses the session; an unknown link is null", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/rpc/interest_by_slug": { body: null },
+  });
+  assert.equal(await data(fetch).shared("gone"), null);
+  assert.equal(calls[0].headers.authorization, "Bearer jwt-anna");
+});
+
+test("follow needs a session; a link that stopped working says so", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/rpc/follow": () =>
+      calls.length > 1
+        ? {
+            status: 404,
+            body: { code: "P0002", message: "follow: no such shared interest" },
+          }
+        : { body: "i-rust" },
+  });
+  await assert.rejects(data(fetch, false).follow("slug-1"), (e: unknown) => {
+    assert.ok(e instanceof HostedError);
+    assert.equal(e.kind, "signed-out");
+    return true;
+  });
+  assert.equal(await data(fetch).follow("slug-1"), "i-rust");
+  assert.deepEqual(calls[0].body, { p_slug: "slug-1" });
+  await assert.rejects(data(fetch).follow("slug-1"), {
+    message: "That's no longer shared. Ask whoever sent it for a new link.",
+  });
+});
+
+test("hosting a stopped interest yourself respects the plan; dismiss marks it read", async () => {
+  let full = false;
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/rpc/host_copy": () =>
+      full
+        ? {
+            status: 400,
+            body: {
+              code: "P0001",
+              message: "quota: 15 of 15 interests used",
+              hint: "max_interests",
+            },
+          }
+        : { body: "i-new" },
+    "/rest/v1/notifications": { body: null },
+  });
+  const d = data(fetch);
+  assert.equal(await d.hostCopy("n1"), "i-new");
+  assert.deepEqual(calls[0].body, { p_notification: "n1" });
+  full = true;
+  await assert.rejects(d.hostCopy("n1"), (e: unknown) => {
+    assert.ok(e instanceof HostedError);
+    assert.equal(e.kind, "limit");
+    assert.match(e.message, /room for 15 interests/);
+    return true;
+  });
+  await d.dismiss("n1");
+  const patch = calls[2];
+  assert.equal(patch.method, "PATCH");
+  assert.match(patch.url, /notifications\?id=eq\.n1$/);
+  assert.equal(typeof (patch.body as { read_at: string }).read_at, "string");
+});
+
+test("a share URL opens the public brief page", () => {
+  assert.equal(shareUrl("abc"), "/i/?s=abc");
+});
+
 test("allowanceLine says what is left in plain words", () => {
   assert.equal(
     allowanceLine({
@@ -286,6 +440,10 @@ test("allowanceLine says what is left in plain words", () => {
     "Free plan: 0 of 1 daily and 2 of 3 weekly slots free. 1 run left today.",
   );
 });
+
+function ownRow(id: string, topic: string, cadence: string) {
+  return { id, topic, cadence, visibility: "private", share_slug: null };
+}
 
 function run(
   id: string,

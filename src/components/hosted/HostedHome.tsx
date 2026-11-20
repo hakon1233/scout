@@ -19,6 +19,9 @@ import {
   type HostedData,
   type HostedHome as Home,
   type HostedInterest,
+  type Notice,
+  shareUrl,
+  type Visibility,
 } from "@/lib/hosted";
 import { HostedChat } from "./HostedChat";
 
@@ -26,8 +29,9 @@ const POLL_MS = 5_000;
 const UNDO_MS = 15_000;
 
 // The signed-in hosted app on one screen: the reader's interests with their
-// schedules, the setup chat one click away, and their latest brief. A reader
-// with no interests lands straight in the chat.
+// schedules and sharing, the setup chat one click away, their latest brief, and
+// a bell for interests whose host stopped sharing them. A reader with no
+// interests lands straight in the chat.
 export function HostedHome() {
   const data = hostedData();
   const router = useRouter();
@@ -92,6 +96,14 @@ export function HostedHome() {
     return () => clearInterval(timer);
   }, [waiting, reload]);
 
+  // Back on the tab: a follow from a share link, or a host who stopped
+  // sharing, shows without a manual reload.
+  React.useEffect(() => {
+    const onFocus = () => void reload();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [reload]);
+
   // `data` is null only while prerendering (no window); the client's first
   // render must match it, so both show the skeleton.
   if (!data || !home) {
@@ -130,7 +142,16 @@ export function HostedHome() {
 
   const firstRun = home.interests.length === 0;
   return (
-    <Frame>
+    <Frame
+      notices={
+        <Notices
+          data={data}
+          notices={home.notices}
+          reload={reload}
+          onSignedOut={signedOut}
+        />
+      }
+    >
       {loadError && <Banner tone="danger">{loadError}</Banner>}
       {firstRun ? (
         <section className="flex flex-col gap-6" data-main>
@@ -206,19 +227,27 @@ function freeSlot(a: Allowance): "daily" | "weekly" | null {
   return null;
 }
 
-function Frame({ children }: { children: React.ReactNode }) {
+function Frame({
+  notices,
+  children,
+}: {
+  notices?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const [signingOut, setSigningOut] = React.useState(false);
   return (
     <main className="min-h-screen bg-page px-4 py-8 text-primary sm:px-6 sm:py-12">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
-        <nav className="flex items-center justify-between gap-3">
+        <nav className="relative flex items-center justify-between gap-3">
           <ScoutWordmark />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
+            {notices}
             <ThemeToggle />
             <Button
               variant="ghost"
               size="sm"
+              className="whitespace-nowrap"
               loading={signingOut}
               onClick={async () => {
                 setSigningOut(true);
@@ -311,7 +340,13 @@ function Interests({
             interest={i}
             busy={busy[i.id] ?? false}
             note={notes[i.id] ?? null}
+            canPublish={home.isAdmin}
             onCadence={(c) => act(i.id, () => data.setCadence(i.id, c))}
+            onVisibility={(v) =>
+              act(i.id, async () => {
+                await data.setVisibility(i.id, v);
+              })
+            }
             onRunNow={() => act(i.id, () => data.runNow(i.id))}
             onRemove={() => remove(i)}
           />
@@ -355,18 +390,29 @@ const CADENCES: { value: Cadence; label: string }[] = [
   { value: "off", label: "Paused" },
 ];
 
+const SHARING: { value: Visibility; label: string }[] = [
+  { value: "private", label: "Private" },
+  { value: "shared", label: "Shared by link" },
+  { value: "public", label: "Public" },
+];
+
 function InterestRow({
   interest: i,
   busy,
   note,
+  canPublish,
   onCadence,
+  onVisibility,
   onRunNow,
   onRemove,
 }: {
   interest: HostedInterest;
   busy: boolean;
   note: string | null;
+  // Only an admin may make an interest public (the catalog).
+  canPublish: boolean;
   onCadence: (c: Cadence) => void;
+  onVisibility: (v: Visibility) => void;
   onRunNow: () => void;
   onRemove: () => void;
 }) {
@@ -429,12 +475,175 @@ function InterestRow({
           </Button>
         </div>
       </div>
+      {!i.following && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="sr-only" htmlFor={`sharing-${i.id}`}>
+            Sharing for {i.topic}
+          </label>
+          <select
+            id={`sharing-${i.id}`}
+            value={i.visibility}
+            disabled={busy}
+            onChange={(e) => onVisibility(e.target.value as Visibility)}
+            className="min-h-9 rounded-md border border-border-default bg-transparent px-2 text-body-sm text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+          >
+            {SHARING.filter(
+              (o) =>
+                o.value !== "public" || canPublish || i.visibility === "public",
+            ).map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {i.shareSlug && <CopyLink slug={i.shareSlug} />}
+        </div>
+      )}
       {note && (
         <p role="alert" className="text-body-sm text-danger">
           {note}
         </p>
       )}
     </li>
+  );
+}
+
+function CopyLink({ slug }: { slug: string }) {
+  const [copied, setCopied] = React.useState(false);
+  React.useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2_000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="min-w-24"
+      onClick={() =>
+        navigator.clipboard
+          .writeText(shareUrl(slug))
+          .then(() => setCopied(true))
+          .catch(() => window.prompt("Copy this link", shareUrl(slug)))
+      }
+    >
+      <span aria-live="polite">{copied ? "Copied" : "Copy link"}</span>
+    </Button>
+  );
+}
+
+// The bell: interests the reader followed whose host stopped sharing them.
+// Each offers "Host it yourself" (a copy of its own, within the plan) or
+// Dismiss. Hidden when there is nothing to say.
+function Notices({
+  data,
+  notices,
+  reload,
+  onSignedOut,
+}: {
+  data: HostedData;
+  notices: Notice[];
+  reload: () => Promise<void>;
+  onSignedOut: (err: unknown) => boolean;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<{ id: string; text: string } | null>(
+    null,
+  );
+  if (notices.length === 0) return null;
+
+  async function act(id: string, fn: () => Promise<void>) {
+    setBusy(id);
+    setError(null);
+    try {
+      await fn();
+      await reload();
+    } catch (err) {
+      if (!onSignedOut(err))
+        setError({
+          id,
+          text:
+            err instanceof HostedError
+              ? err.message
+              : "Something went wrong. Try again.",
+        });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // The panel hangs from the whole nav (not the bell), so it stays on screen
+  // at phone width. Escape closes it.
+  return (
+    <div onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="notices-list"
+        aria-label={`${notices.length} ${notices.length === 1 ? "notice" : "notices"}`}
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex min-h-9 items-center gap-2 rounded-pill px-3 text-body-sm text-primary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+      >
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="size-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
+        <span className="tabular-nums">{notices.length}</span>
+      </button>
+      {open && (
+        <ul
+          id="notices-list"
+          className="absolute right-0 top-full z-10 mt-2 flex w-[min(22rem,calc(100vw-2rem))] flex-col divide-y divide-border-default rounded-lg border border-border-default bg-surface shadow-lg"
+        >
+          {notices.map((n) => (
+            <li key={n.id} className="flex flex-col gap-2 p-4">
+              <p className="break-words text-body-sm text-primary">
+                “{n.topic}” is no longer shared, so its briefs stopped.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={busy === n.id}
+                  disabled={busy !== null}
+                  onClick={() =>
+                    act(n.id, async () => {
+                      const id = await data.hostCopy(n.id);
+                      await scheduleNew(data, [id], false);
+                    })
+                  }
+                >
+                  Host it yourself
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy !== null}
+                  onClick={() => act(n.id, () => data.dismiss(n.id))}
+                >
+                  Dismiss
+                </Button>
+              </div>
+              {error?.id === n.id && (
+                <p role="alert" className="text-body-sm text-danger">
+                  {error.text}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

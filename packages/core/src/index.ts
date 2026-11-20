@@ -17,6 +17,7 @@ export type {
   TopicCoverage,
 } from "./contract.ts";
 export { PATHS } from "./contract.ts";
+export { plural, quotaMessage } from "./quota.ts";
 export { SEARCH_SKILLS } from "./search-skills.ts";
 export { ASSEMBLY_SKILLS } from "./assembly-skills.ts";
 export {

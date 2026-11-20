@@ -86,13 +86,15 @@ export function supabaseChatStore(opts: {
       ]);
       const followed = new Set(follows.map((f) => f.interest_id));
       const said = words(message);
-      return pool
-        .filter((i) => !followed.has(i.id))
-        .map((i) => ({ i, score: overlap(said, words(i.topic)) }))
-        .filter((x) => x.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit)
-        .map((x) => ({ id: x.i.id, topic: x.i.topic }));
+      return (
+        pool
+          .filter((i) => !followed.has(i.id))
+          // The whole catalog, best word matches first: the model judges the fit.
+          .map((i) => ({ i, score: overlap(said, words(i.topic)) }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, limit)
+          .map((x) => ({ id: x.i.id, topic: x.i.topic }))
+      );
     },
 
     async commit(userId, { turn, follows, costUsd }) {

@@ -139,16 +139,28 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   client), so the static export needs no callback route. Errors reach the page as
   plain sentences.
 - `lib/hosted.ts`: the hosted app's one data module. `hostedData()` returns `home`,
-  `transcript`, `chat`, `confirm`, `setCadence`, `remove`, `restore`, `unfollow` and
-  `runNow` over Supabase REST (as the reader, under RLS) and the Worker. Limits come
-  back as `HostedError` with a plain sentence. `components/hosted/` renders it; in a
-  hosted build `app/app/page.tsx` shows `HostedHome` instead of the companion feed.
+  `transcript`, `chat`, `confirm`, `setCadence`, `remove`, `restore`, `unfollow`,
+  `runNow`, and for sharing `setVisibility`, `shared(slug)`, `follow(slug)`,
+  `hostCopy(notice)` and `dismiss(notice)`, over Supabase REST (as the reader, under
+  RLS) and the Worker. `shared` also works signed out, with the anon key. Limits come
+  back as `HostedError` with a plain sentence (core's `quotaMessage`, shared with the
+  Worker). `components/hosted/` renders it; in a hosted build `app/app/page.tsx` shows
+  `HostedHome` instead of the companion feed. `app/i` is a share link's page
+  (`/i/?s=<slug>`, read on the client because the site is a static export): the
+  interest's latest brief for anyone, and Follow for a signed-in reader.
 
 ### Hosted backend (`supabase/`)
 
 The hosted plan's schema, RLS and `allowance()` (`migrations/`), with pgTAP tests in
 `tests/` (`pnpm test:rls`, against `supabase start`). A trigger on `auth.users` creates
-each new account's profile row (free plan, UTC). `config.toml` turns on Google (client
+each new account's profile row (free plan, UTC). `*_sharing.sql` adds sharing: an
+interest is private, shared (anyone with the link may follow) or public (the catalog;
+only `profiles.is_admin` may set it), through `set_visibility`. Followers read the
+host's runs, at no cost to them. `follow(slug)`, `interest_by_slug(slug)` (anon too)
+and `host_copy(notice)` are the RPCs; when a host makes a followed interest private or
+deletes it, a trigger leaves each follower a `stopped_sharing` notification and drops
+the follows. `seeds/public-interests.sql` is the starter catalog, applied by hand.
+`config.toml` turns on Google (client
 id and secret read from env by name) and the email link, and lists the sign-in page's
 redirect URLs.
 
@@ -181,7 +193,8 @@ redirect URLs.
 - `packages/research/test`, `packages/hosted/test`, `packages/worker/test`: the hosted
   code through its interfaces, with a stub Claude client that answers with recorded
   responses and an in-memory store or queue. No network.
-- `supabase/tests`: pgTAP tests for RLS, quotas, the sign-up trigger and the run queue
+- `supabase/tests`: pgTAP tests for RLS, quotas, the sign-up trigger, the run queue, chat
+  and sharing
   (`pnpm test:rls`, needs Docker; not part of `pnpm check`).
 - `packages/agent/test`: the companion's unit and HTTP contract tests (`node:test`). They
   use a stub `claude`, a temporary state directory and port 0, so they need no network

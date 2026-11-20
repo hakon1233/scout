@@ -32,8 +32,8 @@ export type ChatStore = {
     transcript: ChatTurn[];
     limits: { maxInterests: number; maxDocChars: number };
   }>;
-  // Up to `limit` public interests that may match `message`, leaving out the
-  // reader's own and those they already follow.
+  // Up to `limit` public interests, best matches for `message` first, leaving
+  // out the reader's own and those they already follow.
   findPublicInterests(
     userId: string,
     message: string,
@@ -51,7 +51,8 @@ export type ChatStore = {
 export type { ChatConfirm };
 
 export const CHAT_MODEL = "claude-haiku-5-5";
-const PUBLIC_INTEREST_LIMIT = 5;
+// The public catalog the model sees: topics only, so a short list stays cheap.
+const PUBLIC_INTEREST_LIMIT = 20;
 const MAX_TOPIC_LEN = 200; // interests.topic's check in the schema
 const MAX_OUTPUT_TOKENS = 8192;
 const TURN_TIMEOUT_MS = 60_000;

@@ -15,6 +15,12 @@ _Avoid_: subscription, feed item
 The short headline of an interest, also used verbatim as the heading of its section in a brief.
 _Avoid_: tag, category
 
+**Visibility**:
+Who may follow an interest: private (only its owner), shared (anyone with its share link)
+or public (in the catalog the setup chat suggests; an admin's call). A follower gets the
+host's briefs for that interest and pays nothing; the runs count on the host's plan.
+_Avoid_: published, subscribed
+
 **Intent doc**:
 A short markdown note per interest that says what the reader wants from it; it is given to
 the model word for word on every run.

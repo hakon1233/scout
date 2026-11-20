@@ -1,6 +1,8 @@
 // The hosted app's data: the signed-in reader's interests, their latest brief,
-// their plan's allowance, the setup chat and run-now. The one module hosted
-// screens call; components never fetch or touch Supabase themselves.
+// their plan's allowance, the setup chat, run-now and sharing (links, follows,
+// and the notice when a host stops sharing). The one module hosted screens
+// call; components never fetch or touch Supabase themselves. A share link
+// (`shared`) also works signed out.
 //
 // Reads and the reader's own edits go to Supabase's REST API as the reader
 // (their JWT, so RLS and the quota trigger apply). The chat and run-now go to
@@ -15,20 +17,28 @@ import {
   type ChatTurnRow,
   type TopicCoverage,
   chatTurnFromRow,
+  plural,
+  quotaMessage,
 } from "@scout/core";
 import { hostedAuth, hostedConfig } from "./auth";
 import { parseArticlesFromMarkdown } from "./companion";
 import type { Brief } from "./types";
 
 export type Cadence = "daily" | "weekly" | "off";
+// private: the owner's only. shared: anyone with the link may follow.
+// public: in the catalog (an admin's call), readable signed out.
+export type Visibility = "private" | "shared" | "public";
 
 export type HostedInterest = {
   id: string;
   topic: string;
   cadence: Cadence;
-  // Someone else's public interest the reader follows: no schedule of its own
-  // to set and no run-now, only unfollow.
+  // Someone else's shared or public interest the reader follows: no schedule
+  // of its own to set, no run-now and no sharing, only unfollow.
   following: boolean;
+  visibility: Visibility;
+  // The link's slug while shared or public; null when private.
+  shareSlug: string | null;
   // A run waiting in the queue or being researched now.
   run: "queued" | "running" | null;
   // When the latest brief section for it was written, or null for none yet.
@@ -49,6 +59,23 @@ export type HostedHome = {
   // The latest section of every interest, as one brief. Null before the first.
   brief: Brief | null;
   allowance: Allowance;
+  // May make an interest public.
+  isAdmin: boolean;
+  // Unread: interests the reader followed whose host stopped sharing them.
+  notices: Notice[];
+};
+
+/** A host stopped sharing an interest the reader followed. */
+export type Notice = { id: string; topic: string; createdAt: string };
+
+/** What a share link shows. `brief` is the interest's latest, or null. */
+export type SharedInterest = {
+  id: string;
+  topic: string;
+  visibility: Visibility;
+  owned: boolean;
+  following: boolean;
+  brief: Brief | null;
 };
 
 export interface HostedData {
@@ -63,6 +90,20 @@ export interface HostedData {
   restore(interestId: string): Promise<void>;
   unfollow(interestId: string): Promise<void>;
   runNow(interestId: string): Promise<void>;
+  // Returns the share slug, or null once private.
+  setVisibility(
+    interestId: string,
+    visibility: Visibility,
+  ): Promise<string | null>;
+  // A share link's interest and latest brief, signed in or out. Null when the
+  // link is unknown or no longer shared.
+  shared(slug: string): Promise<SharedInterest | null>;
+  // Follow from a share link. Returns the interest id.
+  follow(slug: string): Promise<string>;
+  // "Host it yourself": the notice's interest as the reader's own, paused and
+  // private, within their limits. Returns the new interest id.
+  hostCopy(noticeId: string): Promise<string>;
+  dismiss(noticeId: string): Promise<void>;
 }
 
 /** A failure with a message the page can show as is. `limit` means the
@@ -138,8 +179,12 @@ export function createHostedData(deps: {
   async function rest<T>(
     path: string,
     init: { method?: string; body?: unknown; prefer?: string } = {},
+    // Signed out, the anon key stands in for the session (public reads only).
+    signedOutOk = false,
   ): Promise<T> {
-    const s = await session();
+    const s = signedOutOk
+      ? ((await deps.session()) ?? { userId: "", accessToken: deps.anonKey })
+      : await session();
     const { status, body } = await call(
       `${deps.supabaseUrl}/rest/v1/${path}`,
       { method: init.method ?? "GET", body: init.body, prefer: init.prefer },
@@ -183,23 +228,27 @@ export function createHostedData(deps: {
     async home() {
       const s = await session();
       const user = encodeURIComponent(s.userId);
-      const [own, follows, allowance] = await Promise.all([
+      const [own, follows, allowance, profile, notices] = await Promise.all([
         rest<InterestRow[]>(
-          `interests?select=id,topic,cadence&owner_id=eq.${user}&deleted_at=is.null&order=created_at.asc`,
+          `interests?select=${INTEREST_COLUMNS}&owner_id=eq.${user}&deleted_at=is.null&order=created_at.asc`,
         ),
-        rest<{ interests: { id: string; topic: string } | null }[]>(
-          `follows?select=interests(id,topic)&user_id=eq.${user}&order=created_at.asc`,
+        rest<{ interests: InterestRow | null }[]>(
+          `follows?select=interests(${INTEREST_COLUMNS})&user_id=eq.${user}&order=created_at.asc`,
         ),
         rest<AllowanceRow>("rpc/allowance", {
           method: "POST",
           body: { p_user: s.userId },
         }),
+        rest<{ is_admin: boolean }[]>(`profiles?select=is_admin&id=eq.${user}`),
+        rest<NoticeRow[]>(
+          `notifications?select=id,payload,created_at&user_id=eq.${user}&kind=eq.stopped_sharing&read_at=is.null&order=created_at.desc`,
+        ),
       ]);
       const rows: (InterestRow & { following: boolean })[] = [
         ...own.map((i) => ({ ...i, following: false })),
         ...follows
           .map((f) => f.interests)
-          .filter((i): i is { id: string; topic: string } => i !== null)
+          .filter((i): i is InterestRow => i !== null)
           .map((i) => ({ ...i, cadence: "off" as Cadence, following: true })),
       ];
       const runs =
@@ -210,7 +259,15 @@ export function createHostedData(deps: {
                 .map((r) => encodeURIComponent(r.id))
                 .join(",")})&order=created_at.desc&limit=${RUN_HISTORY}`,
             );
-      return assembleHome(rows, runs, allowance);
+      return {
+        ...assembleHome(rows, runs, allowance),
+        isAdmin: profile[0]?.is_admin === true,
+        notices: notices.map((n) => ({
+          id: n.id,
+          topic: n.payload?.topic ?? "An interest",
+          createdAt: n.created_at,
+        })),
+      };
     },
 
     async transcript() {
@@ -252,10 +309,91 @@ export function createHostedData(deps: {
     async runNow(interestId) {
       await worker("/runs", { interestId });
     },
+
+    async setVisibility(interestId, visibility) {
+      return await rest<string | null>("rpc/set_visibility", {
+        method: "POST",
+        body: { p_interest: interestId, p_visibility: visibility },
+      });
+    },
+
+    async shared(slug) {
+      const row = await rest<SharedRow | null>(
+        "rpc/interest_by_slug",
+        { method: "POST", body: { p_slug: slug } },
+        true,
+      );
+      if (!row) return null;
+      const run = row.run;
+      return {
+        id: row.id,
+        topic: row.topic,
+        visibility: row.visibility,
+        owned: row.owned,
+        following: row.following,
+        brief: run?.section_md
+          ? briefFrom(
+              [{ topic: row.topic, section: run.section_md }],
+              run.coverage ? [run.coverage] : [],
+              { id: run.id, at: run.finished_at ?? "" },
+            )
+          : null,
+      };
+    },
+
+    async follow(slug) {
+      return await rest<string>("rpc/follow", {
+        method: "POST",
+        body: { p_slug: slug },
+      });
+    },
+
+    async hostCopy(noticeId) {
+      return await rest<string>("rpc/host_copy", {
+        method: "POST",
+        body: { p_notification: noticeId },
+      });
+    },
+
+    async dismiss(noticeId) {
+      await rest(`notifications?id=eq.${encodeURIComponent(noticeId)}`, {
+        method: "PATCH",
+        body: { read_at: new Date().toISOString() },
+        prefer: "return=minimal",
+      });
+    },
   };
 }
 
-type InterestRow = { id: string; topic: string; cadence: Cadence };
+const INTEREST_COLUMNS = "id,topic,cadence,visibility,share_slug";
+
+type InterestRow = {
+  id: string;
+  topic: string;
+  cadence: Cadence;
+  visibility: Visibility;
+  share_slug: string | null;
+};
+
+type NoticeRow = {
+  id: string;
+  payload: { topic?: string } | null;
+  created_at: string;
+};
+
+type SharedRow = {
+  id: string;
+  topic: string;
+  visibility: Visibility;
+  owned: boolean;
+  following: boolean;
+  run: {
+    id: string;
+    section_md: string | null;
+    coverage: TopicCoverage | null;
+    finished_at: string | null;
+  } | null;
+};
 
 type RunRow = {
   id: string;
@@ -288,7 +426,7 @@ function assembleHome(
   rows: (InterestRow & { following: boolean })[],
   runs: RunRow[],
   a: AllowanceRow,
-): HostedHome {
+): Omit<HostedHome, "isAdmin" | "notices"> {
   const sections: { topic: string; section: string }[] = [];
   const coverage: TopicCoverage[] = [];
   let newest: RunRow | null = null;
@@ -312,6 +450,8 @@ function assembleHome(
       topic: row.topic,
       cadence: row.cadence,
       following: row.following,
+      visibility: row.visibility,
+      shareSlug: row.share_slug,
       run: active ? (active.status as "queued" | "running") : null,
       updatedAt: ready ? doneAt(ready) : null,
       failed:
@@ -321,25 +461,12 @@ function assembleHome(
     };
   });
 
-  let brief: Brief | null = null;
   const latest = newest as RunRow | null;
-  if (latest) {
-    const markdown = assembleBrief(sections);
-    const id = `hosted-${latest.id}`;
-    const parsed = parseArticlesFromMarkdown(markdown, id);
-    brief = {
-      id,
-      generatedAt: doneAt(latest),
-      interests: parsed.interests,
-      articles: parsed.articles,
-      markdown,
-      topics: coverage,
-    };
-  }
-
   return {
     interests,
-    brief,
+    brief: latest
+      ? briefFrom(sections, coverage, { id: latest.id, at: doneAt(latest) })
+      : null,
     allowance: {
       plan: a.plan,
       daily: { used: a.used.daily_interests, limit: a.limits.daily_interests },
@@ -355,41 +482,45 @@ function assembleHome(
   };
 }
 
+// Brief sections as one Brief, named after the newest run in it.
+function briefFrom(
+  sections: { topic: string; section: string }[],
+  coverage: TopicCoverage[],
+  newest: { id: string; at: string },
+): Brief {
+  const markdown = assembleBrief(sections);
+  const id = `hosted-${newest.id}`;
+  const parsed = parseArticlesFromMarkdown(markdown, id);
+  return {
+    id,
+    generatedAt: newest.at,
+    interests: parsed.interests,
+    articles: parsed.articles,
+    markdown,
+    topics: coverage,
+  };
+}
+
 function doneAt(r: RunRow): string {
   return r.finished_at ?? r.created_at;
 }
 
 // PostgREST's error body: the quota trigger raises P0001 with the limit's name
-// as the hint.
+// as the hint (core's quotaMessage words it); the sharing calls raise P0002 for
+// a link or notice that is gone.
 function restError(body: unknown): HostedError {
   const err = (body ?? {}) as {
     code?: string;
     hint?: string;
     message?: string;
   };
-  if (err.code === "P0001") {
-    const limit = /of (\d+)/.exec(err.message ?? "")?.[1];
-    if (err.hint === "daily_interests")
-      return new HostedError(
-        "limit",
-        `Your plan has room for ${plural(limit, "daily interest")}, and it's in use. Set one to weekly or pause it first.`,
-      );
-    if (err.hint === "weekly_interests")
-      return new HostedError(
-        "limit",
-        `Your plan has room for ${plural(limit, "weekly interest")}, and they're in use. Pause one first.`,
-      );
-    if (err.hint === "max_interests")
-      return new HostedError(
-        "limit",
-        `Your plan has room for ${plural(limit, "interest")}, and they're in use. Delete one first.`,
-      );
-    if (err.hint === "max_doc_chars")
-      return new HostedError(
-        "limit",
-        "That interest's description is too long for your plan.",
-      );
-  }
+  const limit = quotaMessage(err);
+  if (limit) return new HostedError("limit", limit);
+  if (err.code === "P0002")
+    return new HostedError(
+      "failed",
+      "That's no longer shared. Ask whoever sent it for a new link.",
+    );
   return new HostedError("failed", "Couldn't save that. Try again.");
 }
 
@@ -402,11 +533,6 @@ function workerLimitMessage(path: string, said: string): string {
   return said || "Scout has paused new work for now. Try again later.";
 }
 
-function plural(n: string | number | undefined, word: string): string {
-  if (n === undefined) return `${word}s`;
-  return `${n} ${word}${Number(n) === 1 ? "" : "s"}`;
-}
-
 /** What the reader's plan has left, in one plain line. */
 export function allowanceLine(a: Allowance): string {
   const left = (x: { used: number; limit: number }) =>
@@ -417,6 +543,13 @@ export function allowanceLine(a: Allowance): string {
     `${left(a.weekly)} of ${a.weekly.limit} weekly slots free. ` +
     `${plural(left(a.runsToday), "run")} left today.`
   );
+}
+
+/** The page a share link opens: `/i/?s=<slug>`, under the app's base path. */
+export function shareUrl(slug: string): string {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  return `${origin}${base}/i/?s=${encodeURIComponent(slug)}`;
 }
 
 let hosted: HostedData | null | undefined;

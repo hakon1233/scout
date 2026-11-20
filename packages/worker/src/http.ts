@@ -6,6 +6,7 @@
 //                                ChatConfirm); 200 ChatTurn, 409 if nothing waits.
 // Host-neutral: Request and Response only.
 
+import { quotaMessage } from "@scout/core";
 import { createChat, type ChatConfirm } from "@scout/hosted";
 import type { ClaudeClient } from "@scout/research";
 import { supabaseChatStore, verifiedUserId } from "./chat-store.ts";
@@ -158,6 +159,12 @@ async function chatRoute(
       ? json(200, turn)
       : json(409, { error: "There is nothing waiting to confirm." });
   } catch (err) {
+    // A change past the reader's limits, refused by the interest trigger.
+    const limit =
+      err instanceof RpcError
+        ? quotaMessage({ code: err.code, hint: err.hint, message: err.message })
+        : null;
+    if (limit) return json(429, { error: limit });
     console.error("[chat] store failed:", err);
     return json(502, { error: "Scout couldn't save that. Try again." });
   }
