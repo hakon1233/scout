@@ -26,7 +26,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { URL } from "node:url";
 import { loadState, STATE_FILE, type State } from "./state.js";
-import { PATHS, type Brief, type ChatTurn } from "./contract.js";
+import { PATHS, type Brief, type ChatTurn } from "#core";
 import type { ChatDeps } from "./chat.js";
 import { defaultChatTranscriptFile } from "./chat-transcript.js";
 import { DEFAULT_BUILD_INFO_FILE } from "./build-info.js";
@@ -131,7 +131,7 @@ function createServer(deps: ServerDeps = {}): http.Server {
     res.setHeader("x-frame-options", "DENY");
     res.setHeader("content-security-policy", "frame-ancestors 'none'");
     res.setHeader("x-content-type-options", "nosniff");
-    const origin = req.headers.origin as string | undefined;
+    const origin = req.headers.origin;
     const cors = corsHeaders(origin);
 
     if (!isHostAllowed(req.headers.host)) {
@@ -270,7 +270,7 @@ function createServer(deps: ServerDeps = {}): http.Server {
         // (Accept: application/json without text/html) still get the
         // machine-readable JSON 404.
         if (req.method === "GET" || req.method === "HEAD") {
-          const accept = (req.headers.accept as string | undefined) ?? "";
+          const accept = req.headers.accept ?? "";
           const wantsJsonOnly =
             accept.includes("application/json") &&
             !accept.includes("text/html");

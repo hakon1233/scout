@@ -3,11 +3,12 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import type { Article, Brief } from "@/lib/types";
-import { canonicalUrl } from "@scout/agent/brief-document";
+import { canonicalUrl } from "@scout/core";
 import type { LikeInput } from "@/lib/likes";
-import { LikeButton } from "@/components/LikeButton";
+import { LikeButton, SaveButton } from "@/components/LikeButton";
 import { EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
+import { usage } from "@/lib/usage";
 
 // react-markdown + rehype-sanitize (~170KB) are only needed by the
 // single-story detail body, which never mounts until a reader opens a card.
@@ -22,9 +23,9 @@ const FeedBody = dynamic(() => import("@/components/FeedBody"), {
 // BriefView as the default home view: each story is a card with a headline, one
 // short blurb, and — where the research run handpicked one from the source — a
 // lead image. Clicking a card opens a still-short in-page detail with the source
-// link(s) and image. Back returns to the feed via history (no route change: the
-// companion serves only the `/app/` shell, so detail is in-page state, not a
-// real export route).
+// link(s) and image. The open story is a `?story=<id>` query on the same page
+// (the companion serves only the `/app/` shell, so there is no export route per
+// story); Back returns to the feed via history.
 
 type FeedItem = {
   id: string;
@@ -63,25 +64,35 @@ export function FeedView({
   // one obvious reading order. To reintroduce later: derive topics from `items`,
   // hold an `activeTopic` state, and filter `items` by it before the grid map.
 
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
-
-  // No reset effect on brief change is needed: a stale selection resolves to null
-  // because story ids embed the brief id, so a previous edition's selectedId
-  // never matches a new brief's items.
-
-  // Close the detail on browser/OS Back. openDetail() pushes one history entry;
-  // Back (hardware, gesture, or our in-app button via history.back()) pops it and
-  // this fires — an in-app SPA transition with no landing flash.
-  React.useEffect(() => {
-    const onPop = () => setSelectedId(null);
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  // The open story lives in the URL (`?story=<id>`), so reload, Back and a
+  // shared link keep it. A stale id (a previous edition's) resolves to null
+  // because story ids embed the brief id.
+  const selectedId = React.useSyncExternalStore(
+    subscribeStoryParam,
+    storyParam,
+    () => null,
+  );
 
   const selected = selectedId
     ? (items.find((it) => it.id === selectedId) ?? null)
     : null;
   const detailOpen = selected != null;
+
+  // Hosted and signed in only (usage is a no-op until startUsage): the brief
+  // was seen, and which story is open for how long.
+  React.useEffect(() => {
+    usage.briefViewed(
+      brief.id,
+      brief.articles.map((a) => a.interest),
+    );
+  }, [brief]);
+  const openTopic = selected?.topic;
+  const openUrl = selected?.url;
+  React.useEffect(() => {
+    if (!openTopic || !openUrl) return;
+    usage.storyOpened(openTopic, openUrl);
+    return () => usage.storyClosed();
+  }, [openTopic, openUrl]);
 
   // Tell the page when we're in single-story mode so it can drop the
   // brief header, banners, and history pager — leaving only this one story.
@@ -103,22 +114,28 @@ export function FeedView({
 
   function openDetail(id: string) {
     feedScrollY.current = window.scrollY;
-    setSelectedId(id);
     try {
-      window.history.pushState({ scoutFeedDetail: id }, "");
+      window.history.pushState({ scoutFeedDetail: id }, "", storyHref(id));
     } catch {
-      // pushState can throw in rare sandboxed contexts — detail still opens,
-      // it just won't be tied to the Back button. Provide the in-app Back button.
+      // pushState can throw in rare sandboxed contexts: the story just won't
+      // open from the URL.
     }
+    notifyStoryParam();
   }
 
   function closeDetail() {
     const state = window.history.state as { scoutFeedDetail?: string } | null;
     if (state?.scoutFeedDetail) {
       window.history.back(); // pops our pushed entry → popstate closes it
-    } else {
-      setSelectedId(null);
+      return;
     }
+    // Opened from a reload or a shared link: drop the param in place.
+    try {
+      window.history.replaceState(window.history.state, "", storyHref(null));
+    } catch {
+      // Nothing to undo.
+    }
+    notifyStoryParam();
   }
 
   if (selected) {
@@ -158,52 +175,46 @@ function likeInputFor(item: FeedItem): LikeInput {
 }
 
 function FeedCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
-  // The card is a relative wrapper holding TWO siblings: a full-area open button
-  // and the like button overlaid top-right. They're siblings (not nested) because
-  // a <button> inside a <button> is invalid HTML — the heart must never be a child
-  // of the open button. The wrapper carries the card's border/bg/hover so both
-  // controls share one visual frame.
+  // One story per card. The headline's button stretches over the whole card
+  // (its ::after covers it), so a tap anywhere opens the story, while the heart
+  // in the foot sits above that layer as its own button: a <button> inside a
+  // <button> is invalid HTML. A headline may wrap; the card allows it.
   return (
-    <div className="group relative flex h-full flex-col overflow-hidden rounded-md border border-border-default bg-surface transition focus-within:ring-2 focus-within:ring-focus-ring hover:border-border-strong hover:bg-surface-muted">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex h-full flex-col text-left focus:outline-none"
-      >
-        {item.imageUrl && (
-          <FeedImage
-            src={item.imageUrl}
-            className="aspect-[16/9] w-full object-cover"
-          />
-        )}
-        <div className="flex flex-1 flex-col gap-2 p-4">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption uppercase tracking-wide text-muted">
-            <span className="font-medium text-signal">{item.topic}</span>
-            {item.publishedAt && (
-              <span className="tabular-nums">
-                · {formatDate(item.publishedAt)}
-              </span>
-            )}
-          </div>
-          <h3 className="font-serif text-title-3 leading-snug text-primary line-clamp-3">
+    <article
+      data-allow-wrap
+      className="relative flex flex-col overflow-hidden rounded-card border border-border-default bg-surface transition focus-within:ring-2 focus-within:ring-focus-ring hover:border-border-strong"
+    >
+      {item.imageUrl && (
+        <FeedImage
+          src={item.imageUrl}
+          className="aspect-[16/9] w-full object-cover"
+        />
+      )}
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <p className="text-caption font-medium text-secondary">{item.topic}</p>
+        <h3 className="font-serif text-title-3 leading-snug text-primary text-balance">
+          <button
+            type="button"
+            onClick={onOpen}
+            className="text-left after:absolute after:inset-0 after:content-[''] focus:outline-none"
+          >
             {item.headline}
-          </h3>
-          {item.blurb && (
-            <p className="font-reading text-body-sm text-secondary line-clamp-2">
-              {item.blurb}
-            </p>
-          )}
-          {/* pr keeps the source clear of the absolutely-positioned heart */}
-          <span className="mt-auto pr-11 pt-1 text-caption text-muted">
+          </button>
+        </h3>
+        {item.blurb && (
+          <p className="font-reading text-body text-secondary line-clamp-3">
+            {item.blurb}
+          </p>
+        )}
+        <div className="mt-auto flex items-center justify-between gap-2 text-body-sm text-muted">
+          <span className="min-w-0 truncate tabular-nums">
             {item.source}
+            {item.publishedAt && <> · {formatDate(item.publishedAt)}</>}
           </span>
+          <LikeButton story={likeInputFor(item)} className="relative z-10" />
         </div>
-      </button>
-      <LikeButton
-        story={likeInputFor(item)}
-        className="absolute right-2 top-2"
-      />
-    </div>
+      </div>
+    </article>
   );
 }
 
@@ -218,17 +229,25 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
         >
           ← Back to feed
         </button>
-        <LikeButton story={likeInputFor(item)} />
+        <span className="flex items-center gap-2">
+          <SaveButton story={likeInputFor(item)} />
+          <LikeButton story={likeInputFor(item)} />
+        </span>
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption uppercase tracking-wide text-muted">
-          <span className="font-medium text-signal">{item.topic}</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
+          <span className="font-medium uppercase tracking-wide text-signal">
+            {item.topic}
+          </span>
           {item.publishedAt && (
-            <span className="tabular-nums">
+            <span className="uppercase tracking-wide tabular-nums">
               · {formatDate(item.publishedAt)}
             </span>
           )}
+          <span className="rounded-pill border border-border-default px-2 py-0.5 text-secondary">
+            Written by AI
+          </span>
         </div>
         <h1 className="font-serif text-title-1 leading-tight text-primary">
           {item.headline}
@@ -257,11 +276,11 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
         <a
           href={item.url}
           target="_blank"
-          rel="noopener noreferrer"
+          rel="nofollow ugc noopener"
           className="inline-flex items-center gap-2 text-body-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
         >
-          <SourceBadge host={item.source} />
-          Read the full story at {item.source} ↗
+          <SourceBadge host={hostname(item.url)} />
+          Read the full story at {hostname(item.url)} ↗
         </a>
       </div>
     </article>
@@ -371,7 +390,7 @@ export function SourceBadge({ host }: { host: string }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-border-default bg-surface text-caption font-semibold uppercase leading-none text-muted"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-surface-muted text-caption font-semibold uppercase leading-none text-muted"
     >
       {host.replace(/^www\./, "").charAt(0)}
     </span>
@@ -383,3 +402,32 @@ export function SourceBadge({ host }: { host: string }) {
 // here so existing `@/components/FeedView` importers (e.g. the liked-stories
 // page) are unchanged.
 export { formatDate };
+
+// --- the open story in the URL ----------------------------------------------
+
+const storyListeners = new Set<() => void>();
+
+function subscribeStoryParam(fn: () => void): () => void {
+  storyListeners.add(fn);
+  window.addEventListener("popstate", fn);
+  return () => {
+    storyListeners.delete(fn);
+    window.removeEventListener("popstate", fn);
+  };
+}
+
+function notifyStoryParam(): void {
+  for (const fn of storyListeners) fn();
+}
+
+function storyParam(): string | null {
+  return new URLSearchParams(window.location.search).get("story");
+}
+
+/** This page's URL with `story` set to `id`, or without it. */
+function storyHref(id: string | null): string {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set("story", id);
+  else url.searchParams.delete("story");
+  return `${url.pathname}${url.search}${url.hash}`;
+}

@@ -136,7 +136,7 @@ function leadHeart(
   name: "Save to liked stories" | "Remove from liked stories",
 ) {
   return page
-    .locator("div.group", {
+    .locator("article:not(:has(article))", {
       has: page.getByRole("heading", { name: LEAD_HEADLINE }),
     })
     .getByRole("button", { name });
@@ -178,7 +178,9 @@ test("saving a story from the feed surfaces it in the Liked feed and persists", 
   });
   expect(typeof liked.likes[LEAD_KEY].likedAt).toBe("string");
 
-  // Navigate to the Liked feed via the real top-bar entry point.
+  // Navigate to the Liked feed the real way: Menu, Profile, Liked stories.
+  await page.getByRole("button", { name: "Menu" }).click();
+  await page.getByRole("link", { name: "Profile" }).click();
   await page.getByRole("link", { name: "Liked stories" }).click();
   await expect(page).toHaveURL(/\/app\/liked\/?$/);
 

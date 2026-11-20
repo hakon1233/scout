@@ -1,8 +1,4 @@
-import type {
-  Interest,
-  TopicBasis,
-  TopicCoverage,
-} from "@scout/agent/contract";
+import type { Interest, TopicBasis, TopicCoverage } from "@scout/core";
 
 export type Article = {
   id: string;

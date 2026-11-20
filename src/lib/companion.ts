@@ -4,12 +4,15 @@
 // agent on a different port can still pair.
 
 import type { Brief as AppBrief } from "./types";
-import { parseBrief } from "@scout/agent/brief-document";
 import {
+  briefSettingsOrDefault,
+  parseBrief,
   PATHS,
   type Brief as WireBrief,
+  type BriefSettings,
+  type InterestSettingsBody,
   type ScheduleView,
-} from "@scout/agent/contract";
+} from "@scout/core";
 import { getLocalStorage, isClient, safeSetItem } from "./safe-storage";
 
 // Dev/diagnostic trace for the browser→loopback transport. Every fetch
@@ -344,7 +347,7 @@ async function postInterests(
       // elsewhere (another browser, or the chat).
       409: (refusal) =>
         Array.isArray(refusal.dropped)
-          ? "Your interests changed somewhere else (another browser or the chat). Reload this page to get the current list, then run again."
+          ? "Your topics changed somewhere else (another browser or the chat). Reload this page to get the current list, then run again."
           : undefined,
     },
   });
@@ -454,6 +457,45 @@ export async function updateSchedule(
     timeoutMs: 8_000,
     failure: "Couldn't save the schedule",
   });
+}
+
+// One interest's brief settings, read from GET /v0/interests. Null when the
+// companion doesn't know the interest; throws when it can't be reached.
+export async function fetchInterestSettings(
+  token: string,
+  interestId: string,
+): Promise<BriefSettings | null> {
+  const body = await companionJson<{
+    interests?: Array<{ id?: string; settings?: unknown }>;
+  }>(PATHS.interests, {
+    token,
+    timeoutMs: 5_000,
+    failure: "Couldn't load the brief settings",
+  });
+  const found = body.interests?.find((i) => i.id === interestId);
+  return found ? briefSettingsOrDefault(found.settings) : null;
+}
+
+// Change one interest's brief settings (PUT /v0/interest-settings). Fields
+// left out keep their stored value; the answer is the whole stored settings.
+export async function updateInterestSettings(
+  token: string,
+  interestId: string,
+  settings: Partial<BriefSettings>,
+): Promise<BriefSettings> {
+  const body: InterestSettingsBody = { interestId, settings };
+  const res = await companionJson<{ settings: BriefSettings }>(
+    PATHS.interestSettings,
+    {
+      token,
+      method: "PUT",
+      body,
+      timeoutMs: 8_000,
+      failure: "Couldn't save the brief settings",
+      messages: { 404: "Scout no longer has this topic." },
+    },
+  );
+  return res.settings;
 }
 
 // Page the companion's rolling brief history, newest-first. Backs the

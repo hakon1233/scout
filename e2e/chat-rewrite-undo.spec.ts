@@ -29,7 +29,7 @@ test("chat rewrite Apply surfaces a live Undo, same as create", async ({
   await expect(
     createReply.getByRole("button", { name: "Undo", exact: true }),
   ).toBeVisible({ timeout: 30_000 });
-  const railLink = page.getByRole("link", { name: `Interest: ${TOPIC}` });
+  const railLink = page.getByRole("link", { name: `Topic: ${TOPIC}` });
   await expect(railLink).toBeVisible();
 
   // ── REWRITE — propose, then Apply via the real confirm-rewrite route ──────
@@ -124,7 +124,7 @@ test("chat rewrite Apply surfaces a live Undo, same as create", async ({
     timeout: 30_000,
   });
   await confirmDelete.getByRole("button", { name: "Delete" }).click();
-  await expect(
-    confirmDelete.getByText("Removed from your interests"),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(confirmDelete.getByText("Removed from your topics")).toBeVisible(
+    { timeout: 30_000 },
+  );
 });

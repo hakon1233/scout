@@ -23,14 +23,15 @@
 import type { spawn } from "node:child_process";
 import { USAGE_LIMIT_RE } from "./claude-runner.js";
 import { loadState, newChatTurnId, updateState, type State } from "./state.js";
-import type { ChatChange, ChatTurn } from "./contract.js";
+import {
+  quotedList,
+  replayChanges,
+  type ChatChange,
+  type ChatTurn,
+} from "#core";
 import { writeInterestDoc } from "./docs.js";
 import { buildInterestSnapshots, chatComplete } from "./chat-model.js";
-import {
-  applyChatChanges,
-  applyConfirmedDelete,
-  replayChanges,
-} from "./chat-changes.js";
+import { applyChatChanges, applyConfirmedDelete } from "./chat-changes.js";
 import {
   appendChatTranscript,
   defaultChatTranscriptFile,
@@ -283,14 +284,6 @@ export function confirmDeleteTurn(
   });
 }
 
-// "A", "A" and "B", or "A", "B" and "C".
-function quotedList(items: string[]): string {
-  const quoted = items.map((t) => `"${t}"`);
-  return quoted.length < 2
-    ? quoted.join("")
-    : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`;
-}
-
 // Confirm-gated rewrite: writes the STORED proposed doc
 // (`last_chat.pending_rewrite`). The client sends only the interestId, never
 // the doc, so a tampered or stale client can't write arbitrary content.
@@ -363,6 +356,7 @@ async function runChatTurn(
       message,
       reply: output.reply,
       changes: applied,
+      ...(output.page ? { page: output.page } : {}),
       ...(pendingDeletes.length > 0
         ? { pending_deletes: pendingDeletes, pending_delete: pendingDeletes[0] }
         : {}),

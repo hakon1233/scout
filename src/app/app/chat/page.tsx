@@ -20,7 +20,7 @@ export default function ChatRedirectPage() {
         <p className="font-reading text-[15px] leading-relaxed text-secondary">
           Chat moved — it now lives on the{" "}
           <Link href="/app/interests" className="text-signal underline">
-            interests page
+            topics page
           </Link>
           .
         </p>

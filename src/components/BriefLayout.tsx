@@ -16,6 +16,8 @@ type Props = {
   // to hide its own siblings (banners, history pager); we use it to drop this
   // brief's "Your brief — <date>" header so the focused view is ONLY the story.
   onDetailOpenChange?: (open: boolean) => void;
+  // The topic filter beside the heading (TopicFilter), when the page has one.
+  filter?: React.ReactNode;
 };
 
 export function BriefLayout({
@@ -23,6 +25,7 @@ export function BriefLayout({
   name,
   heading,
   onDetailOpenChange,
+  filter,
 }: Props) {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const handleDetailOpenChange = React.useCallback(
@@ -42,13 +45,8 @@ export function BriefLayout({
   const title =
     heading ?? (brief.kind === "weekly" ? "Weekly brief" : ownerLabel);
 
-  // A deliberately bare header — title + date and NOTHING else. The
-  // old "Generated … · time" caption and the "Searched N topics · X articles"
-  // banner (whose counts were the source of the cosmetic counter bug) are gone,
-  // so the reader drops straight from the title into the headlines. The inline
-  // Run-now / Manage-interests footer card was removed too: Run-now now lives in
-  // the top-right profile menu, and Manage interests lives in the history pager
-  // at the bottom of the feed.
+  // A bare header: the date with "Written by AI", then the title and the
+  // topic filter. Run now and New topic live in the menu.
   return (
     <article
       aria-label={`${title} — ${dateLabel}`}
@@ -58,10 +56,20 @@ export function BriefLayout({
           the reader doesn't want to see — the detail carries its own headline
           and meta. Hide it so only the story remains. */}
       {!detailOpen && (
-        <header className="measure-prose flex flex-col gap-1">
-          <h1 className="text-title-1 text-primary">
-            {title} — {dateLabel}
-          </h1>
+        <header className="flex flex-col gap-1">
+          <p className="flex flex-wrap items-center gap-2 text-caption text-muted">
+            <span>{dateLabel}</span>
+            <span aria-hidden="true">·</span>
+            <span className="rounded-pill border border-border-default px-2 py-0.5 text-caption text-secondary">
+              Written by AI
+            </span>
+          </p>
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="min-w-0 text-title-1 text-primary [text-wrap:balance]">
+              {title}
+            </h1>
+            {filter}
+          </div>
         </header>
       )}
 

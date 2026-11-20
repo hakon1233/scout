@@ -13,8 +13,8 @@ type Props = {
 
 // Direction A enable/disable switch. A real `role="switch"` button (not a
 // styled checkbox) so it carries its on/off state to assistive tech and is
-// operable by keyboard for free. Track fills with the editorial signal-red
-// accent when on; the 44px-wide / 24px-tall hit area clears the WCAG 2.5.8
+// operable by keyboard for free. Track fills with the --good green
+// when on; the 44px-wide / 24px-tall hit area clears the WCAG 2.5.8
 // minimum target size. Honors prefers-reduced-motion via the global transition
 // token — the knob still moves, just without an animated slide when reduced.
 export function Toggle({
@@ -41,14 +41,16 @@ export function Toggle({
         "focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-page " +
         "disabled:cursor-not-allowed disabled:opacity-60 " +
         (checked
-          ? "border-signal bg-signal"
+          ? "border-good bg-good"
           : "border-border-strong bg-surface-muted")
       }
     >
       <span
         aria-hidden="true"
         className={
-          "inline-block size-4 rounded-full bg-white shadow-sm transition-transform duration-150 " +
+          // A drop-shadow filter, not box-shadow: the knob is part of the
+          // control, not a box nested in the settings group.
+          "inline-block size-4 rounded-full bg-white drop-shadow-sm transition-transform duration-150 " +
           (checked ? "translate-x-6" : "translate-x-1")
         }
       />

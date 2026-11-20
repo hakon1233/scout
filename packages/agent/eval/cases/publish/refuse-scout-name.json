@@ -1,0 +1,10 @@
+{
+  "input": {
+    "title": "Official Scout announcements",
+    "doc": "News about AI models and tools.",
+    "displayName": "The Sc0ut Team"
+  },
+  "expect": "refuse",
+  "output": "{\"verdict\":\"refuse\",\"reason\":\"Your display name looks like Scout's own. Choose a name of your own first.\",\"tags\":[]}",
+  "expectFail": []
+}

@@ -1,46 +1,20 @@
-// The trusted applier for chat: validates a model's proposed changes against
-// the interests we hold, mints ids server-side, writes intent docs, and holds
-// deletes and full rewrites back for the reader to confirm.
+// The companion's side of the chat change set: core's planChatChanges decides
+// what of a model's proposal lands (the same rules the hosted chat uses); this
+// module mints ids and writes the intent docs of what landed.
 
-import type {
-  ChatChange,
-  Interest,
-  PendingDelete,
-  PendingRewrite,
-} from "./contract.js";
-import type { ProposedChange } from "./chat-model.js";
-import {
-  deleteInterestDoc,
-  readInterestDoc,
-  writeInterestDoc,
-} from "./docs.js";
+import { planChatChanges, type Interest, type ProposedChange } from "#core";
+import type { ChatChange, PendingDelete, PendingRewrite } from "#core";
+import { buildInterestSnapshots } from "./chat-model.js";
+import { deleteInterestDoc, writeInterestDoc } from "./docs.js";
 import { MAX_INTEREST_LEN, MAX_INTERESTS } from "./limits.js";
 import { newInterestId } from "./state.js";
 
-// A topic the model proposed, held to the same length limit as the HTTP API;
-// "" when there is none.
-function proposedTopic(raw: unknown): string {
-  return typeof raw === "string" ? raw.trim().slice(0, MAX_INTEREST_LEN) : "";
-}
-
 // Apply the model's proposed changes to the doc store + interest list, returning
 // the new interest list and the change set that ACTUALLY landed (with concrete,
-// server-assigned ids). Every change is validated against `current`: an update or
-// delete naming an id we don't hold is dropped (so the model can never write an
-// arbitrary `<id>.md`), and a create past MAX_INTERESTS is dropped. The applied
-// list — never the model's raw proposal — is what we return to the client, so the
-// FE only ever sees confirmed writes.
-//
-// Delete is the one DESTRUCTIVE op, so it is confirm-gated. A model
-// `delete` is NOT applied here; it is collected into `pendingDeletes` and surfaced
-// to the FE as a [Delete]/[Cancel] proposal. The interest stays alive until the
-// user explicitly confirms via applyConfirmedDelete. create/update remain
-// auto-apply by design — do not gate those.
-//
-// A full from-scratch `rewrite` replaces the ENTIRE doc, so it is gated
-// the same way: collected into `pendingRewrites` (with the FULL proposed doc),
-// NOT written. The doc on disk stays byte-identical until the user presses
-// [Apply], which routes through applyConfirmedRewrite.
+// server-assigned ids). The rules live in core's planChatChanges: an id we don't
+// hold is dropped, a create past MAX_INTERESTS is dropped, and deletes and full
+// rewrites come back pending for the reader to confirm (applyConfirmedDelete,
+// confirmRewriteTurn). Only the applied creates and updates are written here.
 export async function applyChatChanges(
   current: Interest[],
   proposed: ProposedChange[],
@@ -51,62 +25,24 @@ export async function applyChatChanges(
   pendingDeletes: PendingDelete[];
   pendingRewrites: PendingRewrite[];
 }> {
-  const interests = [...current];
-  const applied: ChatChange[] = [];
-  const pendingDeletes: PendingDelete[] = [];
-  const pendingRewrites: PendingRewrite[] = [];
-
-  for (const ch of proposed) {
-    const op = ch.op;
-    if (op === "create") {
-      const topic = proposedTopic(ch.topic);
-      if (!topic) continue;
-      if (interests.length >= MAX_INTERESTS) continue;
-      const id = newInterestId();
-      const doc = typeof ch.doc === "string" ? ch.doc : "";
-      interests.push({ id, topic });
-      await writeInterestDoc(id, doc, interestsDir);
-      applied.push({ interestId: id, op: "create", topic, doc });
-    } else if (op === "update") {
-      const id = typeof ch.interestId === "string" ? ch.interestId : "";
-      const idx = interests.findIndex((i) => i.id === id);
-      if (idx === -1) continue; // never touch an id we don't own
-      const topic = proposedTopic(ch.topic) || interests[idx].topic;
-      const doc =
-        typeof ch.doc === "string"
-          ? ch.doc
-          : ((await readInterestDoc(id, interestsDir)) ?? "");
-      interests[idx] = { id, topic };
-      await writeInterestDoc(id, doc, interestsDir);
-      applied.push({ interestId: id, op: "update", topic, doc });
-    } else if (op === "rewrite") {
-      const id = typeof ch.interestId === "string" ? ch.interestId : "";
-      const idx = interests.findIndex((i) => i.id === id);
-      if (idx === -1) continue; // never touch an id we don't own
-      const doc = typeof ch.doc === "string" ? ch.doc : "";
-      if (!doc.trim()) continue; // a rewrite without a full doc is meaningless
-      // Confirm-gated: propose with the FULL doc, do NOT write. Dedup
-      // so a model that lists the same id twice still surfaces one card.
-      if (!pendingRewrites.some((p) => p.interestId === id)) {
-        pendingRewrites.push({
-          interestId: id,
-          topic: interests[idx].topic,
-          doc,
-        });
-      }
-    } else if (op === "delete") {
-      const id = typeof ch.interestId === "string" ? ch.interestId : "";
-      const idx = interests.findIndex((i) => i.id === id);
-      if (idx === -1) continue;
-      // Confirm-gated: propose, do NOT remove. Dedup so a model that lists the
-      // same id twice still surfaces one card.
-      if (!pendingDeletes.some((p) => p.interestId === id)) {
-        pendingDeletes.push({ interestId: id, topic: interests[idx].topic });
-      }
-    }
+  const plan = planChatChanges(
+    await buildInterestSnapshots(current, interestsDir),
+    proposed,
+    {
+      newId: newInterestId,
+      maxInterests: MAX_INTERESTS,
+      maxTopicLen: MAX_INTEREST_LEN,
+    },
+  );
+  for (const change of plan.applied) {
+    await writeInterestDoc(change.interestId, change.doc ?? "", interestsDir);
   }
-
-  return { interests, applied, pendingDeletes, pendingRewrites };
+  return {
+    interests: plan.interests.map(({ id, topic }) => ({ id, topic })),
+    applied: plan.applied,
+    pendingDeletes: plan.pendingDeletes,
+    pendingRewrites: plan.pendingRewrites,
+  };
 }
 
 // Perform a confirmed delete: the deterministic removal that runs only
@@ -128,24 +64,4 @@ export async function applyConfirmedDelete(
     interests,
     applied: { interestId, op: "delete", topic: removed.topic },
   };
-}
-
-// Apply an already-applied change set to another copy of the interest list,
-// such as the one on disk at save time.
-export function replayChanges(
-  list: Interest[],
-  changes: ChatChange[],
-): Interest[] {
-  let next = [...list];
-  for (const c of changes) {
-    const at = next.findIndex((i) => i.id === c.interestId);
-    if (c.op === "create" && at === -1 && c.topic) {
-      next.push({ id: c.interestId, topic: c.topic });
-    } else if (c.op === "update" && at !== -1 && c.topic) {
-      next[at] = { ...next[at], topic: c.topic };
-    } else if (c.op === "delete") {
-      next = next.filter((i) => i.id !== c.interestId);
-    }
-  }
-  return next;
 }

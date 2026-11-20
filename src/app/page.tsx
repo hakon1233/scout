@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { PairedEntryRedirect } from "@/components/PairedEntryRedirect";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { isHostedBuild } from "@/lib/auth";
+import { PLANS, priceText } from "@/lib/plans";
 
 // Direction A — Editorial / "Private Wire Service".
 // Masthead → hero (with sample brief filed alongside) → how-it-works →
@@ -9,7 +11,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 const steps = [
   {
     n: "01",
-    title: "Pick your interests",
+    title: "Pick your topics",
     body: "Tell Scout the topics, beats, and questions you actually care about — in plain language.",
   },
   {
@@ -74,10 +76,39 @@ function CompassMark({ className = "" }: { className?: string }) {
   );
 }
 
+// The lines that differ between the hosted site and the local companion build:
+// the hosted app signs in with Google and researches in the cloud.
+function landingCopy(hosted: boolean) {
+  if (hosted) {
+    return {
+      badges: [
+        "Sign in with Google",
+        "Research runs in the cloud",
+        `Free plan, or Plus for ${priceText(PLANS.plus)}`,
+      ],
+      closing: `Sign in with Google and Scout researches your topics for you. The Free plan covers ${PLANS.free.topics} topics; no card needed.`,
+      privacyHref: "/app/privacy/",
+    };
+  }
+  return {
+    badges: [
+      "Local-first & private",
+      "Bring your own model",
+      "No tracking, no inbox spam",
+    ],
+    closing:
+      "Runs as a loopback companion to your local Claude Code CLI. No extra keys, nothing leaves your machine.",
+    privacyHref: "#privacy",
+  };
+}
+
 const navLink =
   "text-secondary transition-colors hover:text-primary no-underline";
 
 export default function Home() {
+  const hosted = isHostedBuild();
+  const copy = landingCopy(hosted);
+  const icons = [ShieldIcon, ForkIcon, NoTrackIcon];
   return (
     <main className="min-h-screen bg-page font-sans text-primary">
       <PairedEntryRedirect />
@@ -100,7 +131,7 @@ export default function Home() {
               <a href="#how-it-works" className={navLink}>
                 How it works
               </a>
-              <a href="#privacy" className={navLink}>
+              <a href={copy.privacyHref} className={navLink}>
                 Privacy
               </a>
               <a
@@ -139,7 +170,7 @@ export default function Home() {
               <em className="italic text-signal">written</em> by agents.
             </h1>
             <p className="mb-7 max-w-[30em] font-reading text-[21px] leading-[1.5] text-secondary">
-              Set your interests once. Scout&apos;s agents read the open web,
+              Set your topics once. Scout&apos;s agents read the open web,
               dedupe the noise, and file one clean editorial brief — only the
               stories you asked for.
             </p>
@@ -161,18 +192,15 @@ export default function Home() {
               id="privacy"
               className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-muted"
             >
-              <span className="flex items-center gap-2">
-                <ShieldIcon />
-                Local-first &amp; private
-              </span>
-              <span className="flex items-center gap-2">
-                <ForkIcon />
-                Bring your own model
-              </span>
-              <span className="flex items-center gap-2">
-                <NoTrackIcon />
-                No tracking, no inbox spam
-              </span>
+              {copy.badges.map((badge, i) => {
+                const Icon = icons[i];
+                return (
+                  <span key={badge} className="flex items-center gap-2">
+                    <Icon />
+                    {badge}
+                  </span>
+                );
+              })}
             </div>
           </div>
 
@@ -221,7 +249,7 @@ export default function Home() {
         <section id="how-it-works" className="py-10 lg:py-16">
           <div className="mb-9 flex items-baseline justify-between border-b border-border-default pb-3.5">
             <h2 className="font-serif text-[26px] font-semibold tracking-[-0.02em] sm:text-[34px]">
-              From interests to brief, in three moves.
+              From topics to brief, in three moves.
             </h2>
             <span className="hidden font-mono text-[12px] uppercase tracking-[0.1em] text-muted sm:inline">
               How it works
@@ -260,8 +288,7 @@ export default function Home() {
               Filed every morning.
             </h2>
             <p className="mt-2 font-reading text-[17px] text-accent-fg/70">
-              Runs as a loopback companion to your local Claude Code CLI. No
-              extra keys, nothing leaves your machine.
+              {copy.closing}
             </p>
           </div>
           <Link
@@ -276,7 +303,18 @@ export default function Home() {
       {/* Colophon */}
       <footer className="mx-auto mt-8 flex w-full max-w-[1120px] flex-col gap-2 border-t border-border-default px-7 py-9 font-mono text-[13px] tracking-[0.04em] text-muted sm:flex-row sm:justify-between">
         <span>Scout · Personalized news by agents</span>
-        <span>Local-first · Open source · 2026</span>
+        {hosted ? (
+          <span className="flex gap-5">
+            <Link href="/app/privacy/" className={navLink}>
+              Privacy
+            </Link>
+            <Link href="/app/terms/" className={navLink}>
+              Terms
+            </Link>
+          </span>
+        ) : (
+          <span>Local-first · Open source · 2026</span>
+        )}
       </footer>
     </main>
   );

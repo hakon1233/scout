@@ -20,7 +20,7 @@ import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
 import { loadState, saveState } from "../src/state.js";
-import type { Brief, Interest } from "../src/contract.js";
+import type { Brief, Interest } from "#core";
 import { startRun, summarizeSessionFailures } from "../src/runner.js";
 import { writeInterestDoc, defaultInterestDoc } from "../src/docs.js";
 
@@ -164,10 +164,10 @@ test("the brief snapshots each topic's intent doc into `bases`", async () => {
   const seeded = bases.find((b) => b.topic === "ai");
   const bare = bases.find((b) => b.topic === "climate");
   assert.ok(seeded, "a basis snapshot exists for the seeded topic");
-  assert.equal(seeded!.doc, customDoc, "custom doc is snapshotted verbatim");
+  assert.equal(seeded.doc, customDoc, "custom doc is snapshotted verbatim");
   assert.ok(bare, "a basis snapshot exists for the docless topic");
   assert.equal(
-    bare!.doc,
+    bare.doc,
     defaultInterestDoc("climate"),
     "docless topic snapshots the backfilled default",
   );

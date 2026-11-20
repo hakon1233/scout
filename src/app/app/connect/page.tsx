@@ -53,7 +53,7 @@ export default function ConnectPage() {
   useEffect(() => {
     // When served from the companion (same-origin — loopback or an HTTPS proxy),
     // auto-adopt the pairing token from /v0/config so the user skips copy/paste.
-    (async () => {
+    void (async () => {
       const tok = await bootstrapCompanionToken();
       setToken(tok);
       setHasSavedToken(Boolean(tok));
@@ -68,8 +68,8 @@ export default function ConnectPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    check();
-    intervalRef.current = setInterval(check, 8000);
+    void check();
+    intervalRef.current = setInterval(() => void check(), 8000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -92,7 +92,7 @@ export default function ConnectPage() {
   }, [token]);
 
   const copy = useCallback((text: string, key: string) => {
-    navigator.clipboard.writeText(text).then(() => {
+    void navigator.clipboard.writeText(text).then(() => {
       setCopied(key);
       setTimeout(() => setCopied(null), 1500);
     });
@@ -101,7 +101,7 @@ export default function ConnectPage() {
   const handleGenerate = useCallback(async () => {
     const settings = loadSettings();
     if (!settings || settings.interests.length === 0) {
-      setGenMsg("No interests set yet.");
+      setGenMsg("No topics set yet.");
       setGenState("error");
       return;
     }
@@ -203,7 +203,7 @@ export default function ConnectPage() {
 
   const generateLabel =
     genState === "posting"
-      ? "Sending interests…"
+      ? "Sending topics…"
       : genState === "polling"
         ? "Generating brief…"
         : genState === "done"
@@ -225,7 +225,7 @@ export default function ConnectPage() {
             <a
               href="/app/interests"
               aria-label="Open your profile"
-              title="Profile & interests"
+              title="Topics"
               className="inline-flex size-7 items-center justify-center rounded-pill border border-border-default text-muted transition-colors hover:text-primary"
             >
               <svg
@@ -283,7 +283,7 @@ export default function ConnectPage() {
             {statusLabel}
           </span>
           <button
-            onClick={check}
+            onClick={() => void check()}
             className="ml-auto font-mono text-[11px] uppercase tracking-[0.08em] text-muted underline underline-offset-2 transition-colors hover:text-primary"
           >
             refresh
@@ -309,19 +309,19 @@ export default function ConnectPage() {
                 className="w-full"
                 disabled={generating}
                 loading={generating}
-                onClick={handleGenerate}
+                onClick={() => void handleGenerate()}
               >
                 {generateLabel}
               </Button>
 
               {!hasInterests && genState === "idle" && (
                 <p className="text-sm text-secondary">
-                  No interests set yet.{" "}
+                  No topics set yet.{" "}
                   <a
                     href="/app"
                     className="text-signal underline underline-offset-2"
                   >
-                    Set your interests first →
+                    Set your topics first →
                   </a>
                 </p>
               )}
@@ -344,7 +344,7 @@ export default function ConnectPage() {
                         href="/app"
                         className="text-signal underline underline-offset-2"
                       >
-                        Set your interests first →
+                        Set your topics first →
                       </a>
                     </>
                   )}
@@ -409,7 +409,10 @@ export default function ConnectPage() {
                       placeholder="Paste pairing token here"
                       className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
                     />
-                    <Button variant="primary" onClick={handleSaveToken}>
+                    <Button
+                      variant="primary"
+                      onClick={() => void handleSaveToken()}
+                    >
                       Save
                     </Button>
                   </div>
@@ -455,7 +458,10 @@ export default function ConnectPage() {
                   placeholder="Paste pairing token here"
                   className="flex-1 rounded-[6px] border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-focus-ring"
                 />
-                <Button variant="primary" onClick={handleSaveToken}>
+                <Button
+                  variant="primary"
+                  onClick={() => void handleSaveToken()}
+                >
                   Save
                 </Button>
               </div>
@@ -496,13 +502,13 @@ export default function ConnectPage() {
               </h2>
               <p className="text-sm text-secondary">
                 With the companion running, click below to kick off a brief
-                using your saved interests.
+                using your saved topics.
               </p>
               <Button
                 variant="primary"
                 className="w-full"
                 disabled={status !== "connected" || generating}
-                onClick={handleGenerate}
+                onClick={() => void handleGenerate()}
               >
                 {generateLabel}
               </Button>

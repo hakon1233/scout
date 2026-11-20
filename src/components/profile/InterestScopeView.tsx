@@ -1,8 +1,73 @@
 "use client";
 
+import * as React from "react";
+import type { BriefSettings } from "@scout/core";
+import { BriefSettingsGroup } from "@/components/BriefSettingsGroup";
 import { EmptyState } from "@/components/ui";
+import {
+  bootstrapCompanionToken,
+  fetchInterestSettings,
+  loadCompanionToken,
+  updateInterestSettings,
+} from "@/lib/companion";
+import { formatDocDate } from "@/lib/format-date";
+import { DOC_MARKDOWN } from "./DocMarkdown";
 import { LazyMarkdown } from "./LazyMarkdown";
 import type { DocCardModel } from "./InterestDocCard";
+
+// The topic's brief settings, read from and saved to the companion. Hidden
+// when there is no paired companion (the `?mock` review pages) or it doesn't
+// know the topic; a failed load says so in place.
+function CompanionBriefSettings({ interestId }: { interestId: string }) {
+  const [settings, setSettings] = React.useState<BriefSettings | null>(null);
+  const [state, setState] = React.useState<"loading" | "ready" | "none">(
+    "loading",
+  );
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let live = true;
+    bootstrapCompanionToken()
+      .then((token) =>
+        token ? fetchInterestSettings(token, interestId) : null,
+      )
+      .then((s) => {
+        if (!live) return;
+        setSettings(s);
+        setState(s ? "ready" : "none");
+      })
+      .catch((err: unknown) => {
+        if (!live) return;
+        setLoadError(
+          err instanceof Error ? err.message : "Couldn't load the settings.",
+        );
+        setState("ready");
+      });
+    return () => {
+      live = false;
+    };
+  }, [interestId]);
+
+  const save = React.useCallback(
+    (change: Partial<BriefSettings>) =>
+      updateInterestSettings(loadCompanionToken(), interestId, change),
+    [interestId],
+  );
+
+  if (state === "none") return null;
+  if (loadError) {
+    return (
+      <p role="alert" className="text-body-sm text-danger">
+        {loadError}
+      </p>
+    );
+  }
+  return (
+    <div className="max-w-2xl">
+      <BriefSettingsGroup settings={settings} save={save} />
+    </div>
+  );
+}
 
 // The single-interest "Research scope" detail rendered INSIDE
 // the interests workbench's left pane, so the chat column on the right stays
@@ -10,68 +75,6 @@ import type { DocCardModel } from "./InterestDocCard";
 // reader drills into one doc. Mirrors the standalone
 // /app/interests/interest page's editorial layout; that route remains for
 // old deep links / new-tab opens.
-
-const MD = {
-  h1: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h1
-      className="mb-4 font-serif text-[30px] font-semibold leading-tight text-primary"
-      {...p}
-    />
-  ),
-  h2: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2
-      className="mb-2 mt-7 font-mono text-[12px] font-medium uppercase tracking-[0.1em] text-secondary first:mt-0"
-      {...p}
-    />
-  ),
-  h3: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3 className="mb-2 mt-5 font-serif text-[20px] text-primary" {...p} />
-  ),
-  p: (p: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p
-      className="my-3 font-reading text-[16px] leading-relaxed text-secondary"
-      {...p}
-    />
-  ),
-  ul: (p: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul
-      className="my-3 list-disc space-y-2 pl-6 font-reading text-[16px] leading-relaxed text-secondary"
-      {...p}
-    />
-  ),
-  ol: (p: React.HTMLAttributes<HTMLOListElement>) => (
-    <ol
-      className="my-3 list-decimal space-y-2 pl-6 font-reading text-[16px] leading-relaxed text-secondary"
-      {...p}
-    />
-  ),
-  li: (p: React.HTMLAttributes<HTMLLIElement>) => (
-    <li className="pl-1" {...p} />
-  ),
-  strong: (p: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="font-semibold text-primary" {...p} />
-  ),
-  a: (p: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a className="text-signal underline underline-offset-2" {...p} />
-  ),
-  code: (p: React.HTMLAttributes<HTMLElement>) => (
-    <code
-      className="rounded bg-surface-muted px-1 py-0.5 font-mono text-[13px] text-primary"
-      {...p}
-    />
-  ),
-};
-
-function formatDocDate(iso?: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export function InterestScopeView({
   model,
@@ -87,52 +90,51 @@ export function InterestScopeView({
 }) {
   return (
     <div className="space-y-8">
-      <div className="font-mono text-[12px] uppercase tracking-[0.06em] text-muted">
+      <div className="text-body-sm font-medium text-muted">
         <button
           type="button"
           onClick={onBack}
           className="transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
         >
-          ← Interests
+          ← Topics
         </button>
       </div>
 
       {!model ? (
         <EmptyState
-          title="Interest not found"
-          body="Return to Interests and open an interest from the list."
+          title="Topic not found"
+          body="Return to Topics and open a topic from the list."
         />
       ) : (
         <>
           <header className="border-b border-border-default pb-5">
-            <p className="mb-3 flex items-center gap-2.5 font-mono text-[12px] uppercase tracking-[0.14em] text-signal">
-              <span className="h-[1.5px] w-[26px] bg-signal" />
+            <p className="mb-2 text-body-sm font-medium text-muted">
               Assignment
             </p>
-            <h1 className="font-serif text-[36px] font-semibold leading-[1.08] tracking-[-0.02em]">
-              {model.topic}
-            </h1>
+            <h1 className="font-serif text-title-1">{model.topic}</h1>
             {model.updatedAt && (
-              <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+              <p className="mt-2 text-body-sm text-muted">
                 Assignment updated {formatDocDate(model.updatedAt)}
               </p>
             )}
           </header>
 
+          <CompanionBriefSettings interestId={model.key} />
+
           <section className="max-w-3xl">
             {model.body ? (
               <div className="scout-md">
-                <LazyMarkdown text={model.body} components={MD} />
+                <LazyMarkdown text={model.body} components={DOC_MARKDOWN} />
               </div>
             ) : model.hasDoc ? (
-              <p className="font-reading text-[16px] leading-relaxed text-secondary">
-                Scout has an assignment for this interest, but the companion did
+              <p className="font-reading text-body leading-relaxed text-secondary">
+                Scout has an assignment for this topic, but the companion did
                 not return its markdown in this session.
               </p>
             ) : (
               <EmptyState
                 title="No assignment yet"
-                body="Refine this interest in chat to create the assignment Scout will follow."
+                body="Refine this topic in chat to create the assignment Scout will follow."
               />
             )}
           </section>
@@ -142,7 +144,7 @@ export function InterestScopeView({
               <button
                 type="button"
                 onClick={onRefine}
-                className="rounded-pill border border-border-default px-3 py-2 font-mono text-[11px] uppercase tracking-[0.06em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                className="rounded-pill border border-border-default px-3 py-2 text-caption font-medium text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
               >
                 Refine in chat
               </button>

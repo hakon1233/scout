@@ -29,3 +29,16 @@ export function formatDate(iso: string): string {
     year: "numeric",
   });
 }
+
+// An intent doc's "updated" date ("Nov 20, 2026"; "Nov 20" without the year
+// on a doc card), or "" when the date is missing or unreadable.
+export function formatDocDate(iso?: string, { year = true } = {}): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(year ? { year: "numeric" } : {}),
+  });
+}

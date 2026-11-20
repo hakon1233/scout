@@ -15,7 +15,7 @@ import {
   updateState,
   type ScheduleConfig,
 } from "./state.js";
-import type { Brief } from "./contract.js";
+import type { Brief } from "#core";
 import {
   recordScheduledSkip,
   startRun,
@@ -23,20 +23,19 @@ import {
   type RunOptions,
   type RunSource,
 } from "./runner.js";
+import { USAGE_LIMIT_RE } from "./claude-runner.js";
 
 // setTimeout overflows past ~24.8 days (2^31-1 ms) and fires immediately. Daily
 // schedules are always well under that, but clamp defensively.
 const MAX_TIMER_MS = 2_147_483_647;
 
-// Automatically RETRY a failed scheduled run a few times, spaced out, before
-// giving up for the day. A transient Claude usage/session-limit at exactly 07:00
-// can kill the WHOLE day's brief with no self-heal — the user sees a silent
-// stop. Re-running ~45 min later a handful of times rides over that limit window
-// (which typically clears within an hour) without any user intervention. Like
+// Retry a failed scheduled run ONCE, 45 min later, then give up for the day.
+// A run that failed on a Claude usage or rate limit is not retried: another
+// attempt only spends more of the same limit (run guardrails, plan.md). Like
 // the schedule itself this lives in-process (not reboot-durable) — an accepted
 // limit; a durable LaunchAgent is the reboot story.
-const RETRY_DELAY_MS = 45 * 60 * 1000; // 45 min between attempts
-const MAX_SCHEDULED_RETRIES = 3; // up to 3 retries → 4 attempts total (~07:00–09:15)
+const RETRY_DELAY_MS = 45 * 60 * 1000;
+const MAX_SCHEDULED_RETRIES = 1;
 
 // Topics the model DROPPED in `brief` (coverage "missing") — exactly what a
 // focused retry can recover by re-researching just them and merging into the
@@ -304,6 +303,12 @@ export class Scheduler {
     const droppedTopics = missingTopics(brief).length > 0;
     if (!failedWholeRun && !droppedTopics) {
       this.retryCount = 0;
+      return;
+    }
+    if (failedWholeRun && USAGE_LIMIT_RE.test(brief.error_msg ?? "")) {
+      console.warn(
+        "[scheduler] scheduled run hit a Claude usage limit; not retrying",
+      );
       return;
     }
     if (this.retryCount >= this.maxRetries) {

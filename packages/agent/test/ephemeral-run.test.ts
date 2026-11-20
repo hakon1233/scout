@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
 import { loadState, saveState, newPairingToken } from "../src/state.js";
-import type { Brief } from "../src/contract.js";
+import type { Brief } from "#core";
 import { startServer } from "../src/server.js";
 
 // A claude stub: each per-interest session emits that one topic's section.
@@ -124,8 +124,7 @@ test("ephemeral run produces a brief but never mutates the user's saved interest
     // test payload did NOT replace or shrink them.
     const state = await loadState(stateFile);
     assert.equal(
-      (state.last_brief as (Brief & { ephemeral?: boolean }) | undefined)
-        ?.ephemeral,
+      state.last_brief?.ephemeral,
       true,
       "the persisted last_brief slot must retain its ephemeral provenance",
     );

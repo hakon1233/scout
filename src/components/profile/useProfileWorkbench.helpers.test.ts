@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ChatTurn } from "@scout/agent/contract";
+import type { ChatTurn } from "@scout/core";
 import type { ChatMessage } from "./ChatDock";
 import {
   appliedChangeMessage,
@@ -312,4 +312,19 @@ test("saved settings follow the workbench's interests, including deleting the la
   assert.equal(mirroredSettings(stored, stored.interests), null);
   // Nothing saved yet: nothing to keep in step.
   assert.equal(mirroredSettings(null, []), null);
+});
+
+test("a reloaded chat bubble shows what the reader typed, not the model's scope prefix", () => {
+  const turns: ChatTurn[] = [
+    {
+      id: "turn_1",
+      created_at: "2026-07-11T12:00:00.000Z",
+      status: "ready",
+      message: 'Regarding my interest "AI safety": what changed?',
+      reply: "Here is what changed.",
+    },
+  ];
+  const you = transcriptMessages(turns).find((m) => m.role === "you");
+  assert.equal(you?.text, "what changed?");
+  assert.doesNotMatch(you?.text ?? "", /interest/i);
 });

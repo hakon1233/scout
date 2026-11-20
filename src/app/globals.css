@@ -55,8 +55,8 @@
     Direction A — Editorial / "Private Wire Service".
     Warm-paper canvas, ink type, signal-red dateline accent, editorial serif.
   */
-  --paper: #f6f2ea;
-  --paper-2: #efe9dd;
+  --paper: #f3eee4;
+  --paper-2: #ece4d6;
   --ink: #1c1a17;
   --ink-2: #46413a;
   --ink-3: #6f685d;
@@ -107,7 +107,23 @@
   --warning-bg: #f6ecd6;
   --warning-fg: #7a5a1e;
   --warning-border: #ddc89a;
-  --focus-ring: var(--accent-signal);
+  --focus-ring: var(--accent-deep);
+  /* "On" for switches and plan meters: a real good outcome, not the accent. */
+  --good: #2f6b4a;
+
+  /*
+    Liquid glass — only for things that float over the page: the top logo pill,
+    the menu button, the menu popover, sheets and toasts. Content cards stay
+    solid surfaces (bg-surface + border). Used through the .glass class below.
+  */
+  --glass: rgb(255 251 244 / 0.46);
+  --glass-strong: rgb(255 251 244 / 0.72);
+  --glass-edge: rgb(255 255 255 / 0.85);
+  --glass-line: rgb(80 55 30 / 0.16);
+  --glass-sheen: rgb(255 255 255 / 0.55);
+  --float-shadow:
+    0 12px 32px rgb(70 45 20 / 0.16), 0 2px 6px rgb(70 45 20 / 0.08);
+  --scrim: rgb(30 20 10 / 0.22);
 
   /* Space — 4px base */
   --space-1: 0.25rem;
@@ -131,40 +147,44 @@
 }
 
 :root.dark {
-  /* Direction A dark — warm "ink room": darkened paper, not neutral black. */
-  --bg-page: #16140f;
-  --bg-surface: #1d1a14;
-  --bg-surface-muted: #24201a;
-  /* Raised/selected fill (dark) — a step up from surface-muted toward border. */
-  --bg-surface-strong: #2e2920;
-  --border-default: #37322a;
-  --border-strong: #4b443a;
-  --text-primary: #f1ece1;
-  --text-secondary: #cabfac;
-  --text-muted: #9a917f;
-  --accent-bg: #f1ece1;
-  --accent-fg: #1c1a17;
+  /* Plain dark: a quiet blue-black ground so the glass reads on top of it. */
+  --bg-page: #12141a;
+  --bg-surface: #1c1f27;
+  --bg-surface-muted: #252a34;
+  --bg-surface-strong: #2d3340;
+  --border-default: rgb(255 255 255 / 0.09);
+  --border-strong: rgb(255 255 255 / 0.18);
+  --text-primary: #ede8df;
+  --text-secondary: #c6bfb3;
+  --text-muted: #958e82;
+  --accent-bg: #ede8df;
+  --accent-fg: #15171d;
   --accent-bg-hover: #ffffff;
-  /* Lightened from #c4553f (3.89:1 on --bg-surface, fails AA) to
-     4.85:1 against #1d1a14, keeping the same warm brick-red hue family. */
-  --accent-signal: #d2694c;
+  --accent-signal: #e48a73;
   --accent-deep: #7da7bd;
-  --danger-bg: #2c1a16;
-  --danger-bg-hover: #3a201a;
-  --danger-fg: #e6a99c;
-  --danger-border: #5a342b;
-  /* Warm "ink room" info — recessed parchment-dark + warm-tan text, matching
-       the PAIR COMPANION link. Replaces the cold teal #16242b/#9fc4d4. */
-  --info-bg: #221d14;
+  --danger-bg: #3a2220;
+  --danger-bg-hover: #472926;
+  --danger-fg: #f08a78;
+  --danger-border: #6a3a33;
+  --info-bg: #1f2430;
   --info-fg: var(--text-secondary);
-  --info-border: #463c2c;
-  --success-bg: #1a241544;
-  --success-fg: #a6c596;
-  --success-border: #3a4d2f;
-  --warning-bg: #2a2310;
+  --info-border: #343b4a;
+  --success-bg: #1a2a22;
+  --success-fg: #7cc49b;
+  --success-border: #2f4a3b;
+  --warning-bg: #2a2516;
   --warning-fg: #d8bd86;
   --warning-border: #4d4324;
-  --focus-ring: var(--accent-signal);
+  --focus-ring: var(--accent-deep);
+  --good: #4f9a71;
+
+  --glass: rgb(34 38 48 / 0.42);
+  --glass-strong: rgb(30 34 44 / 0.74);
+  --glass-edge: rgb(255 255 255 / 0.18);
+  --glass-line: rgb(255 255 255 / 0.11);
+  --glass-sheen: rgb(255 255 255 / 0.1);
+  --float-shadow: 0 14px 36px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.3);
+  --scrim: rgb(0 0 0 / 0.45);
 }
 
 @theme {
@@ -195,12 +215,14 @@
   --color-warning-border: var(--warning-border);
   --color-focus-ring: var(--focus-ring);
   --color-signal: var(--accent-signal);
+  --color-good: var(--good);
   --color-signal-deep: var(--accent-deep);
   --color-paper-card: var(--card);
 
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
+  --radius-card: 1.125rem;
   --radius-pill: 9999px;
 
   --text-display: 2.5rem;
@@ -244,12 +266,6 @@
 
 body {
   background: var(--bg-page);
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    color-mix(in srgb, var(--text-primary) 4%, transparent) 1px,
-    transparent 0
-  );
-  background-size: 22px 22px;
   color: var(--text-primary);
   font-family: var(--font-sans);
   line-height: 1.6;
@@ -284,6 +300,56 @@ body {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/*
+  Liquid glass for floating chrome (top pills, menu, sheets). A CSS rule, not
+  utilities, because it needs the ::before sheen and the solid fallbacks:
+  browsers without backdrop-filter, and readers who ask for less transparency
+  or more contrast, get a plain surface.
+*/
+@layer components {
+  /* In the components layer so position utilities (fixed, absolute) win. */
+  .glass {
+    position: relative;
+    isolation: isolate;
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(22px) saturate(1.8);
+    backdrop-filter: blur(22px) saturate(1.8);
+    box-shadow:
+      inset 0 0 0 1px var(--glass-line),
+      inset 0 1px 0 var(--glass-edge),
+      var(--float-shadow);
+  }
+  .glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(180deg, var(--glass-sheen), transparent 46%);
+  }
+  .glass-strong {
+    background: var(--glass-strong);
+  }
+  @supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+  ) {
+    .glass {
+      background: var(--bg-surface);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .glass {
+      background: var(--bg-surface);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+    .glass::before {
+      display: none;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -9,11 +9,24 @@ reader's own machine through their Claude Code CLI; the website only shows the r
 
 **Interest**:
 Something the reader wants news about, with a stable id and a short **topic** (its headline).
-_Avoid_: subscription, feed item
+On screen it is called a **topic** ("Topics", "New topic", "Manage topics"); the word
+"interest" stays in code, the HTTP contract and the database only.
+Naming rule: code and database names stay "interest" (tables, columns, core types, the
+contract, `interestId`). On-screen text, and the names of UI components and routes, may
+say "topic" (`HostedTopics`, `TopicCard`, `/app/topics/`). The public catalog's SQL
+functions that already say topic (`browse_topics`, `set_topic_tags`, `report_topic`)
+keep their names; new database names say interest.
+_Avoid_: subscription, feed item; "interest" in any on-screen text
 
 **Topic**:
 The short headline of an interest, also used verbatim as the heading of its section in a brief.
 _Avoid_: tag, category
+
+**Visibility**:
+Who may follow an interest: private (only its owner), shared (anyone with its share link)
+or public (in the catalog the setup chat suggests; an admin's call). A follower gets the
+host's briefs for that interest and pays nothing; the runs count on the host's plan.
+_Avoid_: published, subscribed
 
 **Intent doc**:
 A short markdown note per interest that says what the reader wants from it; it is given to
@@ -56,8 +69,15 @@ and an in-depth body.
 _Avoid_: article (the UI's type name), item, post
 
 **Coverage**:
-Whether each topic of a run came back covered (has stories), empty (the model found no fresh
-news) or missing (its session failed or the section was dropped).
+Whether each topic of a run came back covered (has stories), empty (nothing cleared the
+relevance bar, so the section says "No change since <date>." or "No news yet.") or missing
+(its session failed or the section was dropped).
+
+**Brief settings**:
+Per interest: how long its section is, how many stories it may carry (a number, or only
+the relevant ones), whether old items still count (evergreen), and which locale to search
+in and language to write in. Every run's prompt uses them.
+_Avoid_: preferences, options
 
 **Basis**:
 The exact topic and intent doc a run used for one interest, kept with the brief.
@@ -65,6 +85,10 @@ The exact topic and intent doc a run used for one interest, kept with the brief.
 **Search skills**:
 The fixed research rules given to the model on every run (recency, dates, source quality,
 story format).
+
+**Relevance skills**:
+The fixed rules for when a story earns a place in a section. A run that finds nothing
+relevant enough posts nothing rather than pad.
 
 **Assembly skills**:
 The plain-language description of how sections become one ordered brief; enforced in code,

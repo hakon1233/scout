@@ -8,8 +8,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Interest } from "../src/contract.js";
-import { type Check, checkChatOutput, checkResearchOutput } from "./checks.js";
+import type { Interest, PublishInput } from "#core";
+import {
+  type Check,
+  checkChatOutput,
+  checkPublishOutput,
+  checkResearchOutput,
+} from "./checks.js";
 
 const CASES_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -17,7 +22,7 @@ const CASES_DIR = path.join(
 );
 
 export type CaseResult = {
-  kind: "research" | "chat";
+  kind: "research" | "chat" | "publish";
   name: string;
   checks: Check[];
   expectFail: string[];
@@ -37,8 +42,9 @@ function result(
   return { kind, name, checks, expectFail, ok };
 }
 
-// Research case: first line `<!-- topic: … | today: YYYY-MM-DD | expect-fail: a, b -->`,
-// the rest is the session's raw output.
+// Research case: first line `<!-- topic: … | today: YYYY-MM-DD | last-story:
+// YYYY-MM-DD | past: url-or-title ; … | expect-fail: a, b -->` (last-story and
+// past optional), the rest is the session's raw output.
 async function researchCases(): Promise<CaseResult[]> {
   const dir = path.join(CASES_DIR, "research");
   const results: CaseResult[] = [];
@@ -49,7 +55,10 @@ async function researchCases(): Promise<CaseResult[]> {
       header
         .replace(/^<!--|-->$/g, "")
         .split("|")
-        .map((part) => part.split(":").map((s) => s.trim())),
+        .map((part) => {
+          const at = part.indexOf(":");
+          return [part.slice(0, at).trim(), part.slice(at + 1).trim()];
+        }),
     ) as Record<string, string>;
     const expectFail = (meta["expect-fail"] ?? "")
       .split(",")
@@ -58,6 +67,11 @@ async function researchCases(): Promise<CaseResult[]> {
     const checks = checkResearchOutput(rest.join("\n"), {
       topic: meta.topic,
       today: meta.today,
+      lastStory: meta["last-story"] || undefined,
+      past: (meta.past ?? "")
+        .split(";")
+        .map((s) => s.trim())
+        .filter(Boolean),
     });
     results.push(
       result("research", file.replace(/\.md$/, ""), checks, expectFail),
@@ -67,12 +81,14 @@ async function researchCases(): Promise<CaseResult[]> {
 }
 
 type ChatCase = {
+  message?: string;
   interests: Interest[];
   output: string;
   expect: {
     applied: string[];
     pendingDelete?: string;
     pendingRewrite?: string;
+    page?: string;
   };
   expectFail: string[];
 };
@@ -92,8 +108,37 @@ async function chatCases(): Promise<CaseResult[]> {
   return results;
 }
 
+// Publish case: the topic as the check sees it, the verdict it should get and
+// the model's raw output.
+type PublishCase = {
+  input: PublishInput;
+  expect: "approve" | "refuse";
+  wantTags?: string[];
+  output: string;
+  expectFail: string[];
+};
+
+async function publishCases(): Promise<CaseResult[]> {
+  const dir = path.join(CASES_DIR, "publish");
+  const results: CaseResult[] = [];
+  for (const file of (await fs.readdir(dir)).sort()) {
+    const c = JSON.parse(
+      await fs.readFile(path.join(dir, file), "utf8"),
+    ) as PublishCase;
+    const checks = checkPublishOutput(c.output, c);
+    results.push(
+      result("publish", file.replace(/\.json$/, ""), checks, c.expectFail),
+    );
+  }
+  return results;
+}
+
 export async function runEval(): Promise<CaseResult[]> {
-  return [...(await researchCases()), ...(await chatCases())];
+  return [
+    ...(await researchCases()),
+    ...(await chatCases()),
+    ...(await publishCases()),
+  ];
 }
 
 function report(results: CaseResult[]): string {

@@ -1,10 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isLiked, likeKey, toggleLike } from "./likes";
+import {
+  followLikes,
+  isLiked,
+  isSaved,
+  type LikedStory,
+  likeKey,
+  type LikesSync,
+  setLikesUser,
+  setSavesUser,
+  toggleLike,
+  toggleSave,
+} from "./likes";
 
-// The device-local likes store: likes persist, a swallowed persist still holds
-// for the session, and a corrupt stored value reads as an empty store.
+// The likes store: likes persist, a swallowed persist still holds for the
+// session, a corrupt stored value reads as an empty store, and a signed-in
+// reader's likes live in the database without device likes leaking in.
 
 const LIKES_KEY = "scout.likes.v1";
 
@@ -161,3 +173,185 @@ for (const { name, raw } of [
     }
   });
 }
+
+function memorySync(stories: LikedStory[] = []) {
+  const sent: string[] = [];
+  const sync: LikesSync = {
+    async list() {
+      return stories;
+    },
+    async add(story) {
+      sent.push(`add ${story.key}`);
+    },
+    async remove(key) {
+      sent.push(`remove ${key}`);
+    },
+  };
+  return { sync, sent };
+}
+
+const story = (url: string) => ({
+  url,
+  headline: "H",
+  source: "example.com",
+  topic: "AI",
+});
+
+test("signed in, likes load from the database and each toggle is sent there", async () => {
+  const { backing, restore } = installStorage({ failWrites: false });
+  const saved = "https://example.com/saved-in-db";
+  const db = memorySync([
+    { ...story(saved), key: likeKey(saved), likedAt: "2026-11-20T10:00:00Z" },
+  ]);
+  try {
+    await setLikesUser("user-anna", db.sync);
+    assert.equal(isLiked(likeKey(saved)), true);
+    const fresh = "https://example.com/fresh";
+    toggleLike(story(fresh));
+    toggleLike(story(saved));
+    assert.deepEqual(db.sent, [
+      `add ${likeKey(fresh)}`,
+      `remove ${likeKey(saved)}`,
+    ]);
+    assert.ok(backing.has(`${LIKES_KEY}:user-anna`));
+    assert.equal(backing.has(LIKES_KEY), false);
+  } finally {
+    await setLikesUser(null);
+    restore();
+  }
+});
+
+test("likes made signed out move into the account that signs in, and only that one", async () => {
+  const { backing, restore } = installStorage({ failWrites: false });
+  const local = "https://example.com/liked-signed-out";
+  const annas = "https://example.com/annas";
+  try {
+    await setLikesUser(null);
+    toggleLike(story(local));
+
+    // Anna signs in: the device's like is sent to her account and leaves
+    // the device.
+    const anna = memorySync();
+    await setLikesUser("user-anna", anna.sync);
+    assert.equal(isLiked(likeKey(local)), true);
+    assert.deepEqual(anna.sent, [`add ${likeKey(local)}`]);
+    assert.equal(backing.has(LIKES_KEY), false);
+    toggleLike(story(annas));
+
+    // Switching to Ben drops Anna's local copy; Ben sees none of hers.
+    const ben = memorySync();
+    await setLikesUser("user-ben", ben.sync);
+    assert.equal(backing.has(`${LIKES_KEY}:user-anna`), false);
+    assert.equal(isLiked(likeKey(annas)), false);
+    assert.equal(isLiked(likeKey(local)), false);
+    assert.deepEqual(ben.sent, []);
+
+    // Signed out again: Ben's copy is gone and the device holds nothing.
+    await setLikesUser(null);
+    assert.equal(backing.has(`${LIKES_KEY}:user-ben`), false);
+    assert.equal(isLiked(likeKey(local)), false);
+  } finally {
+    restore();
+  }
+});
+
+test("a device like already in the account is not sent again", async () => {
+  const { restore } = installStorage({ failWrites: false });
+  const both = "https://example.com/liked-twice";
+  try {
+    await setLikesUser(null);
+    toggleLike(story(both));
+    const db = memorySync([
+      { ...story(both), key: likeKey(both), likedAt: "2026-11-20T10:00:00Z" },
+    ]);
+    await setLikesUser("user-anna", db.sync);
+    assert.equal(isLiked(likeKey(both)), true);
+    assert.deepEqual(db.sent, []);
+  } finally {
+    await setLikesUser(null);
+    restore();
+  }
+});
+
+// Plays Auth.onAuthChange: emit() reports a sign-in, a switch or a sign-out.
+function stubAuth() {
+  let listener: ((user: { id: string } | null) => void) | null = null;
+  return {
+    onAuthChange(l: (user: { id: string } | null) => void) {
+      listener = l;
+      return () => {
+        listener = null;
+      };
+    },
+    async emit(user: { id: string } | null) {
+      listener?.(user);
+      await new Promise((r) => setImmediate(r));
+    },
+  };
+}
+
+test("following the session, sign-out and an account switch drop the previous reader's likes", async () => {
+  const { backing, restore } = installStorage({ failWrites: false });
+  const annas = "https://example.com/annas-like";
+  const auth = stubAuth();
+  // One sync for the session, like likesSync(data): the database answers for
+  // whoever is signed in.
+  let signedIn: string | null = null;
+  const rows: Record<string, LikedStory[]> = {
+    "user-anna": [
+      { ...story(annas), key: likeKey(annas), likedAt: "2026-11-20T10:00:00Z" },
+    ],
+    "user-ben": [],
+  };
+  const sync: LikesSync = {
+    async list() {
+      return signedIn ? rows[signedIn] : [];
+    },
+    async add() {},
+    async remove() {},
+  };
+  const as = async (id: string | null) => {
+    signedIn = id;
+    await auth.emit(id ? { id } : null);
+  };
+  const stop = followLikes(auth, sync);
+  try {
+    await as("user-anna");
+    assert.equal(isLiked(likeKey(annas)), true);
+
+    await as(null);
+    assert.equal(isLiked(likeKey(annas)), false);
+    assert.equal(backing.has(`${LIKES_KEY}:user-anna`), false);
+
+    await as("user-anna");
+    assert.equal(isLiked(likeKey(annas)), true);
+    await as("user-ben");
+    assert.equal(isLiked(likeKey(annas)), false);
+    assert.equal(backing.has(`${LIKES_KEY}:user-anna`), false);
+  } finally {
+    stop();
+    await setLikesUser(null);
+    restore();
+  }
+});
+
+test("saves are a store of their own: saving doesn't like, and each goes to its own sync", async () => {
+  const { backing, restore } = installStorage({ failWrites: false });
+  const url = "https://example.com/read-later";
+  const likesDb = memorySync();
+  const savesDb = memorySync();
+  try {
+    await setLikesUser("reader-s", likesDb.sync);
+    await setSavesUser("reader-s", savesDb.sync);
+    assert.equal(toggleSave(story(url)), true);
+    assert.equal(isSaved(likeKey(url)), true);
+    assert.equal(isLiked(likeKey(url)), false);
+    assert.deepEqual(savesDb.sent, [`add ${likeKey(url)}`]);
+    assert.deepEqual(likesDb.sent, []);
+    assert.ok(backing.get("scout.saves.v1:reader-s")?.includes(likeKey(url)));
+  } finally {
+    await setLikesUser(null);
+    await setSavesUser(null);
+    restore();
+  }
+});

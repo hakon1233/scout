@@ -1,16 +1,23 @@
 // Offline checks for model output. Each check is one rule from the prompts the
-// companion sends (search-skills.ts, research.ts, chat.ts), applied to a
-// hand-written example output with the same parsers the product uses. No model
-// is called.
+// companion sends (search-skills.ts, research.ts, chat.ts) and the publish
+// check (core publish-check.ts), applied to a hand-written example output with
+// the same parsers the product uses. No model is called.
 
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseBrief } from "../src/brief-document.js";
 import { applyChatChanges } from "../src/chat-changes.js";
-import { parseChatOutput } from "../src/chat-model.js";
-import { normalizeTopic } from "../src/coverage.js";
-import type { Interest } from "../src/contract.js";
+import {
+  MAX_TAGS,
+  cadenceInWords,
+  normalizeTags,
+  normalizeTopic,
+  parseBrief,
+  parseChatOutput,
+  parsePublishCheck,
+  type Interest,
+  type PublishInput,
+} from "#core";
 
 export type Check = { name: string; pass: boolean; detail?: string };
 
@@ -21,20 +28,57 @@ function check(name: string, pass: boolean, detail?: string): Check {
   return pass ? { name, pass } : { name, pass, detail };
 }
 
-// One research session's output for one topic.
+// The one line a section with no story carries (relevance-skills.ts):
+// "No change since YYYY-MM-DD." or "No news yet.", optionally in italics, or
+// the intent doc's own "No change…" text.
+const EMPTY_LINE_RE = /^\s*_?\s*No (?:change|news)\b/im;
+const NO_CHANGE_SINCE_RE = /No change since (\d{4}-\d{2}-\d{2})/i;
+// The research agent writes as a news service, never about itself.
+const FIRST_PERSON_RE = /\b(?:I|I'm|I've|I'd|[Ww]e|[Mm]y|[Oo]ur)\b/g;
+// A "[domain — Title](url)" citation.
+const CITATION_ON_LINE_RE = /\[[^\]]* — [^\]]*\]\(/;
+
+// One research session's output for one topic. `lastStory` is the date of the
+// topic's last posted story; `past` the titles and URLs already posted.
 export function checkResearchOutput(
   raw: string,
-  opts: { topic: string; today: string },
+  opts: {
+    topic: string;
+    today: string;
+    lastStory?: string;
+    past?: string[];
+  },
 ): Check[] {
   const firstLine = raw.trim().split("\n")[0] ?? "";
   const { topics, entries } = parseBrief(raw);
   const stories = entries.flatMap((e) => (e.kind === "story" ? [e] : []));
-  const noFreshNews = /_+\s*no fresh news\s*_+/i.test(raw);
+  const emptyLine = EMPTY_LINE_RE.test(raw);
+  const noChangeDate = NO_CHANGE_SINCE_RE.exec(raw)?.[1] ?? null;
+  const noNewsYet = /No news yet\./i.test(raw);
+  const past = new Set((opts.past ?? []).map((p) => p.toLowerCase()));
+  const repeats = stories.filter((s) =>
+    s.links.some(
+      (l) =>
+        past.has(l.url.toLowerCase()) ||
+        past.has((l.label.split(" — ")[1] ?? l.label).toLowerCase()),
+    ),
+  );
   const dates = stories.map((s) => DATE_MARKER_RE.exec(s.raw)?.[1] ?? null);
   const dated = dates.filter((d): d is string => d !== null && d !== "undated");
   const todayMs = Date.parse(opts.today);
   const oldest = new Date(todayMs - 30 * DAY_MS).toISOString().slice(0, 10);
   const words = raw.split(/\s+/).filter(Boolean).length;
+  const prose = stories.map((s) => `${s.summary}\n${s.body ?? ""}`).join("\n");
+  const firstPerson = prose.match(FIRST_PERSON_RE) ?? [];
+  const titles = stories.flatMap((s) =>
+    s.links.filter((l) => l.label.includes(" — ")).map((l) => l.label),
+  );
+  const generic = titles.filter(
+    (l) => (l.split(" — ")[1] ?? "").trim().split(/\s+/).length < 3,
+  );
+  const citedOnBullet = stories.filter((s) =>
+    CITATION_ON_LINE_RE.test(s.raw.split("\n")[0]),
+  );
 
   return [
     check(
@@ -50,9 +94,32 @@ export function checkResearchOutput(
     ),
     check(
       "story-count",
-      (stories.length >= 2 && stories.length <= 4) ||
-        (stories.length === 0 && noFreshNews),
+      (stories.length >= 1 && stories.length <= 4) ||
+        (stories.length === 0 && emptyLine),
       `${stories.length} stories`,
+    ),
+    check(
+      "no-change-line",
+      (noChangeDate === null || noChangeDate === opts.lastStory) &&
+        (!noNewsYet || !opts.lastStory),
+      noChangeDate
+        ? `says ${noChangeDate}, last story ${opts.lastStory ?? "none"}`
+        : "says No news yet. but the topic has posted before",
+    ),
+    check(
+      "novel",
+      repeats.length === 0,
+      `already posted: ${repeats.map((s) => s.links[0]?.url).join(", ")}`,
+    ),
+    check(
+      "after-last-story",
+      !opts.lastStory || dated.every((d) => d >= opts.lastStory!),
+      `before ${opts.lastStory}: ${dated.filter((d) => d < (opts.lastStory ?? "")).join(", ")}`,
+    ),
+    check(
+      "no-padding-banner",
+      !/showing older items/i.test(raw),
+      'the old "showing older items" banner pads a quiet topic',
     ),
     check(
       "every-story-dated",
@@ -77,28 +144,56 @@ export function checkResearchOutput(
     ),
     check(
       "in-depth-body",
-      stories.every(
-        (s) => (s.body?.split("\n\n").filter(Boolean).length ?? 0) >= 4,
-      ),
-      "every story needs a lead plus at least 3 paragraphs",
+      stories.every((s) => {
+        const n = s.body?.split("\n\n").filter(Boolean).length ?? 0;
+        return n >= 1 && n <= 3;
+      }),
+      "every story needs a body of 1-3 paragraphs (the lead first)",
     ),
     check(
       "source-images-https",
       stories.every((s) => s.image === null || s.image.startsWith("https://")),
     ),
-    check("length", words <= 950, `${words} words`),
+    check(
+      "third-person",
+      firstPerson.length === 0,
+      `first person: ${firstPerson.join(", ")}`,
+    ),
+    check(
+      "specific-headline",
+      generic.length === 0,
+      `generic titles: ${generic.join("; ")}`,
+    ),
+    check(
+      "citation-own-line",
+      citedOnBullet.length === 0,
+      `${citedOnBullet.length} stories cite on the bullet line`,
+    ),
+    check("length", words <= 700, `${words} words`),
   ];
 }
 
 // One chat turn's output, applied to a throwaway copy of the interests.
+// The `page` the model wrote, before parsing drops one that isn't allowed.
+function rawPage(raw: string): unknown {
+  try {
+    const text = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
+    return (JSON.parse(text) as { page?: unknown }).page;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function checkChatOutput(
   raw: string,
   opts: {
+    message?: string;
     interests: Interest[];
     expect: {
       applied: string[];
       pendingDelete?: string;
       pendingRewrite?: string;
+      page?: string;
     };
   },
 ): Promise<Check[]> {
@@ -117,7 +212,19 @@ export async function checkChatOutput(
       applied: result.applied.map((c) => `${c.op}:${c.topic ?? ""}`),
       pendingDelete: result.pendingDeletes[0]?.topic,
       pendingRewrite: result.pendingRewrites[0]?.topic,
+      page: output.page,
     };
+    const askedPage = rawPage(raw);
+    // A create's reply confirms what was set up: the topic, and the cadence
+    // when the reader named one.
+    const reply = output.reply.toLowerCase();
+    const created = result.applied.filter((c) => c.op === "create");
+    const said = cadenceInWords(opts.message ?? "");
+    const confirms = created.every(
+      (c) =>
+        reply.includes((c.topic ?? "").toLowerCase()) &&
+        (!said || new RegExp(`\\b${said}\\b`).test(reply)),
+    );
     return [
       check("json-object", true),
       check("reply", output.reply.trim().length > 0),
@@ -136,12 +243,28 @@ export async function checkChatOutput(
         "update, rewrite and delete must name a listed interest id",
       ),
       check(
+        "allowed-page",
+        askedPage === undefined || askedPage === output.page,
+        `page: ${JSON.stringify(askedPage)}`,
+      ),
+      check(
+        "no-url",
+        !/https?:\/\/|www\./i.test(output.reply),
+        "the reply must offer a page, never write a URL",
+      ),
+      check(
+        "create-reply-confirms",
+        confirms,
+        `reply must name the new topic${said ? ` and say ${said}` : ""}`,
+      ),
+      check(
         "expected-effect",
         JSON.stringify(effect) ===
           JSON.stringify({
             applied: opts.expect.applied,
             pendingDelete: opts.expect.pendingDelete,
             pendingRewrite: opts.expect.pendingRewrite,
+            page: opts.expect.page,
           }),
         `got ${JSON.stringify(effect)}`,
       ),
@@ -149,4 +272,100 @@ export async function checkChatOutput(
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+}
+
+// Tags too broad to browse by on their own (publish-check.ts asks for a
+// specific tag next to them).
+const BROAD_TAGS = new Set([
+  "tech",
+  "science",
+  "business",
+  "world",
+  "culture",
+  "local",
+  "research",
+]);
+
+// The publish check (core publish-check.ts): one JSON verdict. A good approve
+// has 1 to 5 valid tags, at most one outside the seed list; a refuse has no
+// tags and one short reason that repeats no full name from the topic.
+export function checkPublishOutput(
+  output: string,
+  ctx: {
+    input: PublishInput;
+    expect: "approve" | "refuse";
+    // Specific tags that fit the topic; a good approve uses at least one.
+    wantTags?: string[];
+  },
+): Check[] {
+  type Raw = { verdict?: unknown; reason?: unknown; tags?: unknown };
+  const raw = ((): Raw | null => {
+    try {
+      const parsed: unknown = JSON.parse(output);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : null;
+    } catch {
+      return null;
+    }
+  })();
+  const checks: Check[] = [check("json-object", raw !== null)];
+  const got = parsePublishCheck(output).approved ? "approve" : "refuse";
+  checks.push(
+    check(
+      "verdict",
+      raw?.verdict === ctx.expect && got === ctx.expect,
+      `expected ${ctx.expect}, got ${String(raw?.verdict)}`,
+    ),
+  );
+  if (raw?.verdict === "approve") {
+    const tags: unknown[] = Array.isArray(raw.tags) ? raw.tags : [];
+    const kept = normalizeTags(tags, { maxFree: 1 });
+    checks.push(
+      check(
+        "tags",
+        tags.length >= 1 &&
+          tags.length <= MAX_TAGS &&
+          kept.length === tags.length &&
+          kept.every((t, i) => t === tags[i]),
+        `tags ${JSON.stringify(tags)}; usable ${JSON.stringify(kept)}`,
+      ),
+    );
+    // Only a topic that should pass: a wrong approve fails on its verdict.
+    const specific = kept.filter((t) => !BROAD_TAGS.has(t));
+    if (ctx.expect === "approve") {
+      checks.push(
+        check(
+          "specific-tags",
+          specific.length > 0 &&
+            (!ctx.wantTags || ctx.wantTags.some((t) => kept.includes(t))),
+          `tags ${JSON.stringify(kept)}; want one of ${JSON.stringify(ctx.wantTags ?? [])}`,
+        ),
+      );
+    }
+  }
+  if (raw?.verdict === "refuse") {
+    const reason = typeof raw.reason === "string" ? raw.reason.trim() : "";
+    const names =
+      [ctx.input.displayName ?? "", ctx.input.title, ctx.input.doc]
+        .join("\n")
+        .match(/[A-ZÆØÅ][a-zæøå]+(?: [A-ZÆØÅ][a-zæøå]+)+/g) ?? [];
+    const repeated = names.filter((n) => reason.includes(n));
+    const noTags = Array.isArray(raw.tags) && raw.tags.length === 0;
+    checks.push(
+      check(
+        "reason",
+        reason.length > 0 &&
+          reason.length <= 200 &&
+          repeated.length === 0 &&
+          noTags,
+        !reason
+          ? "no reason"
+          : repeated.length
+            ? `repeats ${repeated.join(", ")}`
+            : "too long or has tags",
+      ),
+    );
+  }
+  return checks;
 }

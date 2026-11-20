@@ -9,8 +9,6 @@
   > Tool calls now run sandboxed by default, with 14 built-in tools moved over.
   >
   > Plugins that wrote to the home directory need changes; a migration guide exists.
-  >
-  > The old mode is removed in the November release.
 
 ## Also worth knowing
 
@@ -21,5 +19,3 @@
   > Each model call, tool call and result is an event with a parent id.
   >
   > Four frameworks plan to emit it by year end.
-  >
-  > Evaluation tools are the first intended users.

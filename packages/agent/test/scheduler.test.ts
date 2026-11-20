@@ -28,7 +28,7 @@ import {
   defaultSchedule,
   type State,
 } from "../src/state.js";
-import type { Brief } from "../src/contract.js";
+import type { Brief } from "#core";
 import { Scheduler, nextFireAt } from "../src/scheduler.js";
 import { startServer } from "../src/server.js";
 
@@ -88,7 +88,7 @@ function makeSpawnRecorder(opts: { autoClose: boolean }) {
 // with the canned brief. Models a transient morning usage-limit that clears: the
 // 07:00 fire fails, a later retry recovers. One call === one
 // per-interest session, so with a single interest each attempt is one call.
-function makeFlakySpawn(opts: { failFirst: number }) {
+function makeFlakySpawn(opts: { failFirst: number; stderr?: string }) {
   const calls: Array<{ stdin: string }> = [];
   let n = 0;
   const spawnFn = ((
@@ -111,7 +111,11 @@ function makeFlakySpawn(opts: { failFirst: number }) {
     const finish = () => {
       record.stdin = stdinData;
       n += 1;
-      if (n <= opts.failFirst) {
+      if (n <= opts.failFirst && opts.stderr) {
+        // A failing CLI: its error on stderr, a non-zero exit.
+        child.stderr.emit("data", Buffer.from(opts.stderr));
+        child.emit("close", 1);
+      } else if (n <= opts.failFirst) {
         // Empty stdout, clean exit → the session yields no content and rejects,
         // so every topic fails and (no base brief) the run lands `failed`.
         child.stdout.emit("data", Buffer.from(""));
@@ -202,7 +206,7 @@ test("a scheduled fire produces a brief and records success + next_run_at", asyn
     assert.equal(state.schedule?.last_run_status, "success");
     assert.ok(state.schedule?.last_run_at, "last_run_at recorded");
     // next_run_at must be re-armed for tomorrow (07:00 already passed at fire).
-    const next = new Date(state.schedule!.next_run_at!);
+    const next = new Date(state.schedule.next_run_at!);
     assert.equal(next.getDate(), 2, "next fire rolled to tomorrow");
     assert.equal(next.getHours(), 7);
   } finally {
@@ -312,7 +316,7 @@ test("start materializes the default enabled schedule when no schedule is persis
     assert.equal(state.schedule?.enabled, true);
     assert.equal(state.schedule?.time_of_day, defaultSchedule().time_of_day);
     assert.ok(state.schedule?.next_run_at, "default schedule should be armed");
-    const next = new Date(state.schedule!.next_run_at!);
+    const next = new Date(state.schedule.next_run_at);
     assert.equal(next.getDate(), 1);
     assert.equal(next.getHours(), 7);
   } finally {
@@ -356,7 +360,7 @@ test("GET /v0/schedule returns the Settings-UI contract incl. reboot_durable:fal
     // program arguments to be present, so a half-written file no longer
     // reports reboot_durable:true.
     await fs.writeFile(
-      process.env.SCOUT_LAUNCH_AGENT_PLIST!,
+      process.env.SCOUT_LAUNCH_AGENT_PLIST,
       `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
   <dict>
@@ -543,6 +547,44 @@ test("a scheduled run that keeps failing gives up after the retry budget", async
     assert.equal(calls.length, 1 + maxRetries);
     const state = await loadState(stateFile);
     assert.equal(state.schedule?.last_run_status, "failed");
+  } finally {
+    clearInterval(keepAlive);
+    scheduler.stop();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a scheduled run that hit a usage limit is not retried", async () => {
+  const { tmp, stateFile } = await tmpState({
+    pairing_token: newPairingToken(),
+    interests: [{ id: "int_aisafety", topic: "ai safety" }],
+    schedule: { enabled: true, time_of_day: "07:00" },
+  });
+  const { calls, spawnFn } = makeFlakySpawn({
+    failFirst: Number.POSITIVE_INFINITY,
+    stderr: "Claude AI usage limit reached|1767250800",
+  });
+  let resolveFailed: () => void;
+  const failed = new Promise<void>((r) => (resolveFailed = r));
+  const now = () => new Date(2026, 5, 1, 7, 0, 0, 0);
+  const scheduler = new Scheduler(
+    {
+      stateFile,
+      spawnFn,
+      onSynthesisDone: (b) => {
+        if (b.status === "failed") setImmediate(resolveFailed);
+      },
+    },
+    now,
+    { retryDelayMs: 10 },
+  );
+  const keepAlive = setInterval(() => {}, 1000);
+  try {
+    await scheduler.fire();
+    await failed;
+    // Wait past several backoff windows: no retry may be armed.
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(calls.length, 1, "a usage limit gets no second attempt");
   } finally {
     clearInterval(keepAlive);
     scheduler.stop();

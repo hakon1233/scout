@@ -46,7 +46,7 @@ test("a corrupt state.json is backed up to .corrupt-*.bak, not wiped", async () 
       "expected a .corrupt-*.bak backup of the unparseable state",
     );
     assert.equal(
-      await fs.readFile(path.join(tmp, backup!), "utf8"),
+      await fs.readFile(path.join(tmp, backup), "utf8"),
       corruptBytes,
     );
 
@@ -181,7 +181,7 @@ test("listCorruptStateBackups reports the recovery file a corrupt load leaves be
     await loadState(file);
     const backups = await listCorruptStateBackups(file);
     assert.equal(backups.length, 1);
-    assert.match(backups[0]!, /^state\.json\.corrupt-\d+\.bak$/);
+    assert.match(backups[0], /^state\.json\.corrupt-\d+\.bak$/);
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }

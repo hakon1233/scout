@@ -30,7 +30,14 @@ export type ClaudeRunOptions = {
   timeoutMs?: number;
   // Kills the child and rejects with an AbortError.
   signal?: AbortSignal;
+  // Caps a web-research session's agentic turns (`--max-turns`): each search
+  // or fetch takes one. Unset, MAX_RESEARCH_TURNS.
+  maxTurns?: number;
 };
+
+// A research run that keeps searching ends instead of looping. A real run
+// takes 5-15 turns.
+const MAX_RESEARCH_TURNS = 25;
 
 const TOOL_ARGS: Record<ClaudeTools, string[]> = {
   "web-research": [
@@ -73,6 +80,9 @@ function childEnv(): NodeJS.ProcessEnv {
         ENV_NAMES.has(name) || ENV_PREFIXES.some((p) => name.startsWith(p)),
     ),
   );
+  // Needed under the root tsconfig, where Next's types make NODE_ENV required;
+  // lint sees only this package's tsconfig and calls it unnecessary.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   return kept as NodeJS.ProcessEnv;
 }
 
@@ -125,6 +135,9 @@ export function runClaude(
         "--output-format",
         "text",
         ...TOOL_ARGS[opts.tools],
+        ...(opts.tools === "web-research"
+          ? ["--max-turns", String(opts.maxTurns ?? MAX_RESEARCH_TURNS)]
+          : []),
         "--strict-mcp-config",
         "--safe-mode",
         "--setting-sources",
@@ -195,8 +208,8 @@ export function runClaude(
     let stderr = "";
     const outDecoder = new StringDecoder("utf8");
     const errDecoder = new StringDecoder("utf8");
-    child.stdout!.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
-    child.stderr!.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
+    child.stdout.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
+    child.stderr.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
 
     child.on("error", (e) =>
       settle(() =>
@@ -229,10 +242,10 @@ export function runClaude(
     // If the CLI exits before reading the whole prompt, the write fails with
     // EPIPE. Unhandled, that would crash the server; the close/error handlers
     // above already report the real cause.
-    child.stdin!.on("error", (e: Error) =>
+    child.stdin.on("error", (e: Error) =>
       console.error(`[claude-runner] stdin write failed:`, e.message),
     );
-    child.stdin!.write(prompt);
-    child.stdin!.end();
+    child.stdin.write(prompt);
+    child.stdin.end();
   });
 }

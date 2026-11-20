@@ -35,11 +35,12 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const siteUrl = "https://hakon1233.github.io/scout/";
 const title = "Scout — Personalized AI news, delivered by agents.";
 const description =
-  "Set your interests, get a brief from agents covering only the news you care about.";
+  "Pick your topics, get a brief from agents covering only the news you care about.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title,
+  // Each screen names itself ("Browse · Scout"); the landing keeps the full line.
+  title: { default: title, template: "%s · Scout" },
   description,
   openGraph: {
     type: "website",
@@ -62,6 +63,10 @@ export const metadata: Metadata = {
     description,
     images: ["og.png"],
   },
+  // Relative URLs inside resolve against the manifest, so it works under any
+  // base path. Installing it is what lets an iPhone get push notifications.
+  manifest: `${basePath}/manifest.webmanifest`,
+  appleWebApp: { capable: true, title: "Scout", statusBarStyle: "default" },
   icons: {
     icon: [
       { url: `${basePath}/icon-32.png`, sizes: "32x32", type: "image/png" },
@@ -80,8 +85,8 @@ export const viewport: Viewport = {
   // in the chat composer so the input is never hidden behind the keyboard.
   interactiveWidget: "resizes-content",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f2ea" },
-    { media: "(prefers-color-scheme: dark)", color: "#16140f" },
+    { media: "(prefers-color-scheme: light)", color: "#f3eee4" },
+    { media: "(prefers-color-scheme: dark)", color: "#12141a" },
   ],
 };
 
@@ -93,6 +98,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${inter.variable} ${jetbrainsMono.variable} ${fraunces.variable} ${newsreader.variable} h-full antialiased`}
     >
       <head>

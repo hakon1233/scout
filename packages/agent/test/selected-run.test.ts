@@ -25,7 +25,7 @@ import os from "node:os";
 import path from "node:path";
 import type { spawn } from "node:child_process";
 import { loadState, saveState, newPairingToken } from "../src/state.js";
-import type { Brief, TopicCoverage } from "../src/contract.js";
+import type { Brief, TopicCoverage } from "#core";
 import { startServer } from "../src/server.js";
 
 // Per-interest claude stub: each session researches ONE topic (named in the

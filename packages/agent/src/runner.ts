@@ -28,7 +28,6 @@ import {
   updateState,
   type ScheduleConfig,
 } from "./state.js";
-import type { Brief, Interest } from "./contract.js";
 import { researchAndSynthesize } from "./research.js";
 import {
   computeCoverage,
@@ -36,9 +35,11 @@ import {
   extractTopicSection,
   assembleBrief,
   enforceBriefFreshness,
-  interestWantsEvergreen,
+  briefSettingsOrDefault,
   normalizeTopic,
-} from "./coverage.js";
+  type Brief,
+  type Interest,
+} from "#core";
 import { ensureInterestDoc } from "./docs.js";
 
 export type RunDeps = {
@@ -384,6 +385,28 @@ async function runSynthesis(
     // these messages (it slices stderr, which the token never reaches).
     const sessionErrors: string[] = [];
     let anyOk = false;
+    // Each interest's brief settings, and the reader's last two ready briefs
+    // so a session reports only what is new since then.
+    // The relevance rules also get the cadence and when each topic last had
+    // a story.
+    const saved = await loadState(deps.stateFile);
+    const settingsOf = (id: string) =>
+      briefSettingsOrDefault(saved.brief_settings?.[id]);
+    const readyBriefs = (saved.briefs ?? []).filter(
+      (b) => b.status === "ready" && b.summary_md && !b.ephemeral,
+    );
+    const prior = readyBriefs
+      .slice(0, 2)
+      .map((b) => ({ date: b.generated_at, markdown: b.summary_md ?? "" }));
+    const cadence = saved.schedule?.enabled ? "daily" : null;
+    const lastPosted = (topic: string) =>
+      readyBriefs.find((b) =>
+        (b.topics ?? []).some(
+          (t) =>
+            t.status === "covered" &&
+            normalizeTopic(t.topic) === normalizeTopic(topic),
+        ),
+      )?.generated_at ?? null;
     for (const interest of plan.researchInterests) {
       try {
         const doc = await ensureInterestDoc(
@@ -393,7 +416,14 @@ async function runSynthesis(
         );
         basisByTopic.set(interest.topic, doc);
         const sessionMd = await researchAndSynthesize(
-          { topic: interest.topic, doc },
+          {
+            topic: interest.topic,
+            doc,
+            settings: settingsOf(interest.id),
+            prior,
+            cadence,
+            lastPosted: lastPosted(interest.topic),
+          },
           { claudeBin: deps.claudeBin, spawnFn: deps.spawnFn },
         );
         const section = extractTopicSection(sessionMd, interest.topic);
@@ -459,13 +489,13 @@ async function runSynthesis(
         : patch;
     // Code-enforce the freshness cutoff before the brief is saved: drop
     // ordinary stories older than ~30 days that the model emitted in defiance of
-    // SEARCH_SKILLS. Topics whose intent doc explicitly asks for background /
-    // evergreen / historical context are exempt. Runs over the full assembled
-    // (and, on retry, merged) markdown so no stale section can slip through.
+    // SEARCH_SKILLS. Topics marked evergreen in their brief settings are
+    // exempt. Runs over the full assembled (and, on retry, merged) markdown so
+    // no stale section can slip through.
     const evergreenKeys = new Set(
-      bases
-        .filter((b) => interestWantsEvergreen(b.topic, b.doc))
-        .map((b) => normalizeTopic(b.topic)),
+      plan.coverageInterests
+        .filter((it) => settingsOf(it.id).evergreen)
+        .map((it) => normalizeTopic(it.topic)),
     );
     const summary = enforceBriefFreshness(merged, {
       now: new Date(),

@@ -1,0 +1,9 @@
+{
+  "message": "My own private topic: Home Assistant breaking changes for Zigbee. Weekly brief.",
+  "interests": [],
+  "output": "{\"reply\": \"Created \\\"Zigbee breaking changes\\\" — Weekly, private. Tell me what to change.\", \"changes\": [{\"op\": \"create\", \"topic\": \"Zigbee breaking changes\", \"doc\": \"# Zigbee breaking changes\\n\\nHome Assistant releases that break ZHA or Zigbee2MQTT setups.\", \"cadence\": \"weekly\"}]}",
+  "expect": {
+    "applied": ["create:Zigbee breaking changes"]
+  },
+  "expectFail": []
+}

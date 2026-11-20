@@ -15,7 +15,7 @@ import {
   newPairingToken,
   type State,
 } from "../src/state.js";
-import type { ChatTurn } from "../src/contract.js";
+import type { ChatTurn } from "#core";
 import { readInterestDoc, writeInterestDoc } from "../src/docs.js";
 import { isChatInFlight, startChatTurn } from "../src/chat.js";
 import { readChatTranscript } from "../src/chat-transcript.js";
@@ -88,7 +88,7 @@ async function seeded(state: Partial<State> = {}) {
   const stateFile = path.join(tmp, "state.json");
   const interestsDir = path.join(tmp, "interests");
   const token = newPairingToken();
-  await saveState({ pairing_token: token, ...state } as State, stateFile);
+  await saveState({ pairing_token: token, ...state }, stateFile);
   return { tmp, stateFile, interestsDir, token };
 }
 
@@ -232,7 +232,7 @@ test("POST /v0/chat creates a new interest (+ its doc) with a server-minted id",
     // The applied change carries a concrete, server-assigned id (not echoed back
     // from the model, which never supplied one).
     assert.equal(turn.changes?.length, 1);
-    const change = turn.changes![0];
+    const change = turn.changes[0];
     assert.equal(change.op, "create");
     assert.equal(change.topic, "formula 1");
     assert.match(change.interestId, /^int_[0-9a-f]+$/);
@@ -496,8 +496,8 @@ test("POST /v0/chat/confirm-delete removes the interest + doc and returns a read
     assert.equal(res.status, 200);
     const body = (await res.json()) as { turn?: ChatTurn };
     assert.ok(body.turn, "confirm-delete returned a turn");
-    assert.equal(body.turn!.status, "ready");
-    assert.deepEqual(body.turn!.changes, [
+    assert.equal(body.turn.status, "ready");
+    assert.deepEqual(body.turn.changes, [
       { interestId: "int_drop02", op: "delete", topic: "crypto" },
     ]);
 
@@ -659,6 +659,44 @@ test("POST /v0/chat/confirm-delete returns 404 without a matching pending delete
   }
 });
 
+test("POST /v0/chat answers a how-to question with an allow-listed page and no change", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  const model = JSON.stringify({
+    reply: "Turn on a topic's bell on Topics.",
+    changes: [],
+    page: "/app/topics/",
+  });
+  const { spawnFn, calls } = makeChatSpawn({ output: model, autoClose: true });
+  const { onChatDone, done } = awaitTurn();
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ message: "How do I get notified?" }),
+    });
+    assert.equal(kick.status, 202);
+    const turn = await done;
+    assert.equal(turn.status, "ready");
+    assert.equal(turn.page, "/app/topics/");
+    assert.deepEqual(turn.changes, []);
+    assert.match(JSON.stringify(calls[0]), /How Scout works/);
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/chat GATES a full rewrite: surfaces pending_rewrite and leaves the doc byte-identical", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],
@@ -758,10 +796,10 @@ test("POST /v0/chat/confirm-rewrite writes the STORED proposed doc and returns a
     assert.equal(res.status, 200);
     const body = (await res.json()) as { turn?: ChatTurn };
     assert.ok(body.turn, "confirm-rewrite returned a turn");
-    assert.equal(body.turn!.status, "ready");
+    assert.equal(body.turn.status, "ready");
     // The applied change carries the STORED doc, through the same confirmed-
     // write seam an update takes (so the FE flashes the docs-rail card).
-    assert.deepEqual(body.turn!.changes, [
+    assert.deepEqual(body.turn.changes, [
       {
         interestId: "int_abc123",
         op: "update",
@@ -1282,10 +1320,10 @@ test("POST /v0/chat/stop aborts the in-flight turn — no doc edit is committed"
     let followUp: ChatTurn | undefined;
     while (!followUp) {
       releaseAll();
-      followUp = (await Promise.race([
+      followUp = await Promise.race([
         landing,
         new Promise<undefined>((r) => setTimeout(r, 10)),
-      ])) as ChatTurn | undefined;
+      ]);
     }
     assert.equal(followUp.status, "ready");
   } finally {
@@ -1349,10 +1387,10 @@ test("POST /v0/chat/stop is a no-op for a stale turn id or no in-flight turn", a
     let landed: ChatTurn | undefined;
     while (!landed) {
       releaseAll();
-      landed = (await Promise.race([
+      landed = await Promise.race([
         done,
         new Promise<undefined>((r) => setTimeout(r, 10)),
-      ])) as ChatTurn | undefined;
+      ]);
     }
     assert.equal(landed.status, "ready");
     assert.equal(
@@ -1391,7 +1429,7 @@ test("a corrupt transcript is backed up to .corrupt-*.bak, not wiped", async () 
       "expected a .corrupt-*.bak backup of the unparseable transcript",
     );
     assert.equal(
-      await fs.readFile(path.join(tmp, backup!), "utf8"),
+      await fs.readFile(path.join(tmp, backup), "utf8"),
       corruptBytes,
     );
   } finally {

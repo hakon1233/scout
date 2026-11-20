@@ -6,7 +6,7 @@ import {
   confirmRewriteInterest,
   pollChatTurn,
 } from "./chat";
-import type { ChatTurn } from "@scout/agent/contract";
+import type { ChatTurn } from "@scout/core";
 
 const origin = "http://scout.test";
 

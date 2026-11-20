@@ -9,10 +9,10 @@
 import type {
   ChatChange,
   ChatTurn,
+  Interest,
   PendingDelete,
-} from "@scout/agent/contract";
+} from "@scout/core";
 import { type InterestDocMeta, interestKey } from "@/lib/interest-docs";
-import type { Interest } from "@scout/agent/contract";
 import type { Settings } from "@/lib/types";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
@@ -29,7 +29,7 @@ export function greetingMessage(): ChatMessage {
   return {
     id: nextMsgId(),
     role: "scout",
-    text: "Hi — I'm Scout. Tell me what to track and I'll draft an assignment for it, refine one you already have, or drop an interest. Pick “Refine” on any card to aim a message at it.",
+    text: "Hi — I'm Scout. Tell me what to track and I'll draft an assignment for it, refine one you already have, or drop a topic. Pick “Refine” on any card to aim a message at it.",
   };
 }
 
@@ -79,6 +79,19 @@ export function proposedDeletes(turn: ChatTurn): PendingDelete[] | undefined {
   return turn.pending_delete ? [turn.pending_delete] : undefined;
 }
 
+// A message about one focused topic reaches the model with a scope prefix
+// ("interest" is the model's word). The bubble shows only what the reader
+// typed, live and after a reload.
+const SCOPE = /^Regarding my interest "[^\n]*?": /;
+
+export function scopedWire(focusTopic: string | null, text: string): string {
+  return focusTopic ? `Regarding my interest "${focusTopic}": ${text}` : text;
+}
+
+export function unscopedText(wire: string): string {
+  return wire.replace(SCOPE, "");
+}
+
 export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
   const consumedDeleteIds = new Set<string>();
   // Deletes may key on interestId alone: an `op:"delete"` change ONLY ever comes
@@ -105,7 +118,7 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
       {
         id: nextMsgId(),
         role: "you",
-        text: turn.message,
+        text: unscopedText(turn.message),
         ts: turn.created_at,
       },
     ];
@@ -139,6 +152,7 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
             ? "applied"
             : undefined,
         rewriteAutoFocus: pendingRewrite ? false : undefined,
+        page: turn.page,
       });
     } else if (turn.status === "failed" && turn.error_msg) {
       out.push({
@@ -205,9 +219,7 @@ export function resolveRetryTarget(
   while (youIdx >= 0 && messages[youIdx].role !== "you") youIdx--;
   if (youIdx < 0) return null;
   const youText = messages[youIdx].text;
-  const wire = focusTopic
-    ? `Regarding my interest "${focusTopic}": ${youText}`
-    : youText;
+  const wire = scopedWire(focusTopic, youText);
   return { nextMessages: messages.slice(0, idx), wire };
 }
 

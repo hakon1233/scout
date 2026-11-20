@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef } from "react";
 
-import type { PendingDelete } from "@scout/agent/contract";
+import type { PendingDelete } from "@scout/core";
 
 // The confirm-gated delete card. Delete is the ONE destructive op, so
 // it is the ONLY one behind a confirmation. A turn that resolved to a delete does
@@ -101,8 +101,8 @@ export function ChatDeleteConfirm({
         {resolved ? (
           <span className="font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
             {resolved === "deleted"
-              ? "Removed from your interests"
-              : "Left your interests unchanged"}
+              ? "Removed from your topics"
+              : "Left your topics unchanged"}
           </span>
         ) : (
           <>

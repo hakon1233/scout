@@ -20,7 +20,7 @@ import {
   newPairingToken,
   type State,
 } from "../src/state.js";
-import type { Brief } from "../src/contract.js";
+import type { Brief } from "#core";
 import { startServer } from "../src/server.js";
 import { isSameOriginCaller } from "../src/http-util.js";
 import { MAX_INTERESTS } from "../src/limits.js";

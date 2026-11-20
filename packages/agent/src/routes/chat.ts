@@ -9,13 +9,12 @@ import {
   startChatTurn,
   stopChatTurn,
 } from "../chat.js";
+// A single chat message is bounded so an oversized turn can't be forwarded
+// into the (model-priced) chat prompt.
+import { MAX_CHAT_MESSAGE_CHARS as MAX_CHAT_MESSAGE_LEN } from "#core";
 import { readChatTranscriptCached } from "../chat-transcript.js";
 import { json, jsonBodyParseError, parseJsonBody } from "../http-util.js";
 import type { AuthedRequestContext, ServerContext } from "./types.js";
-
-// A single chat message. Generous enough for a paragraph of intent, bounded so an
-// oversized turn can't be forwarded into the (model-priced) chat prompt.
-const MAX_CHAT_MESSAGE_LEN = 4000;
 
 // Kick one chat turn over the interest collection. Async
 // kick + poll, exactly like POST /v0/interests: we persist a `pending`

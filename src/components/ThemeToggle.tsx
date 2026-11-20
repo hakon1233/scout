@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { Segmented } from "@/components/ui/Segmented";
 import { getLocalStorage, isClient, safeSetItem } from "@/lib/safe-storage";
 
 type Theme = "light" | "dark" | "system";
@@ -9,7 +10,7 @@ type Theme = "light" | "dark" | "system";
 const STORAGE_KEY = "scout.theme";
 // Same-tab broadcast so every mounted <ThemeToggle> stays in sync. The native
 // `storage` event only fires in OTHER tabs, so two toggles in the SAME document
-// (e.g. the settings page body control + the one in AppNav's profile menu, or the
+// (e.g. the settings page body control + the one in the old profile menu, or the
 // landing page's desktop/mobile pair) would otherwise show a stale selection /
 // wrong `aria-checked` after one of them changes the theme.
 const THEME_EVENT = "scout:theme-change";
@@ -88,37 +89,15 @@ export function ThemeToggle({
   ];
 
   if (showLabels) {
-    // Labeled segmented control for the settings panel: full-width,
-    // icon + text so the three choices read clearly inside the menu.
+    // The settings row's segmented control, labelled so the three choices
+    // read without the icons.
     return (
-      <div
-        role="radiogroup"
-        aria-label="Theme"
-        className="grid grid-cols-3 gap-1 rounded-md border border-border-default bg-surface p-1"
-      >
-        {options.map((opt) => {
-          const active = mounted && theme === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              suppressHydrationWarning
-              onClick={() => setTheme(opt.value)}
-              className={
-                "inline-flex flex-col items-center justify-center gap-1 rounded-sm px-2 py-2 text-caption transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page " +
-                (active
-                  ? "bg-accent text-accent-fg"
-                  : "text-muted hover:bg-surface-muted hover:text-primary")
-              }
-            >
-              {opt.icon}
-              <span>{opt.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <Segmented
+        label="Theme"
+        value={mounted ? theme : null}
+        options={options.map(({ value, label }) => ({ value, label }))}
+        onChange={setTheme}
+      />
     );
   }
 

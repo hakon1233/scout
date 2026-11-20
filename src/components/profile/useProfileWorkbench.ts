@@ -15,9 +15,10 @@ import {
 } from "@/lib/chat";
 import type {
   ChatChange,
+  Interest,
   PendingDelete,
   PendingRewrite,
-} from "@scout/agent/contract";
+} from "@scout/core";
 import {
   fetchCompanionInterestSet,
   type InterestDocMeta,
@@ -27,7 +28,6 @@ import {
 } from "@/lib/interest-docs";
 import { prefersReducedMotion } from "@/lib/motion";
 import { loadSettings, saveSettings } from "@/lib/storage";
-import type { Interest } from "@scout/agent/contract";
 import type { ChatMessage } from "./ChatDock";
 import type { DocBeat, DocCardModel } from "./InterestDocCard";
 import {
@@ -45,6 +45,7 @@ import {
   nextMsgId,
   resolveMessage,
   resolveRetryTarget,
+  scopedWire,
   transcriptMessages,
 } from "./useProfileWorkbench.helpers";
 
@@ -121,7 +122,7 @@ export function useProfileWorkbench() {
     (scope) => {
       if (!hydrated) return;
       if (mockSeed !== null) return;
-      (async () => {
+      void (async () => {
         const tok = await bootstrapCompanionToken();
         if (scope.cancelled) return;
         setToken(tok);
@@ -246,7 +247,7 @@ export function useProfileWorkbench() {
       );
       abortedRef.current = false;
       const controller = startAbortable();
-      (async () => {
+      void (async () => {
         try {
           const turn = await confirmDeleteInterest(ids, token, {
             signal: controller.signal,
@@ -295,7 +296,7 @@ export function useProfileWorkbench() {
       const prevBody = docBodiesRef.current[pr.interestId] ?? null;
       abortedRef.current = false;
       const controller = startAbortable();
-      (async () => {
+      void (async () => {
         try {
           const turn = await confirmRewriteInterest(pr.interestId, token, {
             signal: controller.signal,
@@ -375,7 +376,7 @@ export function useProfileWorkbench() {
       stopRequestedRef.current = false;
       const controller = startAbortable();
 
-      (async () => {
+      void (async () => {
         try {
           const turn = await runChatTurn(wire, token, {
             signal: controller.signal,
@@ -434,12 +435,13 @@ export function useProfileWorkbench() {
                     ? `Want me to remove ${pendingDeletes.map((d) => `“${d.topic}”`).join(" and ")}?`
                     : pendingRewrite
                       ? `Here's a proposed rewrite of “${pendingRewrite.topic}” — apply below.`
-                      : "Done — updated your interests."),
+                      : "Done — updated your topics."),
                 ts: replyAt,
                 changes,
                 prev,
                 pendingDeletes,
                 pendingRewrite,
+                page: turn.page,
               },
             ]);
             startStream(id, turn.reply ?? "");
@@ -482,9 +484,7 @@ export function useProfileWorkbench() {
       const focusTopic = focusKey
         ? (interests.find((i) => interestKey(i) === focusKey)?.topic ?? null)
         : null;
-      const wire = focusTopic
-        ? `Regarding my interest "${focusTopic}": ${text}`
-        : text;
+      const wire = scopedWire(focusTopic, text);
 
       const at = new Date().toISOString();
       setMessages((prev) => [

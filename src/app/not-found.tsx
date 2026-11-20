@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AppNav } from "@/components/AppNav";
+import { TopPills } from "@/components/shell/AppShell";
 import { buttonClasses } from "@/components/ui";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -50,10 +50,8 @@ export default function NotFound() {
     const attemptedPath = resolved.attemptedPath;
     return (
       <main className="flex min-h-screen flex-col bg-page font-sans text-primary">
-        <div className="mx-auto w-full max-w-2xl px-6 py-8">
-          <AppNav />
-        </div>
-        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 pb-24">
+        <TopPills />
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 pb-24 pt-[88px]">
           <div className="flex flex-col gap-4">
             <p className="text-caption font-medium uppercase text-muted">404</p>
             <h1 className="text-title-1 text-primary">Page not found</h1>

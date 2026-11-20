@@ -1,0 +1,42 @@
+# Scout's run queue Worker (Cloudflare Workers free plan). Deployed by hand with
+# `npx wrangler deploy`, not from CI.
+#
+# Secrets, set once with `wrangler secret put <NAME>`, never written here:
+#   SUPABASE_SERVICE_ROLE_KEY  claims and finishes runs, stores chat turns
+#   ANTHROPIC_API_KEY          the research and chat calls
+#   SUPABASE_ANON_KEY          the publishable key, for the reader's own calls
+#                              (public by design, but never committed)
+#   VAPID_PRIVATE_KEY          signs "Your brief is ready" pushes (src/push.ts);
+#                              without it no pushes are sent
+#   TEAM_RUNNER_TOKEN          optional: the Scout team runner's /team routes
+#                              (src/team.ts, `pnpm team:run`); unset, they 404
+#   MODERATION_TOKEN           optional: POST /team/hide for the weekly public
+#                              topic check; unset, it 404s
+name = "scout-runs"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+# One tick a minute, then queued pushes; daily at 03:17 UTC, cleanup and (Mondays)
+# the weekly push. Each minute tick claims at most RUN_BATCH runs (see src/run-due.ts
+# for the free plan's limits).
+[triggers]
+crons = ["* * * * *", "17 3 * * *"]
+
+[vars]
+SUPABASE_URL = "https://qctcuajvefuicasakgkq.supabase.co"
+# The web app's origins, comma-separated.
+ALLOWED_ORIGIN = "https://scout-ideas.pages.dev"
+RUN_BATCH = "2"
+# Web Push: the public half of the VAPID pair (the web app's
+# NEXT_PUBLIC_VAPID_PUBLIC_KEY) and the contact push services see.
+VAPID_PUBLIC_KEY = "BI6UnDSibkd7O63kgma8diRbDNqciOAYM00hAVYqp-nsn-TAP1AsHpGyEmG3Psj6u1ALdIQKAJZzbZYBLnAMyhE"
+VAPID_SUBJECT = "https://scout-ideas.pages.dev/"
+
+# Workers AI, for POST /voice (src/voice.ts): whisper-large-v3-turbo, about 47
+# neurons per audio minute. Free tier only: the Workers Free plan includes 10,000
+# neurons a day and fails past them instead of billing
+# (https://developers.cloudflare.com/workers-ai/platform/pricing/). Keep this
+# account on Workers Free; there is no billing or usage-model setting here.
+# The database stops voice at 9,000 neurons a day (supabase/migrations/*_voice.sql).
+[ai]
+binding = "AI"

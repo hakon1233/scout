@@ -11,6 +11,7 @@ import {
   type State,
 } from "../state.js";
 import { interestDocMeta, readInterestDoc } from "../docs.js";
+import { briefSettingsOrDefault, parseBriefSettings } from "#core";
 import { startRun } from "../runner.js";
 import { json, jsonBodyParseError, parseJsonBody } from "../http-util.js";
 import { MAX_INTEREST_LEN, MAX_INTERESTS } from "../limits.js";
@@ -112,6 +113,7 @@ export async function handleGetInterests(
         hasDoc: meta.hasDoc,
         docUpdatedAt: meta.updatedAt ?? null,
         doc,
+        settings: briefSettingsOrDefault(state.brief_settings?.[it.id]),
       };
     }),
   );
@@ -271,4 +273,54 @@ export async function handlePostInterests(
   }
 
   json(res, 202, { brief_id: outcome.briefId, status: "pending" }, cors);
+}
+
+// PUT /v0/interest-settings: change one interest's brief settings. Fields
+// left out keep their stored value; the answer carries the whole settings.
+export async function handlePutInterestSettings(
+  { req, res, cors }: AuthedRequestContext,
+  sc: ServerContext,
+): Promise<void> {
+  const parsedBody = await parseJsonBody<{
+    interestId?: unknown;
+    settings?: unknown;
+  }>(req);
+  if (!parsedBody.ok) return jsonBodyParseError(res, parsedBody, cors);
+  const { interestId, settings } = parsedBody.body;
+  if (typeof interestId !== "string" || !interestId)
+    return json(res, 400, { error: "interestId required" }, cors);
+  let outcome:
+    | { status: 200; settings: unknown }
+    | { status: 400 | 404; error: string } = {
+    status: 404,
+    error: "unknown interest",
+  };
+  await updateState(sc.stateFile, (state) => {
+    if (!(state.interests ?? []).some((it) => it.id === interestId)) {
+      outcome = { status: 404, error: "unknown interest" };
+      return state;
+    }
+    const parsed = parseBriefSettings(
+      settings,
+      briefSettingsOrDefault(state.brief_settings?.[interestId]),
+    );
+    if (!parsed.ok) {
+      outcome = { status: 400, error: parsed.error };
+      return state;
+    }
+    outcome = { status: 200, settings: parsed.settings };
+    return {
+      ...state,
+      brief_settings: {
+        ...state.brief_settings,
+        [interestId]: parsed.settings,
+      },
+    };
+  });
+  const done = outcome as
+    | { status: 200; settings: unknown }
+    | { status: 400 | 404; error: string };
+  if (done.status !== 200)
+    return json(res, done.status, { error: done.error }, cors);
+  json(res, 200, { interestId, settings: done.settings }, cors);
 }

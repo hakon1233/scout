@@ -71,7 +71,7 @@ test("Scout wordmark home-link shows on every app route, including home", async 
   await blockNonLoopback(page);
 
   // The top-left Scout wordmark is a shared logo slot rendered by
-  // AppNav on every `/app/*` route and doubles as the home link — so it is now
+  // AppShell on every `/app/*` route and doubles as the home link — so it is now
   // present on the app home itself, not just on sub-pages (this superseded the
   // old "hide the Back link on home" behavior).
   await page.goto(`${ORIGIN}/app/`);
