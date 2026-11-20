@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Card } from "@/components/ui";
+import { Card, SkeletonLine } from "@/components/ui";
 
 export function AppSkeleton() {
   return (
@@ -25,14 +25,6 @@ export function AppSkeleton() {
       ))}
       <span className="sr-only">Loading your brief…</span>
     </div>
-  );
-}
-
-function SkeletonLine({ className = "" }: { className?: string }) {
-  return (
-    <span
-      className={`scout-skeleton block rounded-sm bg-surface-muted ${className}`}
-    />
   );
 }
 

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { formatDocDate } from "@/lib/format-date";
+import { DOC_CARD_MARKDOWN } from "./DocMarkdown";
 import { LazyMarkdown } from "./LazyMarkdown";
 
 // The "just changed" beat fired the instant a chat turn confirms a durable
@@ -23,66 +25,6 @@ export type DocCardModel = {
   body?: string;
   beat: DocBeat;
   href: string;
-};
-
-function formatDocDate(iso?: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-// Markdown components matched to the editorial tokens — same surface BriefView
-// uses, scaled down for a card preview.
-const MD = {
-  h1: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3
-      className="mt-3 font-serif text-title-3 text-primary first:mt-0"
-      {...p}
-    />
-  ),
-  h2: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h4
-      className="mt-3 text-caption font-medium text-secondary first:mt-0"
-      {...p}
-    />
-  ),
-  p: (p: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p
-      className="mt-2 font-reading text-body-sm leading-relaxed text-secondary first:mt-0"
-      {...p}
-    />
-  ),
-  ul: (p: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul
-      className="mt-2 list-disc space-y-1 pl-5 font-reading text-body-sm leading-relaxed text-secondary first:mt-0"
-      {...p}
-    />
-  ),
-  ol: (p: React.HTMLAttributes<HTMLOListElement>) => (
-    <ol
-      className="mt-2 list-decimal space-y-1 pl-5 font-reading text-body-sm leading-relaxed text-secondary first:mt-0"
-      {...p}
-    />
-  ),
-  li: (p: React.HTMLAttributes<HTMLLIElement>) => (
-    <li className="pl-0.5" {...p} />
-  ),
-  strong: (p: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="font-semibold text-primary" {...p} />
-  ),
-  a: (p: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a className="text-signal underline underline-offset-2" {...p} />
-  ),
-  code: (p: React.HTMLAttributes<HTMLElement>) => (
-    <code
-      className="rounded bg-surface-muted px-1 py-0.5 font-mono text-body-sm text-primary"
-      {...p}
-    />
-  ),
 };
 
 export function InterestDocCard({
@@ -186,7 +128,7 @@ export function InterestDocCard({
             </pre>
           ) : (
             <div className="scout-md max-h-64 overflow-auto">
-              <LazyMarkdown text={body} components={MD} />
+              <LazyMarkdown text={body} components={DOC_CARD_MARKDOWN} />
             </div>
           )}
           <button
@@ -242,7 +184,7 @@ function DocLine({
     );
   }
   if (hasDoc) {
-    const date = formatDocDate(updatedAt);
+    const date = formatDocDate(updatedAt, { year: false });
     return (
       <span className="mt-1 inline-flex items-center gap-1.5 text-caption font-medium text-secondary">
         <span

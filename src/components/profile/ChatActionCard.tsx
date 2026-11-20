@@ -42,6 +42,46 @@ function diffFor(change: ChatChange, prev: string | null): DiffLine[] {
   return lineDiff(prev ?? "", next);
 }
 
+// A change's line diff, added lines green and removed lines red; nothing when
+// the diff is empty. Both chat cards show one.
+function DiffLines({ diff }: { diff: DiffLine[] }) {
+  if (diff.length === 0) return null;
+  return (
+    <div className="max-h-56 overflow-auto py-1.5 font-mono text-[11px] leading-[1.5]">
+      {diff.map((ln, i) => (
+        <div
+          key={i}
+          className={[
+            "flex px-2.5",
+            ln.kind === "add"
+              ? "bg-success-bg"
+              : ln.kind === "del"
+                ? "bg-danger-bg"
+                : "",
+          ].join(" ")}
+        >
+          <span
+            aria-hidden="true"
+            className={[
+              "w-3.5 shrink-0 select-none",
+              ln.kind === "add"
+                ? "text-success"
+                : ln.kind === "del"
+                  ? "text-danger"
+                  : "text-muted",
+            ].join(" ")}
+          >
+            {ln.kind === "add" ? "+" : ln.kind === "del" ? "−" : " "}
+          </span>
+          <span className="whitespace-pre-wrap break-words text-primary">
+            {ln.text || " "}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ChatActionCard({
   model,
   onUndo,
@@ -79,40 +119,7 @@ export function ChatActionCard({
         </span>
       </div>
 
-      {diff.length > 0 ? (
-        <div className="max-h-56 overflow-auto py-1.5 font-mono text-[11px] leading-[1.5]">
-          {diff.map((ln, i) => (
-            <div
-              key={i}
-              className={[
-                "flex px-2.5",
-                ln.kind === "add"
-                  ? "bg-success-bg"
-                  : ln.kind === "del"
-                    ? "bg-danger-bg"
-                    : "",
-              ].join(" ")}
-            >
-              <span
-                aria-hidden="true"
-                className={[
-                  "w-3.5 shrink-0 select-none",
-                  ln.kind === "add"
-                    ? "text-success"
-                    : ln.kind === "del"
-                      ? "text-danger"
-                      : "text-muted",
-                ].join(" ")}
-              >
-                {ln.kind === "add" ? "+" : ln.kind === "del" ? "−" : " "}
-              </span>
-              <span className="whitespace-pre-wrap break-words text-primary">
-                {ln.text || " "}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      <DiffLines diff={diff} />
 
       <div className="flex items-center gap-2 border-t border-border-default px-2.5 py-2">
         <button
@@ -219,40 +226,7 @@ export function ChatRewriteProposal({
         )}
       </div>
 
-      {diff.length > 0 ? (
-        <div className="max-h-56 overflow-auto py-1.5 font-mono text-[11px] leading-[1.5]">
-          {diff.map((ln, i) => (
-            <div
-              key={i}
-              className={[
-                "flex px-2.5",
-                ln.kind === "add"
-                  ? "bg-success-bg"
-                  : ln.kind === "del"
-                    ? "bg-danger-bg"
-                    : "",
-              ].join(" ")}
-            >
-              <span
-                aria-hidden="true"
-                className={[
-                  "w-3.5 shrink-0 select-none",
-                  ln.kind === "add"
-                    ? "text-success"
-                    : ln.kind === "del"
-                      ? "text-danger"
-                      : "text-muted",
-                ].join(" ")}
-              >
-                {ln.kind === "add" ? "+" : ln.kind === "del" ? "−" : " "}
-              </span>
-              <span className="whitespace-pre-wrap break-words text-primary">
-                {ln.text || " "}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      <DiffLines diff={diff} />
 
       <div className="flex items-center gap-2 border-t border-border-default px-2.5 py-2">
         {resolved ? (

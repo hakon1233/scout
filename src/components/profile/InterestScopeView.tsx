@@ -10,6 +10,8 @@ import {
   loadCompanionToken,
   updateInterestSettings,
 } from "@/lib/companion";
+import { formatDocDate } from "@/lib/format-date";
+import { DOC_MARKDOWN } from "./DocMarkdown";
 import { LazyMarkdown } from "./LazyMarkdown";
 import type { DocCardModel } from "./InterestDocCard";
 
@@ -74,69 +76,6 @@ function CompanionBriefSettings({ interestId }: { interestId: string }) {
 // /app/interests/interest page's editorial layout; that route remains for
 // old deep links / new-tab opens.
 
-const MD = {
-  // The doc's own title sits under the page's h1 (the topic).
-  h1: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2
-      className="mb-4 font-serif text-title-2 leading-tight text-primary"
-      {...p}
-    />
-  ),
-  h2: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2
-      className="mb-2 mt-7 text-body-sm font-medium text-secondary first:mt-0"
-      {...p}
-    />
-  ),
-  h3: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3 className="mb-2 mt-5 font-serif text-title-3 text-primary" {...p} />
-  ),
-  p: (p: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p
-      className="my-3 font-reading text-body leading-relaxed text-secondary"
-      {...p}
-    />
-  ),
-  ul: (p: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul
-      className="my-3 list-disc space-y-2 pl-6 font-reading text-body leading-relaxed text-secondary"
-      {...p}
-    />
-  ),
-  ol: (p: React.HTMLAttributes<HTMLOListElement>) => (
-    <ol
-      className="my-3 list-decimal space-y-2 pl-6 font-reading text-body leading-relaxed text-secondary"
-      {...p}
-    />
-  ),
-  li: (p: React.HTMLAttributes<HTMLLIElement>) => (
-    <li className="pl-1" {...p} />
-  ),
-  strong: (p: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="font-semibold text-primary" {...p} />
-  ),
-  a: (p: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a className="text-signal underline underline-offset-2" {...p} />
-  ),
-  code: (p: React.HTMLAttributes<HTMLElement>) => (
-    <code
-      className="rounded bg-surface-muted px-1 py-0.5 font-mono text-body-sm text-primary"
-      {...p}
-    />
-  ),
-};
-
-function formatDocDate(iso?: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 export function InterestScopeView({
   model,
   onBack,
@@ -185,7 +124,7 @@ export function InterestScopeView({
           <section className="max-w-3xl">
             {model.body ? (
               <div className="scout-md">
-                <LazyMarkdown text={model.body} components={MD} />
+                <LazyMarkdown text={model.body} components={DOC_MARKDOWN} />
               </div>
             ) : model.hasDoc ? (
               <p className="font-reading text-body leading-relaxed text-secondary">

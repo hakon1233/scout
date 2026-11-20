@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { EmptyState } from "@/components/ui";
+import { DOC_MARKDOWN } from "@/components/profile/DocMarkdown";
 import { LazyMarkdown } from "@/components/profile/LazyMarkdown";
 import { bootstrapCompanionToken } from "@/lib/companion";
 import {
@@ -12,70 +13,9 @@ import {
   SAMPLE_INTERESTS,
   type InterestDocMeta,
 } from "@/lib/interest-docs";
+import { formatDocDate } from "@/lib/format-date";
 import { loadSettings } from "@/lib/storage";
 import type { Interest } from "@scout/core";
-
-const MD = {
-  h1: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2
-      className="mb-4 font-serif text-title-2 leading-tight text-primary"
-      {...p}
-    />
-  ),
-  h2: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2
-      className="mb-2 mt-7 text-body-sm font-medium text-secondary first:mt-0"
-      {...p}
-    />
-  ),
-  h3: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3 className="mb-2 mt-5 font-serif text-title-3 text-primary" {...p} />
-  ),
-  p: (p: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p
-      className="my-3 font-reading text-body leading-relaxed text-secondary"
-      {...p}
-    />
-  ),
-  ul: (p: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul
-      className="my-3 list-disc space-y-2 pl-6 font-reading text-body leading-relaxed text-secondary"
-      {...p}
-    />
-  ),
-  ol: (p: React.HTMLAttributes<HTMLOListElement>) => (
-    <ol
-      className="my-3 list-decimal space-y-2 pl-6 font-reading text-body leading-relaxed text-secondary"
-      {...p}
-    />
-  ),
-  li: (p: React.HTMLAttributes<HTMLLIElement>) => (
-    <li className="pl-1" {...p} />
-  ),
-  strong: (p: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="font-semibold text-primary" {...p} />
-  ),
-  a: (p: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a className="text-signal underline underline-offset-2" {...p} />
-  ),
-  code: (p: React.HTMLAttributes<HTMLElement>) => (
-    <code
-      className="rounded bg-surface-muted px-1 py-0.5 font-mono text-body-sm text-primary"
-      {...p}
-    />
-  ),
-};
-
-function formatDocDate(iso?: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export default function InterestScopePage() {
   const [hydrated, setHydrated] = useState(false);
@@ -171,7 +111,10 @@ export default function InterestScopePage() {
             <section className="max-w-3xl">
               {model.meta.body ? (
                 <div className="scout-md">
-                  <LazyMarkdown text={model.meta.body} components={MD} />
+                  <LazyMarkdown
+                    text={model.meta.body}
+                    components={DOC_MARKDOWN}
+                  />
                 </div>
               ) : model.meta.hasDoc ? (
                 <p className="font-reading text-body leading-relaxed text-secondary">

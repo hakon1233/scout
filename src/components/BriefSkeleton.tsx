@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Card } from "@/components/ui";
+import { Card, SkeletonLine } from "@/components/ui";
 
 export function BriefSkeleton() {
   return (
@@ -15,13 +15,5 @@ export function BriefSkeleton() {
         </Card>
       ))}
     </div>
-  );
-}
-
-function SkeletonLine({ className = "" }: { className?: string }) {
-  return (
-    <span
-      className={`scout-skeleton block rounded-sm bg-surface-muted ${className}`}
-    />
   );
 }
