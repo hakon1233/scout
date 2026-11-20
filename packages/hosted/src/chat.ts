@@ -8,6 +8,7 @@
 // switch, and one turn at a time per reader.
 
 import {
+  APP_PAGES,
   buildChatPrompt,
   parseChatOutput,
   planChatChanges,
@@ -82,6 +83,7 @@ const CHAT_OUTPUT_SCHEMA = {
         },
       },
     },
+    page: { type: "string", enum: Object.keys(APP_PAGES) },
   },
 };
 
@@ -160,6 +162,7 @@ export function createChat(deps: {
           status: "ready",
           reply: output.reply,
           changes: plan.applied,
+          ...(output.page ? { page: output.page } : {}),
           ...(pendingDeletes.length > 0
             ? {
                 pending_deletes: pendingDeletes,

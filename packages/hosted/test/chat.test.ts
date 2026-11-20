@@ -116,6 +116,32 @@ function setup(
   return { chat, requests, state };
 }
 
+test("a how-to answer keeps its allow-listed page and changes nothing", async () => {
+  const answer = (text: string): MessagesResponse =>
+    ({
+      ...recorded("create"),
+      content: [{ type: "text", text, citations: null }],
+    }) as MessagesResponse;
+  const { chat, requests, state } = setup([
+    answer(
+      '{"reply":"Set it under Time zone in Settings.","changes":[],"page":"/app/settings/"}',
+    ),
+    answer('{"reply":"Here.","changes":[],"page":"https://example.com/"}'),
+  ]);
+  const turn = await chat.turn("u1", "Where do I set my time zone?");
+  assert.equal(turn.page, "/app/settings/");
+  assert.deepEqual(turn.changes, []);
+  assert.deepEqual(state.interests, [AI]);
+  assert.match(promptOf(requests[0]), /How Scout works/);
+  const schema = requests[0].output_config?.format?.schema as {
+    properties: { page: { enum: string[] } };
+  };
+  assert.ok(schema.properties.page.enum.includes("/app/settings/"));
+
+  const other = await chat.turn("u1", "Link me somewhere");
+  assert.equal(other.page, undefined);
+});
+
 test("a create lands at once with a minted id, and the turn's cost is kept", async () => {
   const { chat, requests, state } = setup([recorded("create")]);
   const turn = await chat.turn("u1", "Follow Rust releases for me");

@@ -18,6 +18,7 @@ import type { ClaudeClient } from "@scout/research";
 import { supabaseChatStore, verifiedUserId } from "./chat-store.ts";
 import { requestRun, RpcError, rpcCaller } from "./supabase.ts";
 import { handleTeamRequest, isTeamPath, type TeamDeps } from "./team.ts";
+import { handleVoiceRequest, type VoiceAi } from "./voice.ts";
 
 export type HttpDeps = {
   supabaseUrl: string;
@@ -29,6 +30,7 @@ export type HttpDeps = {
   serviceKey?: string;
   claude?: ClaudeClient;
   fetch?: typeof fetch;
+  ai?: VoiceAi; // POST /voice (voice.ts)
 } & Pick<TeamDeps, "teamToken" | "moderationToken">;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -44,6 +46,7 @@ export async function handleRequest(
 ): Promise<Response> {
   const path = new URL(request.url).pathname;
   if (isTeamPath(path)) return handleTeamRequest(request, deps);
+  if (path === "/voice") return handleVoiceRequest(request, deps);
 
   const origin = request.headers.get("origin");
   const allowed = deps.allowedOrigin.split(",").map((o) => o.trim());

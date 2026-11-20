@@ -1,0 +1,21 @@
+{
+  "message": "How do I delete my account?",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    },
+    {
+      "id": "int_fusion",
+      "topic": "Fusion energy"
+    }
+  ],
+  "output": "{\"reply\": \"Go to https://scout.example/app/settings/ and type DELETE under Delete account.\", \"changes\": [], \"page\": \"/app/settings/\"}",
+  "expect": {
+    "applied": [],
+    "page": "/app/settings/"
+  },
+  "expectFail": [
+    "no-url"
+  ]
+}

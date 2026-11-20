@@ -25,6 +25,7 @@ import {
   chatTurnFromRow,
   plural,
   quotaMessage,
+  VOICE_USED_UP,
 } from "@scout/core";
 import { hostedAuth, hostedConfig } from "./auth";
 import { parseArticlesFromMarkdown } from "./companion";
@@ -108,6 +109,9 @@ export interface HostedData {
   transcript(): Promise<ChatTurn[]>;
   chat(message: string): Promise<ChatTurn>;
   confirm(action: ChatConfirm): Promise<ChatTurn>;
+  // A recorded clip as text for the chat input (the Worker's POST /voice).
+  // At a voice limit it throws a `limit` HostedError saying to type instead.
+  transcribe(audio: Blob): Promise<string>;
   setCadence(interestId: string, cadence: Cadence): Promise<void>;
   // Changes only the given fields; the next run uses them.
   setBriefSettings(
@@ -457,6 +461,46 @@ export function createHostedData(deps: {
 
     async confirm(action) {
       return (await worker("/chat/confirm", action)) as ChatTurn;
+    },
+
+    async transcribe(audio) {
+      if (!deps.workerUrl)
+        throw new HostedError(
+          "failed",
+          "This build has no Scout server set up.",
+        );
+      const s = await session();
+      let res: Response;
+      try {
+        res = await doFetch(`${deps.workerUrl}/voice`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${s.accessToken}`,
+            "content-type": audio.type || "audio/webm",
+          },
+          body: audio,
+        });
+      } catch {
+        throw new HostedError(
+          "failed",
+          "Scout's server can't be reached right now. Type instead.",
+        );
+      }
+      const body = (await res.json().catch(() => null)) as {
+        text?: string;
+        error?: string;
+      } | null;
+      if (res.ok && typeof body?.text === "string") return body.text;
+      if (res.status === 401)
+        throw new HostedError(
+          "signed-out",
+          "Your session ended. Sign in again.",
+        );
+      if (res.status === 429) throw new HostedError("limit", VOICE_USED_UP);
+      throw new HostedError(
+        "failed",
+        body?.error ?? "Voice isn't working right now. Type instead.",
+      );
     },
 
     async setCadence(interestId, cadence) {

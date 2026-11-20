@@ -82,6 +82,7 @@ type ChatCase = {
     applied: string[];
     pendingDelete?: string;
     pendingRewrite?: string;
+    page?: string;
   };
   expectFail: string[];
 };

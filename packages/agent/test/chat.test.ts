@@ -659,6 +659,44 @@ test("POST /v0/chat/confirm-delete returns 404 without a matching pending delete
   }
 });
 
+test("POST /v0/chat answers a how-to question with an allow-listed page and no change", async () => {
+  const { tmp, stateFile, interestsDir, token } = await seeded({
+    interests: [{ id: "int_abc123", topic: "ai safety" }],
+  });
+  const model = JSON.stringify({
+    reply: "Turn on a topic's bell on Topics.",
+    changes: [],
+    page: "/app/topics/",
+  });
+  const { spawnFn, calls } = makeChatSpawn({ output: model, autoClose: true });
+  const { onChatDone, done } = awaitTurn();
+  const { server, port } = await startServer(0, {
+    stateFile,
+    interestsDir,
+    spawnFn,
+    onChatDone,
+  });
+  try {
+    const kick = await fetch(`http://127.0.0.1:${port}/v0/chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ message: "How do I get notified?" }),
+    });
+    assert.equal(kick.status, 202);
+    const turn = await done;
+    assert.equal(turn.status, "ready");
+    assert.equal(turn.page, "/app/topics/");
+    assert.deepEqual(turn.changes, []);
+    assert.match(JSON.stringify(calls[0]), /How Scout works/);
+  } finally {
+    server.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("POST /v0/chat GATES a full rewrite: surfaces pending_rewrite and leaves the doc byte-identical", async () => {
   const { tmp, stateFile, interestsDir, token } = await seeded({
     interests: [{ id: "int_abc123", topic: "ai safety" }],

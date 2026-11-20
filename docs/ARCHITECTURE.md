@@ -54,6 +54,9 @@ as `@scout/core`, the companion as `#core`.
 - `chat-prompt.ts`, `chat-changes.ts`: the chat prompt and its output parser, and
   `planChatChanges`, the rules for what of a model's change set lands, waits for a
   confirm or is dropped. The companion and the hosted chat both use them.
+- `scout-guide.ts`: `SCOUT_GUIDE`, how Scout works in plain words, which the chat
+  prompt carries so the chat answers how-to questions; and `APP_PAGES`, the only pages a
+  reply may offer to open (`ChatTurn.page`). The parser drops any other page.
 
 The companion runs core's code from `dist/core`: its build compiles core there, and
 `#core` in its `package.json` points at that copy. Its tests and `pnpm eval` run with the
@@ -148,6 +151,12 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   result through `team_finish_run`, which queues the same pushes as a cron run.
   `MODERATION_TOKEN`: `POST /team/hide {interestId, reason}` hides a public topic
   (`team_hide_interest`, logged in `moderation_log`). Hidden, never deleted.
+- `voice.ts`: `POST /voice` (audio body, the reader's JWT, at most 1.5 MB) turns a clip
+  into text for the setup chat's input with Workers AI's `whisper-large-v3-turbo` (the
+  `AI` binding; without it the route answers 404). `begin_voice_clip`
+  (`*_voice.sql`) allows 5 clips per reader per rolling 24 hours and stops everyone at
+  9,000 of the free plan's 10,000 neurons a UTC day; then the reader is told to type.
+  The account stays on Workers Free, where going over fails rather than bills.
 
 ### The Scout team runner (`packages/agent/src/team-runner.ts`, `pnpm team:run`)
 

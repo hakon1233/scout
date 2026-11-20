@@ -27,8 +27,17 @@ import { scheduleNew, useHostedHome } from "./useHostedHome";
 // filter. Topics, sharing and schedules live on /app/topics. A reader with no
 // topics lands straight in the setup chat.
 export function HostedHome() {
-  const { data, home, turns, loadError, reload, signedOut, send, confirm } =
-    useHostedHome({ chat: true });
+  const {
+    data,
+    home,
+    turns,
+    loadError,
+    reload,
+    signedOut,
+    send,
+    confirm,
+    transcribe,
+  } = useHostedHome({ chat: true });
 
   // `data` is null only while prerendering (no window); the client's first
   // render must match it, so both show the skeleton.
@@ -68,6 +77,7 @@ export function HostedHome() {
             turns={turns}
             send={send}
             confirm={confirm}
+            transcribe={transcribe}
             label="Your topic"
             autoFocus
           />

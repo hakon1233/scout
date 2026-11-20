@@ -3,6 +3,7 @@
 // the companion and the hosted functions can all use it.
 
 export type {
+  AppPage,
   Brief,
   ChatChange,
   ChatConfirm,
@@ -21,7 +22,7 @@ export type {
   BriefSettings,
   InterestSettingsBody,
 } from "./contract.ts";
-export { PATHS } from "./contract.ts";
+export { PATHS, VOICE_USED_UP } from "./contract.ts";
 export {
   BRIEF_SETTINGS_COLUMNS,
   DEFAULT_BRIEF_SETTINGS,
@@ -48,6 +49,7 @@ export {
   type ResearchTools,
 } from "./research-prompt.ts";
 export { RELEVANCE_SKILLS } from "./relevance-skills.ts";
+export { APP_PAGES, SCOUT_GUIDE, appPage } from "./scout-guide.ts";
 export {
   assembleBrief,
   computeCoverage,

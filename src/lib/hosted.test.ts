@@ -339,6 +339,41 @@ test("chat and confirm go to the Worker and return its turn", async () => {
   });
 });
 
+test("a voice clip goes to the Worker as audio; a limit says to type instead", async () => {
+  const sent: {
+    url: string;
+    headers: Record<string, string>;
+    body: unknown;
+  }[] = [];
+  const answers = [
+    { status: 200, body: { text: "Follow Rust releases" } },
+    { status: 429, body: { error: "anything" } },
+  ];
+  const fetch = (async (url: string, init: RequestInit) => {
+    sent.push({
+      url,
+      headers: init.headers as Record<string, string>,
+      body: init.body,
+    });
+    const a = answers.shift()!;
+    return new Response(JSON.stringify(a.body), { status: a.status });
+  }) as unknown as typeof globalThis.fetch;
+  const d = data(fetch);
+  const clip = new Blob([new Uint8Array([1, 2])], { type: "audio/webm" });
+
+  assert.equal(await d.transcribe(clip), "Follow Rust releases");
+  assert.equal(sent[0].url, `${WORKER}/voice`);
+  assert.equal(sent[0].headers.authorization, "Bearer jwt-anna");
+  assert.equal(sent[0].headers["content-type"], "audio/webm");
+  assert.equal(sent[0].body, clip);
+
+  await assert.rejects(d.transcribe(clip), {
+    name: "HostedError",
+    kind: "limit",
+    message: "Voice is used up for today. Type instead.",
+  });
+});
+
 test("the transcript comes back oldest first from the stored rows", async () => {
   const row = (id: string, at: string) => ({
     id,

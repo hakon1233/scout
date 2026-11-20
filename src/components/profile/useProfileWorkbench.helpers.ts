@@ -152,6 +152,7 @@ export function transcriptMessages(turns: ChatTurn[]): ChatMessage[] {
             ? "applied"
             : undefined,
         rewriteAutoFocus: pendingRewrite ? false : undefined,
+        page: turn.page,
       });
     } else if (turn.status === "failed" && turn.error_msg) {
       out.push({
