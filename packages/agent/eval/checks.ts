@@ -143,6 +143,16 @@ export function checkResearchOutput(
 }
 
 // One chat turn's output, applied to a throwaway copy of the interests.
+// The `page` the model wrote, before parsing drops one that isn't allowed.
+function rawPage(raw: string): unknown {
+  try {
+    const text = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
+    return (JSON.parse(text) as { page?: unknown }).page;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function checkChatOutput(
   raw: string,
   opts: {
@@ -151,6 +161,7 @@ export async function checkChatOutput(
       applied: string[];
       pendingDelete?: string;
       pendingRewrite?: string;
+      page?: string;
     };
   },
 ): Promise<Check[]> {
@@ -169,7 +180,9 @@ export async function checkChatOutput(
       applied: result.applied.map((c) => `${c.op}:${c.topic ?? ""}`),
       pendingDelete: result.pendingDeletes[0]?.topic,
       pendingRewrite: result.pendingRewrites[0]?.topic,
+      page: output.page,
     };
+    const askedPage = rawPage(raw);
     return [
       check("json-object", true),
       check("reply", output.reply.trim().length > 0),
@@ -188,12 +201,23 @@ export async function checkChatOutput(
         "update, rewrite and delete must name a listed interest id",
       ),
       check(
+        "allowed-page",
+        askedPage === undefined || askedPage === output.page,
+        `page: ${JSON.stringify(askedPage)}`,
+      ),
+      check(
+        "no-url",
+        !/https?:\/\/|www\./i.test(output.reply),
+        "the reply must offer a page, never write a URL",
+      ),
+      check(
         "expected-effect",
         JSON.stringify(effect) ===
           JSON.stringify({
             applied: opts.expect.applied,
             pendingDelete: opts.expect.pendingDelete,
             pendingRewrite: opts.expect.pendingRewrite,
+            page: opts.expect.page,
           }),
         `got ${JSON.stringify(effect)}`,
       ),

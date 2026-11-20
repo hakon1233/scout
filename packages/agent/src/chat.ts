@@ -359,6 +359,7 @@ async function runChatTurn(
       message,
       reply: output.reply,
       changes: applied,
+      ...(output.page ? { page: output.page } : {}),
       ...(pendingDeletes.length > 0
         ? { pending_deletes: pendingDeletes, pending_delete: pendingDeletes[0] }
         : {}),

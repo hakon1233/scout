@@ -441,6 +441,7 @@ export function useProfileWorkbench() {
                 prev,
                 pendingDeletes,
                 pendingRewrite,
+                page: turn.page,
               },
             ]);
             startStream(id, turn.reply ?? "");

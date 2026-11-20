@@ -3,11 +3,13 @@
 // anything; chat-changes.ts decides what of its proposal lands.
 
 import type { ProposedChange, InterestSnapshot } from "./chat-changes.ts";
-import type { ChatTurn, Interest } from "./contract.ts";
+import type { AppPage, ChatTurn, Interest } from "./contract.ts";
+import { APP_PAGES, SCOUT_GUIDE, appPage } from "./scout-guide.ts";
 
 export type ChatModelOutput = {
   reply: string;
   changes: ProposedChange[];
+  page?: AppPage;
 };
 
 const CHAT_CONTEXT_TURN_LIMIT = 20;
@@ -36,6 +38,12 @@ export function buildChatPrompt(
     "manage their personalized-news interests. There is ONE chat for the WHOLE",
   );
   lines.push("set of interests — not one chat per interest.");
+  lines.push(
+    "You also answer the user's questions about how Scout works. The app calls an",
+  );
+  lines.push("interest a topic; say topic to the user.");
+  lines.push("");
+  lines.push(SCOUT_GUIDE);
   lines.push("");
   lines.push("Each interest has:");
   lines.push("- an `id`: an opaque, stable handle (do NOT invent new ids),");
@@ -137,7 +145,10 @@ export function buildChatPrompt(
   }
   lines.push("    // Delete an interest:");
   lines.push('    { "op": "delete", "interestId": "<existing id>" }');
-  lines.push("  ]");
+  lines.push("  ],");
+  lines.push(
+    '  "page": "<optional: one app page to offer the user, from the list below>"',
+  );
   lines.push("}");
   lines.push("");
   lines.push("Rules:");
@@ -252,6 +263,19 @@ export function buildChatPrompt(
       "    `follow`; never update, rewrite or delete one. If none fits, create as usual.",
     );
   }
+  lines.push(
+    "- A how-to question about Scout gets a short answer from the guide above and",
+  );
+  lines.push(
+    "    `changes: []`. Never invent a feature, setting or limit the guide doesn't",
+  );
+  lines.push(
+    "    name; if it doesn't say, tell the user you don't know. Never write a URL in",
+  );
+  lines.push(
+    "    `reply`. When a page would help, set `page` to exactly one of:",
+  );
+  lines.push(`    ${Object.keys(APP_PAGES).join(", ")}. Otherwise omit it.`);
   lines.push("- Do not use any tools. Output only the JSON object.");
   return lines.join("\n");
 }
@@ -273,10 +297,11 @@ export function parseChatOutput(raw: string): ChatModelOutput {
   } catch (err) {
     throw new Error(`chat model returned invalid JSON: ${String(err)}`);
   }
-  const obj = parsed as { reply?: unknown; changes?: unknown };
+  const obj = parsed as { reply?: unknown; changes?: unknown; page?: unknown };
   const reply = typeof obj.reply === "string" ? obj.reply : "";
   const changes = Array.isArray(obj.changes)
     ? (obj.changes as ProposedChange[])
     : [];
-  return { reply, changes };
+  const page = appPage(obj.page);
+  return page ? { reply, changes, page } : { reply, changes };
 }

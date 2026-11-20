@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatChange, PendingDelete, PendingRewrite } from "@scout/core";
+import type {
+  AppPage,
+  ChatChange,
+  PendingDelete,
+  PendingRewrite,
+} from "@scout/core";
+import { ChatPageLink } from "@/components/ChatPageLink";
 import { prefersReducedMotion } from "@/lib/motion";
 import {
   ChatActionCard,
@@ -40,6 +46,8 @@ export type ChatMessage = {
   rewriteAutoFocus?: boolean;
   // A turn that failed — offer retry, render quietly.
   failed?: boolean;
+  // A page of the app the reply offers to open (allow-listed in core).
+  page?: AppPage;
 };
 
 const SUGGESTED_PROMPTS = [
@@ -250,6 +258,8 @@ export function ChatDock({
                       disabled={sending}
                     />
                   ))}
+
+                  <ChatPageLink page={m.page} />
 
                   {m.pendingDeletes && (
                     <ChatDeleteConfirm

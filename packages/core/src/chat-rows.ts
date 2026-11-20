@@ -1,8 +1,10 @@
 // A hosted chat turn as a `chat_turns` row (supabase/migrations) and back.
 // The Worker writes rows and the web app reads them, so both use this one
-// mapping. Pending proposals share one `pending` jsonb column.
+// mapping. Pending proposals share one `pending` jsonb column, and so does
+// the reply's page link (not a proposal, but it saves a migration).
 
 import type {
+  AppPage,
   ChatChange,
   ChatTurn,
   PendingDelete,
@@ -21,6 +23,7 @@ export type ChatTurnRow = {
     deletes?: PendingDelete[];
     rewrite?: PendingRewrite;
     follows?: PendingFollow[];
+    page?: AppPage;
   } | null;
   error_msg: string | null;
 };
@@ -30,6 +33,7 @@ export function chatTurnToRow(turn: ChatTurn): ChatTurnRow {
   if (turn.pending_deletes?.length) pending.deletes = turn.pending_deletes;
   if (turn.pending_rewrite) pending.rewrite = turn.pending_rewrite;
   if (turn.pending_follows?.length) pending.follows = turn.pending_follows;
+  if (turn.page) pending.page = turn.page;
   return {
     id: turn.id,
     created_at: turn.created_at,
@@ -58,6 +62,7 @@ export function chatTurnFromRow(row: ChatTurnRow): ChatTurn {
     ...(row.pending?.follows?.length
       ? { pending_follows: row.pending.follows }
       : {}),
+    ...(row.pending?.page ? { page: row.pending.page } : {}),
     ...(row.error_msg !== null ? { error_msg: row.error_msg } : {}),
   };
 }

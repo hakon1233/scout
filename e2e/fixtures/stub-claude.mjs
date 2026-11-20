@@ -157,7 +157,18 @@ function emitChat(prompt) {
   const firstId = targetIds[0] ?? "";
   let out;
 
-  if (/\b(rewrite|start over|from scratch)\b/i.test(message) && firstId) {
+  if (/^how do i\b/i.test(message)) {
+    // A how-to question: answered from the guide, nothing changed, and one
+    // allow-listed page offered.
+    out = {
+      reply: "Open Settings and turn on notifications for this device.",
+      changes: [],
+      page: "/app/settings/",
+    };
+  } else if (
+    /\b(rewrite|start over|from scratch)\b/i.test(message) &&
+    firstId
+  ) {
     // Confirm-gated full rewrite: propose the WHOLE doc, do NOT claim
     // it's done. chat.ts collects this into pending_rewrite.
     out = {

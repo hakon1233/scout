@@ -11,8 +11,10 @@ import {
   ChatDeleteConfirm,
   type DeleteResolution,
 } from "@/components/profile/ChatDeleteConfirm";
+import { ChatPageLink } from "@/components/ChatPageLink";
 import { Button } from "@/components/ui";
 import { HostedError } from "@/lib/hosted";
+import { VoiceButton } from "./VoiceButton";
 
 // The hosted setup chat: the reader says what they want to follow, Scout
 // answers and changes their interests. Only the last turn's proposals
@@ -23,6 +25,7 @@ export function HostedChat({
   confirm,
   label,
   autoFocus = false,
+  transcribe,
 }: {
   turns: ChatTurn[];
   // Both resolve once the turn is stored; the parent appends it and reloads.
@@ -31,10 +34,13 @@ export function HostedChat({
   // The composer's visible label.
   label: string;
   autoFocus?: boolean;
+  // A recorded clip as text. Without it (local mode) there is no mic.
+  transcribe?: (audio: Blob) => Promise<string>;
 }) {
   const [draft, setDraft] = React.useState("");
   const [sending, setSending] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [voiceStatus, setVoiceStatus] = React.useState<string | null>(null);
   const [resolved, setResolved] = React.useState<
     Record<string, "done" | "kept">
   >({});
@@ -93,6 +99,7 @@ export function HostedChat({
               ) : (
                 <>
                   {turn.reply && <ChatMarkdown text={turn.reply} />}
+                  <ChatPageLink page={turn.page} />
                   <Changes turn={turn} />
                   {turn === last && (
                     <Proposals
@@ -149,10 +156,27 @@ export function HostedChat({
             {error}
           </p>
         )}
-        <div>
+        <div className="flex items-center gap-2">
           <Button type="submit" loading={sending !== null}>
             Send
           </Button>
+          {transcribe && (
+            <VoiceButton
+              transcribe={transcribe}
+              disabled={sending !== null}
+              onText={(text) => {
+                setError(null);
+                setDraft((d) => (d.trim() ? `${d.trimEnd()} ${text}` : text));
+              }}
+              onStatus={setVoiceStatus}
+              onError={setError}
+            />
+          )}
+          {voiceStatus && (
+            <p aria-live="polite" className="text-body-sm text-muted">
+              {voiceStatus}
+            </p>
+          )}
         </div>
       </form>
     </div>

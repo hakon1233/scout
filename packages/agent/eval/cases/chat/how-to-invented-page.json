@@ -1,0 +1,20 @@
+{
+  "message": "Where can I see public topics?",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    },
+    {
+      "id": "int_fusion",
+      "topic": "Fusion energy"
+    }
+  ],
+  "output": "{\"reply\": \"Public topics will be listed in Browse.\", \"changes\": [], \"page\": \"/app/explore/\"}",
+  "expect": {
+    "applied": []
+  },
+  "expectFail": [
+    "allowed-page"
+  ]
+}

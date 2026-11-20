@@ -3,6 +3,10 @@
 // `@scout/agent/contract`), so it must stay browser-safe: types and constants
 // only, no Node imports.
 
+// What the hosted Worker's POST /voice answers (429) at any voice limit, and
+// what the web app shows: voice has no paid fallback.
+export const VOICE_USED_UP = "Voice is used up for today. Type instead.";
+
 // Paths the companion serves. Everything else is the static web app.
 export const PATHS = {
   health: "/healthz",
@@ -141,8 +145,18 @@ export type ChatTurn = {
   pending_delete?: PendingDelete;
   pending_rewrite?: PendingRewrite;
   pending_follows?: PendingFollow[];
+  // A page of the app the reply offers to open (core's APP_PAGES).
+  page?: AppPage;
   error_msg?: string;
 };
+
+// The app pages a chat reply may link to. Labels live in scout-guide.ts.
+export type AppPage =
+  | "/app/topics/"
+  | "/app/browse/"
+  | "/app/profile/"
+  | "/app/settings/"
+  | "/app/upgrade/";
 
 // Outcome of the last scheduled run: success (a brief landed), failed, or
 // skipped (a run was already in flight, or there were no interests).

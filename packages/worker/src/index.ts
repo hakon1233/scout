@@ -1,13 +1,14 @@
 // The Cloudflare Worker: wiring only. The minute tick runs runDue with the
 // Supabase queue and the Anthropic client, then sends queued pushes with the
 // subrequests left; the daily cron cleans up and, on Mondays, queues the
-// weekly push. fetch serves run-now, the chat and delete account.
+// weekly push. fetch serves run-now, the chat, voice and delete account.
 // Secrets (SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, SUPABASE_ANON_KEY,
 // VAPID_PRIVATE_KEY, and optionally TEAM_RUNNER_TOKEN and MODERATION_TOKEN)
 // come from `wrangler secret put`, never from a file.
 
 import { anthropicClient } from "@scout/research";
 import { handleRequest } from "./http.ts";
+import type { VoiceAi } from "./voice.ts";
 import { sendOutbox } from "./push.ts";
 import { DEFAULT_BATCH, notifyBudget, runDue } from "./run-due.ts";
 import { dailyJobs, supabasePushStore, supabaseQueue } from "./supabase.ts";
@@ -34,6 +35,8 @@ export type Env = {
   TEAM_RUNNER_TOKEN?: string;
   // /team/hide, for the weekly public topic check. Unset, it does not exist.
   MODERATION_TOKEN?: string;
+  // Workers AI ([ai] in wrangler.toml), for POST /voice. Free tier only.
+  AI?: VoiceAi;
 };
 
 // wrangler.toml's daily trigger.
@@ -80,6 +83,7 @@ const worker = {
       claude: anthropicClient({ apiKey: env.ANTHROPIC_API_KEY }),
       teamToken: env.TEAM_RUNNER_TOKEN,
       moderationToken: env.MODERATION_TOKEN,
+      ai: env.AI,
     });
   },
 };

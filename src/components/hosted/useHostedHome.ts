@@ -114,7 +114,26 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
     [data, reload],
   );
 
-  return { data, home, turns, loadError, reload, signedOut, send, confirm };
+  // A recorded clip as text for the chat input (the Worker's /voice).
+  const transcribe = React.useCallback(
+    async (audio: Blob) => {
+      if (!data) throw new HostedError("failed", "Type instead.");
+      return data.transcribe(audio);
+    },
+    [data],
+  );
+
+  return {
+    data,
+    home,
+    turns,
+    loadError,
+    reload,
+    signedOut,
+    send,
+    confirm,
+    transcribe,
+  };
 }
 
 // A new topic takes the first free slot (daily, then weekly) or stays paused.

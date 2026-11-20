@@ -1,0 +1,19 @@
+{
+  "message": "How do I get a push when a brief lands?",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    },
+    {
+      "id": "int_fusion",
+      "topic": "Fusion energy"
+    }
+  ],
+  "output": "{\"reply\": \"Turn on notifications for this device in Settings, then press the bell on each topic you want a push for.\", \"changes\": [], \"page\": \"/app/settings/\"}",
+  "expect": {
+    "applied": [],
+    "page": "/app/settings/"
+  },
+  "expectFail": []
+}

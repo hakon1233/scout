@@ -31,3 +31,12 @@ RUN_BATCH = "2"
 # NEXT_PUBLIC_VAPID_PUBLIC_KEY) and the contact push services see.
 VAPID_PUBLIC_KEY = "BI6UnDSibkd7O63kgma8diRbDNqciOAYM00hAVYqp-nsn-TAP1AsHpGyEmG3Psj6u1ALdIQKAJZzbZYBLnAMyhE"
 VAPID_SUBJECT = "https://scout-ideas.pages.dev/"
+
+# Workers AI, for POST /voice (src/voice.ts): whisper-large-v3-turbo, about 47
+# neurons per audio minute. Free tier only: the Workers Free plan includes 10,000
+# neurons a day and fails past them instead of billing
+# (https://developers.cloudflare.com/workers-ai/platform/pricing/). Keep this
+# account on Workers Free; there is no billing or usage-model setting here.
+# The database stops voice at 9,000 neurons a day (supabase/migrations/*_voice.sql).
+[ai]
+binding = "AI"

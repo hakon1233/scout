@@ -28,8 +28,17 @@ const UNDO_MS = 15_000;
 // schedule and privacy, then the ones they follow. "New" opens the setup chat
 // (also reached from the menu's "New topic" as ?new=1).
 export function HostedTopics() {
-  const { data, home, turns, loadError, reload, signedOut, send, confirm } =
-    useHostedHome({ chat: true });
+  const {
+    data,
+    home,
+    turns,
+    loadError,
+    reload,
+    signedOut,
+    send,
+    confirm,
+    transcribe,
+  } = useHostedHome({ chat: true });
   const [chatOpen, setChatOpen] = React.useState(false);
   const push = useTopicPush(data);
 
@@ -62,6 +71,7 @@ export function HostedTopics() {
             turns={turns.slice(-6)}
             send={send}
             confirm={confirm}
+            transcribe={transcribe}
             label="Message Scout"
             autoFocus
           />
