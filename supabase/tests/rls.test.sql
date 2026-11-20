@@ -9,6 +9,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 
+-- The hosted project holds real rows (the starter catalog, real runs and spend), so
+-- reads are scoped to this file's fixtures (ids starting 00000000-) and spend is
+-- measured from a baseline taken before any fixture costs.
+
 -- ---------------------------------------------------------------------------
 -- Setup (as postgres)
 -- ---------------------------------------------------------------------------
@@ -69,11 +73,11 @@ set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
 select results_eq(
-  'select topic from public.interests order by topic',
+  'select topic from public.interests where id::text like ''00000000-%'' order by topic',
   array['House public'],
   'anon reads only live public interests');
 select results_eq(
-  'select section_md from public.runs order by section_md',
+  'select section_md from public.runs where interest_id::text like ''00000000-%'' order by section_md',
   array['public section'],
   'anon reads only runs of live public interests');
 select throws_ok('select * from public.profiles', '42501', null, 'anon cannot read profiles');
@@ -114,11 +118,11 @@ select set_config('request.jwt.claims',
   '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}', true);
 
 select results_eq(
-  'select topic from public.interests order by topic',
+  'select topic from public.interests where id::text like ''00000000-%'' order by topic',
   array['House public'],
   'Ben sees only the public interest before following');
 select results_eq(
-  'select section_md from public.runs order by section_md',
+  'select section_md from public.runs where interest_id::text like ''00000000-%'' order by section_md',
   array['public section'],
   'Ben sees only public runs before following');
 select results_eq(
@@ -208,11 +212,11 @@ select set_config('request.jwt.claims',
   '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}', true);
 
 select results_eq(
-  'select topic from public.interests order by topic',
+  'select topic from public.interests where id::text like ''00000000-%'' order by topic',
   array['Anna shared', 'House public'],
   'Ben reads the shared interest he follows, never a private one even with a follow row');
 select results_eq(
-  'select section_md from public.runs order by section_md',
+  'select section_md from public.runs where interest_id::text like ''00000000-%'' order by section_md',
   array['public section', 'shared section'],
   'Ben reads runs of the shared interest he follows');
 update public.interests set doc = 'edited' where id = '00000000-0000-0000-0000-0000000000a2';
@@ -220,7 +224,7 @@ select lives_ok(
   $$delete from public.follows where interest_id = '00000000-0000-0000-0000-0000000000a2'$$,
   'Ben unfollows');
 select results_eq(
-  'select topic from public.interests order by topic',
+  'select topic from public.interests where id::text like ''00000000-%'' order by topic',
   array['House public'],
   'after unfollowing, the shared interest is gone from Ben''s view');
 
@@ -239,11 +243,11 @@ select set_config('request.jwt.claims',
   '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated"}', true);
 
 select results_eq(
-  'select topic from public.interests order by topic',
+  'select topic from public.interests where id::text like ''00000000-%'' order by topic',
   array['Anna private', 'Anna shared', 'Deleted public', 'House public'],
   'Anna reads all her interests, deleted ones included');
 select results_eq(
-  'select section_md from public.runs order by section_md',
+  'select section_md from public.runs where interest_id::text like ''00000000-%'' order by section_md',
   array['deleted section', 'private section', 'public section', 'shared section'],
   'Anna reads the runs of all her interests');
 select is((select count(*)::int from public.follows), 0, 'Anna cannot see Ben''s follows');

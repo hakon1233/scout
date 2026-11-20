@@ -8,6 +8,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 
+-- The hosted project holds real rows (the starter catalog, real runs and spend), so
+-- reads are scoped to this file's fixtures (ids starting 00000000-) and spend is
+-- measured from a baseline taken before any fixture costs.
+
 -- ---------------------------------------------------------------------------
 -- Setup (as postgres): Hana hosts (admin), Ben follows, Cleo is a plain reader.
 -- ---------------------------------------------------------------------------
@@ -84,7 +88,7 @@ select is((public.interest_by_slug((select share_slug from slugs
     where id = '00000000-0000-0000-0000-00000000a002')) ->> 'visibility'),
   'public', 'a signed-out visitor reads a public interest by its link');
 select is(public.interest_by_slug('no-such-slug-aaaaaaaaaaaa'), null, 'an unknown link shows nothing');
-select results_eq('select topic from public.interests order by topic', array['Heat pumps'],
+select results_eq('select topic from public.interests where id::text like ''00000000-%'' order by topic', array['Heat pumps'],
   'signed out, the table still shows only public interests');
 select ok(not has_function_privilege('anon', 'public.follow(text)', 'execute'),
   'a signed-out visitor cannot follow');
@@ -107,7 +111,7 @@ select lives_ok($$ select public.follow((select share_slug from slugs
 select results_eq('select interest_id from public.follows order by interest_id',
   array['00000000-0000-0000-0000-00000000a001'::uuid, '00000000-0000-0000-0000-00000000a002'::uuid],
   'the follower sees both follows, once each');
-select results_eq($$select topic from public.interests order by topic$$,
+select results_eq($$select topic from public.interests where id::text like '00000000-%' order by topic$$,
   array['Heat pumps', 'Trondheim events'], 'the follower reads both interests');
 select is((select count(*)::int from public.runs
     where interest_id = '00000000-0000-0000-0000-00000000a001'),

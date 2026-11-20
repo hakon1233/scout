@@ -8,6 +8,11 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 
+-- The hosted project holds real spend today, so spend is measured from a
+-- baseline taken before any fixture costs.
+select set_config('scout.spend_noon', public.spend_today('2026-11-20 12:00+00')::text, true);
+select set_config('scout.spend_1204', public.spend_today('2026-11-20 12:04+00')::text, true);
+
 -- ---------------------------------------------------------------------------
 -- Setup (as postgres)
 -- ---------------------------------------------------------------------------
@@ -80,11 +85,11 @@ update public.settings set paused = false;
 
 insert into public.chat_turns (user_id, message, cost_usd, created_at) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'expensive', 10.00, '2026-11-20 11:00+00');
-select is(public.spend_today('2026-11-20 12:00+00'), 10.00::numeric, 'chat cost counts today');
+select is(public.spend_today('2026-11-20 12:00+00') - current_setting('scout.spend_noon')::numeric, 10.00::numeric, 'chat cost counts today');
 select is((select count(*)::int from public.claim_runs(10, '2026-11-20 12:00+00')), 0,
   'ceiling reached: no runs claimed');
 select ok(public.spending_open('2026-11-21 12:00+00'), 'the ceiling resets on the next UTC day');
-delete from public.chat_turns;
+delete from public.chat_turns where user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
 
 -- ---------------------------------------------------------------------------
 -- Claiming
@@ -121,7 +126,7 @@ select is(
   (select status || ' ' || cost_usd || ' ' || searches from public.runs
    where interest_id = '00000000-0000-0000-0000-0000000000a3' and section_md is not null),
   'ready 0.0600 4', 'a ready run keeps its cost and searches');
-select is(public.spend_today('2026-11-20 12:04+00'), 0.06::numeric, 'run cost counts today');
+select is(public.spend_today('2026-11-20 12:04+00') - current_setting('scout.spend_1204')::numeric, 0.06::numeric, 'run cost counts today');
 
 -- Ben weekly fails once: queued again; then fails for good with a notification.
 select ok(public.finish_run(

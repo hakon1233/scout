@@ -6,6 +6,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 
+-- The hosted project holds real spend today, so spend is measured from a
+-- baseline taken before any fixture costs.
+select set_config('scout.spend_base', public.spend_today()::text, true);
+
 -- ---------------------------------------------------------------------------
 -- Setup (as postgres)
 -- ---------------------------------------------------------------------------
@@ -78,7 +82,7 @@ select is((select status || '|' || reply || '|' || cost_usd::text || '|' || (pen
   'ready|done|0.0123|Anna renamed', 'the turn is stored with its pending deletes and cost');
 select is((select jsonb_array_length(changes) from public.chat_turns
            where id = '11111111-0000-0000-0000-000000000001'), 3, 'changes are stored');
-select is(public.spend_today(), 0.0123::numeric, 'the turn''s cost counts toward today''s spend');
+select is(public.spend_today() - current_setting('scout.spend_base')::numeric, 0.0123::numeric, 'the turn''s cost counts toward today''s spend');
 
 select lives_ok($$
   select public.commit_chat_turn('aaaaaaaa-0000-0000-0000-000000000001',
