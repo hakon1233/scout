@@ -27,7 +27,9 @@
     "check:tarball-dist": "node scripts/check-tarball-dist.mjs",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "eval": "tsx --conditions=source packages/agent/eval/run.ts",
-    "test:rls": "supabase db reset --local && supabase test db"
+    "test:rls": "supabase db reset --local && supabase test db",
+    "db:push:hosted": "node scripts/supabase-hosted.mjs push",
+    "test:rls:hosted": "node scripts/supabase-hosted.mjs test"
   },
   "dependencies": {
     "@scout/core": "workspace:*",

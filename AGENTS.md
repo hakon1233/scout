@@ -22,6 +22,11 @@ code, tests and comments.
   changing a prompt.
 - `pnpm test:rls`: the hosted schema's RLS and quota tests (`supabase/tests`). Needs
   Docker and `supabase start`; resets the local database first. Not part of `pnpm check`.
+- `pnpm test:rls:hosted`: the same tests against a hosted project over the Management
+  API, no Docker. Needs `SUPABASE_PROJECT_REF` and `SUPABASE_ACCESS_TOKEN` (a personal
+  access token; never `supabase login`). Each file runs in a transaction that is always
+  rolled back, and it checks no rows were left behind. `pnpm db:push:hosted` applies
+  pending migrations the same way and records them as `supabase db push` would.
 
 ## Rules
 
