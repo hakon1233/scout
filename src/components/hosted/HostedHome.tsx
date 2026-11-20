@@ -4,9 +4,11 @@ import * as React from "react";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { BriefLayout } from "@/components/BriefLayout";
 import { FeedNotices, type NoticeView } from "@/components/FeedNotices";
+import { PickCards, usePicks } from "@/components/PickCards";
 import { AppShell } from "@/components/shell/AppShell";
 import { ContactEmail } from "@/components/shell/DraftDocument";
 import { TopicFilter } from "@/components/TopicFilter";
+import { startUsage } from "@/lib/usage";
 import { Banner, Button } from "@/components/ui";
 import {
   dismissLocally,
@@ -23,8 +25,8 @@ import {
 import { HostedChat } from "./HostedChat";
 import { scheduleNew, useHostedHome } from "./useHostedHome";
 
-// The signed-in hosted feed: notice cards, then the latest brief with a topic
-// filter. Topics, sharing and schedules live on /app/topics. A reader with no
+// The signed-in hosted feed: notice cards and up to three picks, then the
+// latest brief with a topic filter. Topics, sharing and schedules live on /app/topics. A reader with no
 // topics lands straight in the setup chat.
 export function HostedHome() {
   const {
@@ -133,6 +135,12 @@ function Feed({
   );
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const picks = usePicks(data, signedOut);
+  // Reading events for picks; only this signed-in hosted feed records them.
+  React.useEffect(
+    () => startUsage(data, home.interests),
+    [data, home.interests],
+  );
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage read on mount
     setDismissed(readDismissed());
@@ -264,6 +272,7 @@ function Feed({
   return (
     <>
       <FeedNotices items={items} />
+      <PickCards picks={picks} max={3} />
       {error && (
         <p role="alert" className="text-body-sm text-danger">
           {error}

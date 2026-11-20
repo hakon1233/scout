@@ -8,6 +8,7 @@
 // no import cycle at runtime.
 
 import {
+  canonicalUrl,
   DEFAULT_BRIEF_SETTINGS,
   parseBriefSettings,
   type BriefSettings,
@@ -79,6 +80,8 @@ export function createFakeAuthClient(): AuthClient {
     },
     onAuthStateChange(callback) {
       listeners.add(callback);
+      // supabase-js reports the current session to each new listener.
+      queueMicrotask(() => callback("INITIAL_SESSION", session()));
       return {
         data: {
           subscription: { unsubscribe: () => listeners.delete(callback) },
@@ -104,6 +107,7 @@ function interest(
     following: false,
     visibility: "private",
     shareSlug: null,
+    tags: [],
     run: null,
     updatedAt: day(0),
     failed: null,
@@ -142,6 +146,7 @@ function seedInterests(): HostedInterest[] {
       cadence: "weekly",
       visibility: "public",
       shareSlug: "rust-releases",
+      tags: ["rust", "programming"],
       settings: { ...DEFAULT_BRIEF_SETTINGS, length: "long", stories: 3 },
       updatedAt: day(4),
       failed: "The last run stopped before it finished.",
@@ -281,6 +286,30 @@ function seedCatalog(): TopicCard[] {
   ];
 }
 
+// The tags the fake publish check gives each seeded topic.
+const FAKE_PUBLISH_TAGS: Record<string, string[]> = {
+  power: ["energy", "norway"],
+  llama: ["ai", "open-models"],
+};
+
+/** A like or save of one seeded story, as story_marks keeps it. */
+function storyMark(a: Article, daysAgo: number): StoryMark {
+  return {
+    storyKey: canonicalUrl(a.url),
+    interestId: null,
+    story: {
+      url: a.url,
+      headline: a.title,
+      blurb: a.text,
+      source: new URL(a.url).hostname.replace(/^www\./, ""),
+      topic: a.interest,
+      publishedAt: a.publishedAt,
+      likedAt: day(daysAgo, 12),
+    },
+    createdAt: day(daysAgo, 12),
+  };
+}
+
 const reply = (message: string, text: string): ChatTurn => ({
   id: `fake-turn-${Math.random().toString(36).slice(2)}`,
   created_at: new Date().toISOString(),
@@ -307,7 +336,10 @@ export function createFakeHostedData(): HostedData {
     role: null,
     likedTags: [],
   };
-  const marks: Record<MarkKind, StoryMark[]> = { like: [], save: [] };
+  const marks: Record<MarkKind, StoryMark[]> = {
+    like: [storyMark(brief.articles[2], 0)],
+    save: [storyMark(brief.articles[0], 0), storyMark(brief.articles[4], 1)],
+  };
   let picks: PickCard[] = catalog.slice(0, 3).map((c) => ({
     id: c.id,
     slug: c.slug,
@@ -418,11 +450,18 @@ export function createFakeHostedData(): HostedData {
       throw new Error("Voice isn't available in this preview; type instead.");
     },
     async publish(id) {
+      // Long enough for the "checking" step to show.
+      await new Promise((r) => setTimeout(r, 600));
       const slug = `${id}-public`;
-      patch(id, { visibility: "public", shareSlug: slug });
-      return { status: "public", slug, tags: ["preview"] };
+      const tags = FAKE_PUBLISH_TAGS[id] ?? ["news"];
+      patch(id, { visibility: "public", shareSlug: slug, tags });
+      return { status: "public", slug, tags };
     },
-    setTags: async (_id, tags) => cleanTags(tags),
+    async setTags(id, tags) {
+      const clean = cleanTags(tags);
+      patch(id, { tags: clean });
+      return clean;
+    },
     async browse(query = {}) {
       const q = query.q?.trim().toLowerCase();
       let cards = catalog.filter(

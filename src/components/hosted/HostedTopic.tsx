@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import type { BriefSettings } from "@scout/core";
 import { AppSkeleton } from "@/components/AppSkeleton";
@@ -7,9 +8,10 @@ import { BriefSettingsGroup } from "@/components/BriefSettingsGroup";
 import { FeedView } from "@/components/FeedView";
 import { PushBell } from "@/components/PushBell";
 import { AppShell, PageHeader } from "@/components/shell/AppShell";
-import { Segmented, SettingsRow } from "@/components/ui";
+import { Segmented, SettingsGroup, SettingsRow } from "@/components/ui";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { formatDate } from "@/lib/format-date";
+import { planFor } from "@/lib/plans";
 import {
   HostedError,
   type Cadence,
@@ -19,6 +21,7 @@ import {
 } from "@/lib/hosted";
 import { hostedMenu } from "./HostedHome";
 import { PRIVACY } from "./HostedTopics";
+import { SharingSection } from "./SharingSection";
 import { useHostedHome } from "./useHostedHome";
 
 const RUNS: { value: Cadence; label: string }[] = [
@@ -87,6 +90,7 @@ function TopicPage({
   signedOut: (err: unknown) => boolean;
   push: ReturnType<typeof useTopicPush>;
 }) {
+  const router = useRouter();
   const [runsError, setRunsError] = React.useState<string | null>(null);
   const [cadence, setCadence] = React.useState<Cadence>(i.cadence);
   React.useEffect(() => {
@@ -219,6 +223,26 @@ function TopicPage({
             </p>
           )}
         </div>
+      )}
+
+      {!i.following && (
+        <SettingsGroup title="Sharing">
+          <div className="p-4">
+            <SharingSection
+              data={data}
+              interest={i}
+              publicUsed={
+                home.interests.filter(
+                  (x) => !x.following && x.visibility === "public",
+                ).length
+              }
+              publicLimit={planFor(home.allowance.plan).publicTopics}
+              onChanged={reload}
+              onSignedOut={signedOut}
+              onEdit={() => router.push("/app/topics/?new=1")}
+            />
+          </div>
+        </SettingsGroup>
       )}
     </>
   );

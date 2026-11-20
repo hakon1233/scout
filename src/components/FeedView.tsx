@@ -5,9 +5,10 @@ import dynamic from "next/dynamic";
 import type { Article, Brief } from "@/lib/types";
 import { canonicalUrl } from "@scout/core";
 import type { LikeInput } from "@/lib/likes";
-import { LikeButton } from "@/components/LikeButton";
+import { LikeButton, SaveButton } from "@/components/LikeButton";
 import { EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
+import { usage } from "@/lib/usage";
 
 // react-markdown + rehype-sanitize (~170KB) are only needed by the
 // single-story detail body, which never mounts until a reader opens a card.
@@ -82,6 +83,22 @@ export function FeedView({
     ? (items.find((it) => it.id === selectedId) ?? null)
     : null;
   const detailOpen = selected != null;
+
+  // Hosted and signed in only (usage is a no-op until startUsage): the brief
+  // was seen, and which story is open for how long.
+  React.useEffect(() => {
+    usage.briefViewed(
+      brief.id,
+      brief.articles.map((a) => a.interest),
+    );
+  }, [brief]);
+  const openTopic = selected?.topic;
+  const openUrl = selected?.url;
+  React.useEffect(() => {
+    if (!openTopic || !openUrl) return;
+    usage.storyOpened(openTopic, openUrl);
+    return () => usage.storyClosed();
+  }, [openTopic, openUrl]);
 
   // Tell the page when we're in single-story mode so it can drop the
   // brief header, banners, and history pager — leaving only this one story.
@@ -212,7 +229,10 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
         >
           ← Back to feed
         </button>
-        <LikeButton story={likeInputFor(item)} />
+        <span className="flex items-center gap-2">
+          <SaveButton story={likeInputFor(item)} />
+          <LikeButton story={likeInputFor(item)} />
+        </span>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -365,7 +385,7 @@ export function SourceBadge({ host }: { host: string }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-border-default bg-surface text-caption font-semibold uppercase leading-none text-muted"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-surface-muted text-caption font-semibold uppercase leading-none text-muted"
     >
       {host.replace(/^www\./, "").charAt(0)}
     </span>

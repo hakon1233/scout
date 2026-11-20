@@ -33,7 +33,12 @@ import {
 import { hostedAuth, hostedConfig } from "./auth";
 import { parseArticlesFromMarkdown } from "./companion";
 import { createFakeHostedData, fakeHostedOn } from "./hosted-fake";
-import { followLikes, type LikedStory, type LikesSync } from "./likes";
+import {
+  followLikes,
+  followSaves,
+  type LikedStory,
+  type LikesSync,
+} from "./likes";
 import type { Brief } from "./types";
 
 export type Cadence = "daily" | "weekly" | "off";
@@ -54,6 +59,9 @@ export type HostedInterest = {
   visibility: Visibility;
   // The link's slug while shared or public; null when private.
   shareSlug: string | null;
+  // Its catalog tags while public (made by the publish check, then the
+  // owner's); empty otherwise.
+  tags: string[];
   // A run waiting in the queue or being researched now.
   run: "queued" | "running" | null;
   // When the latest brief section for it was written, or null for none yet.
@@ -316,7 +324,12 @@ export function createHostedData(deps: {
 
   async function call(
     url: string,
-    init: { method: string; body?: unknown; prefer?: string },
+    init: {
+      method: string;
+      body?: unknown;
+      prefer?: string;
+      keepalive?: boolean;
+    },
     s: Session,
     apikey = true,
   ): Promise<{ status: number; body: unknown }> {
@@ -332,6 +345,7 @@ export function createHostedData(deps: {
         method: init.method,
         headers,
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        ...(init.keepalive ? { keepalive: true } : {}),
       });
     } catch {
       throw new HostedError(
@@ -355,7 +369,13 @@ export function createHostedData(deps: {
 
   async function rest<T>(
     path: string,
-    init: { method?: string; body?: unknown; prefer?: string } = {},
+    init: {
+      method?: string;
+      body?: unknown;
+      prefer?: string;
+      // Lets the request finish after the page is gone (usage on pagehide).
+      keepalive?: boolean;
+    } = {},
     // Signed out, the anon key stands in for the session (public reads only).
     signedOutOk = false,
   ): Promise<T> {
@@ -364,7 +384,12 @@ export function createHostedData(deps: {
       : await session();
     const { status, body } = await call(
       `${deps.supabaseUrl}/rest/v1/${path}`,
-      { method: init.method ?? "GET", body: init.body, prefer: init.prefer },
+      {
+        method: init.method ?? "GET",
+        body: init.body,
+        prefer: init.prefer,
+        keepalive: init.keepalive,
+      },
       s,
     );
     if (status >= 400) throw restError(body);
@@ -904,6 +929,7 @@ export function createHostedData(deps: {
                 : null,
           })),
           prefer: "return=minimal",
+          keepalive: true,
         });
       }
     },
@@ -936,7 +962,7 @@ type MarkRow = {
   created_at: string;
 };
 
-const INTEREST_COLUMNS = `id,topic,cadence,visibility,share_slug,${BRIEF_SETTINGS_COLUMNS}`;
+const INTEREST_COLUMNS = `id,topic,cadence,visibility,share_slug,tags,${BRIEF_SETTINGS_COLUMNS}`;
 
 type InterestRow = Partial<BriefSettingsRow> & {
   id: string;
@@ -944,6 +970,7 @@ type InterestRow = Partial<BriefSettingsRow> & {
   cadence: Cadence;
   visibility: Visibility;
   share_slug: string | null;
+  tags?: string[] | null;
 };
 
 type NoticeRow = {
@@ -1025,6 +1052,7 @@ function assembleHome(
       following: row.following,
       visibility: row.visibility,
       shareSlug: row.share_slug,
+      tags: row.tags ?? [],
       run: active ? (active.status as "queued" | "running") : null,
       updatedAt: ready ? doneAt(ready) : null,
       failed:
@@ -1108,12 +1136,17 @@ function workerLimitMessage(path: string, said: string): string {
   return said || "Scout has paused new work for now. Try again later.";
 }
 
-/** The signed-in reader's likes in the database, for likes.ts. The story
- *  snapshot is trimmed to fit story_marks' 4 KB. */
+/** The signed-in reader's likes in the database, for likes.ts. */
 export function likesSync(data: HostedData): LikesSync {
+  return marksSync(data, "like");
+}
+
+/** The signed-in reader's likes or saves in the database, for the story
+ *  marks stores. The story snapshot is trimmed to fit story_marks' 4 KB. */
+export function marksSync(data: HostedData, kind: MarkKind): LikesSync {
   return {
     async list() {
-      const marks = await data.marks("like");
+      const marks = await data.marks(kind);
       return marks.flatMap((m) =>
         m.story ? [{ ...m.story, key: m.storyKey } as LikedStory] : [],
       );
@@ -1129,14 +1162,14 @@ export function likesSync(data: HostedData): LikesSync {
             ? story.imageUrl
             : undefined,
       };
-      await data.mark("like", {
+      await data.mark(kind, {
         storyKey: story.key,
         interestId: null,
         story: snapshot,
       });
     },
     async remove(key) {
-      await data.unmark("like", key);
+      await data.unmark(kind, key);
     },
   };
 }
@@ -1254,7 +1287,7 @@ export function hostedData(): HostedData | null {
 
 let likesFollowed = false;
 
-/** Ties the likes store to the hosted session for this page load: the signed-in
+/** Ties the likes and saves stores to the hosted session for this page load: the signed-in
  *  reader's likes come from the database, and sign-out or an account switch
  *  drops the previous reader's. Safe to call more than once. */
 export function startHostedLikes(): void {
@@ -1264,4 +1297,5 @@ export function startHostedLikes(): void {
   if (!auth || !data) return;
   likesFollowed = true;
   followLikes(auth, likesSync(data));
+  followSaves(auth, marksSync(data, "save"));
 }
