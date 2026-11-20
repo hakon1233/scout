@@ -8,13 +8,17 @@ import type { HostedData, PushState } from "@/lib/hosted";
 // has no push; on an iPhone outside the Home Screen it says how to get it.
 export function PushSwitch({
   data,
+  device,
   onChange,
 }: {
   data: HostedData;
+  /** The device's state as the screen knows it (a bell may have turned it on). */
+  device?: PushState | null;
   /** Told the device's new state, so the topic bells can follow it. */
   onChange?: (state: PushState) => void;
 }) {
-  const [state, setState] = React.useState<PushState | null>(null);
+  const [own, setState] = React.useState<PushState | null>(null);
+  const state = device ?? own;
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 

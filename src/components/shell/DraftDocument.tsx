@@ -1,17 +1,16 @@
 import * as React from "react";
+import { useBackLink } from "@/hooks/useSignedIn";
+import { contactEmail } from "@/lib/contact";
 import { AppShell, PageHeader } from "./AppShell";
 
-/** The contact address on Privacy, Terms and the hidden-topic notice. */
-export const CONTACT_EMAIL = "privacy@scout-ideas.pages.dev";
-
-/** The address as a link, marked as a placeholder until launch. */
+/**
+ * The contact address as a link. Until the owner sets one (lib/contact.ts)
+ * it says so in words, never as a link that bounces.
+ */
 export function ContactEmail() {
-  return (
-    <>
-      <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> (placeholder until
-      launch)
-    </>
-  );
+  const email = contactEmail();
+  if (!email) return <>the address we publish here before launch</>;
+  return <a href={`mailto:${email}`}>{email}</a>;
 }
 
 // Privacy and Terms: a plain reading page marked Draft until a lawyer reads it.
@@ -28,7 +27,10 @@ export function DraftDocument({
     <AppShell>
       <PageHeader
         title={title}
-        back={{ href: "/app/settings/", label: "Settings" }}
+        back={useBackLink(
+          { href: "/app/settings/", label: "Settings" },
+          { href: "/app/signin/", label: "Sign in" },
+        )}
       >
         <span className="font-medium text-warning">Draft</span> · Last changed{" "}
         {updated}

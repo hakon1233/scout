@@ -39,7 +39,8 @@ const description =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title,
+  // Each screen names itself ("Browse · Scout"); the landing keeps the full line.
+  title: { default: title, template: "%s · Scout" },
   description,
   openGraph: {
     type: "website",

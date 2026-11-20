@@ -160,7 +160,7 @@ export function ReportLink({
         type="button"
         onClick={() => setOpen(true)}
         aria-label={label === "Report" ? `Report ${topic}` : undefined}
-        className="min-h-6 rounded text-caption text-muted underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+        className="-my-2.5 inline-flex min-h-11 min-w-11 items-center justify-center rounded px-2 text-caption text-muted underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
       >
         {label}
       </button>

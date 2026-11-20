@@ -23,9 +23,9 @@ const FeedBody = dynamic(() => import("@/components/FeedBody"), {
 // BriefView as the default home view: each story is a card with a headline, one
 // short blurb, and — where the research run handpicked one from the source — a
 // lead image. Clicking a card opens a still-short in-page detail with the source
-// link(s) and image. Back returns to the feed via history (no route change: the
-// companion serves only the `/app/` shell, so detail is in-page state, not a
-// real export route).
+// link(s) and image. The open story is a `?story=<id>` query on the same page
+// (the companion serves only the `/app/` shell, so there is no export route per
+// story); Back returns to the feed via history.
 
 type FeedItem = {
   id: string;
@@ -64,20 +64,14 @@ export function FeedView({
   // one obvious reading order. To reintroduce later: derive topics from `items`,
   // hold an `activeTopic` state, and filter `items` by it before the grid map.
 
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
-
-  // No reset effect on brief change is needed: a stale selection resolves to null
-  // because story ids embed the brief id, so a previous edition's selectedId
-  // never matches a new brief's items.
-
-  // Close the detail on browser/OS Back. openDetail() pushes one history entry;
-  // Back (hardware, gesture, or our in-app button via history.back()) pops it and
-  // this fires — an in-app SPA transition with no landing flash.
-  React.useEffect(() => {
-    const onPop = () => setSelectedId(null);
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  // The open story lives in the URL (`?story=<id>`), so reload, Back and a
+  // shared link keep it. A stale id (a previous edition's) resolves to null
+  // because story ids embed the brief id.
+  const selectedId = React.useSyncExternalStore(
+    subscribeStoryParam,
+    storyParam,
+    () => null,
+  );
 
   const selected = selectedId
     ? (items.find((it) => it.id === selectedId) ?? null)
@@ -120,22 +114,28 @@ export function FeedView({
 
   function openDetail(id: string) {
     feedScrollY.current = window.scrollY;
-    setSelectedId(id);
     try {
-      window.history.pushState({ scoutFeedDetail: id }, "");
+      window.history.pushState({ scoutFeedDetail: id }, "", storyHref(id));
     } catch {
-      // pushState can throw in rare sandboxed contexts — detail still opens,
-      // it just won't be tied to the Back button. Provide the in-app Back button.
+      // pushState can throw in rare sandboxed contexts: the story just won't
+      // open from the URL.
     }
+    notifyStoryParam();
   }
 
   function closeDetail() {
     const state = window.history.state as { scoutFeedDetail?: string } | null;
     if (state?.scoutFeedDetail) {
       window.history.back(); // pops our pushed entry → popstate closes it
-    } else {
-      setSelectedId(null);
+      return;
     }
+    // Opened from a reload or a shared link: drop the param in place.
+    try {
+      window.history.replaceState(window.history.state, "", storyHref(null));
+    } catch {
+      // Nothing to undo.
+    }
+    notifyStoryParam();
   }
 
   if (selected) {
@@ -236,13 +236,18 @@ function FeedDetail({ item, onBack }: { item: FeedItem; onBack: () => void }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption uppercase tracking-wide text-muted">
-          <span className="font-medium text-signal">{item.topic}</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
+          <span className="font-medium uppercase tracking-wide text-signal">
+            {item.topic}
+          </span>
           {item.publishedAt && (
-            <span className="tabular-nums">
+            <span className="uppercase tracking-wide tabular-nums">
               · {formatDate(item.publishedAt)}
             </span>
           )}
+          <span className="rounded-pill border border-border-default px-2 py-0.5 text-secondary">
+            Written by AI
+          </span>
         </div>
         <h1 className="font-serif text-title-1 leading-tight text-primary">
           {item.headline}
@@ -397,3 +402,32 @@ export function SourceBadge({ host }: { host: string }) {
 // here so existing `@/components/FeedView` importers (e.g. the liked-stories
 // page) are unchanged.
 export { formatDate };
+
+// --- the open story in the URL ----------------------------------------------
+
+const storyListeners = new Set<() => void>();
+
+function subscribeStoryParam(fn: () => void): () => void {
+  storyListeners.add(fn);
+  window.addEventListener("popstate", fn);
+  return () => {
+    storyListeners.delete(fn);
+    window.removeEventListener("popstate", fn);
+  };
+}
+
+function notifyStoryParam(): void {
+  for (const fn of storyListeners) fn();
+}
+
+function storyParam(): string | null {
+  return new URLSearchParams(window.location.search).get("story");
+}
+
+/** This page's URL with `story` set to `id`, or without it. */
+function storyHref(id: string | null): string {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set("story", id);
+  else url.searchParams.delete("story");
+  return `${url.pathname}${url.search}${url.hash}`;
+}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
+import { useHostedData } from "@/hooks/useHostedData";
 import { PickCards, usePicks } from "@/components/PickCards";
 import { PushBell } from "@/components/PushBell";
 import { ReportLink } from "@/components/ReportSheet";
@@ -13,14 +14,10 @@ import {
 } from "@/components/shell/AppShell";
 import { TagChip, useTagCounts } from "@/components/TagPicker";
 import { Button, NoticeCard, buttonClasses } from "@/components/ui";
+import { useBackLink } from "@/hooks/useSignedIn";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { hostedAuth } from "@/lib/auth";
-import {
-  HostedError,
-  hostedData,
-  type HostedData,
-  type TopicCard,
-} from "@/lib/hosted";
+import { HostedError, type HostedData, type TopicCard } from "@/lib/hosted";
 import { followersLabel } from "@/lib/publish-flow";
 import { parseShareLink } from "@/lib/share-link";
 import { cleanTag, popularTags } from "@/lib/tag-picker";
@@ -30,9 +27,13 @@ import { cleanTag, popularTags } from "@/lib/tag-picker";
 // Signed out it reads the same; Follow asks to sign in. The view lives in
 // the URL (?q, ?tag, ?sort), so reload and Back keep it.
 export default function BrowsePage() {
+  const back = useBackLink(
+    { href: "/app/", label: "Brief" },
+    { href: "/", label: "Home" },
+  );
   return (
     <AppShell>
-      <PageHeader title="Browse" back={{ href: "/app/", label: "Brief" }}>
+      <PageHeader title="Browse" back={back}>
         Public topics anyone can follow. Following is free.
       </PageHeader>
       <React.Suspense fallback={<ResultsSkeleton />}>
@@ -52,7 +53,7 @@ type Mine = { following: ReadonlySet<string>; own: ReadonlySet<string> };
 const NONE: Mine = { following: new Set(), own: new Set() };
 
 function Browse() {
-  const data = hostedData();
+  const data = useHostedData();
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -384,6 +385,7 @@ function BrowseRow({
               on={push.isOn(card.id)}
               onChange={(on) => push.set(card.id, on)}
               deviceOn={push.deviceOn}
+              blocked={push.blocked}
             />
           )}
           {own ? (
@@ -434,7 +436,7 @@ function BrowseRow({
             </button>
           ))}
           {signedIn && !own && (
-            <span className="ml-auto pr-2">
+            <span className="-mr-2 ml-auto">
               <ReportLink data={data} interestId={card.id} topic={card.title} />
             </span>
           )}

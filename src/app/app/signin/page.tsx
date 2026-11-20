@@ -177,6 +177,11 @@ export default function SignInPage() {
             <p className="text-body-sm text-muted">
               We email you a link that signs you in. No password.
             </p>
+            <p className="text-body-sm text-muted text-pretty [&_a]:text-secondary [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-primary">
+              By signing in you agree to the{" "}
+              <Link href="/app/terms/">Terms</Link> and{" "}
+              <Link href="/app/privacy/">Privacy policy</Link>.
+            </p>
           </>
         )}
 

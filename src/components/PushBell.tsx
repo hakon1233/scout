@@ -1,60 +1,57 @@
 "use client";
 
-import Link from "next/link";
 import * as React from "react";
 
 // A topic's own push switch, as a small bell: on topic cards, followed topics,
 // Browse results, the topic's page and the Settings list. Off by default.
-// Greyed out while push is off on this device; a tap then says how to turn it
-// on instead of doing nothing.
+// Turning one on while this device is off turns the device on too
+// (useTopicPush). Only when this device can't get notifications (blocked, or
+// a phone that needs Scout on its Home Screen) is it greyed out, and a tap
+// says why.
 export function PushBell({
   topic,
   on,
   onChange,
   deviceOn,
+  blocked = null,
 }: {
   topic: string;
   on: boolean;
   onChange: (on: boolean) => void;
   deviceOn: boolean;
+  /** Why notifications can't work on this device, or null. */
+  blocked?: string | null;
 }) {
   const [hint, setHint] = React.useState(false);
   const label = `Notify me about ${topic}`;
+  const shownOn = deviceOn && on;
 
   return (
     <span className="relative inline-flex shrink-0">
       <button
         type="button"
         aria-label={label}
-        aria-pressed={deviceOn ? on : false}
-        aria-disabled={!deviceOn || undefined}
-        onClick={() => (deviceOn ? onChange(!on) : setHint((v) => !v))}
+        aria-pressed={shownOn}
+        aria-disabled={blocked ? true : undefined}
+        onClick={() => (blocked ? setHint((v) => !v) : onChange(!shownOn))}
         onBlur={() => setHint(false)}
         className={[
           "inline-flex size-11 items-center justify-center rounded-full transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
-          !deviceOn
+          blocked
             ? "text-muted opacity-50"
-            : on
+            : shownOn
               ? "text-primary"
               : "text-muted",
         ].join(" ")}
       >
-        <BellIcon filled={deviceOn && on} />
+        <BellIcon filled={shownOn} />
       </button>
-      {hint && (
+      {hint && blocked && (
         <span
           role="status"
           className="absolute right-0 top-full z-20 mt-1 w-56 rounded-[14px] border border-border-default bg-surface p-3 text-caption text-secondary shadow-sm"
         >
-          Turn on notifications for this device in{" "}
-          <Link
-            href="/app/settings/"
-            className="font-medium text-primary underline"
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            Settings
-          </Link>{" "}
-          first.
+          {blocked}
         </span>
       )}
     </span>

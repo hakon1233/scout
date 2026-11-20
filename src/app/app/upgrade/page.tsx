@@ -4,7 +4,7 @@ import { AppShell, PageHeader } from "@/components/shell/AppShell";
 import { Button } from "@/components/ui";
 import {
   PLANS,
-  planLines,
+  planGains,
   priceAbroadText,
   priceText,
   type Plan,
@@ -66,7 +66,7 @@ function PlanCard({
         )}
       </div>
       <ul className="flex flex-col gap-1.5 text-body-sm text-secondary">
-        {planLines(plan).map((line) => (
+        {planGains(plan).map((line) => (
           <li key={line} className="flex gap-2">
             <span aria-hidden="true" className="text-good">
               ✓

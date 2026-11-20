@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
+import { useHostedData } from "@/hooks/useHostedData";
 import { ScoutWordmark } from "@/components/shell/AppShell";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { BriefLayout } from "@/components/BriefLayout";
@@ -12,7 +13,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button, buttonClasses } from "@/components/ui";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { hostedAuth } from "@/lib/auth";
-import { HostedError, hostedData, type SharedInterest } from "@/lib/hosted";
+import { HostedError, type SharedInterest } from "@/lib/hosted";
 import { startUsage } from "@/lib/usage";
 
 // A share link's page: `/i/?s=<slug>`. Anyone can read the interest's latest
@@ -42,7 +43,7 @@ type View =
 
 function Shared() {
   const slug = useSearchParams().get("s") ?? "";
-  const data = hostedData();
+  const data = useHostedData();
   const router = useRouter();
   const [view, setView] = React.useState<View>({ kind: "loading" });
   const [signedIn, setSignedIn] = React.useState(false);
@@ -147,6 +148,7 @@ function Shared() {
                   on={push.isOn(i.id)}
                   onChange={(on) => push.set(i.id, on)}
                   deviceOn={push.deviceOn}
+                  blocked={push.blocked}
                 />
               )}
               <Link href="/app/" className={buttonClasses("secondary", "sm")}>

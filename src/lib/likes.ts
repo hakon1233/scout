@@ -13,10 +13,10 @@ import { canonicalUrl } from "@scout/core";
 // SIGNED IN (hosted): `setLikesUser(userId, sync)` keys the store by the
 // reader's id and loads their likes from the database (story_marks); each
 // toggle is then also sent through `sync`. Signed out, likes stay on the
-// device under the plain key and are never uploaded: signing in does not move
-// them into an account, so on a shared device one reader's likes cannot land
-// in another's. Signing out drops the signed-in reader's local copy. Saves
-// work the same way.
+// device under the plain key; the next sign-in moves them into that account
+// and clears them from the device, so they land in one account only.
+// Signing out drops the signed-in reader's local copy. Saves work the same
+// way.
 //
 // WHY WE KEY ON CANONICAL URL, NOT THE ARTICLE ID: article ids are generated as
 // `${briefId}-${idx}` (companion.ts) — brief-scoped, so the SAME story gets a
@@ -214,6 +214,22 @@ function createStoryMarks(baseKey: string) {
     if (user !== mine) return; // signed out or switched meanwhile
     const likes: Record<string, LikedStory> = {};
     for (const s of stories) if (isLikedStory(s)) likes[s.key] = s;
+    // Marks made signed out move into the account that signs in, once: they
+    // are sent up, then dropped from the device, so they land in one account
+    // only.
+    const device = parse(getLocalStorage()?.getItem(baseKey) ?? null);
+    for (const s of Object.values(device.likes)) {
+      if (s.key in likes) continue;
+      likes[s.key] = s;
+      mine.sync
+        .add(s)
+        .catch((err: unknown) => console.warn(`[${baseKey}] not moved:`, err));
+    }
+    try {
+      getLocalStorage()?.removeItem(baseKey);
+    } catch {
+      // Storage unavailable: nothing to drop.
+    }
     write({ version: 1, likes });
   }
 

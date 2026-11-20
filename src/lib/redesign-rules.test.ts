@@ -16,6 +16,7 @@ import {
 } from "./home-screen";
 import {
   planFor,
+  planGains,
   planLines,
   planMeters,
   priceAbroadText,
@@ -156,12 +157,20 @@ test("plan meters: own topics against the plan, follows don't count", () => {
     publicTopics: 1,
   });
   assert.deepEqual(meters, [
-    { label: "Topics", used: 4, limit: 5 },
+    { label: "Topics", used: 4, limit: 15 },
     { label: "Public topics", used: 1, limit: 3 },
     { label: "Run now today", used: 2, limit: 3 },
   ]);
   assert.equal(planFor("unknown").id, "free");
-  assert.equal(planLines(planFor("plus"))[0], "30 topics (6 daily, 3 weekly)");
+  assert.deepEqual(planLines(planFor("plus")).slice(0, 2), [
+    "30 topics",
+    "6 daily and 3 weekly briefs",
+  ]);
+  assert.deepEqual(planGains(planFor("plus")), [
+    "30 topics",
+    "6 daily and 3 weekly briefs",
+    "Everything else in Free",
+  ]);
   assert.equal(priceText(planFor("plus")), "49 kr a month");
   assert.equal(priceAbroadText(planFor("plus")), "About $5 a month");
   assert.equal(priceAbroadText(planFor("free")), null);

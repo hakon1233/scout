@@ -74,22 +74,36 @@ export function priceAbroadText(p: Plan): string | null {
 export function planLines(p: Plan): string[] {
   const schedule =
     p.weeklyTopics === 0
-      ? `${p.dailyTopics} daily`
-      : `${p.dailyTopics} daily, ${p.weeklyTopics} weekly`;
+      ? `${p.dailyTopics} daily briefs`
+      : `${p.dailyTopics} daily and ${p.weeklyTopics} weekly briefs`;
   return [
-    `${p.topics} topics (${schedule})`,
+    `${p.topics} topics`,
+    schedule,
     `${p.runNowPerDay} Run now a day`,
     `${p.publicTopics} public topics`,
     "Follow any public topic",
   ];
 }
 
+/**
+ * What a paid plan adds over Free: only the lines that differ, then
+ * "Everything else in Free".
+ */
+export function planGains(p: Plan): string[] {
+  if (p.id === "free") return planLines(p);
+  const free = new Set(planLines(PLANS.free));
+  return [
+    ...planLines(p).filter((line) => !free.has(line)),
+    "Everything else in Free",
+  ];
+}
+
 export type Meter = { label: string; used: number; limit: number };
 
 /**
- * The plan meters in Settings. Topics and Run now come from the database's
- * allowance; public topics are counted from the reader's own topics against
- * the plan's cap. Topics the reader follows don't count.
+ * The plan meters in Settings. Own topics and public topics are counted
+ * against the plan's caps (the same numbers the Upgrade page shows); Run now
+ * comes from the database's allowance. Topics the reader follows don't count.
  */
 export function planMeters(input: {
   plan: string;
@@ -104,7 +118,7 @@ export function planMeters(input: {
     {
       label: "Topics",
       used: input.ownTopics,
-      limit: input.daily.limit + input.weekly.limit,
+      limit: plan.topics,
     },
     {
       label: "Public topics",

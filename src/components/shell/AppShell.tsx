@@ -70,14 +70,20 @@ export function PageHeader({
   children,
 }: {
   title: string;
-  back?: { href: string; label: string };
+  /** "pending" holds the link's space while it is still being worked out. */
+  back?: { href: string; label: string } | "pending";
   action?: React.ReactNode;
   /** One quiet line under the title. */
   children?: React.ReactNode;
 }) {
   return (
     <header className="flex flex-col gap-1">
-      {back && (
+      {back === "pending" && (
+        <span aria-hidden="true" className="invisible mb-1 text-body-sm">
+          ‹
+        </span>
+      )}
+      {back && back !== "pending" && (
         <Link
           href={back.href}
           className="-ml-1 mb-1 self-start rounded px-1 text-body-sm text-secondary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"

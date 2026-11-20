@@ -2,10 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import * as React from "react";
+import { useHostedData } from "@/hooks/useHostedData";
 import type { ChatConfirm, ChatTurn } from "@scout/core";
 import {
   HostedError,
-  hostedData,
   type Allowance,
   type HostedData,
   type HostedHome,
@@ -19,7 +19,7 @@ const POLL_MS = 5_000;
  * to sign in, and runs the setup chat.
  */
 export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
-  const data = hostedData();
+  const data = useHostedData();
   const router = useRouter();
   const [home, setHome] = React.useState<HostedHome | null>(null);
   const [turns, setTurns] = React.useState<ChatTurn[]>([]);

@@ -169,7 +169,7 @@ function TopicLists({
   const plan = planFor(home.allowance.plan);
   const ownCount = own.length;
   const publicCount = own.filter((i) => i.visibility === "public").length;
-  const limit = home.allowance.daily.limit + home.allowance.weekly.limit;
+  const limit = plan.topics;
 
   const row = (i: HostedInterest) => (
     <TopicRow
@@ -342,6 +342,7 @@ function TopicRow({
           on={push.isOn(i.id)}
           onChange={(on) => push.set(i.id, on)}
           deviceOn={push.deviceOn}
+          blocked={push.blocked}
         />
         <button
           type="button"
