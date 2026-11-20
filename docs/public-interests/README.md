@@ -11,6 +11,7 @@ biggest niches elsewhere. The first-users plan is in `../MARKETING.md`.
 | [nordics.md](nordics.md)     | Sweden, Denmark, Finland, Iceland                      |
 | [world.md](world.md)         | Big niches in other countries                          |
 | [intent-docs/](intent-docs/) | Ready-to-use intent docs for the best picks, and tests |
+| [sources.md](sources.md)     | Readable stand-ins for sites that block Scout          |
 
 ## Tested intent docs (20 Nov 2026)
 
@@ -109,7 +110,7 @@ historical, history, retrospective, timeline, explainer, primer, deep dive / dee
 long read / long-read. Any of them switches off the 30-day freshness cutoff
 (`EVERGREEN_RE` in `coverage.ts`).
 
-## Lessons from testing eight docs
+## Lessons from testing eight docs and checking sources
 
 1. **Check sources with the run's own fetch tool, not curl or a browser.** The tool got a
    402 from the Bambu wiki, only the title from Folkeuniversitetet, and doesn't follow
@@ -132,6 +133,14 @@ long read / long-read. Any of them switches off the 30-day freshness cutoff
    it, and the label to use when none exists ("paywalled, details unconfirmed").
 9. **Make "No change" concrete.** A real window and the exact line. Until run change #2
    lands, this conflicts with the prompt's 2–4 stories.
+10. **When a site blocks you, try its RSS feed.** HLTV's HTML is 403 but its feed works.
+    Look for a footer link or a "Subscribe/RSS" page.
+11. **Go one layer up or across:** the gazette, the parent ministry, or a sister agency.
+    Some agencies also keep an open-data API behind a JavaScript-only front end.
+12. **Law firms' and migration agents' WordPress feeds** (`/feed/`) report each visa
+    bulletin and invitation round within days: the best fallback for visa niches.
+13. **A first failure may be a wrong path.** Re-check the homepage and follow its links
+    before dropping a source (BAMF, nav.no).
 
 ## Run changes recommended to chief (20 Nov 2026)
 

@@ -20,7 +20,7 @@ and Danish immigration are in `world.md`.
    svenskafiskeregler.se ✓ dated.
 6. **Swedish permanent residence and citizenship changes** (4). Rules changed in 2026
    (citizenship reform 6 Jun, work permit salary rule 1 Jun). thelocal.se ✓; Migrationsverket
-   has an RSS feed (migrationsverket.se/rss_working).
+   has an RSS feed (migrationsverket.se/rss).
 7. **Iceland road and F-road conditions** (3). Over a million visitors a year;
    vegagerdin.is ✓ dated, but the live map (umferdin.is) is JavaScript.
 8. **Finnish hunting rules and swine-fever zones** (3). metsastajaliitto.fi ✓ dated.
