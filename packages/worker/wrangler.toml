@@ -1,8 +1,11 @@
-# Scout's run queue Worker (Cloudflare Workers free plan). Not deployed from CI yet.
+# Scout's run queue Worker (Cloudflare Workers free plan). Deployed by hand with
+# `npx wrangler deploy`, not from CI.
 #
 # Secrets, set once with `wrangler secret put <NAME>`, never written here:
 #   SUPABASE_SERVICE_ROLE_KEY  claims and finishes runs, stores chat turns
 #   ANTHROPIC_API_KEY          the research and chat calls
+#   SUPABASE_ANON_KEY          the publishable key, for the reader's own calls
+#                              (public by design, but never committed)
 name = "scout-runs"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"
@@ -13,8 +16,7 @@ compatibility_date = "2026-11-01"
 crons = ["* * * * *"]
 
 [vars]
-SUPABASE_URL = "https://<project-ref>.supabase.co"
-# The publishable (anon) key: public by design, like the web app's.
-SUPABASE_ANON_KEY = "<anon key>"
-ALLOWED_ORIGIN = "https://hakon1233.github.io"
+SUPABASE_URL = "https://qctcuajvefuicasakgkq.supabase.co"
+# The web app's origins, comma-separated.
+ALLOWED_ORIGIN = "https://scout-ideas.pages.dev,https://hakon1233.github.io"
 RUN_BATCH = "2"

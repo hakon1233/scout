@@ -1,6 +1,6 @@
 // The Cloudflare Worker: wiring only. The cron tick runs runDue with the
 // Supabase queue and the Anthropic client; fetch serves run-now and the chat.
-// Secrets (SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY) come from
+// Secrets (SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, SUPABASE_ANON_KEY) come from
 // `wrangler secret put`, never from a file.
 
 import { anthropicClient } from "@scout/research";

@@ -115,6 +115,27 @@ test("the route answers CORS preflight, other paths and methods", async () => {
   assert.equal((await runNow(fetch, { path: "/other" })).status, 404);
 });
 
+test("CORS allows each origin in a comma-separated list, and only those", async () => {
+  const preflight = (origin: string) =>
+    handleRequest(
+      new Request("https://runs.example.test/runs", {
+        method: "OPTIONS",
+        headers: { origin },
+      }),
+      {
+        supabaseUrl: SUPABASE,
+        anonKey: "anon-key",
+        allowedOrigin: `${ORIGIN}, https://test.example.test`,
+      },
+    );
+  for (const origin of [ORIGIN, "https://test.example.test"]) {
+    const res = await preflight(origin);
+    assert.equal(res.headers.get("access-control-allow-origin"), origin);
+  }
+  const other = await preflight("https://evil.example.test");
+  assert.equal(other.headers.get("access-control-allow-origin"), null);
+});
+
 test("the queue adapter calls claim_runs and finish_run with the service key", async () => {
   const claim = stubFetch(200, [
     { run_id: "run-1", topic: "AI policy", doc: "EU", searches_per_run: 5 },

@@ -15,7 +15,8 @@ import { requestRun, RpcError, rpcCaller } from "./supabase.ts";
 export type HttpDeps = {
   supabaseUrl: string;
   anonKey: string;
-  // The web app's origin, for CORS. Other origins get no CORS headers.
+  // The web app's origins for CORS, comma-separated. Other origins get no
+  // CORS headers.
   allowedOrigin: string;
   // The chat routes need both; without them they answer 404.
   serviceKey?: string;
@@ -31,10 +32,12 @@ export async function handleRequest(
   request: Request,
   deps: HttpDeps,
 ): Promise<Response> {
+  const origin = request.headers.get("origin");
+  const allowed = deps.allowedOrigin.split(",").map((o) => o.trim());
   const cors: Record<string, string> =
-    request.headers.get("origin") === deps.allowedOrigin
+    origin && allowed.includes(origin)
       ? {
-          "access-control-allow-origin": deps.allowedOrigin,
+          "access-control-allow-origin": origin,
           "access-control-allow-methods": "POST",
           "access-control-allow-headers": "authorization, content-type",
           vary: "origin",
