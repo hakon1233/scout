@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scout for bedrifter</title>
+<meta name="description" content="Scout leser registre, regler og konkurrenter for din bransje i din kommune, og sender en kort, datert brief.">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Scout brand tokens (from src/app/globals.css, Direction A) */
+  :root {
+    --paper: #f6f2ea;
+    --paper-2: #efe9dd;
+    --card: #fffdf8;
+    --ink: #1c1a17;
+    --ink-2: #46413a;
+    --line: #d8d0c1;
+    --signal: #9a3b2e;
+    --deep: #1f3a4d;
+    --on-deep: #f6f2ea;
+    --on-deep-2: #c9d3d9;
+
+    --serif: "Fraunces", Georgia, serif;
+    --sans: "Inter", system-ui, -apple-system, sans-serif;
+
+    --t-display: clamp(2.5rem, 6.4vw, 5.5rem);
+    --t-h2: clamp(2rem, 4vw, 3.25rem);
+    --t-h3: 1.625rem;
+    --t-body: 1.125rem;
+    --t-small: 1rem;
+
+    --gutter: clamp(16px, 4vw, 48px);
+    --max: 1240px;
+    --section: clamp(96px, 12vw, 200px);
+
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --t-press: 140ms;
+    --t-hover: 180ms;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 var(--t-body)/1.55 var(--sans);
+    font-feature-settings: "tnum" 0;
+  }
+  h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; }
+  h1 { font-size: var(--t-display); line-height: 0.98; letter-spacing: -0.035em; }
+  h2 { font-size: var(--t-h2); line-height: 1.04; letter-spacing: -0.025em; }
+  h3 { font-size: var(--t-h3); line-height: 1.15; letter-spacing: -0.015em; }
+  p { margin: 0; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter); }
+
+  .button {
+    display: inline-block;
+    background: var(--ink);
+    color: var(--paper);
+    font: 500 var(--t-small)/1 var(--sans);
+    padding: 18px 26px;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background-color var(--t-hover) ease, transform var(--t-press) var(--ease-out);
+  }
+  .button:active { transform: scale(0.97); }
+  @media (hover: hover) and (pointer: fine) { .button:hover { background: #000; } }
+
+  /* Bar */
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-top: 22px; padding-bottom: 22px; }
+  .mark { display: flex; align-items: center; gap: 10px; font: 600 1.75rem/1 var(--serif); letter-spacing: -0.02em; text-decoration: none; }
+  .compass { position: relative; display: grid; place-items: center; width: 28px; height: 28px; border: 2px solid var(--ink); border-radius: 50%; }
+  .compass::before { content: ""; width: 7px; height: 7px; border: 2px solid var(--ink); border-radius: 50%; }
+  .compass::after { content: ""; position: absolute; top: 3px; left: 12px; width: 2px; height: 10px; background: var(--signal); transform: rotate(35deg); }
+  .bar nav { display: flex; align-items: center; gap: 28px; font-size: var(--t-small); }
+  .bar nav a:not(.button) { text-decoration: none; color: var(--ink-2); transition: color var(--t-hover) ease; }
+  .bar nav a:not(.button):hover { color: var(--ink); }
+  .bar .button { padding: 13px 18px; }
+  @media (max-width: 900px) { .bar nav a:not(.button) { display: none; } }
+  @media (max-width: 480px) { .bar .button { display: none; } }
+
+  /* Hero */
+  .hero { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: clamp(40px, 6vw, 96px); align-items: start; padding-top: clamp(32px, 6vw, 88px); }
+  .hero-text { position: sticky; top: 40px; }
+  .hero h1 { max-width: 9.5em; }
+  .lede { margin-top: 28px; max-width: 32em; font-size: 1.25rem; line-height: 1.5; }
+  .hero .button { margin-top: 36px; }
+  .note { margin-top: 18px; font-size: var(--t-small); color: var(--ink-2); }
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; }
+    .hero-text { position: static; }
+  }
+
+  /* The live thing: pick a trade, the brief refiles */
+  .live fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .live legend { padding: 0; font: 600 var(--t-h3)/1.15 var(--serif); letter-spacing: -0.015em; margin-bottom: 16px; }
+  .trades { display: flex; flex-wrap: wrap; gap: 8px; }
+  .trades input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .trades label {
+    cursor: pointer;
+    padding: 12px 18px;
+    border-radius: 6px;
+    background: var(--paper-2);
+    font-weight: 500;
+    font-size: var(--t-small);
+    transition: background-color var(--t-hover) ease, color var(--t-hover) ease, transform var(--t-press) var(--ease-out);
+  }
+  .trades label:active { transform: scale(0.97); }
+  @media (hover: hover) and (pointer: fine) { .trades label:hover { background: var(--line); } }
+  .trades input:checked + label { background: var(--ink); color: var(--paper); }
+  .trades input:focus-visible + label { outline: 2px solid var(--signal); outline-offset: 3px; }
+
+  .example-label { margin-top: 28px; font-size: var(--t-small); color: var(--ink-2); }
+  .brief { display: none; margin-top: 10px; background: var(--card); border-radius: 8px; padding: 26px 26px 28px; box-shadow: 0 1px 0 var(--line), 0 24px 48px -28px rgba(28, 26, 23, 0.45); }
+  .live:has(#t-bygg:checked) .brief[data-trade="bygg"],
+  .live:has(#t-mat:checked) .brief[data-trade="mat"],
+  .live:has(#t-net:checked) .brief[data-trade="net"] { display: block; }
+  @supports not selector(:has(*)) { .brief[data-trade="bygg"] { display: block; } }
+
+  .dateline { font-size: var(--t-small); color: var(--signal); font-variant-numeric: tabular-nums; }
+  .brief h3 { margin-top: 4px; }
+  .why { margin-top: 10px; font-size: var(--t-small); color: var(--ink-2); }
+  .stories { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 22px; }
+  .story { padding-top: 20px; background: linear-gradient(var(--paper-2), var(--paper-2)) top / 100% 6px no-repeat; }
+  .kind { font-size: var(--t-small); font-weight: 600; color: var(--signal); }
+  .story b { display: block; margin-top: 2px; font-weight: 600; line-height: 1.35; }
+  .story p { margin-top: 4px; font-size: var(--t-small); line-height: 1.5; }
+  .source { margin-top: 6px; font-size: var(--t-small); color: var(--ink-2); }
+
+  /* Signature moment: the brief refiles when the trade changes */
+  @media (prefers-reduced-motion: no-preference) {
+    .live:has(input:checked) .brief .story { animation: file 620ms var(--ease-out) both; }
+    .live .brief .story:nth-child(2) { animation-delay: 80ms; }
+    .live .brief .story:nth-child(3) { animation-delay: 160ms; }
+  }
+  @keyframes file { from { opacity: 0; transform: translateY(14px); } }
+
+  /* Watches */
+  .watches { padding-top: var(--section); }
+  .section-head { display: grid; grid-template-columns: 1fr 1fr; gap: 24px 64px; align-items: end; }
+  .section-head p { max-width: 30em; }
+  .watch-list { list-style: none; margin: 72px 0 0; padding: 0; display: grid; gap: 8px; }
+  .watch { display: grid; grid-template-columns: 0.9fr 1.3fr 0.9fr; gap: 12px 48px; padding: 32px 0; align-items: baseline; }
+  .watch + .watch { box-shadow: 0 -6px 0 var(--paper-2); }
+  .watch q { font-family: var(--serif); font-size: 1.375rem; line-height: 1.35; quotes: "«" "»"; }
+  .watch .source { margin: 0; }
+  @media (max-width: 900px) {
+    .section-head { grid-template-columns: 1fr; }
+    .watch { grid-template-columns: 1fr; padding: 28px 0; }
+    .watch-list { margin-top: 40px; }
+  }
+
+  /* Nothing new */
+  .quiet { margin-top: var(--section); background: var(--paper-2); }
+  .quiet .wrap { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px 96px; align-items: center; padding-top: clamp(80px, 9vw, 144px); padding-bottom: clamp(80px, 9vw, 144px); }
+  .quiet h2 { max-width: 9em; }
+  .quiet .wrap > div > p { margin-top: 24px; max-width: 30em; }
+  .slip { background: var(--card); border-radius: 8px; padding: 28px; box-shadow: 0 1px 0 var(--line), 0 24px 48px -28px rgba(28, 26, 23, 0.45); }
+  .slip .nothing { margin-top: 12px; font: 600 var(--t-h3)/1.2 var(--serif); letter-spacing: -0.015em; }
+  .slip .source { margin-top: 16px; }
+  @media (max-width: 900px) { .quiet .wrap { grid-template-columns: 1fr; } }
+
+  /* The price gap */
+  .gap { background: var(--deep); color: var(--on-deep); }
+  .gap .wrap { padding-top: clamp(80px, 9vw, 144px); padding-bottom: clamp(80px, 9vw, 144px); }
+  .gap h2 { max-width: 12em; }
+  .gap .lede { color: var(--on-deep); }
+  .ruler { position: relative; margin-top: 80px; display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 32px; padding-top: 40px; }
+  .ruler::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--on-deep-2); opacity: 0.45; }
+  .stop { position: relative; }
+  .stop::before { content: ""; position: absolute; top: -48px; left: 0; width: 4px; height: 20px; background: var(--on-deep-2); }
+  .stop.end { text-align: right; }
+  .stop.end::before { left: auto; right: 0; }
+  .stop .amount { font: 600 var(--t-h3)/1.15 var(--serif); }
+  .stop p { margin-top: 8px; color: var(--on-deep-2); font-size: var(--t-small); }
+  .stop.scout { background: var(--on-deep); color: var(--ink); border-radius: 8px; padding: 24px; margin-top: -8px; }
+  .stop.scout::before { top: -40px; left: 50%; width: 4px; height: 28px; background: var(--on-deep); }
+  .stop.scout p { color: var(--ink); }
+  .stop.scout .amount { color: var(--deep); }
+  @media (max-width: 900px) {
+    .ruler { grid-template-columns: 1fr; padding-top: 0; padding-left: 28px; gap: 28px; margin-top: 48px; }
+    .ruler::before { top: 0; bottom: 0; left: 0; right: auto; width: 4px; height: auto; }
+    .stop::before, .stop.end::before { top: 8px; left: -28px; right: auto; width: 16px; height: 4px; }
+    .stop.scout::before { top: 30px; left: -28px; width: 28px; height: 4px; }
+    .stop.end { text-align: left; }
+    .stop.scout { margin-top: 0; }
+  }
+
+  /* Start */
+  .start { padding-top: var(--section); display: grid; grid-template-columns: 1fr 1fr; gap: 48px 96px; align-items: start; }
+  .start .question { font: 600 var(--t-display)/0.98 var(--serif); letter-spacing: -0.035em; margin-top: 20px; color: var(--signal); }
+  .steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 32px; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 48px 1fr; gap: 16px; }
+  .steps li::before { content: counter(s); font: 600 var(--t-h3)/1.1 var(--serif); color: var(--signal); }
+  .steps b { display: block; font-weight: 600; }
+  .start .button { margin-top: 40px; }
+  @media (max-width: 900px) { .start { grid-template-columns: 1fr; } }
+
+  /* Close */
+  footer { margin-top: calc(var(--section) * 1.4); padding-bottom: 48px; }
+  .bigname { display: flex; align-items: center; gap: 0.18em; font: 600 clamp(5rem, 18vw, 15rem)/0.85 var(--serif); letter-spacing: -0.05em; }
+  .bigname .compass { width: 0.5em; height: 0.5em; border-width: 0.05em; }
+  .bigname .compass::before { width: 0.13em; height: 0.13em; border-width: 0.04em; }
+  .bigname .compass::after { top: 0.05em; left: calc(50% - 0.02em); width: 0.04em; height: 0.18em; }
+  .foot { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 64px; font-size: var(--t-small); color: var(--ink-2); }
+  @media (max-width: 760px) { .foot { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header class="wrap bar">
+  <a class="mark" href="#"><span class="compass" aria-hidden="true"></span>Scout</a>
+  <nav aria-label="Hovedmeny">
+    <a href="#folger">Hva Scout følger</a>
+    <a href="#pris">Hvorfor Scout</a>
+    <a href="#start">Kom i gang</a>
+    <a class="button" href="#">Prøv Scout for bedriften din</a>
+  </nav>
+</header>
+
+<main>
+  <section class="wrap hero" aria-labelledby="tittel">
+    <div class="hero-text">
+      <h1 id="tittel">Hva endret seg for bedriften?</h1>
+      <p class="lede">Scout leser Brønnøysundregistrene, Lovdata og nyhetene for din bransje i din kommune. Hver uke får du en kort, datert brief: kunder i trøbbel, nye regler og nye konkurrenter.</p>
+      <a class="button" href="#">Prøv Scout for bedriften din</a>
+      <p class="note">Ingen kortinfo. Du velger selv hva Scout skal følge med på.</p>
+    </div>
+
+    <div class="live">
+      <fieldset>
+        <legend>Hva driver du med?</legend>
+        <div class="trades">
+          <input type="radio" name="trade" id="t-bygg" checked><label for="t-bygg">Håndverker</label>
+          <input type="radio" name="trade" id="t-mat"><label for="t-mat">Restaurant</label>
+          <input type="radio" name="trade" id="t-net"><label for="t-net">Nettbutikk og import</label>
+        </div>
+      </fieldset>
+      <p class="example-label">Eksempel på en brief. Bedriftene og sakene er oppdiktet.</p>
+
+      <article class="brief" data-trade="bygg" aria-label="Eksempel: brief for en tømrer">
+        <p class="dateline">Mandag 16. november 2026</p>
+        <h3>Tømrer i Trondheim</h3>
+        <p class="why">Bygg og anlegg har flest konkurser av alle bransjer.</p>
+        <ol class="stories">
+          <li class="story">
+            <span class="kind">Kunde i trøbbel</span>
+            <b>Eksempelbygg AS er tatt under konkursbehandling.</b>
+            <p>Firmaet står på kundelista di. Har du utestående krav, meldes de til bobestyreren.</p>
+            <p class="source">Kilde: Brønnøysundregistrene</p>
+          </li>
+          <li class="story">
+            <span class="kind">Nye regler</span>
+            <b>Høyere minstelønn for byggearbeid.</b>
+            <p>Arbeidstilsynet varsler ny allmenngjort sats. Sjekk timeprisene i tilbudene du sender nå.</p>
+            <p class="source">Kilde: Arbeidstilsynet</p>
+          </li>
+          <li class="story">
+            <span class="kind">Konkurrenter</span>
+            <b>Tre nye tømrerfirma i Trondheim, ett lagt ned.</b>
+            <p>Alle de nye er enkeltpersonforetak uten ansatte.</p>
+            <p class="source">Kilde: Brønnøysundregistrene</p>
+          </li>
+        </ol>
+      </article>
+
+      <article class="brief" data-trade="mat" aria-label="Eksempel: brief for en restaurant">
+        <p class="dateline">Mandag 16. november 2026</p>
+        <h3>Restaurant i Trondheim</h3>
+        <p class="why">Servering hadde høyest konkursrate i 2025: 2,8 % av bedriftene.</p>
+        <ol class="stories">
+          <li class="story">
+            <span class="kind">Konkurrenter</span>
+            <b>To nye restauranter i Midtbyen, én kafé lagt ned.</b>
+            <p>Den ene nye ligger i samme gate som deg.</p>
+            <p class="source">Kilde: Brønnøysundregistrene</p>
+          </li>
+          <li class="story">
+            <span class="kind">Nye regler</span>
+            <b>Mattilsynet strammer inn på allergeninformasjon.</b>
+            <p>Gjelder det som står skriftlig på menyen. Fristen er 1. mars.</p>
+            <p class="source">Kilde: Lovdata, Mattilsynet</p>
+          </li>
+          <li class="story">
+            <span class="kind">Mulige kunder</span>
+            <b>Tre nye bedrifter med over 20 ansatte i nabolaget.</b>
+            <p>Kontorer som kan trenge lunsj og møtemat.</p>
+            <p class="source">Kilde: Brønnøysundregistrene</p>
+          </li>
+        </ol>
+      </article>
+
+      <article class="brief" data-trade="net" aria-label="Eksempel: brief for en nettbutikk">
+        <p class="dateline">Mandag 16. november 2026</p>
+        <h3>Nettbutikk i Oslo</h3>
+        <p class="why">EUs nye gebyr på fjernsalg gjelder fra 1. november 2026.</p>
+        <ol class="stories">
+          <li class="story">
+            <span class="kind">Nye regler</span>
+            <b>EU-gebyret på fjernsalg gjelder nå.</b>
+            <p>Tolletaten har lagt ut hva det betyr for norske nettbutikker. Sjekk fraktprisene i kassen.</p>
+            <p class="source">Kilde: Tolletaten</p>
+          </li>
+          <li class="story">
+            <span class="kind">Innkjøp</span>
+            <b>Rederiene varsler høyere frakt fra Asia før nyttår.</b>
+            <p>Hvorfor det betyr noe: varene du bestiller nå til vårsesongen, blir dyrere å få inn.</p>
+            <p class="source">Kilde: bransjenyheter</p>
+          </li>
+          <li class="story">
+            <span class="kind">Plattform</span>
+            <b>Shopify endrer hvordan rabattkoder vises i kassen.</b>
+            <p>Gjelder alle butikker fra neste måned. Kampanjer du har planlagt, kan se annerledes ut.</p>
+            <p class="source">Kilde: Shopify</p>
+          </li>
+        </ol>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap watches" id="folger" aria-labelledby="folger-tittel">
+    <div class="section-head">
+      <h2 id="folger-tittel">Fem ting Scout følger med på</h2>
+      <p>Når du har svart på hva du driver med, får du en startpakke for bransjen din. Du kan endre den eller legge til egne ting med vanlige ord.</p>
+    </div>
+    <ul class="watch-list">
+      <li class="watch">
+        <h3>Kredittvakt på kundene</h3>
+        <q>Si fra hvis noen av de 20 største kundene mine går konkurs, blir avviklet eller tvangsoppløst.</q>
+        <p class="source">Brønnøysundregistrene, etter organisasjonsnummer</p>
+      </li>
+      <li class="watch">
+        <h3>Nye regler for bransjen</h3>
+        <q>Nye regler for restauranter og barer i Norge.</q>
+        <p class="source">Lovdata, Arbeidstilsynet, Mattilsynet, Skatteetaten</p>
+      </li>
+      <li class="watch">
+        <h3>Konkurrenter i kommunen</h3>
+        <q>Nye tømrerfirma og nedleggelser i Trondheim.</q>
+        <p class="source">Brønnøysundregistrene</p>
+      </li>
+      <li class="watch">
+        <h3>Leverandører og innkjøp</h3>
+        <q>Hva endret seg hos leverandørene, og hvorfor betyr det noe for meg?</q>
+        <p class="source">Bransjenyheter og leverandørenes egne sider. Ikke prislister.</p>
+      </li>
+      <li class="watch">
+        <h3>Mulige kunder</h3>
+        <q>Nye bedrifter i kommunen som kan trenge det jeg selger.</q>
+        <p class="source">Brønnøysundregistrene</p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="quiet" aria-labelledby="stille-tittel">
+    <div class="wrap">
+      <div>
+        <h2 id="stille-tittel">Ingenting nytt? Da står det det.</h2>
+        <p>Scout fyller ikke opp briefen for å virke nyttig. Har ingenting endret seg, får du én linje og datoen Scout sist fant noe. Ellers får du høyst fire saker.</p>
+      </div>
+      <div>
+        <p class="example-label">Eksempel</p>
+        <div class="slip">
+          <p class="dateline">Mandag 23. november 2026</p>
+          <p class="nothing">Ingenting nytt siden 16. november.</p>
+          <p class="source">Sjekket: Brønnøysundregistrene, Lovdata, Arbeidstilsynet</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="gap" id="pris" aria-labelledby="pris-tittel">
+    <div class="wrap">
+      <h2 id="pris-tittel">Mellom gratis og 1 000 kr i måneden</h2>
+      <p class="lede">I dag velger små bedrifter mellom søkevarsler som ikke kjenner bransjen, og overvåking til bedriftspris som bare gjør én ting. Ingen leser regler, registre og konkurrenter sammen for deg.</p>
+      <div class="ruler">
+        <div class="stop">
+          <p class="amount">0 kr</p>
+          <p>Google Alerts og varsler om endringer på nettsider. Søkeord, ikke bransje.</p>
+        </div>
+        <div class="stop scout">
+          <p class="amount">Scout</p>
+          <p>Regler, registre og konkurrenter sammen, for én bransje i én kommune. Prisen er ikke satt ennå.</p>
+        </div>
+        <div class="stop end">
+          <p class="amount">1 000 kr og mer</p>
+          <p>Kredittovervåking og medieovervåking. Én ting hver.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap start" id="start" aria-labelledby="start-tittel">
+    <div>
+      <h2 id="start-tittel">Det starter med ett spørsmål</h2>
+      <p class="question" aria-hidden="true">Hva driver du med?</p>
+    </div>
+    <div>
+      <ol class="steps">
+        <li><span><b>Svar på hva du driver med, og hvor.</b>Bransje og kommune er nok til å komme i gang.</span></li>
+        <li><span><b>Se over startpakken.</b>Legg til kundene du vil følge med på, med organisasjonsnummer.</span></li>
+        <li><span><b>Les den første briefen.</b>Den kommer på dagen du velger, og så hver uke.</span></li>
+      </ol>
+      <a class="button" href="#">Prøv Scout for bedriften din</a>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p class="bigname"><span class="compass" aria-hidden="true"></span>Scout</p>
+  <div class="foot">
+    <p>Scout leser offentlige kilder for bedriften din: Brønnøysundregistrene, Lovdata, Arbeidstilsynet, Mattilsynet, Skatteetaten og Tolletaten.</p>
+    <p>Eksemplene på denne siden viser formatet. Bedriftene og sakene i dem er oppdiktet.</p>
+  </div>
+</footer>
+</body>
+</html>
