@@ -86,7 +86,12 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   // at the companion's own loopback asset) parses and renders on the card —
   // proving the image path end-to-end (capture contract → parser →
   // FeedImage), not just the text fallback.
-  await expect(card.locator('img[src*="icon-192.png"]')).toBeVisible();
+  await expect(
+    page
+      .locator("article:not(:has(article))", { has: card })
+      .first()
+      .locator('img[src*="icon-192.png"]'),
+  ).toBeVisible();
 
   // The feed stays SHORT: the in-depth blockquote body must NOT leak
   // onto the feed card — depth appears only after a click.

@@ -30,8 +30,11 @@ export default function InterestsPage() {
 
   useEffect(() => {
     const readId = () => new URLSearchParams(window.location.search).get("id");
+    const initial = readId();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- URL → state hydration on mount
-    setSelectedKey(readId());
+    setSelectedKey(initial);
+    // A deep link to one topic opens on its page, not the chat tab.
+    if (initial !== null) setTab("docs");
     const onPop = () => setSelectedKey(readId());
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -107,7 +110,12 @@ export default function InterestsPage() {
       {/* Segmented toggle — below the two-pane breakpoint only. Reaches BOTH
           the big interests+skills view and the chat. */}
       <div className="shrink-0 px-4 py-2 sm:px-6 lg:hidden">
-        <div className="mx-auto flex w-full max-w-[720px] rounded-pill border border-border-default bg-surface-muted p-[3px]">
+        {selectedKey === null ? (
+          <h1 className="mx-auto mb-3 w-full max-w-[720px] font-serif text-title-1 text-primary">
+            Topics
+          </h1>
+        ) : null}
+        <div className="mx-auto flex w-full max-w-[720px] rounded-pill bg-surface-muted p-[3px]">
           <SegButton on={tab === "docs"} onClick={() => setTab("docs")}>
             Topics &amp; skills
             {workbench.docCount > 0 ? (
@@ -165,7 +173,7 @@ function SegButton({
       onClick={onClick}
       aria-pressed={on}
       className={[
-        "flex-1 rounded-pill py-1.5 font-mono text-[11px] uppercase tracking-[0.06em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+        "min-h-11 flex-1 rounded-pill text-body-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
         on ? "bg-surface text-primary shadow-sm" : "text-muted",
       ].join(" ")}
     >
@@ -225,12 +233,14 @@ function PrimaryPane({
   return (
     <div className="mx-auto flex w-full max-w-[880px] flex-col gap-10 px-4 py-6 sm:px-6 lg:py-8">
       <section>
-        <div className="mb-4 flex items-baseline justify-between">
-          <h2 className="font-mono text-[12px] uppercase tracking-[0.1em] text-muted">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          {/* The page title on wide screens; below lg the page header above
+              the pane toggle carries it, so it shows on the chat tab too. */}
+          <h1 className="hidden font-serif text-title-1 text-primary lg:block">
             Topics
-          </h2>
+          </h1>
           {hydrated && cards.length > 0 ? (
-            <span className="font-mono text-[11px] text-muted">
+            <span className="text-body-sm tabular-nums text-muted">
               {docCount} of {cards.length} with an assignment
             </span>
           ) : null}
@@ -238,7 +248,7 @@ function PrimaryPane({
         {!hydrated ? (
           <ProfileSkeleton />
         ) : cards.length === 0 ? (
-          <p className="font-reading text-[15px] leading-relaxed text-muted">
+          <p className="font-reading text-body leading-relaxed text-muted">
             No topics yet. Tell Scout what to track and your docs will appear
             here as it drafts them.
           </p>
@@ -262,9 +272,7 @@ function PrimaryPane({
 
       <section className="flex flex-col gap-6 border-t border-border-default pt-8">
         <div className="flex flex-col gap-2">
-          <h2 className="font-mono text-[12px] uppercase tracking-[0.1em] text-muted">
-            Skills setup
-          </h2>
+          <h2 className="text-body-sm font-medium text-muted">Skills setup</h2>
           <p className="max-w-prose text-body-sm text-secondary">
             The general skills Scout applies to every brief — how it researches
             the news and how it assembles what it finds. They govern how news is

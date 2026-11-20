@@ -158,52 +158,46 @@ function likeInputFor(item: FeedItem): LikeInput {
 }
 
 function FeedCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
-  // The card is a relative wrapper holding TWO siblings: a full-area open button
-  // and the like button overlaid top-right. They're siblings (not nested) because
-  // a <button> inside a <button> is invalid HTML — the heart must never be a child
-  // of the open button. The wrapper carries the card's border/bg/hover so both
-  // controls share one visual frame.
+  // One story per card. The headline's button stretches over the whole card
+  // (its ::after covers it), so a tap anywhere opens the story, while the heart
+  // in the foot sits above that layer as its own button: a <button> inside a
+  // <button> is invalid HTML. A headline may wrap; the card allows it.
   return (
-    <div className="group relative flex h-full flex-col overflow-hidden rounded-md border border-border-default bg-surface transition focus-within:ring-2 focus-within:ring-focus-ring hover:border-border-strong hover:bg-surface-muted">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex h-full flex-col text-left focus:outline-none"
-      >
-        {item.imageUrl && (
-          <FeedImage
-            src={item.imageUrl}
-            className="aspect-[16/9] w-full object-cover"
-          />
-        )}
-        <div className="flex flex-1 flex-col gap-2 p-4">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption uppercase tracking-wide text-muted">
-            <span className="font-medium text-signal">{item.topic}</span>
-            {item.publishedAt && (
-              <span className="tabular-nums">
-                · {formatDate(item.publishedAt)}
-              </span>
-            )}
-          </div>
-          <h3 className="font-serif text-title-3 leading-snug text-primary line-clamp-3">
+    <article
+      data-allow-wrap
+      className="relative flex flex-col overflow-hidden rounded-card border border-border-default bg-surface transition focus-within:ring-2 focus-within:ring-focus-ring hover:border-border-strong"
+    >
+      {item.imageUrl && (
+        <FeedImage
+          src={item.imageUrl}
+          className="aspect-[16/9] w-full object-cover"
+        />
+      )}
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <p className="text-caption font-medium text-secondary">{item.topic}</p>
+        <h3 className="font-serif text-title-3 leading-snug text-primary text-balance">
+          <button
+            type="button"
+            onClick={onOpen}
+            className="text-left after:absolute after:inset-0 after:content-[''] focus:outline-none"
+          >
             {item.headline}
-          </h3>
-          {item.blurb && (
-            <p className="font-reading text-body-sm text-secondary line-clamp-2">
-              {item.blurb}
-            </p>
-          )}
-          {/* pr keeps the source clear of the absolutely-positioned heart */}
-          <span className="mt-auto pr-11 pt-1 text-caption text-muted">
+          </button>
+        </h3>
+        {item.blurb && (
+          <p className="font-reading text-body text-secondary line-clamp-3">
+            {item.blurb}
+          </p>
+        )}
+        <div className="mt-auto flex items-center justify-between gap-2 text-body-sm text-muted">
+          <span className="min-w-0 truncate tabular-nums">
             {item.source}
+            {item.publishedAt && <> · {formatDate(item.publishedAt)}</>}
           </span>
+          <LikeButton story={likeInputFor(item)} className="relative z-10" />
         </div>
-      </button>
-      <LikeButton
-        story={likeInputFor(item)}
-        className="absolute right-2 top-2"
-      />
-    </div>
+      </div>
+    </article>
   );
 }
 

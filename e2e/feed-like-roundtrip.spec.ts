@@ -136,7 +136,7 @@ function leadHeart(
   name: "Save to liked stories" | "Remove from liked stories",
 ) {
   return page
-    .locator("div.group", {
+    .locator("article:not(:has(article))", {
       has: page.getByRole("heading", { name: LEAD_HEADLINE }),
     })
     .getByRole("button", { name });

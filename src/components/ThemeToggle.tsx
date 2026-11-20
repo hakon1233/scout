@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { Segmented } from "@/components/ui/Segmented";
 import { getLocalStorage, isClient, safeSetItem } from "@/lib/safe-storage";
 
 type Theme = "light" | "dark" | "system";
@@ -88,37 +89,15 @@ export function ThemeToggle({
   ];
 
   if (showLabels) {
-    // Labeled segmented control for the settings panel: full-width,
-    // icon + text so the three choices read clearly inside the menu.
+    // The settings row's segmented control, labelled so the three choices
+    // read without the icons.
     return (
-      <div
-        role="radiogroup"
-        aria-label="Theme"
-        className="grid grid-cols-3 gap-1 rounded-md border border-border-default bg-surface p-1"
-      >
-        {options.map((opt) => {
-          const active = mounted && theme === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              suppressHydrationWarning
-              onClick={() => setTheme(opt.value)}
-              className={
-                "inline-flex flex-col items-center justify-center gap-1 rounded-sm px-2 py-2 text-caption transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-page " +
-                (active
-                  ? "bg-accent text-accent-fg"
-                  : "text-muted hover:bg-surface-muted hover:text-primary")
-              }
-            >
-              {opt.icon}
-              <span>{opt.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <Segmented
+        label="Theme"
+        value={mounted ? theme : null}
+        options={options.map(({ value, label }) => ({ value, label }))}
+        onChange={setTheme}
+      />
     );
   }
 

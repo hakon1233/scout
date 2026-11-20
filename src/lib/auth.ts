@@ -12,6 +12,7 @@
 // that device in (the PKCE flow would need the browser that asked for the link).
 
 import { createClient } from "@supabase/supabase-js";
+import { createFakeAuthClient, FAKE_CONFIG, fakeHostedOn } from "./hosted-fake";
 
 export type AuthUser = { id: string; email: string | null };
 
@@ -153,6 +154,9 @@ function callbackMessage(error: AuthClientError): string {
 /** The hosted backend, read from public env vars at build time. Null when this
  *  build has none (the local companion build): hosted sign-in stays hidden. */
 export function hostedConfig(): { url: string; anonKey: string } | null {
+  // The literal NODE_ENV tests let a production build drop the fake entirely.
+  if (process.env.NODE_ENV !== "production" && fakeHostedOn())
+    return FAKE_CONFIG;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   return url && anonKey ? { url, anonKey } : null;
@@ -171,6 +175,8 @@ export function hostedAuth(): Auth | null {
   if (hosted !== undefined) return hosted;
   const config = hostedConfig();
   if (!config || typeof window === "undefined") return (hosted = null);
+  if (process.env.NODE_ENV !== "production" && fakeHostedOn())
+    return (hosted = createAuth(createFakeAuthClient(), { redirectTo: "" }));
   const client = createClient(config.url, config.anonKey, {
     auth: {
       flowType: "implicit",

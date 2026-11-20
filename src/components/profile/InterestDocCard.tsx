@@ -40,31 +40,31 @@ function formatDocDate(iso?: string): string {
 const MD = {
   h1: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
     <h3
-      className="mt-3 font-serif text-[17px] text-primary first:mt-0"
+      className="mt-3 font-serif text-title-3 text-primary first:mt-0"
       {...p}
     />
   ),
   h2: (p: React.HTMLAttributes<HTMLHeadingElement>) => (
     <h4
-      className="mt-3 font-mono text-[11px] uppercase tracking-[0.1em] text-secondary first:mt-0"
+      className="mt-3 text-caption font-medium text-secondary first:mt-0"
       {...p}
     />
   ),
   p: (p: React.HTMLAttributes<HTMLParagraphElement>) => (
     <p
-      className="mt-2 font-reading text-[14px] leading-relaxed text-secondary first:mt-0"
+      className="mt-2 font-reading text-body-sm leading-relaxed text-secondary first:mt-0"
       {...p}
     />
   ),
   ul: (p: React.HTMLAttributes<HTMLUListElement>) => (
     <ul
-      className="mt-2 list-disc space-y-1 pl-5 font-reading text-[14px] leading-relaxed text-secondary first:mt-0"
+      className="mt-2 list-disc space-y-1 pl-5 font-reading text-body-sm leading-relaxed text-secondary first:mt-0"
       {...p}
     />
   ),
   ol: (p: React.HTMLAttributes<HTMLOListElement>) => (
     <ol
-      className="mt-2 list-decimal space-y-1 pl-5 font-reading text-[14px] leading-relaxed text-secondary first:mt-0"
+      className="mt-2 list-decimal space-y-1 pl-5 font-reading text-body-sm leading-relaxed text-secondary first:mt-0"
       {...p}
     />
   ),
@@ -79,7 +79,7 @@ const MD = {
   ),
   code: (p: React.HTMLAttributes<HTMLElement>) => (
     <code
-      className="rounded bg-surface-muted px-1 py-0.5 font-mono text-[12px] text-primary"
+      className="rounded bg-surface-muted px-1 py-0.5 font-mono text-body-sm text-primary"
       {...p}
     />
   ),
@@ -156,7 +156,7 @@ export function InterestDocCard({
               event.preventDefault();
               onOpen();
             }}
-            className="block truncate font-serif text-[19px] leading-tight text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+            className="block truncate font-serif text-title-3 leading-tight text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
           >
             {topic}
           </a>
@@ -167,7 +167,7 @@ export function InterestDocCard({
           onClick={onFocusToggle}
           aria-pressed={focused}
           className={[
-            "shrink-0 rounded-pill border px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.06em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+            "shrink-0 rounded-pill border px-2.5 py-1 text-caption font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
             focused
               ? "border-signal bg-signal/10 text-signal"
               : "border-border-default text-secondary hover:border-border-strong",
@@ -181,7 +181,7 @@ export function InterestDocCard({
       {body ? (
         <div className="mt-3 border-t border-border-default pt-3">
           {showRaw ? (
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-surface-muted p-3 font-mono text-[12px] leading-relaxed text-secondary">
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-surface-muted p-3 font-mono text-body-sm leading-relaxed text-secondary">
               {body}
             </pre>
           ) : (
@@ -192,18 +192,18 @@ export function InterestDocCard({
           <button
             type="button"
             onClick={() => setShowRaw((v) => !v)}
-            className="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-muted underline underline-offset-2 hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+            className="mt-2 text-caption font-medium text-muted underline underline-offset-2 hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
           >
             {showRaw ? "Rendered" : "Raw markdown"}
           </button>
         </div>
       ) : hasDoc ? (
-        <p className="mt-3 border-t border-border-default pt-3 font-reading text-[13px] leading-relaxed text-muted">
+        <p className="mt-3 border-t border-border-default pt-3 font-reading text-body-sm leading-relaxed text-muted">
           Scout is tracking an assignment for this topic. Refine it in the chat
           to see the latest draft here.
         </p>
       ) : (
-        <p className="mt-3 border-t border-border-default pt-3 font-reading text-[13px] leading-relaxed text-muted">
+        <p className="mt-3 border-t border-border-default pt-3 font-reading text-body-sm leading-relaxed text-muted">
           No assignment yet. Tell Scout what matters about this topic and it
           will draft one — and follow it on every research run.
         </p>
@@ -232,7 +232,7 @@ function DocLine({
           ? "Removing…"
           : "Assignment updated just now";
     return (
-      <span className="mt-1 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-signal">
+      <span className="mt-1 inline-flex items-center gap-1.5 text-caption font-medium text-signal">
         <span
           aria-hidden="true"
           className="inline-block h-1.5 w-1.5 rounded-full bg-signal motion-safe:animate-pulse"
@@ -244,7 +244,7 @@ function DocLine({
   if (hasDoc) {
     const date = formatDocDate(updatedAt);
     return (
-      <span className="mt-1 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-secondary">
+      <span className="mt-1 inline-flex items-center gap-1.5 text-caption font-medium text-secondary">
         <span
           aria-hidden="true"
           className="inline-block h-1.5 w-1.5 rounded-full bg-signal"
@@ -254,11 +254,7 @@ function DocLine({
     );
   }
   return (
-    <span className="mt-1 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
-      <span
-        aria-hidden="true"
-        className="inline-block h-1.5 w-1.5 rounded-full border border-dashed border-border-strong"
-      />
+    <span className="mt-1 inline-flex items-center text-caption font-medium text-muted">
       No assignment yet
     </span>
   );
