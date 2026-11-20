@@ -91,6 +91,13 @@ export type PendingFollow = {
   topic: string;
 };
 
+// The hosted Worker's POST /chat/confirm body: which proposal of the reader's
+// last chat turn they accept. The Worker checks it against the stored turn.
+export type ChatConfirm =
+  | { kind: "delete"; interestIds: string[] }
+  | { kind: "rewrite"; interestId: string }
+  | { kind: "follow"; interestId: string };
+
 // One chat turn. Kicked with POST /v0/chat and polled with GET /v0/chat, like
 // a brief run. A `ready` turn's `changes` are already on disk.
 export type ChatTurn = {

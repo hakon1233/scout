@@ -11,6 +11,8 @@
     "test": "tsx --conditions=source --test test/*.test.ts"
   },
   "dependencies": {
+    "@scout/core": "workspace:*",
+    "@scout/hosted": "workspace:*",
     "@scout/research": "workspace:*"
   },
   "devDependencies": {
