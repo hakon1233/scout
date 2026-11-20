@@ -12,6 +12,7 @@ import {
   parseChatOutput,
   planChatChanges,
   type ChatChange,
+  type ChatConfirm,
   type ChatTurn,
   type Interest,
   type InterestSnapshot,
@@ -46,10 +47,8 @@ export type ChatStore = {
   ): Promise<void>;
 };
 
-export type ChatConfirm =
-  | { kind: "delete"; interestIds: string[] }
-  | { kind: "rewrite"; interestId: string }
-  | { kind: "follow"; interestId: string };
+// The confirm body is part of the Worker's HTTP contract, so it lives in core.
+export type { ChatConfirm };
 
 export const CHAT_MODEL = "claude-haiku-5-5";
 const PUBLIC_INTEREST_LIMIT = 5;

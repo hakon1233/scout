@@ -5,6 +5,7 @@
 export type {
   Brief,
   ChatChange,
+  ChatConfirm,
   ChatTurn,
   Interest,
   PendingDelete,
@@ -42,6 +43,11 @@ export {
   type InterestSnapshot,
   type ProposedChange,
 } from "./chat-changes.ts";
+export {
+  chatTurnFromRow,
+  chatTurnToRow,
+  type ChatTurnRow,
+} from "./chat-rows.ts";
 export {
   buildChatPrompt,
   parseChatOutput,

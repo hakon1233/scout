@@ -111,6 +111,11 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   `researchInterest`, finish each. Host-neutral; tests use a stub queue.
 - `supabase.ts`: the `RunQueue` adapter over PostgREST, and `requestRun` as the reader.
 - `http.ts`: `POST /runs {interestId}` with the reader's Supabase JWT; it only queues.
+  `POST /chat {message}` and `POST /chat/confirm {kind, …}` verify the JWT, check
+  `chat_block_reason` (kill switch, daily chat turns), and run `packages/hosted`'s chat.
+- `chat-store.ts`: the chat's store over PostgREST with the service key. A turn's
+  changes, follows and its `chat_turns` row land in one `commit_chat_turn` call
+  (`supabase/migrations/*_chat.sql`, which also adds `plans.max_interests`).
 - `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`.
 
 ### Web app (`src`)
@@ -131,6 +136,11 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   comes back to `app/app/signin` (implicit flow: tokens in the URL fragment, read by the
   client), so the static export needs no callback route. Errors reach the page as
   plain sentences.
+- `lib/hosted.ts`: the hosted app's one data module. `hostedData()` returns `home`,
+  `transcript`, `chat`, `confirm`, `setCadence`, `remove`, `restore`, `unfollow` and
+  `runNow` over Supabase REST (as the reader, under RLS) and the Worker. Limits come
+  back as `HostedError` with a plain sentence. `components/hosted/` renders it; in a
+  hosted build `app/app/page.tsx` shows `HostedHome` instead of the companion feed.
 
 ### Hosted backend (`supabase/`)
 

@@ -10,6 +10,8 @@ import { BriefHistory } from "@/components/BriefHistory";
 import { BriefLayout } from "@/components/BriefLayout";
 import { BriefSkeleton } from "@/components/BriefSkeleton";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { HostedHome } from "@/components/hosted/HostedHome";
+import { isHostedBuild } from "@/lib/auth";
 import { Banner, Button } from "@/components/ui";
 import type { AgentProgress } from "@/lib/agent";
 import {
@@ -71,7 +73,13 @@ function topicFilterKey(topic: string): string {
   return topic.trim().toLowerCase();
 }
 
+// A build with NEXT_PUBLIC_SUPABASE_URL is the hosted app; otherwise the page
+// talks to the local companion.
 export default function AppPage() {
+  return isHostedBuild() ? <HostedHome /> : <CompanionHome />;
+}
+
+function CompanionHome() {
   const router = useRouter();
   const goToInterests = useCallback(
     () => router.push(INTERESTS_PATH),

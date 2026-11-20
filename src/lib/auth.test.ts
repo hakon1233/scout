@@ -70,6 +70,21 @@ test("currentUser returns the signed-in reader", async () => {
   assert.deepEqual(await auth.currentUser(), anna);
 });
 
+test("accessToken gives the session's token, or null when signed out", async () => {
+  const signedOut = createAuth(stubClient().client, { redirectTo: REDIRECT });
+  assert.equal(await signedOut.accessToken(), null);
+  const { client } = stubClient({
+    async getSession() {
+      return {
+        data: { session: { user: anna, access_token: "jwt-anna" } },
+        error: null,
+      };
+    },
+  });
+  const auth = createAuth(client, { redirectTo: REDIRECT });
+  assert.equal(await auth.accessToken(), "jwt-anna");
+});
+
 test("a failed sign-in link throws a plain message and clears the URL", async () => {
   let cleared = false;
   const { client } = stubClient({

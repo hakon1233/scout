@@ -1,8 +1,8 @@
 # Scout's run queue Worker (Cloudflare Workers free plan). Not deployed from CI yet.
 #
 # Secrets, set once with `wrangler secret put <NAME>`, never written here:
-#   SUPABASE_SERVICE_ROLE_KEY  claims and finishes runs
-#   ANTHROPIC_API_KEY          the research calls
+#   SUPABASE_SERVICE_ROLE_KEY  claims and finishes runs, stores chat turns
+#   ANTHROPIC_API_KEY          the research and chat calls
 name = "scout-runs"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"

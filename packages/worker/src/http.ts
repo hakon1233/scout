@@ -1,19 +1,30 @@
-// The Worker's one route: POST /runs {interestId} with the reader's Supabase
-// JWT as a bearer token. It queues a run-now request and answers 202 {runId};
-// the next cron tick (within a minute) starts it. Host-neutral: Request and
-// Response only.
+// The Worker's routes, each with the reader's Supabase JWT as a bearer token:
+//   POST /runs {interestId}      queue a run now; 202 {runId}. The next cron
+//                                tick (within a minute) starts it.
+//   POST /chat {message}         one setup chat turn; 200 ChatTurn.
+//   POST /chat/confirm <confirm> confirm what the last turn proposed (a
+//                                ChatConfirm); 200 ChatTurn, 409 if nothing waits.
+// Host-neutral: Request and Response only.
 
-import { requestRun, RpcError } from "./supabase.ts";
+import { createChat, type ChatConfirm } from "@scout/hosted";
+import type { ClaudeClient } from "@scout/research";
+import { supabaseChatStore, verifiedUserId } from "./chat-store.ts";
+import { requestRun, RpcError, rpcCaller } from "./supabase.ts";
 
 export type HttpDeps = {
   supabaseUrl: string;
   anonKey: string;
   // The web app's origin, for CORS. Other origins get no CORS headers.
   allowedOrigin: string;
+  // The chat routes need both; without them they answer 404.
+  serviceKey?: string;
+  claude?: ClaudeClient;
   fetch?: typeof fetch;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_MESSAGE_CHARS = 4000;
+const ROUTES = new Set(["/runs", "/chat", "/chat/confirm"]);
 
 export async function handleRequest(
   request: Request,
@@ -34,8 +45,8 @@ export async function handleRequest(
       headers: { "content-type": "application/json", ...cors },
     });
 
-  if (new URL(request.url).pathname !== "/runs")
-    return json(404, { error: "not found" });
+  const path = new URL(request.url).pathname;
+  if (!ROUTES.has(path)) return json(404, { error: "not found" });
   if (request.method === "OPTIONS")
     return new Response(null, { status: 204, headers: cors });
   if (request.method !== "POST")
@@ -46,13 +57,26 @@ export async function handleRequest(
   )?.[1];
   if (!jwt) return json(401, { error: "sign in first" });
 
-  let interestId: unknown;
+  let body: unknown;
   try {
-    interestId = ((await request.json()) as { interestId?: unknown })
-      .interestId;
+    body = await request.json();
   } catch {
-    interestId = undefined;
+    body = undefined;
   }
+
+  if (path === "/runs") return runNow(body, jwt, deps, json);
+  return chatRoute(path, body, jwt, deps, json);
+}
+
+type Json = (status: number, body: unknown) => Response;
+
+async function runNow(
+  body: unknown,
+  jwt: string,
+  deps: HttpDeps,
+  json: Json,
+): Promise<Response> {
+  const interestId = (body as { interestId?: unknown } | undefined)?.interestId;
   if (typeof interestId !== "string" || !UUID.test(interestId))
     return json(400, { error: "interestId must be an interest's id" });
 
@@ -74,4 +98,86 @@ export async function handleRequest(
     }
     return json(502, { error: "could not queue the run" });
   }
+}
+
+async function chatRoute(
+  path: string,
+  body: unknown,
+  jwt: string,
+  deps: HttpDeps,
+  json: Json,
+): Promise<Response> {
+  const { serviceKey, claude } = deps;
+  if (!serviceKey || !claude) return json(404, { error: "not found" });
+
+  let input: { message: string } | { confirm: ChatConfirm } | null;
+  if (path === "/chat") {
+    const message = (body as { message?: unknown } | undefined)?.message;
+    input =
+      typeof message === "string" &&
+      message.trim() !== "" &&
+      message.length <= MAX_MESSAGE_CHARS
+        ? { message: message.trim() }
+        : null;
+  } else {
+    const confirm = parseConfirm(body);
+    input = confirm ? { confirm } : null;
+  }
+  if (!input) return json(400, { error: "that request isn't one Scout reads" });
+
+  try {
+    const userId = await verifiedUserId({
+      url: deps.supabaseUrl,
+      anonKey: deps.anonKey,
+      userJwt: jwt,
+      fetch: deps.fetch,
+    });
+    if (!userId) return json(401, { error: "sign in first" });
+
+    const service = { apikey: serviceKey, bearer: serviceKey };
+    const rpc = rpcCaller(deps.supabaseUrl, deps.fetch);
+    const blocked = (await rpc(
+      "chat_block_reason",
+      { p_user: userId },
+      service,
+    )) as string | null;
+    if (blocked) return json(429, { error: blocked });
+
+    const chat = createChat({
+      claude,
+      store: supabaseChatStore({
+        url: deps.supabaseUrl,
+        serviceKey,
+        fetch: deps.fetch,
+      }),
+    });
+    if ("message" in input)
+      return json(200, await chat.turn(userId, input.message));
+    const turn = await chat.confirm(userId, input.confirm);
+    return turn
+      ? json(200, turn)
+      : json(409, { error: "There is nothing waiting to confirm." });
+  } catch (err) {
+    console.error("[chat] store failed:", err);
+    return json(502, { error: "Scout couldn't save that. Try again." });
+  }
+}
+
+function parseConfirm(body: unknown): ChatConfirm | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+  if (b.kind === "delete") {
+    const ids = b.interestIds;
+    return Array.isArray(ids) &&
+      ids.length > 0 &&
+      ids.every((id) => typeof id === "string")
+      ? { kind: "delete", interestIds: ids as string[] }
+      : null;
+  }
+  if (
+    (b.kind === "rewrite" || b.kind === "follow") &&
+    typeof b.interestId === "string"
+  )
+    return { kind: b.kind, interestId: b.interestId };
+  return null;
 }

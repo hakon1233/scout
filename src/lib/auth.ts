@@ -24,6 +24,9 @@ export interface Auth {
   /** Emails a sign-in link. Throws an AuthError the page can show as is. */
   sendMagicLink(email: string): Promise<void>;
   signOut(): Promise<void>;
+  /** The signed-in reader's access token (a JWT, refreshed when near expiry)
+   *  for the hosted data calls, or null when signed out. */
+  accessToken(): Promise<string | null>;
   /** Called with the reader on every sign-in and sign-out. Returns unsubscribe. */
   onAuthChange(listener: (user: AuthUser | null) => void): () => void;
 }
@@ -38,7 +41,7 @@ export class AuthError extends Error {
 export type AuthClient = {
   initialize(): Promise<{ error: AuthClientError | null }>;
   getSession(): Promise<{
-    data: { session: { user: ClientUser } | null };
+    data: { session: { user: ClientUser; access_token?: string } | null };
     error: AuthClientError | null;
   }>;
   signInWithOAuth(args: {
@@ -75,6 +78,12 @@ export function createAuth(
       const { data, error } = await client.getSession();
       if (error) throw new AuthError(GENERIC);
       return toUser(data.session?.user);
+    },
+
+    async accessToken() {
+      const { data, error } = await client.getSession();
+      if (error) throw new AuthError(GENERIC);
+      return data.session?.access_token ?? null;
     },
 
     async signInWithGoogle() {
@@ -143,10 +152,16 @@ function callbackMessage(error: AuthClientError): string {
 
 /** The hosted backend, read from public env vars at build time. Null when this
  *  build has none (the local companion build): hosted sign-in stays hidden. */
-function hostedConfig(): { url: string; anonKey: string } | null {
+export function hostedConfig(): { url: string; anonKey: string } | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   return url && anonKey ? { url, anonKey } : null;
+}
+
+/** True in the hosted build: the app talks to Supabase and the Worker instead
+ *  of a local companion. */
+export function isHostedBuild(): boolean {
+  return hostedConfig() !== null;
 }
 
 let hosted: Auth | null | undefined;

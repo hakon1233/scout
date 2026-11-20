@@ -80,7 +80,7 @@ export async function requestRun(opts: {
   )) as string;
 }
 
-function rpcCaller(baseUrl: string, doFetch: Fetch = globalThis.fetch) {
+export function rpcCaller(baseUrl: string, doFetch: Fetch = globalThis.fetch) {
   return async (
     fn: string,
     args: Record<string, unknown>,
