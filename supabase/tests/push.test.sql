@@ -236,7 +236,7 @@ select ok(not has_function_privilege('authenticated', 'public.push_targets(uuid)
   'a reader cannot list who gets notified');
 select ok(not has_function_privilege('authenticated', 'public.claim_outbox(integer)', 'execute'),
   'a reader cannot take queued pushes');
-select ok(not has_function_privilege('authenticated', 'public.queue_weekly_pushes(timestamptz)', 'execute'),
+select ok(not has_function_privilege('authenticated', 'public.queue_weekly_pushes(timestamptz, uuid)', 'execute'),
   'a reader cannot queue the weekly push');
 select ok(not has_table_privilege('authenticated', 'public.topic_popularity', 'select'),
   'a reader cannot read topic popularity');

@@ -25,6 +25,8 @@ export type OutboxPush = {
         count: number;
         topics: string[];
         popular: { title: string; slug: string }[];
+        // Up to 3 of the reader's picks (absent on rows queued before picks).
+        picks?: { title: string; slug: string }[];
       };
     }
 );
@@ -45,20 +47,30 @@ export function briefReadyPayload(topic: string) {
   return { title: "Your brief is ready", body: `New stories on ${topic}.` };
 }
 
-/** The Monday digest: new stories in topics with push off, and popular ones. */
+/**
+ * The Monday digest: new stories in topics with push off, then the reader's
+ * picks, or popular topics when they have none.
+ */
 export function weeklyPayload(p: {
   count: number;
   topics: string[];
   popular: { title: string }[];
+  picks?: { title: string }[];
 }) {
+  const picks = p.picks ?? [];
+  const suggest = picks.length
+    ? `Picked for you: ${picks.map((t) => t.title).join(", ")}.`
+    : p.popular.length
+      ? `Popular now: ${p.popular.map((t) => t.title).join(", ")}.`
+      : "";
+  if (p.count === 0) {
+    return { title: "Picked for you this week", body: suggest };
+  }
   const more =
     p.count > p.topics.length ? ` and ${p.count - p.topics.length} more` : "";
-  const popular = p.popular.length
-    ? ` Popular now: ${p.popular.map((t) => t.title).join(", ")}.`
-    : "";
   return {
     title: "New this week in your topics",
-    body: `New stories on ${p.topics.join(", ")}${more}.${popular}`,
+    body: `New stories on ${p.topics.join(", ")}${more}.${suggest ? ` ${suggest}` : ""}`,
   };
 }
 

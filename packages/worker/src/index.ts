@@ -1,16 +1,22 @@
 // The Cloudflare Worker: wiring only. The minute tick runs runDue with the
 // Supabase queue and the Anthropic client, then sends queued pushes with the
-// subrequests left; the daily cron cleans up and, on Mondays, queues the
+// subrequests left (after up to 3 readers' picks); the daily cron cleans up and, on Mondays, queues the
 // weekly push. fetch serves run-now, the chat and delete account.
 // Secrets (SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, SUPABASE_ANON_KEY,
 // VAPID_PRIVATE_KEY, and optionally TEAM_RUNNER_TOKEN and MODERATION_TOKEN)
 // come from `wrangler secret put`, never from a file.
 
+import { createPicks } from "@scout/hosted";
 import { anthropicClient } from "@scout/research";
 import { handleRequest } from "./http.ts";
 import { sendOutbox } from "./push.ts";
-import { DEFAULT_BATCH, notifyBudget, runDue } from "./run-due.ts";
-import { dailyJobs, supabasePushStore, supabaseQueue } from "./supabase.ts";
+import { DEFAULT_BATCH, notifyBudget, picksBatch, runDue } from "./run-due.ts";
+import {
+  dailyJobs,
+  supabasePicksStore,
+  supabasePushStore,
+  supabaseQueue,
+} from "./supabase.ts";
 
 export {
   runDue,
@@ -51,12 +57,25 @@ const worker = {
     }
 
     const batchSize = Number(env.RUN_BATCH ?? DEFAULT_BATCH);
+    const claude = anthropicClient({ apiKey: env.ANTHROPIC_API_KEY });
     const summary = await runDue({
       queue: supabaseQueue(supabase),
-      claude: anthropicClient({ apiKey: env.ANTHROPIC_API_KEY }),
+      claude,
       batchSize,
     });
     if (summary.claimed) console.log("run queue tick", summary);
+
+    // Picks before pushes: a finished Monday refresh queues its weekly push.
+    const picks = await createPicks({
+      claude,
+      store: supabasePicksStore(supabase),
+    })
+      .refresh(picksBatch(batchSize))
+      .catch((err) => {
+        console.error("[picks] refresh failed:", err);
+        return null;
+      });
+    if (picks?.claimed) console.log("picks tick", picks);
 
     if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
       await sendOutbox({

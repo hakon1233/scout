@@ -68,9 +68,30 @@ function batchLimit(batchSize: number | undefined): number {
   return Math.max(0, Math.min(MAX_BATCH, size));
 }
 
-/** The subrequests a tick's outbox drain may use: what the claim and the runs leave. */
+// A picks refresh is one Claude call and one finish_picks; the tick claims
+// readers once. At most 3 readers a tick: a minute cron clears 180 an hour.
+export const SUBREQUESTS_PER_PICK = 2;
+export const PICKS_BATCH = 3;
+
+/** Readers a tick may refresh picks for: what the claim and the runs leave, at most 3. */
+export function picksBatch(batchSize: number | undefined): number {
+  const left =
+    SUBREQUEST_LIMIT - 1 - batchLimit(batchSize) * SUBREQUESTS_PER_RUN - 1;
+  return Math.max(
+    0,
+    Math.min(PICKS_BATCH, Math.floor(left / SUBREQUESTS_PER_PICK)),
+  );
+}
+
+/** The subrequests a tick's outbox drain may use: what the runs and picks leave. */
 export function notifyBudget(batchSize: number | undefined): number {
-  return SUBREQUEST_LIMIT - 1 - batchLimit(batchSize) * SUBREQUESTS_PER_RUN;
+  const picks = picksBatch(batchSize);
+  return (
+    SUBREQUEST_LIMIT -
+    1 -
+    batchLimit(batchSize) * SUBREQUESTS_PER_RUN -
+    (picks ? 1 + picks * SUBREQUESTS_PER_PICK : 0)
+  );
 }
 
 export type RunDueDeps = {

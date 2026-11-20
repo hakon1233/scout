@@ -15,3 +15,10 @@ export {
   type PublishStart,
   type PublishStore,
 } from "./publish.ts";
+export {
+  PICKS_MODEL,
+  createPicks,
+  type PicksJob,
+  type PicksResult,
+  type PicksStore,
+} from "./picks.ts";
