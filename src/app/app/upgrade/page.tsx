@@ -2,7 +2,13 @@
 
 import { AppShell, PageHeader } from "@/components/shell/AppShell";
 import { Button } from "@/components/ui";
-import { PLANS, planLines, type Plan } from "@/lib/plans";
+import {
+  PLANS,
+  planLines,
+  priceAbroadText,
+  priceText,
+  type Plan,
+} from "@/lib/plans";
 
 // Free vs Plus. Payment is a placeholder: both ways say "Coming soon" and make
 // no calls. Vipps first (most readers are in Norway), then card by Stripe.
@@ -14,7 +20,7 @@ export default function UpgradePage() {
         title="Upgrade"
         back={{ href: "/app/settings/", label: "Settings" }}
       >
-        More topics, every one daily.
+        More topics and more daily briefs.
       </PageHeader>
       <div className="grid gap-4 sm:grid-cols-2" data-main>
         <PlanCard plan={PLANS.free} />
@@ -54,9 +60,9 @@ function PlanCard({
     >
       <div className="flex flex-col gap-0.5">
         <h3 className="font-serif text-title-2 text-primary">{plan.name}</h3>
-        <p className="text-body-sm text-primary">{plan.price}</p>
-        {plan.priceAbroad && (
-          <p className="text-caption text-muted">{plan.priceAbroad}</p>
+        <p className="text-body-sm text-primary">{priceText(plan)}</p>
+        {priceAbroadText(plan) && (
+          <p className="text-caption text-muted">{priceAbroadText(plan)}</p>
         )}
       </div>
       <ul className="flex flex-col gap-1.5 text-body-sm text-secondary">

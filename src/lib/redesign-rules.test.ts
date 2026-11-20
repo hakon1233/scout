@@ -14,7 +14,13 @@ import {
   readLastShown,
   shouldShowHomeScreenCard,
 } from "./home-screen";
-import { planFor, planLines, planMeters } from "./plans";
+import {
+  planFor,
+  planLines,
+  planMeters,
+  priceAbroadText,
+  priceText,
+} from "./plans";
 import { defaultTimeZone, timeZoneOptions } from "./time-zone";
 
 // The redesign's small rules: the Home Screen card's once-a-week rule, notice
@@ -155,5 +161,8 @@ test("plan meters: own topics against the plan, follows don't count", () => {
     { label: "Run now today", used: 2, limit: 3 },
   ]);
   assert.equal(planFor("unknown").id, "free");
-  assert.equal(planLines(planFor("plus"))[0], "20 topics (all daily)");
+  assert.equal(planLines(planFor("plus"))[0], "30 topics (6 daily, 3 weekly)");
+  assert.equal(priceText(planFor("plus")), "49 kr a month");
+  assert.equal(priceAbroadText(planFor("plus")), "About $5 a month");
+  assert.equal(priceAbroadText(planFor("free")), null);
 });

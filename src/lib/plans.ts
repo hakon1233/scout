@@ -1,23 +1,30 @@
 // The plans Scout offers, in one place. The Upgrade page, the Settings plan
-// meters and the menu's plan line all read from here; the database's own
-// limits (rpc/allowance) stay the truth for what a reader has used.
+// meters and the menu's plan line all read from here. The database's plans
+// table (what allowance() and the triggers enforce) holds the same numbers;
+// test/plans-parity.test.mjs fails when the two disagree, so a change here
+// needs a migration that sets the table to match.
 //
 // Prices are placeholders until payments go live (Vipps first, card by Stripe
-// second). Change the numbers here and every screen follows.
+// second).
 
 export type PlanId = "free" | "plus";
 
 export type Plan = {
   id: PlanId;
   name: string;
-  /** Monthly price as shown, Norwegian kroner first. */
-  price: string;
-  /** The same price for readers outside Norway, or null when free. */
-  priceAbroad: string | null;
+  /** Monthly price in Norwegian kroner (plans.price_nok). */
+  priceNok: number;
+  /** Monthly price outside Norway, in US cents (plans.price_usd_cents). */
+  priceUsdCents: number;
+  /** Own topics, any schedule (plans.max_interests). */
   topics: number;
+  /** Topics that may run daily (plans.daily_interests). */
   dailyTopics: number;
+  /** Topics that may run weekly (plans.weekly_interests). */
   weeklyTopics: number;
+  /** "Run now" presses a day (plans.on_demand_runs_per_day). */
   runNowPerDay: number;
+  /** Public topics (plans.max_public_interests). */
   publicTopics: number;
 };
 
@@ -25,10 +32,10 @@ export const PLANS: Record<PlanId, Plan> = {
   free: {
     id: "free",
     name: "Free",
-    price: "0 kr",
-    priceAbroad: null,
-    topics: 5,
-    dailyTopics: 2,
+    priceNok: 0,
+    priceUsdCents: 0,
+    topics: 15,
+    dailyTopics: 1,
     weeklyTopics: 3,
     runNowPerDay: 3,
     publicTopics: 3,
@@ -36,12 +43,12 @@ export const PLANS: Record<PlanId, Plan> = {
   plus: {
     id: "plus",
     name: "Plus",
-    price: "49 kr a month",
-    priceAbroad: "About $5 a month",
-    topics: 20,
-    dailyTopics: 20,
-    weeklyTopics: 0,
-    runNowPerDay: 10,
+    priceNok: 49,
+    priceUsdCents: 500,
+    topics: 30,
+    dailyTopics: 6,
+    weeklyTopics: 3,
+    runNowPerDay: 3,
     publicTopics: 3,
   },
 };
@@ -51,11 +58,23 @@ export function planFor(name: string | null | undefined): Plan {
   return name === "plus" ? PLANS.plus : PLANS.free;
 }
 
+/** The monthly price as shown, Norwegian kroner. */
+export function priceText(p: Plan): string {
+  return p.priceNok === 0 ? "0 kr" : `${p.priceNok} kr a month`;
+}
+
+/** The price for readers outside Norway, or null when free. */
+export function priceAbroadText(p: Plan): string | null {
+  if (p.priceUsdCents === 0) return null;
+  const usd = p.priceUsdCents / 100;
+  return `About $${Number.isInteger(usd) ? usd : usd.toFixed(2)} a month`;
+}
+
 /** What a plan gives, as short lines for the Upgrade page. */
 export function planLines(p: Plan): string[] {
   const schedule =
     p.weeklyTopics === 0
-      ? "all daily"
+      ? `${p.dailyTopics} daily`
       : `${p.dailyTopics} daily, ${p.weeklyTopics} weekly`;
   return [
     `${p.topics} topics (${schedule})`,

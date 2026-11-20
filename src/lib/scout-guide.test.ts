@@ -14,10 +14,12 @@ test("the chat guide names the plans' current limits", () => {
     ),
   );
   assert.ok(SCOUT_GUIDE.includes(`at most ${f.publicTopics} of yours`));
-  assert.ok(SCOUT_GUIDE.includes(p.price.replace(" a month", "")));
+  assert.ok(
+    SCOUT_GUIDE.includes(`${p.priceNok} kr (about $${p.priceUsdCents / 100})`),
+  );
   assert.ok(
     SCOUT_GUIDE.includes(
-      `${p.topics} topics, all daily, ${p.runNowPerDay} Run now a day`,
+      `${p.topics} topics (${p.dailyTopics} daily, ${p.weeklyTopics} weekly), ${p.runNowPerDay} Run now a day`,
     ),
   );
 });

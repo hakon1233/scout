@@ -298,6 +298,9 @@ student, role and liked tags, and `is_reserved_name` for display names.
 reason), `dismissed_picks`, and `pick_runs`, whose cost counts toward the spend caps.
 `my_picks` returns only topics still public, not owned, followed or dismissed.
 `*_payments.sql`: plan prices and a `subscriptions` table, unused until payments.
+The plans table and `src/lib/plans.ts` (what the screens show) hold the same prices and
+limits; `test/plans-parity.test.mjs` fails when they differ, so a change to one needs
+a migration or an edit to the other.
 `config.toml` turns on Google (client
 id and secret read from env by name) and the email link, and lists the sign-in page's
 redirect URLs.
@@ -335,7 +338,8 @@ redirect URLs.
   sharing, push devices, usage events, the profile and subscriptions. `pnpm test:sql`
   runs them in PGlite (part of `pnpm check`); `pnpm test:rls` against Docker.
 - `test/*.test.mjs`: script tests, and `sql-parity.test.mjs`, which checks that core and
-  the schema agree on tags and the topic length (PGlite, no network).
+  the schema agree on tags and the topic length, and `plans-parity.test.mjs` (plans.ts
+  against the plans table), both in PGlite with no network.
 - `packages/agent/test`: the companion's unit and HTTP contract tests (`node:test`). They
   use a stub `claude`, a temporary state directory and port 0, so they need no network
   and no model quota. A guard makes any test that points at the real `~/.config/scout`
