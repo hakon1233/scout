@@ -14,11 +14,17 @@ test("a chat turn survives the round trip through its row", () => {
     pending_deletes: [{ interestId: "a", topic: "AI" }],
     pending_delete: { interestId: "a", topic: "AI" },
     pending_follows: [{ interestId: "p", topic: "AI policy" }],
+    pending_creates: [
+      { interestId: "n", topic: "Zigbee", doc: "# Zigbee", cadence: "weekly" },
+    ],
   };
   const row = chatTurnToRow(turn);
   assert.deepEqual(row.pending, {
     deletes: [{ interestId: "a", topic: "AI" }],
     follows: [{ interestId: "p", topic: "AI policy" }],
+    creates: [
+      { interestId: "n", topic: "Zigbee", doc: "# Zigbee", cadence: "weekly" },
+    ],
   });
   assert.deepEqual(chatTurnFromRow(row), turn);
 });

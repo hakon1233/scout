@@ -1,7 +1,7 @@
 // The hosted setup chat: one chat turn through the Claude API, and the reader's
 // confirms of what a turn proposed. The model only proposes a change set; core's
-// planChatChanges decides what lands, and deletes, full rewrites and follows
-// wait for a confirm that names a proposal the store holds (never one the
+// planChatChanges decides what lands, and new topics, deletes, full rewrites
+// and follows wait for a confirm that names a proposal the store holds (never one the
 // client sends). Host-neutral: the host injects the Claude client and the store.
 //
 // Left to the host: auth, the daily turn quota, the global ceiling and kill
@@ -34,7 +34,13 @@ export type ChatStore = {
   load(userId: string): Promise<{
     interests: InterestSnapshot[];
     transcript: ChatTurn[];
-    limits: { maxInterests: number; maxDocChars: number };
+    // `dailyInterests`: the plan's daily topics; 0 (Free) makes a daily ask
+    // weekly. Absent: no daily cap is known.
+    limits: {
+      maxInterests: number;
+      maxDocChars: number;
+      dailyInterests?: number;
+    };
   }>;
   // Up to `limit` public interests, best matches for `message` first, leaving
   // out the reader's own and those they already follow.
@@ -142,6 +148,7 @@ export function createChat(deps: {
                     ...limits,
                     publicInterests,
                     cadences: true,
+                    noDaily: limits.dailyInterests === 0,
                   }),
                 },
               ],
@@ -160,13 +167,31 @@ export function createChat(deps: {
         message,
       });
       const { pendingDeletes, pendingRewrites, pendingFollows } = plan;
+      // A new topic waits for the reader's confirm, so they see its title
+      // and cadence before it is saved and its first brief is queued.
+      // On a plan with no daily topics, a daily ask is made weekly.
+      const pendingCreates = plan.applied.flatMap((c) => {
+        if (c.op !== "create") return [];
+        const cadence =
+          c.cadence === "daily" && limits.dailyInterests === 0
+            ? "weekly"
+            : c.cadence;
+        return [
+          {
+            interestId: c.interestId,
+            topic: c.topic ?? "",
+            doc: c.doc ?? "",
+            ...(cadence ? { cadence } : {}),
+          },
+        ];
+      });
       result = {
         follows: [],
         turn: {
           ...base,
           status: "ready",
           reply: output.reply,
-          changes: plan.applied,
+          changes: plan.applied.filter((c) => c.op !== "create"),
           ...(output.page ? { page: output.page } : {}),
           ...(pendingDeletes.length > 0
             ? {
@@ -179,6 +204,9 @@ export function createChat(deps: {
             : {}),
           ...(pendingFollows.length > 0
             ? { pending_follows: pendingFollows }
+            : {}),
+          ...(pendingCreates.length > 0
+            ? { pending_creates: pendingCreates }
             : {}),
         },
       };
@@ -266,6 +294,20 @@ function confirmOutcome(
           doc: pending.doc,
         },
       ],
+      follows: [],
+    };
+  }
+  if (action.kind === "create") {
+    const pending = last.pending_creates?.find(
+      (p) => p.interestId === action.interestId,
+    );
+    if (!pending || interests.some((i) => i.id === pending.interestId)) {
+      return null;
+    }
+    return {
+      message: `Create "${pending.topic}"`,
+      reply: `Created "${pending.topic}".`,
+      changes: [{ ...pending, op: "create" }],
       follows: [],
     };
   }

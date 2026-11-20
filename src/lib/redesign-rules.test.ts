@@ -19,6 +19,8 @@ import {
   planGains,
   planLines,
   planMeters,
+  planUsage,
+  dailyOffered,
   priceAbroadText,
   priceText,
 } from "./plans";
@@ -147,32 +149,55 @@ test("time zone: the saved one wins, else the browser's", () => {
   assert.ok(timeZoneOptions("UTC").includes("UTC"));
 });
 
-test("plan meters: own topics against the plan, follows don't count", () => {
+test("plan meters: the schedule slots the plan allows, follows don't count", () => {
   const meters = planMeters({
     plan: "free",
-    daily: { used: 2, limit: 2 },
+    daily: { used: 0, limit: 0 },
     weekly: { used: 2, limit: 3 },
     runsToday: { used: 2, limit: 3 },
-    ownTopics: 4,
     publicTopics: 1,
   });
   assert.deepEqual(meters, [
-    { label: "Topics", used: 4, limit: 15 },
+    { label: "Weekly topics", used: 2, limit: 3 },
     { label: "Public topics", used: 1, limit: 3 },
     { label: "Run now today", used: 2, limit: 3 },
   ]);
+  assert.deepEqual(
+    planMeters({
+      plan: "plus",
+      daily: { used: 1, limit: 1 },
+      weekly: { used: 2, limit: 6 },
+      runsToday: { used: 0, limit: 3 },
+      publicTopics: 0,
+    }).slice(0, 2),
+    [
+      { label: "Daily topics", used: 1, limit: 1 },
+      { label: "Weekly topics", used: 2, limit: 6 },
+    ],
+  );
+  assert.equal(
+    planUsage(planFor("free"), { daily: 0, weekly: 2, public: 0 }),
+    "2 of 3 weekly, 0 of 3 public",
+  );
+  assert.equal(
+    planUsage(planFor("plus"), { daily: 1, weekly: 2, public: 1 }),
+    "1 of 1 daily, 2 of 6 weekly, 1 of 3 public",
+  );
+  assert.equal(dailyOffered(planFor("free")), false);
+  assert.equal(dailyOffered(planFor("plus")), true);
   assert.equal(planFor("unknown").id, "free");
-  assert.deepEqual(planLines(planFor("free")).slice(0, 2), [
-    "15 topics",
+  assert.deepEqual(planLines(planFor("free")).slice(0, 3), [
     "3 weekly briefs",
+    "Daily briefs: Plus only",
+    "15 topics in all",
   ]);
   assert.deepEqual(planLines(planFor("plus")).slice(0, 2), [
-    "30 topics",
     "1 daily and 6 weekly briefs",
+    "30 topics in all",
   ]);
   assert.deepEqual(planGains(planFor("plus")), [
-    "30 topics",
     "1 daily and 6 weekly briefs",
+    "30 topics in all",
     "Everything else in Free",
   ]);
   assert.equal(priceText(planFor("plus")), "49 kr a month");

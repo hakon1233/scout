@@ -70,15 +70,19 @@ export function priceAbroadText(p: Plan): string | null {
   return `About $${Number.isInteger(usd) ? usd : usd.toFixed(2)} a month`;
 }
 
+/** Whether a plan has daily topics; Free has none, so Daily shows as Plus. */
+export function dailyOffered(p: Plan): boolean {
+  return p.dailyTopics > 0;
+}
+
 /** What a plan gives, as short lines for the Upgrade page. */
 export function planLines(p: Plan): string[] {
-  const schedule =
-    p.dailyTopics === 0
-      ? `${p.weeklyTopics} weekly briefs`
-      : `${p.dailyTopics} daily and ${p.weeklyTopics} weekly briefs`;
+  const schedule = dailyOffered(p)
+    ? [`${p.dailyTopics} daily and ${p.weeklyTopics} weekly briefs`]
+    : [`${p.weeklyTopics} weekly briefs`, "Daily briefs: Plus only"];
   return [
-    `${p.topics} topics`,
-    schedule,
+    ...schedule,
+    `${p.topics} topics in all`,
     `${p.runNowPerDay} Run now a day`,
     `${p.publicTopics} public topics`,
     "Follow any public topic",
@@ -101,24 +105,33 @@ export function planGains(p: Plan): string[] {
 export type Meter = { label: string; used: number; limit: number };
 
 /**
- * The plan meters in Settings. Own topics and public topics are counted
- * against the plan's caps (the same numbers the Upgrade page shows); Run now
- * comes from the database's allowance. Topics the reader follows don't count.
+ * The plan meters in Settings. Scheduled topics (daily only when the plan has
+ * any, then weekly) and public topics are counted against the plan's caps (the
+ * same numbers the Upgrade page shows); Run now comes from the database's
+ * allowance. Topics the reader follows don't count.
  */
 export function planMeters(input: {
   plan: string;
   daily: { used: number; limit: number };
   weekly: { used: number; limit: number };
   runsToday: { used: number; limit: number };
-  ownTopics: number;
   publicTopics: number;
 }): Meter[] {
   const plan = planFor(input.plan);
   return [
+    ...(dailyOffered(plan)
+      ? [
+          {
+            label: "Daily topics",
+            used: input.daily.used,
+            limit: plan.dailyTopics,
+          },
+        ]
+      : []),
     {
-      label: "Topics",
-      used: input.ownTopics,
-      limit: plan.topics,
+      label: "Weekly topics",
+      used: input.weekly.used,
+      limit: plan.weeklyTopics,
     },
     {
       label: "Public topics",
@@ -131,4 +144,19 @@ export function planMeters(input: {
       limit: input.runsToday.limit,
     },
   ];
+}
+
+/**
+ * The plan line under the reader's topics: the slots they will run into, e.g.
+ * "2 of 3 weekly, 0 of 3 public".
+ */
+export function planUsage(
+  p: Plan,
+  used: { daily: number; weekly: number; public: number },
+): string {
+  return [
+    ...(dailyOffered(p) ? [`${used.daily} of ${p.dailyTopics} daily`] : []),
+    `${used.weekly} of ${p.weeklyTopics} weekly`,
+    `${used.public} of ${p.publicTopics} public`,
+  ].join(", ");
 }

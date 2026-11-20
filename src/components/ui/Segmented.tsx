@@ -4,6 +4,8 @@ export type SegmentedOption<T extends string> = {
   value: T;
   label: string;
   icon?: React.ReactNode;
+  /** Shown but not pickable now, e.g. a choice that needs another plan. */
+  disabled?: boolean;
 };
 
 // A small segmented control for one choice out of two to four: a tinted track
@@ -38,7 +40,7 @@ export function Segmented<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
-            disabled={disabled}
+            disabled={disabled || opt.disabled}
             suppressHydrationWarning
             onClick={() => onChange(opt.value)}
             className={

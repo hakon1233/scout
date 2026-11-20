@@ -341,7 +341,7 @@ function parseConfirm(body: unknown): ChatConfirm | null {
       : null;
   }
   if (
-    (b.kind === "rewrite" || b.kind === "follow") &&
+    (b.kind === "rewrite" || b.kind === "follow" || b.kind === "create") &&
     typeof b.interestId === "string"
   )
     return { kind: b.kind, interestId: b.interestId };

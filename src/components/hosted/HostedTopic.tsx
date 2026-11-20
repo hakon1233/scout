@@ -11,7 +11,7 @@ import { AppShell, PageHeader } from "@/components/shell/AppShell";
 import { Button, Segmented, SettingsGroup, SettingsRow } from "@/components/ui";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { formatDate } from "@/lib/format-date";
-import { planFor } from "@/lib/plans";
+import { dailyOffered, planFor } from "@/lib/plans";
 import {
   HostedError,
   type Cadence,
@@ -23,6 +23,7 @@ import { hostedMenu } from "./HostedHome";
 import { PRIVACY } from "./HostedTopics";
 import { SharingSection } from "./SharingSection";
 import { useHostedHome } from "./useHostedHome";
+import { useTabTitle } from "@/hooks/useTabTitle";
 
 const RUNS: { value: Cadence; label: string }[] = [
   { value: "daily", label: "Daily" },
@@ -42,6 +43,7 @@ export function HostedTopic({ id }: { id: string }) {
   const { data, home, loadError, reload, signedOut } = useHostedHome();
   const push = useTopicPush(data);
   const interest = home?.interests.find((i) => i.id === id) ?? null;
+  useTabTitle(interest?.topic);
 
   return (
     <AppShell menu={home ? hostedMenu(home) : undefined}>
@@ -251,7 +253,15 @@ function TopicPage({
                 <Segmented
                   label="Schedule"
                   value={cadence}
-                  options={RUNS}
+                  options={
+                    dailyOffered(planFor(home.allowance.plan))
+                      ? RUNS
+                      : RUNS.map((r) =>
+                          r.value === "daily"
+                            ? { ...r, label: "Daily · Plus", disabled: true }
+                            : r,
+                        )
+                  }
                   onChange={(c) => void changeRuns(c)}
                 />
               </SettingsRow>

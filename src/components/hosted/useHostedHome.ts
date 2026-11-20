@@ -100,12 +100,7 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
       if (!data || !home) return;
       const turn = await data.chat(message);
       setTurns((t) => [...t, turn]);
-      const creates = (turn.changes ?? []).filter((c) => c.op === "create");
-      const asked = Object.fromEntries(
-        creates.flatMap((c) => (c.cadence ? [[c.interestId, c.cadence]] : [])),
-      );
-      const created = creates.map((c) => c.interestId);
-      if (created.length > 0) await scheduleNew(data, created, asked);
+      await scheduleCreated(data, turn);
       await reload();
     },
     [data, home, reload],
@@ -116,6 +111,7 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
       if (!data) return;
       const turn = await data.confirm(action);
       setTurns((t) => [...t, turn]);
+      await scheduleCreated(data, turn);
       await reload();
     },
     [data, reload],
@@ -141,6 +137,20 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
     confirm,
     transcribe,
   };
+}
+
+// Schedules the topics a chat turn created (a confirmed new topic).
+export async function scheduleCreated(data: HostedData, turn: ChatTurn) {
+  const creates = (turn.changes ?? []).filter((c) => c.op === "create");
+  if (creates.length === 0) return;
+  const asked = Object.fromEntries(
+    creates.flatMap((c) => (c.cadence ? [[c.interestId, c.cadence]] : [])),
+  );
+  await scheduleNew(
+    data,
+    creates.map((c) => c.interestId),
+    asked,
+  );
 }
 
 // A new topic takes the cadence the reader asked for in the chat (`asked`)

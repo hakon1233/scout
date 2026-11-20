@@ -10,6 +10,7 @@ export type {
   ChatTurn,
   Interest,
   PendingDelete,
+  PendingCreate,
   PendingFollow,
   PendingRewrite,
   ScheduleRunStatus,

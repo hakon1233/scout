@@ -117,7 +117,7 @@ function post(
   );
 }
 
-test("a chat turn verifies the reader, runs the chat and commits the new interest", async () => {
+test("a chat turn verifies the reader, runs the chat and stores the new topic for the confirm", async () => {
   const db = stubSupabase();
   const { claude } = stubClaude([recorded("create")]);
   const res = await post(
@@ -131,7 +131,8 @@ test("a chat turn verifies the reader, runs the chat and commits the new interes
   assert.equal(res.headers.get("access-control-allow-origin"), ORIGIN);
   const turn = (await res.json()) as ChatTurn;
   assert.equal(turn.status, "ready");
-  assert.equal(turn.changes?.[0].op, "create");
+  assert.deepEqual(turn.changes, []);
+  assert.equal(turn.pending_creates?.[0].topic, "Rust releases");
 
   const user = db.calls.find((c) => c.url.endsWith("/auth/v1/user"));
   assert.equal(user?.auth, "Bearer user-jwt");
@@ -145,12 +146,17 @@ test("a chat turn verifies the reader, runs the chat and commits the new interes
   assert.equal(commit?.auth, "Bearer service-key");
   const args = commit?.body as {
     p_user: string;
-    p_turn: { message: string; changes: { op: string; topic: string }[] };
+    p_turn: {
+      message: string;
+      changes: unknown[];
+      pending: { creates: { topic: string }[] };
+    };
   };
   assert.equal(args.p_user, USER);
   assert.equal((args.p_turn as { id?: string }).id, TURN);
   assert.equal(args.p_turn.message, "Rust releases");
-  assert.equal(args.p_turn.changes[0].topic, "Rust releases");
+  assert.deepEqual(args.p_turn.changes, []);
+  assert.equal(args.p_turn.pending.creates[0].topic, "Rust releases");
 });
 
 test("a chat turn is refused with the SQL's own words when the reader is out of turns", async () => {
@@ -270,6 +276,17 @@ test("a confirm with nothing pending answers 409; a malformed one 400", async ()
     claude,
   );
   assert.equal(none.status, 409);
+  assert.equal(
+    (
+      await post(
+        "/chat/confirm",
+        { kind: "create", interestId: "x" },
+        db.fetch,
+        claude,
+      )
+    ).status,
+    409,
+  );
   assert.equal(
     (await post("/chat/confirm", { kind: "delete" }, db.fetch, claude)).status,
     400,

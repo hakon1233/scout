@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { HostedData } from "@/lib/hosted";
-import { scheduleNew } from "./useHostedHome";
+import { scheduleCreated, scheduleNew } from "./useHostedHome";
 
 // Just what scheduleNew touches: the allowance, setCadence and runNow.
 function stubData(daily: [number, number], weekly: [number, number]) {
@@ -46,4 +46,23 @@ test("without an asked-for cadence a topic takes the first free slot", async () 
   const { data, set } = stubData([2, 2], [0, 3]);
   await scheduleNew(data, ["a"]);
   assert.deepEqual(set, [["a", "weekly"]]);
+});
+
+test("a confirmed new topic from the chat gets the cadence its card showed", async () => {
+  const { data, set } = stubData([0, 1], [0, 6]);
+  await scheduleCreated(data, {
+    id: "t2",
+    created_at: "2026-11-20T08:00:00Z",
+    status: "ready",
+    message: 'Create "Zigbee"',
+    changes: [
+      {
+        interestId: "zigbee",
+        op: "create",
+        topic: "Zigbee",
+        cadence: "weekly",
+      },
+    ],
+  });
+  assert.deepEqual(set, [["zigbee", "weekly"]]);
 });

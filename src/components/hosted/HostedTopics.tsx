@@ -16,7 +16,7 @@ import {
   type HostedInterest,
   type Visibility,
 } from "@/lib/hosted";
-import { planFor } from "@/lib/plans";
+import { dailyOffered, planFor, planUsage } from "@/lib/plans";
 import { HostedChat } from "./HostedChat";
 import { hostedMenu } from "./HostedHome";
 import { useHostedHome } from "./useHostedHome";
@@ -167,9 +167,11 @@ function TopicLists({
   const own = home.interests.filter((i) => !i.following);
   const following = home.interests.filter((i) => i.following);
   const plan = planFor(home.allowance.plan);
-  const ownCount = own.length;
-  const publicCount = own.filter((i) => i.visibility === "public").length;
-  const limit = plan.topics;
+  const usage = planUsage(plan, {
+    daily: home.allowance.daily.used,
+    weekly: home.allowance.weekly.used,
+    public: own.filter((i) => i.visibility === "public").length,
+  });
 
   const row = (i: HostedInterest) => (
     <TopicRow
@@ -178,6 +180,7 @@ function TopicLists({
       busy={busy[i.id] ?? false}
       note={notes[i.id] ?? null}
       push={push}
+      daily={dailyOffered(plan)}
       onCadence={(c) => void act(i.id, () => data.setCadence(i.id, c))}
       onRunNow={() => void act(i.id, () => data.runNow(i.id))}
       onRemove={() => void remove(i)}
@@ -229,8 +232,7 @@ function TopicLists({
           </ul>
         )}
         <p className="px-1 text-body-sm text-muted">
-          {plan.name} plan: {ownCount} of {limit} topics, {publicCount} of{" "}
-          {plan.publicTopics} public.{" "}
+          {plan.name} plan: {usage}.{" "}
           {plan.id === "free" && (
             <Link
               href="/app/upgrade/"
@@ -286,6 +288,7 @@ function TopicRow({
   busy,
   note,
   push,
+  daily,
   onCadence,
   onRunNow,
   onRemove,
@@ -294,6 +297,8 @@ function TopicRow({
   busy: boolean;
   note: string | null;
   push: Push;
+  /** False on Free: Daily shows as a Plus option the reader can't pick. */
+  daily: boolean;
   onCadence: (c: Cadence) => void;
   onRunNow: () => void;
   onRemove: () => void;
@@ -371,11 +376,17 @@ function TopicRow({
                 onChange={(e) => onCadence(e.target.value as Cadence)}
                 className={SELECT}
               >
-                {CADENCES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
+                {CADENCES.map((c) =>
+                  c.value === "daily" && !daily ? (
+                    <option key={c.value} value={c.value} disabled>
+                      Daily (Plus)
+                    </option>
+                  ) : (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ),
+                )}
               </select>
               <Button
                 variant="secondary"

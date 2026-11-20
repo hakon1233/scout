@@ -50,7 +50,7 @@ const AI: InterestSnapshot = {
 const AI_POLICY: Interest = { id: "pub_ai_policy", topic: "AI policy" };
 
 // The store as the hosted function's database would behave, in memory.
-function memoryStore(interests: InterestSnapshot[] = [AI]) {
+function memoryStore(interests: InterestSnapshot[] = [AI], dailyInterests = 1) {
   const state = {
     interests: interests.map((i) => ({ ...i })),
     transcript: [] as ChatTurn[],
@@ -62,7 +62,7 @@ function memoryStore(interests: InterestSnapshot[] = [AI]) {
       return {
         interests: state.interests.map((i) => ({ ...i })),
         transcript: [...state.transcript],
-        limits: { maxInterests: 15, maxDocChars: 4000 },
+        limits: { maxInterests: 15, maxDocChars: 4000, dailyInterests },
       };
     },
     async findPublicInterests(_userId, message) {
@@ -103,9 +103,10 @@ function promptOf(request: MessagesRequest): string {
 function setup(
   answers: (MessagesResponse | Error)[],
   interests?: InterestSnapshot[],
+  dailyInterests?: number,
 ) {
   const { claude, requests } = stubClaude(answers);
-  const { store, state } = memoryStore(interests);
+  const { store, state } = memoryStore(interests, dailyInterests);
   let n = 0;
   const chat = createChat({
     claude,
@@ -141,22 +142,40 @@ test("a how-to answer keeps its allow-listed page and changes nothing", async ()
   assert.equal(other.page, undefined);
 });
 
-test("a create lands at once with a minted id, and the turn's cost is kept", async () => {
+test("a create waits for the confirm, which saves it with its minted id", async () => {
   const { chat, requests, state } = setup([recorded("create")]);
   const turn = await chat.turn("u1", "Follow Rust releases for me");
 
   assert.equal(turn.status, "ready");
-  assert.deepEqual(turn.changes, [
-    {
-      interestId: "id_2",
-      op: "create",
-      topic: "Rust releases",
-      doc: "# Rust releases\n\nStable releases and accepted RFCs. Skip nightly churn.",
-    },
-  ]);
+  assert.deepEqual(turn.changes, []);
+  const proposed = {
+    interestId: "id_2",
+    topic: "Rust releases",
+    doc: "# Rust releases\n\nStable releases and accepted RFCs. Skip nightly churn.",
+  };
+  assert.deepEqual(turn.pending_creates, [proposed]);
+  assert.deepEqual(
+    state.interests.map((i) => i.topic),
+    ["AI"],
+  );
+
+  assert.equal(
+    await chat.confirm("u1", { kind: "create", interestId: "id_other" }),
+    null,
+  );
+  const confirmed = await chat.confirm("u1", {
+    kind: "create",
+    interestId: "id_2",
+  });
+  assert.equal(confirmed?.reply, 'Created "Rust releases".');
+  assert.deepEqual(confirmed?.changes, [{ ...proposed, op: "create" }]);
   assert.deepEqual(
     state.interests.map((i) => i.topic),
     ["AI", "Rust releases"],
+  );
+  assert.equal(
+    await chat.confirm("u1", { kind: "create", interestId: "id_2" }),
+    null,
   );
   // 2150 input and 310 output tokens at Haiku 5.5 prices.
   assert.ok(Math.abs(state.costUsd - 0.00037) < 1e-9);
@@ -183,7 +202,7 @@ test("a create gets the cadence the reader named, whatever the model said", asyn
   };
   const { chat, requests } = setup([daily, recorded("create")]);
   const turn = await chat.turn("u1", "My own private topic on Zigbee. Weekly.");
-  assert.equal(turn.changes?.[0].cadence, "weekly");
+  assert.equal(turn.pending_creates?.[0].cadence, "weekly");
 
   const prompt = promptOf(requests[0]);
   assert.match(prompt, /"cadence"/);
@@ -200,7 +219,27 @@ test("a create gets the cadence the reader named, whatever the model said", asyn
 
   // Named nowhere: no cadence, and the client takes the first free slot.
   const unsaid = await chat.turn("u1", "Follow Rust releases for me");
-  assert.equal(unsaid.changes?.[0].cadence, undefined);
+  assert.equal(unsaid.pending_creates?.[0].cadence, undefined);
+});
+
+test("on a plan with no daily topics a daily ask becomes weekly, and the prompt says so", async () => {
+  const daily: MessagesResponse = {
+    ...recorded("create"),
+    content: [
+      {
+        type: "text",
+        text: '{"reply":"Here is \\"Zigbee\\": Weekly on Free, private. Confirm below.","changes":[{"op":"create","topic":"Zigbee","doc":"# Zigbee","cadence":"daily"}]}',
+        citations: null,
+      },
+    ],
+  };
+  const { chat, requests } = setup([daily], [AI], 0);
+  const turn = await chat.turn("u1", "A daily topic on Zigbee, please.");
+  assert.equal(turn.pending_creates?.[0].cadence, "weekly");
+  const prompt = promptOf(requests[0]);
+  assert.match(prompt, /no daily topics/);
+  assert.match(prompt, /weekly on Free/);
+  assert.match(prompt, /Confirm below/);
 });
 
 test("a delete waits for the confirm, which removes the interest once", async () => {

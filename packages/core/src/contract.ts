@@ -124,12 +124,23 @@ export type PendingFollow = {
   topic: string;
 };
 
+// A new topic a hosted turn proposed but did not save. It waits for the
+// reader's confirm, which saves the stored copy under the minted id. Hosted
+// chat only; the companion's chat still creates at once.
+export type PendingCreate = {
+  interestId: string;
+  topic: string;
+  doc: string;
+  cadence?: "daily" | "weekly";
+};
+
 // The hosted Worker's POST /chat/confirm body: which proposal of the reader's
 // last chat turn they accept. The Worker checks it against the stored turn.
 export type ChatConfirm =
   | { kind: "delete"; interestIds: string[] }
   | { kind: "rewrite"; interestId: string }
-  | { kind: "follow"; interestId: string };
+  | { kind: "follow"; interestId: string }
+  | { kind: "create"; interestId: string };
 
 // One chat turn. Kicked with POST /v0/chat and polled with GET /v0/chat, like
 // a brief run. A `ready` turn's `changes` are already on disk.
@@ -148,6 +159,7 @@ export type ChatTurn = {
   pending_delete?: PendingDelete;
   pending_rewrite?: PendingRewrite;
   pending_follows?: PendingFollow[];
+  pending_creates?: PendingCreate[];
   // A page of the app the reply offers to open (core's APP_PAGES).
   page?: AppPage;
   error_msg?: string;
