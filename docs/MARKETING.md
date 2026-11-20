@@ -47,6 +47,48 @@ Left out: drug shortages (medically risky to summarise), GPU and Steam Deck rest
 (bots do it better), conference CFP deadlines (aideadlin.es covers them), SiT housing
 (sit.no blocks fetches), electricity prices (Norwegian media cover them heavily).
 
+## More niches (research, 20 Nov 2026)
+
+A wider list of niches for later public interests. Full table with communities and
+cadence: <https://claude.ai/artifact/Tjm6uJ985vg3DAVB7Ev2JQ> (private to Håkon). Score is
+need times how badly news serves it, out of 5. Reddit demand is inferred, not yet
+checked by hand.
+
+- **Score 5:** UK settlement (ILR) rules; Canada IRCC processing; Swedish work permits and
+  citizenship; DJI and drone rules; Bambu Lab firmware and policy; open-source relicensing
+  and rug-pulls; climbing competitions and access.
+- **Immigration and moving (4):** digital nomad visas; Danish immigration and tax; UK
+  Skilled Worker and care visas; Portugal and Spain residency; student visas UK/CA/AU.
+- **Work, tax, housing (4):** Norwegian tax for newcomers; UK Renters' Rights Act;
+  foreign nurse registration; doctors' licensing abroad.
+- **Tech (4):** npm and PyPI supply-chain attacks; MCP servers and agent frameworks; local
+  LLM tools; ComfyUI; GrapheneOS and custom ROMs; app store rules and sideloading;
+  Fediverse and Bluesky protocol; Flipper Zero firmware.
+- **Games and retro (4):** emulator releases; retro handheld firmware; MiSTer FPGA cores;
+  mods broken by game patches.
+- **Sports and outdoors (4):** trail and ultra running; orienteering; cross-country skiing;
+  Norway trail, hut and ski-track closures; US national park rules.
+- **Hobbies and fandom (4):** board game Kickstarter updates per game line; TCG ban lists
+  and set releases; anime and manga licensing.
+- **Score 3, later:** pilot licence conversion, US expat tax, EU VAT for small sellers,
+  GDPR enforcement, freelancer rules, UK benefits, Norway and US EV rules, academic job
+  market, Proxmox/TrueNAS/Unraid, Matter and Thread, Steam Deck, Bazzite, PoE2, avalanche
+  season, fishing rules, chess, women's football, space launches, birding rarities,
+  invasive plant bans, author release news, genre tours, Norwegian parents' rules.
+
+Tags: ai, dev-tools, open-source, self-hosting, security, gaming, retro, hardware, maker,
+smart-home, platform-policy, immigration, travel, tax, housing, work, study, benefits,
+regulation, nordic, expat, sports, outdoors, games-tabletop, collectibles, music,
+books-fandom, space-science, nature, family, local, events.
+
+Left out: price and stock tracking (bots do it better), topics that live only on Discord,
+Facebook or Instagram, medical topics, and well-served news (Linux kernel, Raspberry Pi,
+general AI news).
+
+**Running them:** public briefs run on an API key (Haiku, about $0.05 a run, about $150 a
+month for 100 daily interests). Håkon's Claude subscription is for testing only:
+Anthropic's consumer terms §3(7) ban scripted use of a subscription.
+
 ## Trondheim event sources
 
 - **Scout can read:** Samfundet (samfundet.no/arrangement), TIHLDE (tihlde.org/arrangementer),
