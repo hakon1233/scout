@@ -101,13 +101,29 @@ export function planChatChanges(
     const held = interests.find((i) => i.id === id);
     if (ch.op === "create") {
       const topic = topicOf(ch.topic);
-      if (!topic || interests.length >= opts.maxInterests) continue;
+      if (!topic) continue;
       if (!docFits(doc ?? "")) continue;
-      const created = { id: opts.newId(), topic, doc: doc ?? "" };
-      interests.push(created);
       const cadence =
         said ??
         (ch.cadence === "daily" || ch.cadence === "weekly" ? ch.cadence : null);
+      // The same new topic twice in one turn is one create: keep the fuller
+      // doc and any cadence, so the reader sees one confirm card.
+      const twin = plan.applied.find(
+        (c) =>
+          c.op === "create" && c.topic?.toLowerCase() === topic.toLowerCase(),
+      );
+      if (twin) {
+        if ((doc ?? "").length > (twin.doc ?? "").length) {
+          twin.doc = doc;
+          const held = interests.find((i) => i.id === twin.interestId);
+          if (held) held.doc = doc ?? "";
+        }
+        if (cadence && !twin.cadence) twin.cadence = cadence;
+        continue;
+      }
+      if (interests.length >= opts.maxInterests) continue;
+      const created = { id: opts.newId(), topic, doc: doc ?? "" };
+      interests.push(created);
       plan.applied.push({
         interestId: created.id,
         op: "create",

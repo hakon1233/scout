@@ -200,8 +200,10 @@ export function ChatRewriteProposal({
     if (resolved) returnFocusRef.current?.focus();
   }, [resolved]);
 
+  // The ::after stretches the hit area to 44 px tall on a phone; the
+  // card's padding holds it, so the look is unchanged.
   const buttonClass =
-    "rounded-sm border border-border-default bg-surface px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.05em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-50";
+    "rounded-sm border border-border-default bg-surface px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.05em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-50 relative after:absolute after:-inset-x-1 after:-inset-y-[9px] after:content-['']";
 
   return (
     <div

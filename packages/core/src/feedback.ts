@@ -2,8 +2,8 @@
 // `feedback` op; the reader sends it with Confirm on a card, and the Worker
 // stores it (supabase `send_feedback`). This module owns the op: its prompt
 // lines, its output-schema fields and the check of what the model wrote. The
-// chat adds the prompt lines only while the `feedback_on` setting is on, so
-// with it off the prompt is unchanged.
+// chat adds the prompt lines only while the `feedback_on` setting is on; with
+// it off the prompt instead says reports can't be sent yet.
 
 import type { PendingFeedback } from "./contract.ts";
 import type { ProposedChange } from "./chat-changes.ts";
@@ -36,6 +36,16 @@ export const FEEDBACK_PROMPT_RULES = [
   '    `reply` is a PENDING PROPOSAL, e.g. "Here is the note. Confirm below to send',
   '    it to the Scout team." Never say it is sent. To change the wording, the user',
   "    tells you and you emit a new `feedback` op.",
+].join("\n");
+
+// With the setting off there is no channel at all, and the model must not
+// invent one (UT-032: it once pointed to a Settings bug form). Kept free of the
+// word "feedback" so the off prompt carries no trace of the op.
+export const NO_FEEDBACK_PROMPT_RULE = [
+  "- Scout has no way to report a bug or send a note to the Scout team yet. When",
+  "    asked, help with the problem if the guide covers it, then say plainly that",
+  "    reports can't be sent from the app yet. Never point to a form, page or address",
+  "    for reporting, and never say a report was filed.",
 ].join("\n");
 
 // The op's extra fields in the model's JSON output schema.

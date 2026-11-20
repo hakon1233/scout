@@ -186,19 +186,25 @@ test("plan meters: the schedule slots the plan allows, follows don't count", () 
   assert.equal(dailyOffered(planFor("free")), false);
   assert.equal(dailyOffered(planFor("plus")), true);
   assert.equal(planFor("unknown").id, "free");
+  // Free shows the limit readers hit (3 weekly), not a topic total that
+  // reads as a second, bigger allowance (UT-027).
   assert.deepEqual(planLines(planFor("free")).slice(0, 3), [
-    "3 weekly briefs",
-    "Daily briefs: Plus only",
-    "15 topics in all",
+    { text: "3 weekly briefs", included: true },
+    { text: "Daily briefs: Plus only", included: false },
+    { text: "3 Run now a day", included: true },
   ]);
+  assert.ok(
+    [...planLines(planFor("free")), ...planLines(planFor("plus"))].every(
+      (l) => !l.text.includes("topics in all"),
+    ),
+  );
   assert.deepEqual(planLines(planFor("plus")).slice(0, 2), [
-    "1 daily and 6 weekly briefs",
-    "30 topics in all",
+    { text: "1 daily and 6 weekly briefs", included: true },
+    { text: "3 Run now a day", included: true },
   ]);
   assert.deepEqual(planGains(planFor("plus")), [
-    "1 daily and 6 weekly briefs",
-    "30 topics in all",
-    "Everything else in Free",
+    { text: "1 daily and 6 weekly briefs", included: true },
+    { text: "Everything else in Free", included: true },
   ]);
   assert.equal(priceText(planFor("plus")), "49 kr a month");
   assert.equal(priceAbroadText(planFor("plus")), "About $5 a month");

@@ -16,6 +16,33 @@ function ids() {
   return () => `new_${++n}`;
 }
 
+// UT-031: the model once proposed the same new topic twice in one turn, one
+// bare and one with its intent doc, and the reader saw two confirm cards.
+test("two creates of the same topic in one turn become one, keeping the fuller doc", () => {
+  const plan = planChatChanges(
+    [],
+    [
+      { op: "create", topic: "Norwegian heat pumps", cadence: "weekly" },
+      {
+        op: "create",
+        topic: "norwegian heat pumps ",
+        doc: "# Norwegian heat pumps\n\nPrices and policy.",
+      },
+    ],
+    { ...limits, newId: ids() },
+  );
+  assert.deepEqual(plan.applied, [
+    {
+      interestId: "new_1",
+      op: "create",
+      topic: "Norwegian heat pumps",
+      doc: "# Norwegian heat pumps\n\nPrices and policy.",
+      cadence: "weekly",
+    },
+  ]);
+  assert.equal(plan.interests.length, 1);
+});
+
 test("a create gets a minted id and a capped topic, and stops at the cap", () => {
   const plan = planChatChanges(
     [AI],

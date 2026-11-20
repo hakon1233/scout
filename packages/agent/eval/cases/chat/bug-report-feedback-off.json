@@ -1,0 +1,14 @@
+{
+  "message": "I want to report a bug",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    }
+  ],
+  "output": "{\"reply\": \"Sorry you hit a problem. Reports can't be sent from the app yet. If you tell me what happened, I can check whether Scout already does what you need.\", \"changes\": []}",
+  "expect": {
+    "applied": []
+  },
+  "expectFail": []
+}

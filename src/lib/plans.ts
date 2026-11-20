@@ -75,17 +75,28 @@ export function dailyOffered(p: Plan): boolean {
   return p.dailyTopics > 0;
 }
 
-/** What a plan gives, as short lines for the Upgrade page. */
-export function planLines(p: Plan): string[] {
+/** One line on a plan card; `included: false` marks what the plan lacks. */
+export type PlanLine = { text: string; included: boolean };
+
+const line = (text: string, included = true): PlanLine => ({ text, included });
+
+/**
+ * What a plan gives, as short lines for the Upgrade page. The scheduled briefs
+ * come first because they are the limit readers hit; topics they follow don't
+ * count against any of these.
+ */
+export function planLines(p: Plan): PlanLine[] {
   const schedule = dailyOffered(p)
-    ? [`${p.dailyTopics} daily and ${p.weeklyTopics} weekly briefs`]
-    : [`${p.weeklyTopics} weekly briefs`, "Daily briefs: Plus only"];
+    ? [line(`${p.dailyTopics} daily and ${p.weeklyTopics} weekly briefs`)]
+    : [
+        line(`${p.weeklyTopics} weekly briefs`),
+        line("Daily briefs: Plus only", false),
+      ];
   return [
     ...schedule,
-    `${p.topics} topics in all`,
-    `${p.runNowPerDay} Run now a day`,
-    `${p.publicTopics} public topics`,
-    "Follow any public topic",
+    line(`${p.runNowPerDay} Run now a day`),
+    line(`${p.publicTopics} public topics`),
+    line("Follow any public topic"),
   ];
 }
 
@@ -93,12 +104,12 @@ export function planLines(p: Plan): string[] {
  * What a paid plan adds over Free: only the lines that differ, then
  * "Everything else in Free".
  */
-export function planGains(p: Plan): string[] {
+export function planGains(p: Plan): PlanLine[] {
   if (p.id === "free") return planLines(p);
-  const free = new Set(planLines(PLANS.free));
+  const free = new Set(planLines(PLANS.free).map((l) => l.text));
   return [
-    ...planLines(p).filter((line) => !free.has(line)),
-    "Everything else in Free",
+    ...planLines(p).filter((l) => !free.has(l.text)),
+    line("Everything else in Free"),
   ];
 }
 

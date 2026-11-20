@@ -51,12 +51,18 @@ export function HostedChat({
     endRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [turns.length, sending]);
 
+  // Set at once on Send, before React re-renders, so a second press while a
+  // reply is pending is ignored (UT-031).
+  const inFlight = React.useRef(false);
+
   async function submit() {
+    if (inFlight.current) return;
     const message = draft.trim();
     if (!message) {
       setError("Write what you want to follow first.");
       return;
     }
+    inFlight.current = true;
     setError(null);
     setSending(message);
     setDraft("");
@@ -66,6 +72,7 @@ export function HostedChat({
       setDraft(message);
       setError(messageOf(err));
     } finally {
+      inFlight.current = false;
       setSending(null);
     }
   }

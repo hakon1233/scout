@@ -110,7 +110,7 @@ export function ChatDeleteConfirm({
               type="button"
               disabled={disabled}
               onClick={onConfirm}
-              className="rounded-sm border border-danger-border bg-danger-bg px-3 py-1 font-mono text-[10px] uppercase tracking-[0.05em] text-danger transition-colors hover:bg-danger-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-50"
+              className="rounded-sm border border-danger-border bg-danger-bg px-3 py-1 font-mono text-[10px] uppercase after:absolute after:-inset-x-1 after:-inset-y-[9px] after:content-[''] relative tracking-[0.05em] text-danger transition-colors hover:bg-danger-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-50"
             >
               Delete
             </button>
@@ -119,7 +119,7 @@ export function ChatDeleteConfirm({
               type="button"
               disabled={disabled}
               onClick={onCancel}
-              className="rounded-sm border border-border-default bg-surface px-3 py-1 font-mono text-[10px] uppercase tracking-[0.05em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-50"
+              className="rounded-sm border border-border-default bg-surface px-3 py-1 font-mono text-[10px] uppercase after:absolute after:-inset-x-1 after:-inset-y-[9px] after:content-[''] relative tracking-[0.05em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-50"
             >
               Cancel
             </button>

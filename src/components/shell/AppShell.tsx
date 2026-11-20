@@ -86,7 +86,7 @@ export function PageHeader({
       {back && back !== "pending" && (
         <Link
           href={back.href}
-          className="-ml-1 mb-1 self-start rounded px-1 text-body-sm text-secondary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+          className="relative -ml-1 mb-1 self-start rounded px-1 text-body-sm after:absolute after:inset-x-0 after:-inset-y-3 after:content-[''] text-secondary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
         >
           ‹ {back.label}
         </Link>

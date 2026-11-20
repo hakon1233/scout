@@ -131,7 +131,7 @@ function TimeZoneGroup({ data }: { data: HostedData }) {
       title="Time zone"
       footer={
         error ??
-        "Daily briefs arrive in the morning in this time zone. Brief length and how many stories are set on each topic's page."
+        "Your briefs run at their set time in this time zone. Brief length and how many stories are set on each topic's page."
       }
     >
       <SettingsRow label="Time zone">

@@ -22,6 +22,23 @@ test("with feedback off the chat prompt is exactly today's", () => {
   assert.doesNotMatch(today, /feedback/i);
 });
 
+// UT-032: with feedback off, a "report a bug" ask got a reply about a Settings
+// bug form that doesn't exist. The prompt says plainly there is no channel.
+test("with feedback off the prompt says reports can't be sent yet and points nowhere", () => {
+  const prompt = buildChatPrompt("I want to report a bug", [AI], [], {
+    maxInterests: 15,
+    cadences: true,
+  });
+  assert.match(prompt, /no way to report a bug/i);
+  assert.match(prompt, /never point to a form, page or address/i);
+  const on = buildChatPrompt("I want to report a bug", [AI], [], {
+    maxInterests: 15,
+    cadences: true,
+    feedback: true,
+  });
+  assert.doesNotMatch(on, /no way to report a bug/i);
+});
+
 test("with feedback on the prompt offers the feedback op and its rules", () => {
   const prompt = buildChatPrompt("The feed is blank", [AI], [], {
     maxInterests: 15,

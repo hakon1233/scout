@@ -20,7 +20,7 @@ export default function UpgradePage() {
         title="Upgrade"
         back={{ href: "/app/settings/", label: "Settings" }}
       >
-        Daily briefs, more weekly ones and more topics.
+        Daily briefs and more weekly ones.
       </PageHeader>
       <div className="grid gap-4 sm:grid-cols-2" data-main>
         <PlanCard plan={PLANS.free} />
@@ -67,11 +67,17 @@ function PlanCard({
       </div>
       <ul className="flex flex-col gap-1.5 text-body-sm text-secondary">
         {planGains(plan).map((line) => (
-          <li key={line} className="flex gap-2">
-            <span aria-hidden="true" className="text-good">
-              ✓
+          <li
+            key={line.text}
+            className={`flex gap-2 ${line.included ? "" : "text-muted"}`}
+          >
+            <span
+              aria-hidden="true"
+              className={line.included ? "text-good" : "text-muted"}
+            >
+              {line.included ? "✓" : "–"}
             </span>
-            {line}
+            {line.text}
           </li>
         ))}
       </ul>

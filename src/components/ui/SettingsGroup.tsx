@@ -40,7 +40,9 @@ export function SettingsRow({
 }) {
   return (
     <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3">
-      <div className="flex min-w-0 flex-col">
+      {/* A small basis keeps a short control (a bell) on the label's line
+          at phone width; a wide one still wraps below. */}
+      <div className="flex min-w-0 flex-[1_1_5rem] flex-col">
         <span className="text-body-sm text-primary">{label}</span>
         {hint && <span className="text-caption text-muted">{hint}</span>}
       </div>

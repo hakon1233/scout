@@ -351,6 +351,11 @@ export async function checkChatOutput(
         "a feedback turn's reply asks for Confirm; nothing is sent yet",
       ),
       check(
+        "no-invented-report-channel",
+        Boolean(opts.expect.feedback) || !/\bforms?\b/i.test(output.reply),
+        "with feedback off there is no form to report through; say reports can't be sent yet",
+      ),
+      check(
         "one-subject-per-topic",
         mixed.length === 0 && offersSplit,
         mixed.length > 0

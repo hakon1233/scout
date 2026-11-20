@@ -1,0 +1,16 @@
+{
+  "message": "I want to report a bug",
+  "interests": [
+    {
+      "id": "int_ai",
+      "topic": "Open-source AI agents"
+    }
+  ],
+  "output": "{\"reply\": \"What happened? Settings has no bug-report form yet, so I can't file it, but I can fix your topic.\", \"changes\": []}",
+  "expect": {
+    "applied": []
+  },
+  "expectFail": [
+    "no-invented-report-channel"
+  ]
+}

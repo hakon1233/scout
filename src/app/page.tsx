@@ -90,7 +90,7 @@ function landingCopy(hosted: boolean) {
         "Research runs in the cloud",
         `Free plan, or Plus for ${priceText(PLANS.plus)}`,
       ],
-      closing: `Sign in with Google and Scout researches your topics for you. The Free plan covers ${PLANS.free.topics} topics; no card needed.`,
+      closing: `Sign in with Google and Scout researches your topics for you. The Free plan gives you ${PLANS.free.weeklyTopics} weekly briefs; no card needed.`,
       privacyHref: "/app/privacy/",
     };
   }
