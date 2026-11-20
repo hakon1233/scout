@@ -1,0 +1,10 @@
+{
+  "input": {
+    "title": "Fjord kayaking in Western Norway",
+    "doc": "New routes, gear reviews, safety notices and weather warnings for sea kayaking in the fjords.",
+    "displayName": "Kari N."
+  },
+  "expect": "approve",
+  "output": "{\"verdict\":\"approve\",\"reason\":\"\",\"tags\":[\"travel\",\"norway\",\"kayaking\"]}",
+  "expectFail": []
+}

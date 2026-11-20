@@ -1,0 +1,10 @@
+{
+  "input": {
+    "title": "Fjord kayaking in Western Norway",
+    "doc": "New routes, gear reviews, safety notices and weather warnings for sea kayaking in the fjords.",
+    "displayName": null
+  },
+  "expect": "approve",
+  "output": "Looks fine to me! Tags: travel, norway.",
+  "expectFail": ["json-object", "verdict"]
+}

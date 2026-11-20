@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import * as React from "react";
 import { useDisclosure } from "@/hooks/useDisclosure";
 import { isHostedBuild } from "@/lib/auth";
+import { startHostedLikes } from "@/lib/hosted";
 import { planFor } from "@/lib/plans";
 
 // The app's frame on every /app/* screen: a floating glass logo pill at the
@@ -99,6 +100,11 @@ export function PageHeader({
 
 /** The two floating pills. Pages with their own layout render only these. */
 export function TopPills({ menu }: { menu?: ShellMenu }) {
+  // Every /app screen shows these pills, so this is where the hosted session
+  // starts driving the likes store.
+  React.useEffect(() => {
+    if (isHostedBuild()) startHostedLikes();
+  }, []);
   return (
     <>
       <div className="fixed left-3 top-3 z-40 sm:left-5 sm:top-4">

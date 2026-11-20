@@ -8,8 +8,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Interest } from "#core";
-import { type Check, checkChatOutput, checkResearchOutput } from "./checks.js";
+import type { Interest, PublishInput } from "#core";
+import {
+  type Check,
+  checkChatOutput,
+  checkPublishOutput,
+  checkResearchOutput,
+} from "./checks.js";
 
 const CASES_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -17,7 +22,7 @@ const CASES_DIR = path.join(
 );
 
 export type CaseResult = {
-  kind: "research" | "chat";
+  kind: "research" | "chat" | "publish";
   name: string;
   checks: Check[];
   expectFail: string[];
@@ -101,8 +106,36 @@ async function chatCases(): Promise<CaseResult[]> {
   return results;
 }
 
+// Publish case: the topic as the check sees it, the verdict it should get and
+// the model's raw output.
+type PublishCase = {
+  input: PublishInput;
+  expect: "approve" | "refuse";
+  output: string;
+  expectFail: string[];
+};
+
+async function publishCases(): Promise<CaseResult[]> {
+  const dir = path.join(CASES_DIR, "publish");
+  const results: CaseResult[] = [];
+  for (const file of (await fs.readdir(dir)).sort()) {
+    const c = JSON.parse(
+      await fs.readFile(path.join(dir, file), "utf8"),
+    ) as PublishCase;
+    const checks = checkPublishOutput(c.output, c);
+    results.push(
+      result("publish", file.replace(/\.json$/, ""), checks, c.expectFail),
+    );
+  }
+  return results;
+}
+
 export async function runEval(): Promise<CaseResult[]> {
-  return [...(await researchCases()), ...(await chatCases())];
+  return [
+    ...(await researchCases()),
+    ...(await chatCases()),
+    ...(await publishCases()),
+  ];
 }
 
 function report(results: CaseResult[]): string {

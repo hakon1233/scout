@@ -1,0 +1,10 @@
+{
+  "input": {
+    "title": "What Ola Hansen from Bergen is up to",
+    "doc": "Follow everything my neighbour Ola Hansen posts or does: his job, his new girlfriend, where he goes running.",
+    "displayName": "Per"
+  },
+  "expect": "refuse",
+  "output": "{\"verdict\":\"refuse\",\"reason\":\"A public topic can't follow a private person. Pick a subject instead.\",\"tags\":[]}",
+  "expectFail": []
+}

@@ -1,8 +1,9 @@
 // The hosted app's data: the signed-in reader's interests, their latest brief,
 // their plan's allowance, the setup chat, run-now and sharing (links, follows,
-// and the notice when a host stops sharing). The one module hosted screens
-// call; components never fetch or touch Supabase themselves. A share link
-// (`shared`) also works signed out.
+// and the notice when a host stops sharing), publishing and the catalog
+// (browse, tags, reports), the reader's profile, likes and saves, and usage
+// events. The one module hosted screens call; components never fetch or touch
+// Supabase themselves. A share link (`shared`) and browse also work signed out.
 //
 // Reads and the reader's own edits go to Supabase's REST API as the reader
 // (their JWT, so RLS and the quota trigger apply). The chat and run-now go to
@@ -24,10 +25,13 @@ import {
   type TopicCoverage,
   chatTurnFromRow,
   plural,
+  PUBLISH_PATH,
+  type PublishResponse,
   quotaMessage,
 } from "@scout/core";
 import { hostedAuth, hostedConfig } from "./auth";
 import { parseArticlesFromMarkdown } from "./companion";
+import { followLikes, type LikedStory, type LikesSync } from "./likes";
 import type { Brief } from "./types";
 
 export type Cadence = "daily" | "weekly" | "off";
@@ -149,7 +153,87 @@ export interface HostedData {
   // Call from the tap itself: browsers ask permission only in a user gesture.
   pushEnable(): Promise<PushState>;
   pushDisable(): Promise<PushState>;
+  // Scout's publish check on one of the reader's topics (the Worker). A
+  // refusal is a result, not an error; a limit is a HostedError "limit".
+  publish(interestId: string): Promise<PublishResponse>;
+  // The owner's tags on a public topic, without a new check. Returns them
+  // cleaned (lower case, no repeats, at most 5).
+  setTags(interestId: string, tags: string[]): Promise<string[]>;
+  // The public catalog, signed in or out.
+  browse(query?: BrowseQuery): Promise<TopicCard[]>;
+  // Each tag in the catalog with its number of topics, most first.
+  tagCounts(): Promise<{ tag: string; topics: number }[]>;
+  // Report a public or link-shared topic; once per topic.
+  report(interestId: string, reason: string): Promise<void>;
+  profile(): Promise<Profile>;
+  // Changes only the given fields. A reserved display name is refused.
+  setProfile(change: Partial<Profile>): Promise<void>;
+  // The reader's liked or saved stories, newest first.
+  marks(kind: MarkKind): Promise<StoryMark[]>;
+  mark(kind: MarkKind, mark: Omit<StoryMark, "createdAt">): Promise<void>;
+  unmark(kind: MarkKind, storyKey: string): Promise<void>;
+  // Usage events, sent in batches of at most MAX_EVENT_BATCH.
+  sendEvents(events: UsageEvent[]): Promise<void>;
 }
+
+export type BrowseQuery = {
+  q?: string;
+  tags?: string[];
+  sort?: "popular" | "new";
+  limit?: number; // at most 50
+  offset?: number;
+};
+
+/** A public topic's card (the SQL's topic_card) as browse returns it. */
+export type TopicCard = {
+  id: string;
+  slug: string;
+  title: string;
+  tags: string[];
+  ownerName: string | null;
+  team: boolean;
+  followers: number;
+  briefs: {
+    id: string;
+    section_md: string | null;
+    coverage: TopicCoverage | null;
+    finished_at: string | null;
+  }[];
+};
+
+export type Profile = {
+  displayName: string | null;
+  location: string | null;
+  student: boolean | null;
+  role: string | null;
+  likedTags: string[];
+};
+
+export type MarkKind = "like" | "save";
+export type StoryMark = {
+  storyKey: string; // the story's URL, or its title when it has none
+  interestId: string | null;
+  story: Record<string, unknown> | null; // a small copy to show (≤ 4 KB)
+  createdAt: string;
+};
+
+export type UsageEvent =
+  | {
+      kind: "story_click";
+      interestId: string;
+      runId?: string;
+      storyKey: string;
+    }
+  | { kind: "brief_view"; interestId: string; runId?: string }
+  | {
+      kind: "story_seconds";
+      interestId: string;
+      runId?: string;
+      storyKey: string;
+      seconds: number;
+    };
+
+export const MAX_EVENT_BATCH = 50;
 
 /** Push on this device: `needs-install` is an iPhone outside the Home Screen
  *  (iOS 16.4+ pushes only to installed web apps). */
@@ -277,9 +361,13 @@ export function createHostedData(deps: {
       false,
     );
     if (status < 400) return body;
-    const said = (body as { error?: string } | null)?.error ?? "";
+    const b = body as { error?: string; message?: string } | null;
+    const said = b?.message ?? b?.error ?? "";
     if (status === 429)
       throw new HostedError("limit", workerLimitMessage(path, said));
+    // The publish route's other refusals are written for the reader.
+    if (path === PUBLISH_PATH && said && status !== 502)
+      throw new HostedError("failed", said);
     if (status === 409)
       throw new HostedError(
         "failed",
@@ -586,8 +674,182 @@ export function createHostedData(deps: {
     async deleteAccount() {
       await worker("/account/delete", {});
     },
+
+    async publish(interestId) {
+      return (await worker(PUBLISH_PATH, {
+        interest: interestId,
+      })) as PublishResponse;
+    },
+
+    async setTags(interestId, tags) {
+      return await rest<string[]>("rpc/set_topic_tags", {
+        method: "POST",
+        body: { p_interest: interestId, p_tags: tags },
+      });
+    },
+
+    async browse(query = {}) {
+      const rows = await rest<TopicCardRow[]>(
+        "rpc/browse_topics",
+        {
+          method: "POST",
+          body: {
+            p_q: query.q?.trim() || null,
+            p_tags: query.tags?.length ? query.tags : null,
+            p_sort: query.sort ?? "popular",
+            p_limit: Math.min(query.limit ?? 24, 50),
+            p_offset: query.offset ?? 0,
+          },
+        },
+        true,
+      );
+      return rows.map((r) => ({
+        id: r.id,
+        slug: r.slug,
+        title: r.title,
+        tags: r.tags ?? [],
+        ownerName: r.owner_name,
+        team: r.team,
+        followers: r.followers ?? 0,
+        briefs: r.briefs ?? [],
+      }));
+    },
+
+    async tagCounts() {
+      return await rest<{ tag: string; topics: number }[]>(
+        "rpc/tag_counts",
+        { method: "POST", body: {} },
+        true,
+      );
+    },
+
+    async report(interestId, reason) {
+      await rest("rpc/report_topic", {
+        method: "POST",
+        body: { p_interest: interestId, p_reason: reason.trim() },
+      });
+    },
+
+    async profile() {
+      const s = await session();
+      const rows = await rest<ProfileRow[]>(
+        `profiles?id=eq.${encodeURIComponent(s.userId)}&select=display_name,location,student,role,liked_tags`,
+      );
+      const r = rows[0];
+      return {
+        displayName: r?.display_name ?? null,
+        location: r?.location ?? null,
+        student: r?.student ?? null,
+        role: r?.role ?? null,
+        likedTags: r?.liked_tags ?? [],
+      };
+    },
+
+    async setProfile(change) {
+      const s = await session();
+      const row: Record<string, unknown> = {};
+      const text = (v: string | null) => (v?.trim() ? v.trim() : null);
+      if ("displayName" in change)
+        row.display_name = text(change.displayName ?? null);
+      if ("location" in change) row.location = text(change.location ?? null);
+      if ("role" in change) row.role = text(change.role ?? null);
+      if ("student" in change) row.student = change.student ?? null;
+      if ("likedTags" in change) row.liked_tags = change.likedTags ?? [];
+      if (Object.keys(row).length === 0) return;
+      try {
+        await rest(`profiles?id=eq.${encodeURIComponent(s.userId)}`, {
+          method: "PATCH",
+          body: row,
+          prefer: "return=minimal",
+        });
+      } catch (err) {
+        if (err instanceof HostedError && err.kind === "failed")
+          throw new HostedError(
+            "failed",
+            "Couldn't save that. Check the name isn't Scout's or an admin's, and try again.",
+          );
+        throw err;
+      }
+    },
+
+    async marks(kind) {
+      const rows = await rest<MarkRow[]>(
+        `story_marks?kind=eq.${kind}&select=story_key,interest_id,story,created_at&order=created_at.desc`,
+      );
+      return rows.map((r) => ({
+        storyKey: r.story_key,
+        interestId: r.interest_id,
+        story: r.story,
+        createdAt: r.created_at,
+      }));
+    },
+
+    async mark(kind, mark) {
+      await rest("story_marks?on_conflict=user_id,kind,story_key", {
+        method: "POST",
+        body: {
+          kind,
+          story_key: mark.storyKey,
+          interest_id: mark.interestId,
+          story: mark.story,
+        },
+        prefer: "return=minimal,resolution=ignore-duplicates",
+      });
+    },
+
+    async unmark(kind, storyKey) {
+      await rest(
+        `story_marks?kind=eq.${kind}&story_key=eq.${encodeURIComponent(storyKey)}`,
+        { method: "DELETE", prefer: "return=minimal" },
+      );
+    },
+
+    async sendEvents(events) {
+      for (let at = 0; at < events.length; at += MAX_EVENT_BATCH) {
+        await rest("usage_events", {
+          method: "POST",
+          body: events.slice(at, at + MAX_EVENT_BATCH).map((e) => ({
+            kind: e.kind,
+            interest_id: e.interestId,
+            run_id: e.runId ?? null,
+            story_key: "storyKey" in e ? e.storyKey : null,
+            seconds:
+              e.kind === "story_seconds"
+                ? Math.min(3600, Math.max(0, Math.round(e.seconds)))
+                : null,
+          })),
+          prefer: "return=minimal",
+        });
+      }
+    },
   };
 }
+
+type TopicCardRow = {
+  id: string;
+  slug: string;
+  title: string;
+  tags: string[] | null;
+  owner_name: string | null;
+  team: boolean;
+  followers?: number;
+  briefs: TopicCard["briefs"] | null;
+};
+
+type ProfileRow = {
+  display_name: string | null;
+  location: string | null;
+  student: boolean | null;
+  role: string | null;
+  liked_tags: string[] | null;
+};
+
+type MarkRow = {
+  story_key: string;
+  interest_id: string | null;
+  story: Record<string, unknown> | null;
+  created_at: string;
+};
 
 const INTEREST_COLUMNS = `id,topic,cadence,visibility,share_slug,${BRIEF_SETTINGS_COLUMNS}`;
 
@@ -604,12 +866,6 @@ type NoticeRow = {
   kind: NoticeKind;
   payload: { topic?: string; reason?: string | null } | null;
   created_at: string;
-};
-
-type TopicCardRow = {
-  id: string;
-  owner_name?: string | null;
-  team?: boolean;
 };
 
 type SharedRow = {
@@ -767,6 +1023,39 @@ function workerLimitMessage(path: string, said: string): string {
   return said || "Scout has paused new work for now. Try again later.";
 }
 
+/** The signed-in reader's likes in the database, for likes.ts. The story
+ *  snapshot is trimmed to fit story_marks' 4 KB. */
+export function likesSync(data: HostedData): LikesSync {
+  return {
+    async list() {
+      const marks = await data.marks("like");
+      return marks.flatMap((m) =>
+        m.story ? [{ ...m.story, key: m.storyKey } as LikedStory] : [],
+      );
+    },
+    async add(story) {
+      const snapshot = {
+        ...story,
+        headline: story.headline.slice(0, 300),
+        blurb: story.blurb?.slice(0, 600),
+        url: story.url.slice(0, 1000),
+        imageUrl:
+          story.imageUrl && story.imageUrl.length <= 600
+            ? story.imageUrl
+            : undefined,
+      };
+      await data.mark("like", {
+        storyKey: story.key,
+        interestId: null,
+        story: snapshot,
+      });
+    },
+    async remove(key) {
+      await data.unmark("like", key);
+    },
+  };
+}
+
 /** What the reader's plan has left, in one plain line. */
 export function allowanceLine(a: Allowance): string {
   const left = (x: { used: number; limit: number }) =>
@@ -873,4 +1162,18 @@ export function hostedData(): HostedData | null {
     vapidKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
   });
   return hosted;
+}
+
+let likesFollowed = false;
+
+/** Ties the likes store to the hosted session for this page load: the signed-in
+ *  reader's likes come from the database, and sign-out or an account switch
+ *  drops the previous reader's. Safe to call more than once. */
+export function startHostedLikes(): void {
+  if (likesFollowed) return;
+  const auth = hostedAuth();
+  const data = hostedData();
+  if (!auth || !data) return;
+  likesFollowed = true;
+  followLikes(auth, likesSync(data));
 }

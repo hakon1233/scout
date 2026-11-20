@@ -54,6 +54,12 @@ as `@scout/core`, the companion as `#core`.
 - `chat-prompt.ts`, `chat-changes.ts`: the chat prompt and its output parser, and
   `planChatChanges`, the rules for what of a model's change set lands, waits for a
   confirm or is dropped. The companion and the hosted chat both use them.
+- `tags.ts`: the 30 seed tags (browse's chips, the publish check's first choice) and
+  `normalizeTags`; the SQL's `tags_ok` enforces the same pattern.
+- `publish-check.ts`: what a topic must pass to go public: `publishPrecheck` (title,
+  links, length), `buildPublishPrompt` (rules first, the reader's text as JSON-quoted
+  data) and `parsePublishCheck`, which fails closed. Also the `POST /publish` shapes.
+  The offline prompt checks have hand-written verdicts for it (`cases/publish`).
 
 The companion runs core's code from `dist/core`: its build compiles core there, and
 `#core` in its `package.json` points at that copy. Its tests and `pnpm eval` run with the
@@ -111,6 +117,10 @@ price table also gives each turn's cost. Server only: the web app never imports 
   `confirm(userId, action)`. A turn sends core's chat prompt, with matching public
   interests, to Haiku 5.5 as structured output; core's `planChatChanges` decides what
   lands; deletes, full rewrites and follows wait for a confirm of the stored proposal.
+- `publish.ts`: `createPublish({claude, store}).publish(userId, interestId)`. The
+  store's `start` checks owner and limits and opens a check; the plain checks, then one
+  Haiku 5.5 call; `finish` records the verdict and, on approve, sets the tags and makes
+  the topic public. A check that cannot run is recorded as refused and thrown.
 
 ### Run queue (`packages/worker/src`, `supabase/migrations/*_run_queue.sql`)
 
@@ -130,6 +140,9 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
 - `http.ts`: `POST /runs {interestId}` with the reader's Supabase JWT; it only queues.
   `POST /chat {message}` and `POST /chat/confirm {kind, …}` verify the JWT, check
   `chat_block_reason` (kill switch, daily chat turns), and run `packages/hosted`'s chat.
+  `POST /publish {interest}` verifies the JWT and runs `packages/hosted`'s publish over
+  `publish_start`/`publish_finish` (`*_publish.sql`); a limit is 429
+  `{error: "limit", message}`.
 - `chat-store.ts`: the chat's store over PostgREST with the service key. A turn's
   changes, follows and its `chat_turns` row land in one `commit_chat_turn` call
   (`supabase/migrations/*_chat.sql`, which also adds `plans.max_interests`; the
@@ -182,7 +195,11 @@ companion never imports it.
 - `lib/chat.ts`, `lib/interest-docs.ts`, `lib/run-failure.ts`: chat turns, the reader's
   interest list, and the "your run failed" banner.
 - `lib/storage.ts`, `lib/safe-storage.ts`, `lib/likes.ts`: browser storage. Every write
-  goes through `safe-storage`.
+  goes through `safe-storage`. Likes are keyed per reader: `setLikesUser(id, sync)` on
+  each sign-in loads them from `story_marks` (`likesSync(hostedData)`); device likes
+  made signed out are never uploaded, and sign-out drops the reader's local copy.
+  `startHostedLikes()` (called from the shell's `TopPills` on every /app screen) wires
+  this to `onAuthChange` through `followLikes`.
 - `lib/auth.ts`: hosted sign-in (Google or an email link) and the only place the
   Supabase client and session live. Interface: `hostedAuth()` returns `currentUser`,
   `signInWithGoogle`, `sendMagicLink`, `signOut`, `onAuthChange`, or null when the build
@@ -195,8 +212,10 @@ companion never imports it.
   `restore`, `unfollow`,
   `runNow`, and for sharing `setVisibility`, `shared(slug)`, `follow(slug)`,
   `hostCopy(notice)` and `dismiss(notice)`, and `pushStatus`, `pushEnable`,
-  `pushDisable` for this device's notifications, over Supabase REST (as the reader, under
-  RLS) and the Worker. `shared` also works signed out, with the anon key. Limits come
+  `pushDisable` for this device's notifications, `publish`, `setTags`, `browse`,
+  `tagCounts`, `report`, `profile`, `setProfile`, `marks`/`mark`/`unmark` (likes and
+  saves) and `sendEvents` (usage, in batches of 50), over Supabase REST (as the reader,
+  under RLS) and the Worker. `shared` and `browse` also work signed out, with the anon key. Limits come
   back as `HostedError` with a plain sentence (core's `quotaMessage`, shared with the
   Worker). `components/hosted/` renders it; in a hosted build `app/app/page.tsx` shows
   `HostedHome` instead of the companion feed. `app/i` is a share link's page
@@ -229,6 +248,16 @@ sees and deletes only their own, and the Worker reads them through `push_targets
 `seeds/public-interests.sql` is the starter catalog and `seeds/team-topics.sql` the
 Scout team's paused test topics, both applied by hand. A hidden topic
 (`interests.hidden_at`) leaves the catalog, share links and the chat's suggestions.
+`*_publish.sql`: going public only through the Worker's check (`publish_checks`; at
+most 3 public, 5 checks a rolling day, 24 h before republishing); a topic or doc edit
+drops a public topic to shared, a tag edit (`set_topic_tags`) does not.
+`*_usage.sql`: `story_marks` (likes, saves) and `usage_events` (story clicks, brief
+views, seconds per story; own insert only, 300 an hour, deleted after 30 days by
+`cleanup_runs`), which feed `topic_popularity`. `*_browse.sql`: `browse_topics`
+(full-text on title and tags, tag filter, popular or new), `tag_counts`, and
+`report_topic` into the admin-only `topic_reports`. `*_profile.sql`: optional location,
+student, role and liked tags, and `is_reserved_name` for display names.
+`*_payments.sql`: plan prices and a `subscriptions` table, unused until payments.
 `config.toml` turns on Google (client
 id and secret read from env by name) and the email link, and lists the sign-in page's
 redirect URLs.

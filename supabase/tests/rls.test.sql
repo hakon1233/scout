@@ -106,13 +106,16 @@ select ok(
   not exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
-      and ((p.proname not in ('interest_by_slug', 'public_topics', 'interest_is_listed')
+      and ((p.proname not in ('interest_by_slug', 'public_topics', 'interest_is_listed',
+                              'browse_topics', 'tag_counts')
             and has_function_privilege('anon', p.oid, 'execute'))
            or (p.proname not in ('allowance', 'is_time_zone', 'request_run',
                                  'set_sharing', 'follow', 'interest_by_slug', 'host_copy',
                                  'public_topics', 'interest_is_listed', 'hide_interest',
                                  'save_push_subscription', 'set_topic_push', 'set_timezone',
-                                 'default_run_at')
+                                 'default_run_at', 'browse_topics', 'tag_counts',
+                                 'set_topic_tags', 'report_topic', 'tags_ok',
+                                 'topic_search_doc', 'is_reserved_name', 'liked_tags_ok')
                and has_function_privilege('authenticated', p.oid, 'execute')))),
   'anon may call only the public reads; signed-in readers only their own calls');
 
@@ -328,7 +331,7 @@ select is(
   'allowance counts what Anna uses');
 select is(
   public.allowance() -> 'limits',
-  '{"daily_interests": 1, "weekly_interests": 3, "on_demand_runs_per_day": 3, "chat_turns_per_day": 40, "searches_per_run": 5, "max_doc_chars": 4000, "max_interests": 15, "spend_per_day_usd": 0.40, "runs_per_day": 8, "max_public_interests": 3}'::jsonb,
+  '{"daily_interests": 1, "weekly_interests": 3, "on_demand_runs_per_day": 3, "chat_turns_per_day": 40, "searches_per_run": 5, "max_doc_chars": 4000, "max_interests": 15, "spend_per_day_usd": 0.40, "runs_per_day": 8, "max_public_interests": 3, "publishes_per_day": 5, "price_nok": 0, "price_usd_cents": 0, "purchasable": false}'::jsonb,
   'allowance reads the limits from the plans table');
 
 reset role;
