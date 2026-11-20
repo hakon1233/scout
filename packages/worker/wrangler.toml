@@ -8,6 +8,10 @@
 #                              (public by design, but never committed)
 #   VAPID_PRIVATE_KEY          signs "Your brief is ready" pushes (src/push.ts);
 #                              without it no pushes are sent
+#   TEAM_RUNNER_TOKEN          optional: the Scout team runner's /team routes
+#                              (src/team.ts, `pnpm team:run`); unset, they 404
+#   MODERATION_TOKEN           optional: POST /team/hide for the weekly public
+#                              topic check; unset, it 404s
 name = "scout-runs"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"

@@ -4,6 +4,7 @@
 //   POST /chat {message}         one setup chat turn; 200 ChatTurn.
 //   POST /chat/confirm <confirm> confirm what the last turn proposed (a
 //                                ChatConfirm); 200 ChatTurn, 409 if nothing waits.
+// The /team routes (team.ts) take their own tokens instead of a reader's JWT.
 // Host-neutral: Request and Response only.
 
 import { quotaMessage } from "@scout/core";
@@ -11,6 +12,7 @@ import { createChat, type ChatConfirm } from "@scout/hosted";
 import type { ClaudeClient } from "@scout/research";
 import { supabaseChatStore, verifiedUserId } from "./chat-store.ts";
 import { requestRun, RpcError, rpcCaller } from "./supabase.ts";
+import { handleTeamRequest, isTeamPath, type TeamDeps } from "./team.ts";
 
 export type HttpDeps = {
   supabaseUrl: string;
@@ -22,7 +24,7 @@ export type HttpDeps = {
   serviceKey?: string;
   claude?: ClaudeClient;
   fetch?: typeof fetch;
-};
+} & Pick<TeamDeps, "teamToken" | "moderationToken" | "notify">;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_MESSAGE_CHARS = 4000;
@@ -32,6 +34,9 @@ export async function handleRequest(
   request: Request,
   deps: HttpDeps,
 ): Promise<Response> {
+  const path = new URL(request.url).pathname;
+  if (isTeamPath(path)) return handleTeamRequest(request, deps);
+
   const origin = request.headers.get("origin");
   const allowed = deps.allowedOrigin.split(",").map((o) => o.trim());
   const cors: Record<string, string> =
@@ -49,7 +54,6 @@ export async function handleRequest(
       headers: { "content-type": "application/json", ...cors },
     });
 
-  const path = new URL(request.url).pathname;
   if (!ROUTES.has(path)) return json(404, { error: "not found" });
   if (request.method === "OPTIONS")
     return new Response(null, { status: 204, headers: cors });

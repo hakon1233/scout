@@ -30,6 +30,9 @@ export type ClaudeRunOptions = {
   timeoutMs?: number;
   // Kills the child and rejects with an AbortError.
   signal?: AbortSignal;
+  // Caps the session's agentic turns (`--max-turns`): each search or fetch
+  // takes one. Unset, the CLI's own default applies.
+  maxTurns?: number;
 };
 
 const TOOL_ARGS: Record<ClaudeTools, string[]> = {
@@ -129,6 +132,7 @@ export function runClaude(
         "--safe-mode",
         "--setting-sources",
         "",
+        ...(opts.maxTurns ? ["--max-turns", String(opts.maxTurns)] : []),
         // The child no longer reads the reader's settings, so a model choice
         // has to come from here. Unset, the CLI's default model is used.
         ...(process.env.SCOUT_CLAUDE_MODEL

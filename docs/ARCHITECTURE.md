@@ -125,6 +125,33 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   A push failure never fails or retries a run. Tables and RPCs: `*_push.sql`.
 - `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`;
   without `VAPID_PRIVATE_KEY` no pushes are sent.
+- `team.ts`: the `/team` routes (paths in core's `team.ts`), with no CORS and their own
+  bearer tokens; a route whose token is unset answers 404. `TEAM_RUNNER_TOKEN`:
+  `topics`, `claim`, `start`, `runs` for the Scout team runner (below). `runs` records a
+  result through `team_finish_run` and sends the same push as a cron run.
+  `MODERATION_TOKEN`: `POST /team/hide {interestId, reason}` hides a public topic
+  (`team_hide_interest`, logged in `moderation_log`). Hidden, never deleted.
+
+### The Scout team runner (`packages/agent/src/team-runner.ts`, `pnpm team:run`)
+
+The catalog account's public topics, researched on Håkon's Mac with the local `claude`
+CLI (`research.ts` through `claude-runner.ts`, capped by `--max-turns` and a search
+budget in the prompt) and published through the Worker's `/team` routes, so readers
+get the same briefs, notices and pushes. The Mac holds `TEAM_RUNNER_TOKEN` and
+`SCOUT_WORKER_URL` in `~/.config/scout-hosted/.env`, never a Supabase key. The
+companion never imports it.
+
+- Off unless both switches are on: `SCOUT_TEAM_RUNNER=on` in the shell, and
+  `settings.team_runner_on` in the database. While the database switch is on, the
+  cron's `claim_runs` skips team topics, so each run has one owner
+  (`*_team_runner.sql`).
+- `interests.paused`: a paused topic is never queued by either side. The test topics
+  (`seeds/team-topics.sql`) are seeded paused; `--only <topic>` is a one-off run that
+  leaves it paused.
+- `--dry-run` researches and prints, publishing nothing; `--list` shows the topics.
+- Switching on: set the Worker secret `TEAM_RUNNER_TOKEN`, put it and the Worker URL
+  in the env file (chmod 600), `update public.settings set team_runner_on = true`, then
+  `SCOUT_TEAM_RUNNER=on pnpm team:run`.
 
 ### Web app (`src`)
 
@@ -172,7 +199,9 @@ and `host_copy(notice)` are the RPCs; when a host makes a followed interest priv
 deletes it, a trigger leaves each follower a `stopped_sharing` notification and drops
 the follows. `*_push.sql` keeps one row per device for push notifications; a reader
 sees and deletes only their own, and the Worker reads them through `push_targets`.
-`seeds/public-interests.sql` is the starter catalog, applied by hand.
+`seeds/public-interests.sql` is the starter catalog and `seeds/team-topics.sql` the
+Scout team's paused test topics, both applied by hand. A hidden topic
+(`interests.hidden_at`) leaves the catalog, share links and the chat's suggestions.
 `config.toml` turns on Google (client
 id and secret read from env by name) and the email link, and lists the sign-in page's
 redirect URLs.

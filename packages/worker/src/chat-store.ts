@@ -77,7 +77,7 @@ export function supabaseChatStore(opts: {
       const [pool, follows] = await Promise.all([
         select<Interest>(
           "interests",
-          `select=id,topic&visibility=eq.public&deleted_at=is.null&owner_id=neq.${user}&limit=${PUBLIC_POOL}`,
+          `select=id,topic&visibility=eq.public&deleted_at=is.null&hidden_at=is.null&owner_id=neq.${user}&limit=${PUBLIC_POOL}`,
         ),
         select<{ interest_id: string }>(
           "follows",

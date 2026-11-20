@@ -8,6 +8,7 @@
 import type { spawn } from "node:child_process";
 import {
   buildResearchPrompt,
+  CLI_RESEARCH_TOOLS,
   stripBriefPreamble,
   type ResearchInterest,
 } from "#core";
@@ -19,6 +20,10 @@ export type ResearchOptions = {
   spawnFn?: typeof spawn;
   // Per-session hard timeout in ms; defaults to SCOUT_SESSION_TIMEOUT_MS or 4 min.
   timeoutMs?: number;
+  // Caps for a budgeted session (the Scout team runner): the search and fetch
+  // budget the prompt states, and the CLI's `--max-turns` as the hard stop.
+  maxSearches?: number;
+  maxTurns?: number;
 };
 
 // Research a SINGLE interest in its own headless `claude` session with only
@@ -30,12 +35,16 @@ export async function researchAndSynthesize(
   interest: ResearchInterest,
   opts: ResearchOptions = {},
 ): Promise<string> {
-  const raw = await runClaude(buildResearchPrompt(interest), {
+  const prompt = buildResearchPrompt(interest, new Date(), CLI_RESEARCH_TOOLS, {
+    maxSearches: opts.maxSearches,
+  });
+  const raw = await runClaude(prompt, {
     tools: "web-research",
     label: `claude session for "${interest.topic}"`,
     claudeBin: opts.claudeBin,
     spawnFn: opts.spawnFn,
     timeoutMs: opts.timeoutMs,
+    maxTurns: opts.maxTurns,
   });
   const text = stripBriefPreamble(raw);
   if (!text) throw new Error("claude returned empty output");

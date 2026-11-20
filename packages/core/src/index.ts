@@ -37,6 +37,13 @@ export {
   mergeBriefSections,
   normalizeTopic,
 } from "./coverage.ts";
+export { sectionFromAnswer } from "./research-section.ts";
+export {
+  TEAM_PATHS,
+  type TeamRun,
+  type TeamRunResult,
+  type TeamTopic,
+} from "./team.ts";
 export { canonicalUrl, parseBrief } from "./brief-document.ts";
 export { createWeeklyBriefFromHistory } from "./weekly.ts";
 export {

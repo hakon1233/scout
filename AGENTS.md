@@ -24,6 +24,10 @@ code, tests and comments.
   the Cloudflare Pages test site <https://scout-ideas.pages.dev>. Needs
   `SUPABASE_ACCESS_TOKEN`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the
   environment. The GitHub Pages site is untouched.
+- `pnpm team:run`: the Scout team runner, which researches the catalog's public topics
+  with the local `claude` and publishes through the Worker. Off unless
+  `SCOUT_TEAM_RUNNER=on`; `--dry-run` publishes nothing, `--only <topic>` runs one
+  topic once. See docs/ARCHITECTURE.md, "The Scout team runner".
 - `pnpm test:rls`: the hosted schema's RLS and quota tests (`supabase/tests`). Needs
   Docker and `supabase start`; resets the local database first. Not part of `pnpm check`.
 - `pnpm test:rls:hosted`: the same tests against a hosted project over the Management

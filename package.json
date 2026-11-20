@@ -30,7 +30,8 @@
     "test:rls": "supabase db reset --local && supabase test db",
     "db:push:hosted": "node scripts/supabase-hosted.mjs push",
     "test:rls:hosted": "node scripts/supabase-hosted.mjs test",
-    "deploy:ideas": "node scripts/deploy-ideas.mjs"
+    "deploy:ideas": "node scripts/deploy-ideas.mjs",
+    "team:run": "tsx --conditions=source scripts/team-run.mts"
   },
   "dependencies": {
     "@scout/core": "workspace:*",

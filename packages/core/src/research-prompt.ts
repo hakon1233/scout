@@ -69,6 +69,7 @@ export function buildResearchPrompt(
   interest: ResearchInterest,
   now: Date = new Date(),
   tools: ResearchTools = CLI_RESEARCH_TOOLS,
+  limits: { maxSearches?: number } = {},
 ): string {
   const today = [
     now.getFullYear(),
@@ -110,6 +111,13 @@ export function buildResearchPrompt(
   lines.push(
     "write a real summary (not a headline rehash) with a verified date.",
   );
+  // The API path caps searches in its tool definition; the CLI has no such
+  // cap, so a capped CLI session is told its budget here.
+  if (limits.maxSearches !== undefined) {
+    lines.push(
+      `Use ${tools.search} at most ${limits.maxSearches} times and ${tools.fetch} at most ${limits.maxSearches} times.`,
+    );
+  }
   lines.push("");
   lines.push("Output requirements:");
   lines.push(
