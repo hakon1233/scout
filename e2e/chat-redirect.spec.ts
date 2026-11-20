@@ -15,7 +15,7 @@ test.describe("legacy /app/chat redirect", () => {
       timeout: 15_000,
     });
     await expect(
-      page.getByRole("heading", { name: "Topics", level: 2 }),
+      page.getByRole("heading", { name: "Topics", level: 1 }),
     ).toBeVisible();
     await expect(page.getByLabel("Chat with Scout")).toBeVisible();
 

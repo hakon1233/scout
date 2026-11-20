@@ -32,6 +32,7 @@ import {
 } from "@scout/core";
 import { hostedAuth, hostedConfig } from "./auth";
 import { parseArticlesFromMarkdown } from "./companion";
+import { createFakeHostedData, fakeHostedOn } from "./hosted-fake";
 import { followLikes, type LikedStory, type LikesSync } from "./likes";
 import type { Brief } from "./types";
 
@@ -1230,6 +1231,9 @@ export function hostedData(): HostedData | null {
   const config = hostedConfig();
   const auth = hostedAuth();
   if (!config || !auth) return (hosted = null);
+  // The literal NODE_ENV test lets a production build drop the fake entirely.
+  if (process.env.NODE_ENV !== "production" && fakeHostedOn())
+    return (hosted = createFakeHostedData());
   hosted = createHostedData({
     supabaseUrl: config.url,
     anonKey: config.anonKey,

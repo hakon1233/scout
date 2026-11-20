@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { PORT } from "./port";
+import { HOSTED_PORT, PORT } from "./port";
 
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
@@ -29,23 +29,43 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    // cwd defaults to this config's directory (e2e/), so the path is relative
-    // to it. start-companion.mjs derives the repo root from its own location.
-    command: "node start-companion.mjs",
-    // start-companion.mjs and the stub `claude` read the port from here.
-    env: { ...process.env, SCOUT_E2E_PORT: PORT },
-    url: `${BASE_URL}/healthz`,
-    // First run builds the Next.js static export + compiles + packs the tarball,
-    // which is slow on a cold cache — give it room.
-    timeout: 240_000,
-    // Never reuse an already-listening server: a globally-installed
-    // `scout-agent` (or a prior dev instance) squatting on the port would be
-    // reused instead of OUR freshly-packed, stub-wired artifact — the test
-    // would then silently exercise the wrong binary with real `claude` and no
-    // stub. Always boot our own; fail loudly if the port is occupied.
-    reuseExistingServer: false,
-    stdout: "pipe",
-    stderr: "pipe",
-  },
+  webServer: [
+    {
+      // cwd defaults to this config's directory (e2e/), so the path is relative
+      // to it. start-companion.mjs derives the repo root from its own location.
+      command: "node start-companion.mjs",
+      // start-companion.mjs and the stub `claude` read the port from here.
+      env: { ...process.env, SCOUT_E2E_PORT: PORT },
+      url: `${BASE_URL}/healthz`,
+      // First run builds the Next.js static export + compiles + packs the tarball,
+      // which is slow on a cold cache — give it room.
+      timeout: 240_000,
+      // Never reuse an already-listening server: a globally-installed
+      // `scout-agent` (or a prior dev instance) squatting on the port would be
+      // reused instead of OUR freshly-packed, stub-wired artifact — the test
+      // would then silently exercise the wrong binary with real `claude` and no
+      // stub. Always boot our own; fail loudly if the port is occupied.
+      reuseExistingServer: false,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+    {
+      // The hosted web app on its in-memory fake backend (src/lib/hosted-fake.ts):
+      // no Supabase, no Worker, no network. Dev only; a production build with
+      // the flag is refused (next.config.ts).
+      command: `pnpm exec next dev -H 127.0.0.1 -p ${HOSTED_PORT}`,
+      cwd: "..",
+      env: {
+        ...process.env,
+        NEXT_PUBLIC_SCOUT_FAKE_HOSTED: "1",
+        SCOUT_BASE_PATH: "",
+        NEXT_TELEMETRY_DISABLED: "1",
+      },
+      url: `http://127.0.0.1:${HOSTED_PORT}/app/`,
+      timeout: 180_000,
+      reuseExistingServer: false,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  ],
 });

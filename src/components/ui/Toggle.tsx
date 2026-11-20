@@ -48,7 +48,9 @@ export function Toggle({
       <span
         aria-hidden="true"
         className={
-          "inline-block size-4 rounded-full bg-white shadow-sm transition-transform duration-150 " +
+          // A drop-shadow filter, not box-shadow: the knob is part of the
+          // control, not a box nested in the settings group.
+          "inline-block size-4 rounded-full bg-white drop-shadow-sm transition-transform duration-150 " +
           (checked ? "translate-x-6" : "translate-x-1")
         }
       />

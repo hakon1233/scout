@@ -21,6 +21,20 @@ if (!agentVersion) {
   throw new Error(`missing "version" in ${agentPkgPath}`);
 }
 
+// The fake hosted backend (src/lib/hosted-fake.ts) is for dev and e2e
+// servers only; a production build with its flag set is refused.
+export function assertNoFakeInProduction(env: NodeJS.ProcessEnv): void {
+  if (
+    env.NODE_ENV === "production" &&
+    env.NEXT_PUBLIC_SCOUT_FAKE_HOSTED !== undefined
+  ) {
+    throw new Error(
+      "NEXT_PUBLIC_SCOUT_FAKE_HOSTED is for dev and e2e servers only; unset it to build.",
+    );
+  }
+}
+assertNoFakeInProduction(process.env);
+
 const nextConfig: NextConfig = {
   output: "export",
   images: { unoptimized: true },
@@ -30,6 +44,8 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_AGENT_VERSION: agentVersion,
   },
   trailingSlash: true,
+  // The e2e and screenshot server (fake backend) never rewrites AGENTS.md.
+  ...(process.env.NEXT_PUBLIC_SCOUT_FAKE_HOSTED ? { agentRules: false } : {}),
 };
 
 export default nextConfig;

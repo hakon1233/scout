@@ -333,9 +333,12 @@ function TopicRow({
     <li className="flex flex-col gap-3 py-2 pl-4 pr-2">
       <div className="flex items-center gap-1">
         <div className="min-w-0 flex-1 py-1">
-          <p className="break-words text-body font-medium text-primary">
+          <Link
+            href={`/app/topics/?id=${encodeURIComponent(i.id)}`}
+            className="break-words text-body font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+          >
             {i.topic}
-          </p>
+          </Link>
           <p
             className={`text-body-sm ${failed ? "text-danger" : "text-muted"}`}
           >

@@ -107,7 +107,10 @@ function TimeZoneGroup({ data }: { data: HostedData }) {
   return (
     <SettingsGroup
       title="Time zone"
-      footer={error ?? "Daily briefs arrive in the morning in this time zone."}
+      footer={
+        error ??
+        "Daily briefs arrive in the morning in this time zone. Brief length and how many stories are set on each topic's page."
+      }
     >
       <SettingsRow label="Time zone">
         {zone && (
