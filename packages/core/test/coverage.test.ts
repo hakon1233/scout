@@ -381,3 +381,37 @@ test("interestWantsEvergreen matches topic wording too, not just the doc", () =>
   assert.ok(interestWantsEvergreen("ai explainer", ""));
   assert.ok(!interestWantsEvergreen("ai", "latest model releases this week"));
 });
+
+test("a story citing a site root (homepage) is dropped, in every section", () => {
+  const brief = [
+    "# Your brief",
+    "",
+    "## trondheim",
+    "- `2026-06-15` — the venue's listings show a light week. [samfundet.no — Home](https://www.samfundet.no/)",
+    "  > What the homepage lists.",
+    "- `2026-06-14` — a dated article.",
+    "  [example.com — Article](https://example.com/news/article-1)",
+    "- `2026-06-13` — a root without a slash.",
+    "  [example.org](https://example.org)",
+    "",
+    "## history of computing",
+    "- `2019-03-01` — evergreen, but still a homepage.",
+    "  [example.net — Home](https://example.net/)",
+    "- `2019-03-02` — an evergreen article.",
+    "  [example.net — Piece](https://example.net/piece)",
+    "",
+  ].join("\n");
+  const out = enforceBriefFreshness(brief, {
+    now: NOW,
+    evergreenKeys: new Set([normalizeTopic("history of computing")]),
+  });
+  assert.ok(!out.includes("samfundet.no"), "homepage story dropped");
+  assert.ok(!out.includes("What the homepage lists"), "its body too");
+  assert.ok(!out.includes("https://example.org)"), "bare-host root dropped");
+  assert.ok(out.includes("https://example.com/news/article-1"));
+  assert.ok(
+    !out.includes("https://example.net/)"),
+    "evergreen homepage dropped",
+  );
+  assert.ok(out.includes("https://example.net/piece"));
+});

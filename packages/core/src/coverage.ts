@@ -199,7 +199,29 @@ export function interestWantsEvergreen(topic: string, doc: string): boolean {
   return EVERGREEN_RE.test(topic) || EVERGREEN_RE.test(doc);
 }
 
-// Drop ordinary stories older than `cutoffDays` from ONE section block's raw
+// A story is one dated item (article, post, release). A story whose every
+// citation is a site's root (`https://host/`, no path or query) cites a
+// homepage or front page instead; the model has dated such pages "today" (a
+// real run did), so they are dropped whatever the section's freshness rule.
+const CITATION_LINK_RE = /(?<!!)\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g;
+
+function citesOnlySiteRoots(lines: string[]): boolean {
+  const urls = [...lines.join("\n").matchAll(CITATION_LINK_RE)].map(
+    (m) => m[1],
+  );
+  if (urls.length === 0) return false;
+  return urls.every((u) => {
+    try {
+      const url = new URL(u);
+      return url.pathname === "/" && url.search === "" && url.hash === "";
+    } catch {
+      return false;
+    }
+  });
+}
+
+// Drop ordinary stories older than `cutoffDays` (null: no cutoff, for an
+// evergreen interest) and stories citing only a homepage from ONE section block's raw
 // markdown (its `## heading` line plus body). Undated stories are kept as-is
 // (we never had a date to judge them by). Stories with an unparseable date
 // marker are also kept rather than silently lost. When EVERY story in the
@@ -211,7 +233,7 @@ export function interestWantsEvergreen(topic: string, doc: string): boolean {
 function filterStaleStoriesFromBlock(
   raw: string,
   nowMs: number,
-  cutoffDays: number,
+  cutoffDays: number | null,
 ): string {
   const endsNl = raw.endsWith("\n");
   const lines = raw.split("\n");
@@ -231,11 +253,15 @@ function filterStaleStoriesFromBlock(
     }
   }
   if (stories.length === 0) return raw; // no dated bullets to validate
-  const cutoffDate = new Date(nowMs - cutoffDays * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  const cutoffDate =
+    cutoffDays === null
+      ? null
+      : new Date(nowMs - cutoffDays * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10);
   const kept = stories.filter((s) => {
-    if (s.date === null) return true; // undated kept as-is
+    if (citesOnlySiteRoots(s.lines)) return false; // a homepage is not a story
+    if (s.date === null || cutoffDate === null) return true; // undated / evergreen kept
     return s.date >= cutoffDate; // YYYY-MM-DD: lexical == chronological, inclusive
   });
   if (kept.length === stories.length) return raw; // nothing stale ⇒ byte-identical
@@ -269,9 +295,11 @@ export function enforceBriefFreshness(
   const nowMs = opts.now.getTime();
   const { pre, blocks } = sectionBlocks(markdown);
   const rebuilt = blocks.map((b) =>
-    opts.evergreenKeys.has(b.key)
-      ? b.raw
-      : filterStaleStoriesFromBlock(b.raw, nowMs, cutoffDays),
+    filterStaleStoriesFromBlock(
+      b.raw,
+      nowMs,
+      opts.evergreenKeys.has(b.key) ? null : cutoffDays,
+    ),
   );
   // sectionBlocks split losslessly (the `## ` delimiter stays at each block's
   // start), so plain concatenation reproduces the document; filtered blocks keep

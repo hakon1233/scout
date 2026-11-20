@@ -54,6 +54,10 @@ RECENCY (the whole point of this brief):
   explicitly asks for background / evergreen / historical context.
 
 PUBLISH DATES (one per item, mandatory, captured as a field — not buried in link text):
+- Each story is ONE specific dated item: an article, post, release or
+  announcement page. A homepage, front page, section, listing, event calendar
+  or index page is not a story; leave it out (it may only point you to the
+  specific item). Never give such a page today's date.
 - Every story item MUST carry its real publish date. Verify it from the source;
   if the search snippet doesn't show a date, fetch the page to confirm it.
   Use the article's own publish/updated date — never substitute today's date.

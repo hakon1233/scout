@@ -19,6 +19,13 @@ const INTEREST = {
   doc: "Releases and standards from open-source agent projects.",
 };
 
+const trondheimRun = JSON.parse(
+  readFileSync(
+    new URL("./fixtures/trondheim-run.json", import.meta.url),
+    "utf8",
+  ),
+) as MessagesResponse[];
+
 const pausedRun = JSON.parse(
   readFileSync(new URL("./fixtures/paused-run.json", import.meta.url), "utf8"),
 ) as MessagesResponse[];
@@ -77,7 +84,14 @@ test("the request: Haiku, capped web tools, cached prompt, resumed turn sent bac
   assert.equal(first.model, "claude-haiku-5-5");
   assert.deepEqual(first.tools, [
     { type: "web_search_20250305", name: "web_search", max_uses: 3 },
-    { type: "web_fetch_20250910", name: "web_fetch", max_uses: 5 },
+    {
+      type: "web_fetch_20250910",
+      name: "web_fetch",
+      max_uses: 5,
+      // Caps each fetched page so a run stays well under the 100K-token
+      // prompt line where Haiku's long-prompt rates (5×) start.
+      max_content_tokens: 6000,
+    },
   ]);
   const prompt = first.messages[0].content[0];
   assert.deepEqual(prompt.cache_control, { type: "ephemeral" });
@@ -315,4 +329,23 @@ test("anthropicClient posts to the Messages API and surfaces API errors", async 
   await assert.rejects(client.createMessage(request, signal), {
     message: "Claude API 429: rate_limit_error: slow down",
   });
+});
+
+test("a story citing a site's homepage is dropped (recorded Trondheim run)", async () => {
+  // A real run listed Samfundet's homepage as a story dated today. A story is
+  // one dated item; a homepage or listing page is not one.
+  const result = await researchInterest(
+    {
+      topic: "NTNU and Trondheim student events",
+      doc: "What's on this week for NTNU students in Trondheim.",
+    },
+    { claude: recordedClient(trondheimRun), now: NOW },
+  );
+  const md = result.sectionMd ?? "";
+  assert.doesNotMatch(md, /\(https:\/\/www\.samfundet\.no\/\)/);
+  assert.doesNotMatch(md, /Samfundet's listings/);
+  // The article stories stay.
+  assert.match(md, /^- `2026-11-19` — Exams started at NTNU/m);
+  assert.match(md, /^- `2026-11-18` — NTNU has switched off/m);
+  assert.equal(result.coverage.status, "covered");
 });

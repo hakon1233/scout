@@ -27,6 +27,11 @@ export const RESEARCH_MODEL = "claude-haiku-5-5";
 
 // Room for adaptive thinking plus a ~950-word section.
 const MAX_TOKENS = 16_000;
+// Each fetched page is cut to about this many tokens. Every step of the
+// server-tool loop re-reads earlier tool results, so long pages pushed real
+// runs to 84K-99.8K prompt tokens, just under the 100K line where Haiku's
+// long-prompt rates (5x) start. Article text sat in the first ~6-8K tokens.
+const MAX_FETCH_CONTENT_TOKENS = 6000;
 // The free plan's searches_per_run.
 const DEFAULT_MAX_SEARCHES = 5;
 const DEFAULT_MAX_FETCHES = 5;
@@ -80,6 +85,7 @@ function webTools(maxSearches: number, maxFetches: number): ContentBlock[] {
       type: "web_fetch_20250910",
       name: API_RESEARCH_TOOLS.fetch,
       max_uses: maxFetches,
+      max_content_tokens: MAX_FETCH_CONTENT_TOKENS,
     },
   ];
 }
