@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="nb">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scout for utleiere</title>
+    <meta
+      name="description"
+      content="Scout følger husleieloven, Husleietvistutvalget, KPI, skatt og kommunen for deg som leier ut, og sender en kort, datert brief når noe endrer seg."
+    />
+    <meta name="robots" content="noindex" />
+    <script>
+      document.documentElement.classList.add("js");
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Scout brand tokens (same as bedrift.html) */
+      :root {
+        --paper: #f6f2ea;
+        --paper-2: #efe9dd;
+        --card: #fffdf8;
+        --ink: #1c1a17;
+        --ink-2: #46413a;
+        --line: #d8d0c1;
+        --signal: #9a3b2e;
+        --deep: #1f3a4d;
+        --on-deep: #f6f2ea;
+        --on-deep-2: #c9d3d9;
+
+        --serif: "Fraunces", Georgia, serif;
+        --sans: "Inter", system-ui, -apple-system, sans-serif;
+
+        --t-display: clamp(2.5rem, 6.4vw, 5.5rem);
+        --t-h2: clamp(2rem, 4vw, 3.25rem);
+        --t-h3: 1.625rem;
+        --t-body: 1.125rem;
+        --t-small: 1rem;
+
+        --gutter: clamp(16px, 4vw, 48px);
+        --max: 1240px;
+        --section: clamp(96px, 12vw, 200px);
+
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+        --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+        --t-press: 140ms;
+        --t-hover: 180ms;
+        --t-reveal: 800ms;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font: 400 var(--t-body)/1.55 var(--sans);
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--serif);
+        font-weight: 600;
+        margin: 0;
+      }
+      h1 {
+        font-size: var(--t-display);
+        line-height: 0.98;
+        letter-spacing: -0.035em;
+      }
+      h2 {
+        font-size: var(--t-h2);
+        line-height: 1.04;
+        letter-spacing: -0.025em;
+      }
+      h3 {
+        font-size: var(--t-h3);
+        line-height: 1.15;
+        letter-spacing: -0.015em;
+      }
+      p {
+        margin: 0;
+      }
+      a {
+        color: inherit;
+      }
+      :focus-visible {
+        outline: 2px solid var(--signal);
+        outline-offset: 3px;
+      }
+
+      .wrap {
+        max-width: var(--max);
+        margin: 0 auto;
+        padding: 0 var(--gutter);
+      }
+
+      .button {
+        display: inline-block;
+        background: var(--ink);
+        color: var(--paper);
+        font: 500 var(--t-small)/1 var(--sans);
+        padding: 18px 26px;
+        border-radius: 6px;
+        text-decoration: none;
+        transition:
+          background-color var(--t-hover) ease,
+          transform var(--t-press) var(--ease-out);
+      }
+      .button:active {
+        transform: scale(0.97);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .button:hover {
+          background: #000;
+        }
+      }
+
+      /* Bar */
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding-top: 22px;
+        padding-bottom: 22px;
+      }
+      .mark {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font: 600 1.75rem/1 var(--serif);
+        letter-spacing: -0.02em;
+        text-decoration: none;
+      }
+      .compass {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border: 2px solid var(--ink);
+        border-radius: 50%;
+      }
+      .compass::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border: 2px solid var(--ink);
+        border-radius: 50%;
+      }
+      .compass::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 12px;
+        width: 2px;
+        height: 10px;
+        background: var(--signal);
+        transform: rotate(35deg);
+      }
+      .bar nav {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+        font-size: var(--t-small);
+      }
+      .bar nav a:not(.button) {
+        text-decoration: none;
+        color: var(--ink-2);
+        transition: color var(--t-hover) ease;
+      }
+      .bar nav a:not(.button):hover {
+        color: var(--ink);
+      }
+      .bar .button {
+        padding: 13px 18px;
+      }
+      @media (max-width: 900px) {
+        .bar nav a:not(.button) {
+          display: none;
+        }
+      }
+      @media (max-width: 480px) {
+        .bar .button {
+          display: none;
+        }
+      }
+
+      /* Hero */
+      .hero {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: clamp(40px, 6vw, 96px);
+        align-items: start;
+        row-gap: clamp(32px, 4vw, 56px);
+        padding-top: clamp(32px, 6vw, 88px);
+      }
+      .hero-text {
+        position: sticky;
+        top: 40px;
+      }
+      .hero h1 {
+        grid-column: 1 / -1;
+        max-width: 13em;
+      }
+      .lede {
+        max-width: 32em;
+        font-size: 1.25rem;
+        line-height: 1.5;
+      }
+      .hero .button {
+        margin-top: 36px;
+      }
+      .note {
+        margin-top: 18px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      @media (max-width: 900px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+        .hero-text {
+          position: static;
+        }
+      }
+
+      /* The live thing: pick what you rent out, the lease gets its notes */
+      .live fieldset {
+        border: 0;
+        margin: 0;
+        padding: 0;
+        min-width: 0;
+      }
+      .live legend {
+        padding: 0;
+        font: 600 var(--t-h3)/1.15 var(--serif);
+        letter-spacing: -0.015em;
+        margin-bottom: 16px;
+      }
+      .kinds {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .kinds input {
+        position: absolute;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+      }
+      .kinds label {
+        cursor: pointer;
+        padding: 12px 18px;
+        border-radius: 6px;
+        background: var(--paper-2);
+        font-weight: 500;
+        font-size: var(--t-small);
+        transition:
+          background-color var(--t-hover) ease,
+          color var(--t-hover) ease,
+          transform var(--t-press) var(--ease-out);
+      }
+      .kinds label:active {
+        transform: scale(0.97);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .kinds label:hover {
+          background: var(--line);
+        }
+      }
+      .kinds input:checked + label {
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .kinds input:focus-visible + label {
+        outline: 2px solid var(--signal);
+        outline-offset: 3px;
+      }
+
+      .example-label {
+        margin-top: 28px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+
+      /* The brief as a lease: each change filed under the clause it touches */
+      .lease {
+        display: none;
+        margin-top: 10px;
+        background: var(--card);
+        border-radius: 8px;
+        padding: 28px 28px 30px;
+        box-shadow:
+          0 1px 0 var(--line),
+          0 24px 48px -28px rgba(28, 26, 23, 0.45);
+      }
+      .live:has(#k-flat:checked) .lease[data-kind="flat"],
+      .live:has(#k-hybel:checked) .lease[data-kind="hybel"],
+      .live:has(#k-cabin:checked) .lease[data-kind="cabin"] {
+        display: block;
+      }
+      @supports not selector(:has(*)) {
+        .lease[data-kind="flat"] {
+          display: block;
+        }
+      }
+      .dateline {
+        font-size: var(--t-small);
+        color: var(--signal);
+        font-variant-numeric: tabular-nums;
+      }
+      .lease h3 {
+        margin-top: 4px;
+      }
+      .why {
+        margin-top: 8px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      .clauses {
+        list-style: none;
+        margin: 24px 0 0;
+        padding: 0;
+        display: grid;
+        gap: 26px;
+      }
+      .clause {
+        display: grid;
+        grid-template-columns: 7.5em 1fr;
+        gap: 4px 20px;
+        padding-top: 22px;
+        background: linear-gradient(var(--paper-2), var(--paper-2)) top / 100%
+          6px no-repeat;
+      }
+      .ref {
+        position: relative;
+        align-self: start;
+        font: 600 1.125rem/1.3 var(--serif);
+        color: var(--signal);
+        padding-bottom: 8px;
+      }
+      .ref::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 2.5em;
+        height: 3px;
+        background: var(--signal);
+        transform-origin: left;
+      }
+      .clause b {
+        display: block;
+        font-weight: 600;
+        line-height: 1.35;
+      }
+      .clause p {
+        margin-top: 4px;
+        font-size: var(--t-small);
+        line-height: 1.5;
+      }
+      .clause .source {
+        margin-top: 6px;
+        color: var(--ink-2);
+      }
+      .tail {
+        margin-top: 24px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      @media (max-width: 520px) {
+        .lease {
+          padding: 22px 20px 24px;
+        }
+        .clause {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Signature moment: the clauses get marked, then the notes land */
+      @media (prefers-reduced-motion: no-preference) {
+        .js .live:has(input:checked) .lease .ref::after {
+          animation: mark 700ms var(--ease-expo) both;
+        }
+        .js .live:has(input:checked) .lease .clause > div {
+          animation: land 620ms var(--ease-out) both;
+          animation-delay: 220ms;
+        }
+        .js .lease .clause:nth-child(2) .ref::after {
+          animation-delay: 90ms;
+        }
+        .js .lease .clause:nth-child(2) > div {
+          animation-delay: 310ms;
+        }
+        .js .lease .clause:nth-child(3) .ref::after {
+          animation-delay: 180ms;
+        }
+        .js .lease .clause:nth-child(3) > div {
+          animation-delay: 400ms;
+        }
+      }
+      @keyframes mark {
+        from {
+          transform: scaleX(0);
+        }
+      }
+      @keyframes land {
+        from {
+          opacity: 0;
+          transform: translateX(-10px);
+        }
+      }
+
+      /* Watches */
+      .watches {
+        padding-top: var(--section);
+      }
+      .section-head {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px 64px;
+        align-items: end;
+      }
+      .section-head p {
+        max-width: 30em;
+      }
+      .watch-list {
+        list-style: none;
+        margin: 72px 0 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 56px 64px;
+      }
+      .watch {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+        padding-top: 26px;
+        background: linear-gradient(var(--signal), var(--signal)) top left /
+          2.5em 3px no-repeat;
+      }
+      .watch .law {
+        font: 600 1.125rem/1.3 var(--serif);
+        color: var(--signal);
+      }
+      .watch q {
+        font-family: var(--serif);
+        font-size: 1.375rem;
+        line-height: 1.35;
+        quotes: "«" "»";
+      }
+      .watch .source {
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      .watch.wide {
+        grid-column: 1 / -1;
+        max-width: 40em;
+      }
+      @media (max-width: 900px) {
+        .section-head,
+        .watch-list {
+          grid-template-columns: 1fr;
+        }
+        .watch-list {
+          margin-top: 48px;
+          gap: 44px;
+        }
+      }
+
+      /* Cases like yours */
+      .cases {
+        margin-top: var(--section);
+        background: var(--deep);
+        color: var(--on-deep);
+      }
+      .cases .wrap {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 48px 96px;
+        padding-top: clamp(80px, 9vw, 144px);
+        padding-bottom: clamp(80px, 9vw, 144px);
+      }
+      .count {
+        display: block;
+        word-spacing: 0.12em;
+        white-space: nowrap;
+        margin-bottom: 20px;
+        font: 600 clamp(4rem, 11vw, 9rem)/0.9 var(--serif);
+        letter-spacing: -0.045em;
+        font-variant-numeric: tabular-nums;
+      }
+      .cases h2 {
+        max-width: 10em;
+      }
+      .cases .wrap > div > p {
+        margin-top: 24px;
+        max-width: 28em;
+      }
+      .rulings {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 34px;
+        align-content: start;
+      }
+      .rulings li {
+        display: grid;
+        gap: 6px;
+      }
+      .rulings .case {
+        font-size: var(--t-small);
+        color: var(--on-deep-2);
+        font-variant-numeric: tabular-nums;
+      }
+      .rulings b {
+        font: 600 1.375rem/1.3 var(--serif);
+        letter-spacing: -0.01em;
+      }
+      .cases .fine {
+        font-size: var(--t-small);
+        color: var(--on-deep-2);
+      }
+      @media (max-width: 900px) {
+        .cases .wrap {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Nothing new */
+      .quiet {
+        padding-top: var(--section);
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 48px 96px;
+        align-items: center;
+      }
+      .quiet h2 {
+        max-width: 9em;
+      }
+      .quiet > div > p {
+        margin-top: 24px;
+        max-width: 30em;
+      }
+      .slip {
+        margin-top: 10px;
+        background: var(--card);
+        border-radius: 8px;
+        padding: 28px;
+        box-shadow:
+          0 1px 0 var(--line),
+          0 24px 48px -28px rgba(28, 26, 23, 0.45);
+      }
+      .slip .nothing {
+        margin-top: 12px;
+        font: 600 var(--t-h3)/1.2 var(--serif);
+        letter-spacing: -0.015em;
+      }
+      .slip .source {
+        margin-top: 16px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      @media (max-width: 900px) {
+        .quiet {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Start */
+      .start {
+        padding-top: var(--section);
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 48px 96px;
+        align-items: start;
+      }
+      .start .question {
+        font: 600 var(--t-display)/0.98 var(--serif);
+        letter-spacing: -0.035em;
+        margin-top: 20px;
+        color: var(--signal);
+      }
+      .steps {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: s;
+        display: grid;
+        gap: 32px;
+      }
+      .steps li {
+        counter-increment: s;
+        display: grid;
+        grid-template-columns: 48px 1fr;
+        gap: 16px;
+      }
+      .steps li::before {
+        content: counter(s);
+        font: 600 var(--t-h3)/1.1 var(--serif);
+        color: var(--signal);
+      }
+      .steps b {
+        display: block;
+        font-weight: 600;
+      }
+      .start .button {
+        margin-top: 40px;
+      }
+      @media (max-width: 900px) {
+        .start {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Close */
+      footer.wrap {
+        margin-top: calc(var(--section) * 1.4);
+        padding-bottom: 48px;
+      }
+      .bigname {
+        display: flex;
+        align-items: center;
+        gap: 0.18em;
+        font: 600 clamp(5rem, 18vw, 15rem)/0.85 var(--serif);
+        letter-spacing: -0.05em;
+      }
+      .bigname .compass {
+        width: 0.5em;
+        height: 0.5em;
+        border-width: 0.05em;
+      }
+      .bigname .compass::before {
+        width: 0.13em;
+        height: 0.13em;
+        border-width: 0.04em;
+      }
+      .bigname .compass::after {
+        top: 0.05em;
+        left: calc(50% - 0.02em);
+        width: 0.04em;
+        height: 0.18em;
+      }
+      .foot {
+        margin-top: 40px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px 64px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      @media (max-width: 760px) {
+        .foot {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="wrap bar">
+      <a class="mark" href="#"
+        ><span class="compass" aria-hidden="true"></span>Scout</a
+      >
+      <nav aria-label="Hovedmeny">
+        <a href="#folger">Hva Scout følger</a>
+        <a href="#saker">Saker som din</a>
+        <a href="#start">Kom i gang</a>
+        <a class="button" href="#">Prøv Scout som utleier</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="wrap hero" aria-labelledby="tittel">
+        <h1 id="tittel">Du leier ut. Scout følger med.</h1>
+        <div class="hero-text">
+          <p class="lede">
+            Scout leser husleieloven, Husleietvistutvalget, KPI, skattereglene
+            og kommunen din. Når noe endrer seg som angår utleia, får du en
+            kort, datert brief. Hver sak står under punktet i kontrakten den
+            gjelder.
+          </p>
+          <a class="button" href="#">Prøv Scout som utleier</a>
+          <p class="note">
+            For deg som leier ut en hybel, en hytte eller noen få leiligheter.
+          </p>
+        </div>
+
+        <div class="live">
+          <fieldset>
+            <legend>Hva leier du ut?</legend>
+            <div class="kinds">
+              <input type="radio" name="kind" id="k-flat" checked /><label
+                for="k-flat"
+                >Leilighet</label
+              >
+              <input type="radio" name="kind" id="k-hybel" /><label
+                for="k-hybel"
+                >Hybel i egen bolig</label
+              >
+              <input type="radio" name="kind" id="k-cabin" /><label
+                for="k-cabin"
+                >Hytte</label
+              >
+            </div>
+          </fieldset>
+          <p class="example-label">
+            Eksempel på en brief. Sakene er ekte og hentet fra kildene.
+            Utleieren er tenkt.
+          </p>
+
+          <article
+            class="lease"
+            data-kind="flat"
+            aria-label="Eksempel: brief for en utleier av leilighet"
+          >
+            <p class="dateline">Mandag 16. november 2026</p>
+            <h3>Leilighet i Trondheim</h3>
+            <p class="why">Tidsubestemt kontrakt, leia sist justert i 2025.</p>
+            <ol class="clauses">
+              <li class="clause">
+                <span class="ref">§ 4-2 Leia</span>
+                <div>
+                  <b>KPI steg 3,6 prosent det siste året.</b>
+                  <p>
+                    Har leia stått i minst ett år, kan du justere den i takt med
+                    KPI. Varsle leietakeren skriftlig en måned før.
+                  </p>
+                  <p class="source">Kilde: SSB, 10. november</p>
+                </div>
+              </li>
+              <li class="clause">
+                <span class="ref">§ 9-9 Heving</span>
+                <div>
+                  <b>Halvannen måneds skyldig leie var ikke nok til å heve.</b>
+                  <p>
+                    Utleieren fikk betalt for strøm og varmtvann, men hevingen
+                    var ugyldig. Det var stilt garanti for leia.
+                  </p>
+                  <p class="source">
+                    Kilde: Husleietvistutvalget, HTU-2026-1777, 29. oktober
+                  </p>
+                </div>
+              </li>
+              <li class="clause">
+                <span class="ref">Lånet</span>
+                <div>
+                  <b>Styringsrenten står fortsatt på 4,5 prosent.</b>
+                  <p>Neste rentemøte er 17. desember.</p>
+                  <p class="source">Kilde: Norges Bank, 5. november</p>
+                </div>
+              </li>
+            </ol>
+          </article>
+
+          <article
+            class="lease"
+            data-kind="hybel"
+            aria-label="Eksempel: brief for en utleier av hybel"
+          >
+            <p class="dateline">Mandag 19. oktober 2026</p>
+            <h3>Hybel i egen bolig, Oslo</h3>
+            <p class="why">Leietakeren deler kjøkken og stue med deg.</p>
+            <ol class="clauses">
+              <li class="clause">
+                <span class="ref">§ 9-8 Oppsigelse</span>
+                <div>
+                  <b>Eget bad, men delt kjøkken: skriftlig oppsigelse holdt.</b>
+                  <p>
+                    Utvalget regnet det som et rom i utleierens egen bolig. Da
+                    trengs ingen saklig grunn, bare at oppsigelsen er skriftlig.
+                  </p>
+                  <p class="source">
+                    Kilde: Husleietvistutvalget, HTU-2026-4065, 15. oktober
+                  </p>
+                </div>
+              </li>
+              <li class="clause">
+                <span class="ref">Strømmen</span>
+                <div>
+                  <b>Statsbudsjettet for 2027: dyrere strøm.</b>
+                  <p>
+                    Er strømmen med i leia, er det verdt å se på hva kontrakten
+                    sier om endring.
+                  </p>
+                  <p class="source">Kilde: Huseierne, 7. oktober</p>
+                </div>
+              </li>
+            </ol>
+            <p class="tail">To saker denne gangen. Scout fyller ikke på.</p>
+          </article>
+
+          <article
+            class="lease"
+            data-kind="cabin"
+            aria-label="Eksempel: brief for en utleier av hytte"
+          >
+            <p class="dateline">Mandag 9. november 2026</p>
+            <h3>Hytte i Hemsedal, leid ut på Airbnb</h3>
+            <p class="why">Korttidsutleie i helger og ferier.</p>
+            <ol class="clauses">
+              <li class="clause">
+                <span class="ref">Korttids&shy;utleie</span>
+                <div>
+                  <b>Ny lov om data fra utleieplattformene er på høring.</b>
+                  <p>
+                    Den tar EUs regler om innsamling og deling av data om
+                    korttidsutleie inn i norsk lov. Høringsfristen er 14. januar
+                    2027.
+                  </p>
+                  <p class="source">
+                    Kilde: Nærings- og fiskeridepartementet, 4. november
+                  </p>
+                </div>
+              </li>
+              <li class="clause">
+                <span class="ref">Lånet</span>
+                <div>
+                  <b>Styringsrenten står fortsatt på 4,5 prosent.</b>
+                  <p>Neste rentemøte er 17. desember.</p>
+                  <p class="source">Kilde: Norges Bank, 5. november</p>
+                </div>
+              </li>
+            </ol>
+            <p class="tail">To saker denne gangen. Scout fyller ikke på.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap watches" id="folger" aria-labelledby="folger-tittel">
+        <div class="section-head">
+          <h2 id="folger-tittel">Fem ting Scout følger for utleiere</h2>
+          <p>
+            Du får dem som en startpakke når du har sagt hva du leier ut og
+            hvor. Du kan endre dem, eller legge til egne med vanlige ord, for
+            eksempel renten fra Norges Bank.
+          </p>
+        </div>
+        <ul class="watch-list">
+          <li class="watch">
+            <span class="law">Husleieloven</span>
+            <h3>Lovendringer og høringer</h3>
+            <q
+              >Si fra når det kommer forslag til ny husleielov, og når noe trer
+              i kraft.</q
+            >
+            <p class="source">
+              Regjeringen.no og Lovdata. En helt ny boligleielov er varslet,
+              etter NOU 2024: 19.
+            </p>
+          </li>
+          <li class="watch">
+            <span class="law">Tvister</span>
+            <h3>Vedtak i Husleietvistutvalget</h3>
+            <q
+              >Nye vedtak om hybler, depositum og oppsigelse, særlig der
+              utleieren tapte.</q
+            >
+            <p class="source">Lovdata. Nye vedtak omtrent hver annen uke.</p>
+          </li>
+          <li class="watch">
+            <span class="law">§ 4-2</span>
+            <h3>Leia og KPI</h3>
+            <q>Hvor mye kan jeg justere leia med når året er gått?</q>
+            <p class="source">SSB. Neste tall kommer 10. desember 2026.</p>
+          </li>
+          <li class="watch">
+            <span class="law">Skatt</span>
+            <h3>Skatt på leieinntekter</h3>
+            <q>Endringer i skatten på utleie av bolig og hytte.</q>
+            <p class="source">
+              Skatteetatens pressemeldinger og Huseierne. Skattekommisjonen har
+              foreslått høyere skatt på bolig.
+            </p>
+          </li>
+          <li class="watch wide">
+            <span class="law">Kommunen</span>
+            <h3>Eiendomsskatt og Airbnb i kommunen</h3>
+            <q
+              >Endringer i eiendomsskatten i Oslo, og regler for Airbnb i
+              kommunen.</q
+            >
+            <p class="source">
+              Kommunens egne sider og regjeringen.no. I Oslo kan en hybel som er
+              en selvstendig boenhet, gi ekstra bunnfradrag.
+            </p>
+          </li>
+        </ul>
+      </section>
+
+      <section class="cases" id="saker" aria-labelledby="saker-tittel">
+        <div class="wrap">
+          <div>
+            <p class="count">5 140</p>
+            <h2 id="saker-tittel">vedtak fra Husleie&shy;tvistutvalget</h2>
+            <p>
+              Så mange ligger på Lovdata i dag. Få har tid til å lese dem. Scout
+              leser de nye og tar med dem som ligner din situasjon, med hva
+              utvalget la vekt på.
+            </p>
+          </div>
+          <div>
+            <ul class="rulings" aria-label="Fire ekte vedtak fra høsten 2026">
+              <li>
+                <span class="case">HTU-2026-1777, 29. oktober 2026</span>
+                <b>Halvannen måneds skyldig leie var ikke nok til å heve.</b>
+              </li>
+              <li>
+                <span class="case">HTU-2026-4065, 15. oktober 2026</span>
+                <b
+                  >Rom i utleierens egen bolig: skriftlig oppsigelse var nok.</b
+                >
+              </li>
+              <li>
+                <span class="case">HTU-2026-197, 18. september 2026</span>
+                <b>Oppsigelse fordi boligen skulle selges, var gyldig.</b>
+              </li>
+              <li>
+                <span class="case">HTU-2026-774, 17. september 2026</span>
+                <b>Støy og plager for naboene ga gyldig oppsigelse.</b>
+              </li>
+              <li>
+                <p class="fine">
+                  Ekte vedtak, kort gjengitt. Kilde: Lovdata, 20. november 2026.
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap quiet" aria-labelledby="stille-tittel">
+        <div>
+          <h2 id="stille-tittel">Ingenting nytt? Da står det det.</h2>
+          <p>
+            De fleste uker skjer det lite som angår utleia. Da får du én linje
+            og datoen Scout sist fant noe, ikke en lang e-post. Ellers får du
+            høyst fire saker.
+          </p>
+        </div>
+        <div>
+          <p class="example-label">Eksempel</p>
+          <div class="slip">
+            <p class="dateline">Mandag 23. november 2026</p>
+            <p class="nothing">Ingenting nytt siden 16. november.</p>
+            <p class="source">
+              Sjekket: Lovdata, regjeringen.no, SSB, Skatteetaten, Trondheim
+              kommune
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap start" id="start" aria-labelledby="start-tittel">
+        <div>
+          <h2 id="start-tittel">Det starter med ett spørsmål</h2>
+          <p class="question" aria-hidden="true">Hva leier du ut?</p>
+        </div>
+        <div>
+          <ol class="steps">
+            <li>
+              <span
+                ><b>Si hva du leier ut, og hvor.</b>Leilighet, hybel eller
+                hytte, og kommunen. Det er nok til å komme i gang.</span
+              >
+            </li>
+            <li>
+              <span
+                ><b>Se over startpakken.</b>Fjern det du ikke trenger. Skriv inn
+                det du lurer på, med vanlige ord.</span
+              >
+            </li>
+            <li>
+              <span
+                ><b>Les den første briefen.</b>Den kommer på dagen du velger, og
+                så hver uke.</span
+              >
+            </li>
+          </ol>
+          <a class="button" href="#">Prøv Scout som utleier</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wrap">
+      <p class="bigname">
+        <span class="compass" aria-hidden="true"></span>Scout
+      </p>
+      <div class="foot">
+        <p>
+          Scout leser offentlige kilder for deg som leier ut: Lovdata,
+          regjeringen.no, SSB, Norges Bank, Skatteetaten og kommunens egne
+          sider.
+        </p>
+        <p>
+          Sakene i eksemplene er ekte. Utleierne, stedene og kontraktene er
+          tenkt for å vise formatet. Scout gir ikke juridiske råd.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
