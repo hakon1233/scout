@@ -61,7 +61,11 @@ export function supabaseChatStore(opts: {
           `select=id,created_at,status,message,reply,changes,pending,error_msg&user_id=eq.${user}&status=neq.pending&order=created_at.desc&limit=${TRANSCRIPT_TURNS}`,
         ),
         rpc("allowance", { p_user: userId }, auth) as Promise<{
-          limits: { max_interests: number; max_doc_chars: number };
+          limits: {
+            max_interests: number;
+            max_doc_chars: number;
+            daily_interests: number;
+          };
         }>,
       ]);
       return {
@@ -70,6 +74,7 @@ export function supabaseChatStore(opts: {
         limits: {
           maxInterests: allowance.limits.max_interests,
           maxDocChars: allowance.limits.max_doc_chars,
+          dailyInterests: allowance.limits.daily_interests,
         },
       };
     },

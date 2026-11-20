@@ -20,7 +20,7 @@ export default function UpgradePage() {
         title="Upgrade"
         back={{ href: "/app/settings/", label: "Settings" }}
       >
-        More topics and more daily briefs.
+        Daily briefs, more weekly ones and more topics.
       </PageHeader>
       <div className="grid gap-4 sm:grid-cols-2" data-main>
         <PlanCard plan={PLANS.free} />

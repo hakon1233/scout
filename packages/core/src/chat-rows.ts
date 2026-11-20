@@ -7,6 +7,7 @@ import type {
   AppPage,
   ChatChange,
   ChatTurn,
+  PendingCreate,
   PendingDelete,
   PendingFollow,
   PendingRewrite,
@@ -23,6 +24,7 @@ export type ChatTurnRow = {
     deletes?: PendingDelete[];
     rewrite?: PendingRewrite;
     follows?: PendingFollow[];
+    creates?: PendingCreate[];
     page?: AppPage;
   } | null;
   error_msg: string | null;
@@ -33,6 +35,7 @@ export function chatTurnToRow(turn: ChatTurn): ChatTurnRow {
   if (turn.pending_deletes?.length) pending.deletes = turn.pending_deletes;
   if (turn.pending_rewrite) pending.rewrite = turn.pending_rewrite;
   if (turn.pending_follows?.length) pending.follows = turn.pending_follows;
+  if (turn.pending_creates?.length) pending.creates = turn.pending_creates;
   if (turn.page) pending.page = turn.page;
   return {
     id: turn.id,
@@ -61,6 +64,9 @@ export function chatTurnFromRow(row: ChatTurnRow): ChatTurn {
     ...(row.pending?.rewrite ? { pending_rewrite: row.pending.rewrite } : {}),
     ...(row.pending?.follows?.length
       ? { pending_follows: row.pending.follows }
+      : {}),
+    ...(row.pending?.creates?.length
+      ? { pending_creates: row.pending.creates }
       : {}),
     ...(row.pending?.page ? { page: row.pending.page } : {}),
     ...(row.error_msg !== null ? { error_msg: row.error_msg } : {}),

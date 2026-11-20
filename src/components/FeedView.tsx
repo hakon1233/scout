@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTabTitle } from "@/hooks/useTabTitle";
 import dynamic from "next/dynamic";
 import type { Article, Brief } from "@/lib/types";
 import { canonicalUrl } from "@scout/core";
@@ -80,6 +81,7 @@ export function FeedView({
     ? (items.find((it) => it.id === selectedId) ?? null)
     : null;
   const detailOpen = selected != null;
+  useTabTitle(selected?.headline);
 
   // Hosted and signed in only (usage is a no-op until startUsage): the brief
   // was seen, and which story is open for how long.

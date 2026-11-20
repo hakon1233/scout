@@ -153,6 +153,10 @@ export type RewriteResolution = "applied" | "discarded" | undefined;
 // Mirrors ChatDeleteConfirm's alertdialog/focus pattern: initial focus lands
 // on the SAFE button (Discard), and focus returns to the prior element once
 // the card resolves.
+//
+// The hosted chat reuses it for a proposed new topic (`create`): the same
+// card with the new doc as all-adds, a line saying how it will run, and
+// [Confirm]/[Discard]. Nothing is saved until Confirm.
 export function ChatRewriteProposal({
   pr,
   prev,
@@ -161,8 +165,11 @@ export function ChatRewriteProposal({
   onApply,
   onDiscard,
   disabled,
+  create,
 }: {
   pr: PendingRewrite;
+  // Set for a proposed new topic: how it will run, e.g. "Weekly · Private".
+  create?: { schedule: string };
   // The doc body before the proposal, when known. Null (e.g. a card re-rendered
   // from the transcript) degrades the diff to all-adds — still honest, since
   // the proposal IS the full replacement text.
@@ -203,17 +210,17 @@ export function ChatRewriteProposal({
           aria-hidden="true"
           className="grid size-[18px] place-items-center rounded-sm bg-signal font-mono text-[11px] font-semibold leading-none text-[color:var(--accent-fg)]"
         >
-          ~
+          {create ? "+" : "~"}
         </span>
         <span
           id={labelId}
           className="font-mono text-[10px] uppercase tracking-[0.05em] text-secondary"
         >
-          Proposed rewrite · {pr.topic}
+          {create ? "New topic" : "Proposed rewrite"} · {pr.topic}
         </span>
         {resolved === "applied" ? (
           <span className="ml-auto rounded-pill border border-success-border bg-success-bg px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.05em] text-success">
-            Applied
+            {create ? "Saved" : "Applied"}
           </span>
         ) : resolved === "discarded" ? (
           <span className="ml-auto rounded-pill border border-border-default bg-surface-muted px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
@@ -226,14 +233,24 @@ export function ChatRewriteProposal({
         )}
       </div>
 
+      {create && (
+        <p className="px-2.5 pt-2 text-body-sm text-secondary">
+          {create.schedule}
+        </p>
+      )}
+
       <DiffLines diff={diff} />
 
       <div className="flex items-center gap-2 border-t border-border-default px-2.5 py-2">
         {resolved ? (
           <span className="font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
-            {resolved === "applied"
-              ? "Rewrite written to the doc"
-              : "Proposal discarded — doc untouched"}
+            {create
+              ? resolved === "applied"
+                ? "Topic saved"
+                : "Nothing saved"
+              : resolved === "applied"
+                ? "Rewrite written to the doc"
+                : "Proposal discarded — doc untouched"}
           </span>
         ) : (
           <>
@@ -243,7 +260,7 @@ export function ChatRewriteProposal({
               onClick={onApply}
               className={buttonClass}
             >
-              Apply
+              {create ? "Confirm" : "Apply"}
             </button>
             <button
               ref={discardRef}

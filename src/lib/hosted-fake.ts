@@ -377,7 +377,7 @@ export function createFakeHostedData(): HostedData {
         brief: fresh ? null : brief,
         allowance: {
           plan: "free",
-          daily: { used: count("daily"), limit: 2 },
+          daily: { used: count("daily"), limit: 0 },
           weekly: { used: count("weekly"), limit: 3 },
           runsToday: { used: 1, limit: 3 },
         },

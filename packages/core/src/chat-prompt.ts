@@ -18,7 +18,9 @@ const CHAT_CONTEXT_TURN_LIMIT = 20;
 // curated interests that may match the message; with them the model may offer
 // a `follow` instead of creating a near copy. Without them the prompt is the
 // companion's. `cadences` (hosted chat only): a topic gets a daily or weekly
-// brief, so a create carries the cadence the reader asked for.
+// brief, so a create carries the cadence the reader asked for, and a new
+// topic waits for the reader's confirm. `noDaily` (hosted): the reader's plan
+// (Free) has no daily topics.
 export function buildChatPrompt(
   message: string,
   snapshots: InterestSnapshot[],
@@ -28,6 +30,7 @@ export function buildChatPrompt(
     maxDocChars?: number;
     publicInterests?: Interest[];
     cadences?: boolean;
+    noDaily?: boolean;
   },
 ): string {
   const { maxInterests } = opts;
@@ -181,6 +184,12 @@ export function buildChatPrompt(
       "    Be honest about the plan: only its daily and weekly slots run on a",
       "    schedule; other topics run only with Run now.",
     );
+    if (opts.noDaily) {
+      lines.push(
+        "    This user is on Free, which has no daily topics: a topic they want daily",
+        "    is made weekly. Say it will be weekly on Free and that daily comes with Plus.",
+      );
+    }
   }
   lines.push("    If the user still wants them together, save as asked.");
   if (opts.cadences) {
@@ -195,18 +204,13 @@ export function buildChatPrompt(
     );
     lines.push("    topic daily when the user said weekly.");
     lines.push(
-      "- A new topic is private: only the user sees it until they share it. A create's",
+      "- A new topic is private: only the user sees it until they share it. A `create`",
+      "    is CONFIRM-GATED: nothing is saved until the user presses [Confirm] on a card.",
+      "    Its `reply` is a PENDING PROPOSAL naming the topic in quotes, its cadence (Daily",
+      "    or Weekly; or the next free slot when they named none) and that it is private,",
+      '    e.g. "Here is \\"Zigbee\\": Weekly, private. Confirm below, or tell me what to',
+      '    change." Never say it is created or done.',
     );
-    lines.push(
-      "    `reply` confirms what you set up: the topic in quotes, its cadence (Daily or",
-    );
-    lines.push(
-      "    Weekly; or the next free slot when they named none) and that it is private,",
-    );
-    lines.push(
-      '    then invites changes. E.g. "Created \\"Zigbee\\" — Weekly, private. Tell me',
-    );
-    lines.push('    what to change."');
   } else {
     lines.push(
       "- A create's `reply` names the new topic in quotes and what it will track.",
@@ -260,10 +264,14 @@ export function buildChatPrompt(
     '    NEVER claim it is done ("Done — deleted", "Removed X", "You\'re back to N") on a',
   );
   lines.push(
-    "    delete turn; the interest is still there until the user confirms. Create/update",
+    opts.cadences
+      ? "    delete turn; the interest is still there until the user confirms. An update"
+      : "    delete turn; the interest is still there until the user confirms. Create/update",
   );
   lines.push(
-    "    apply immediately, so for those a done-style reply is correct.",
+    opts.cadences
+      ? "    applies immediately, so for it a done-style reply is correct."
+      : "    apply immediately, so for those a done-style reply is correct.",
   );
   lines.push(
     "- A `rewrite` is for a FULL from-scratch replacement of an interest's doc — the",

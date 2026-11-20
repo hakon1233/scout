@@ -18,7 +18,7 @@ import { VoiceButton } from "./VoiceButton";
 
 // The hosted setup chat: the reader says what they want to follow, Scout
 // answers and changes their interests. Only the last turn's proposals
-// (delete, rewrite, follow) can be confirmed; the Worker checks them again.
+// (new topic, delete, rewrite, follow) can be confirmed; the Worker checks them again.
 export function HostedChat({
   turns,
   send,
@@ -250,6 +250,23 @@ function Proposals({
           onDiscard={() => run(rwKey, null)}
         />
       )}
+      {(turn.pending_creates ?? []).map((c) => {
+        const key = `${turn.id}:create:${c.interestId}`;
+        return (
+          <ChatRewriteProposal
+            key={key}
+            pr={c}
+            prev={null}
+            create={{ schedule: createSchedule(c.cadence) }}
+            resolved={rewriteResolution(resolved[key])}
+            disabled={busy}
+            onApply={() =>
+              run(key, { kind: "create", interestId: c.interestId })
+            }
+            onDiscard={() => run(key, null)}
+          />
+        );
+      })}
       {(turn.pending_follows ?? []).map((f) => {
         const key = `${turn.id}:follow:${f.interestId}`;
         return (
@@ -273,6 +290,17 @@ function Proposals({
       })}
     </>
   );
+}
+
+// How a proposed topic will run, as its card says it.
+function createSchedule(cadence: "daily" | "weekly" | undefined): string {
+  const runs =
+    cadence === "daily"
+      ? "Daily"
+      : cadence === "weekly"
+        ? "Weekly"
+        : "Next free daily or weekly slot";
+  return `${runs} · Private`;
 }
 
 function deleteResolution(r: "done" | "kept" | undefined): DeleteResolution {

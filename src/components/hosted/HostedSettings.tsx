@@ -144,7 +144,6 @@ function PlanGroup({ home }: { home: HostedHome }) {
   const own = home.interests.filter((i) => !i.following);
   const meters = planMeters({
     ...home.allowance,
-    ownTopics: own.length,
     publicTopics: own.filter((i) => i.visibility === "public").length,
   });
   return (
