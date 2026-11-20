@@ -1,4 +1,5 @@
--- The Scout team runner and hiding public topics: one owner per run, paused
+-- The Scout team runner and hiding public topics: the Worker never runs the
+-- team's public topics (runner on or off), one owner per run, paused
 -- test topics never run on the schedule, the team functions touch only the
 -- team's public topics, and a hidden topic disappears for everyone but its
 -- owner. Run with `pnpm test:rls`. Everything rolls back at the end.
@@ -44,7 +45,7 @@ create function pg_temp.queued_topics() returns text[] language sql as $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- Runner off: the Worker runs everything that is due, never a paused topic
+-- Runner off: team topics do not run at all; the Worker runs the rest
 -- ---------------------------------------------------------------------------
 
 select is((select count(*)::int from public.team_claim_runs(10, '2026-11-20 12:00+00')), 0,
@@ -53,8 +54,11 @@ select throws_ok($$select * from public.team_start_run('7ea70000-0000-4000-8000-
   '55000', null, 'nor starts a one-off run');
 
 insert into tick select * from public.claim_runs(50, '2026-11-20 12:00+00');
-select is(pg_temp.queued_topics(), array['Anna public', 'Team daily', 'Team private'],
-  'runner off: the Worker runs the team''s due topics; a paused topic never');
+select is(pg_temp.queued_topics(), array['Anna public', 'Team private'],
+  'runner off: the Worker never runs the team''s public topics, nor a paused topic');
+select is((select count(*)::int from public.runs
+           where interest_id = '7ea70000-0000-4000-8000-0000000000d1'), 0,
+  'runner off: a due team topic is not even queued; it waits for the local runner');
 update public.runs set status = 'ready', finished_at = '2026-11-20 12:01+00'
 where id in (select run_id from tick);
 delete from tick;

@@ -1,6 +1,6 @@
 -- The Scout team's 20 test topics (plan/research/team-topics.md, plus five from
--- the tested intent docs below): public, owned by the catalog account, and PAUSED, so neither the Worker's cron nor the team
--- runner's schedule ever runs them. Run one by hand with
+-- the tested intent docs below): public, owned by the catalog account, and PAUSED, so the team
+-- runner's schedule never runs them (the Worker's cron never runs team topics). Run one by hand with
 --   SCOUT_TEAM_RUNNER=on pnpm team:run --only "<topic>"
 -- which is a one-off: the topic stays paused.
 --

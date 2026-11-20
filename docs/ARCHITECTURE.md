@@ -141,10 +141,11 @@ get the same briefs, notices and pushes. The Mac holds `TEAM_RUNNER_TOKEN` and
 `SCOUT_WORKER_URL` in `~/.config/scout-hosted/.env`, never a Supabase key. The
 companion never imports it.
 
-- Off unless both switches are on: `SCOUT_TEAM_RUNNER=on` in the shell, and
-  `settings.team_runner_on` in the database. While the database switch is on, the
-  cron's `claim_runs` skips team topics, so each run has one owner
-  (`*_team_runner.sql`).
+- Team topics never run on the API: the cron's `claim_runs` always skips the catalog
+  account's public topics, whether the runner is on or off (`*_team_runner.sql`).
+- The runner is off unless both switches are on: `SCOUT_TEAM_RUNNER=on` in the shell,
+  and `settings.team_runner_on` in the database. While it is off, team topics do not
+  run at all. Test with `--dry-run` or the spawn stub, never a real run.
 - `interests.paused`: a paused topic is never queued by either side. The test topics
   (`seeds/team-topics.sql`) are seeded paused; `--only <topic>` is a one-off run that
   leaves it paused.

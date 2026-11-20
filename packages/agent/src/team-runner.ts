@@ -6,8 +6,8 @@
 //
 // The runner holds one secret, TEAM_RUNNER_TOKEN, and no Supabase key. It runs
 // only with SCOUT_TEAM_RUNNER=on (--dry-run excepted) and only does anything
-// while settings.team_runner_on is set in the database; while that is set, the
-// Worker's cron leaves these topics alone, so each run has one owner.
+// while settings.team_runner_on is set in the database. The Worker's cron never
+// runs these topics, on or off: they never spend API dollars.
 //
 // Not part of the companion: the companion never imports this module.
 // scripts/team-run.mts is its command line (`pnpm team:run`).

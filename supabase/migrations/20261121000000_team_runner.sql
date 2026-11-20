@@ -1,10 +1,11 @@
 -- The Scout team runner and hiding public topics.
 --
 -- The Scout team is the catalog account that owns the public starter topics
--- (seeds/public-interests.sql). With settings.team_runner_on, its public topics
--- run on Håkon's own machine (the local `claude` CLI, `pnpm team:run`) instead
--- of the Worker's API calls: one owner per run. The local runner never holds a
--- Supabase key. It calls the Worker's /team routes with TEAM_RUNNER_TOKEN, and
+-- (seeds/public-interests.sql). Its public topics never run on the Worker's API
+-- calls: claim_runs always skips them. They run only on Håkon's own machine
+-- (the local `claude` CLI, `pnpm team:run`), and only while
+-- settings.team_runner_on is set; while it is off they do not run at all.
+-- The local runner never holds a Supabase key. It calls the Worker's /team routes with TEAM_RUNNER_TOKEN, and
 -- the Worker calls the team_* functions below, which only touch the Scout
 -- team's public topics. Off by default.
 --
@@ -110,15 +111,6 @@ as $$
   select p_visibility = 'public' and p_owner = s.team_owner from public.settings s
 $$;
 
--- Whether the team runner, not the Worker, runs this interest now.
-create function public.on_team_runner(p_owner uuid, p_visibility text) returns boolean
-language sql stable security definer
-set search_path = ''
-as $$
-  select s.team_runner_on and public.is_team_topic(p_owner, p_visibility)
-  from public.settings s
-$$;
-
 -- ---------------------------------------------------------------------------
 -- The queue, split so the Worker and the team runner share it
 -- ---------------------------------------------------------------------------
@@ -156,7 +148,7 @@ as $$
   select d.interest_id, d.slot
   from public.due_interests(p_now) d
   join public.interests i on i.id = d.interest_id
-  where public.on_team_runner(i.owner_id, i.visibility) = p_team
+  where public.is_team_topic(i.owner_id, i.visibility) = p_team
   on conflict (interest_id) where status in ('queued', 'running') do nothing
 $$;
 
@@ -172,7 +164,7 @@ as $$
     from public.runs r
     join public.interests i on i.id = r.interest_id
     where r.status = 'queued' and r.scheduled_for <= p_now
-      and public.on_team_runner(i.owner_id, i.visibility) = p_team
+      and public.is_team_topic(i.owner_id, i.visibility) = p_team
     order by (i.visibility = 'public') desc, r.scheduled_for, r.created_at
     limit greatest(p_limit, 0)
     for update of r skip locked
@@ -187,7 +179,7 @@ as $$
   from claimed c join public.interests i on i.id = c.interest_id
 $$;
 
--- The Worker's tick, as before, minus the team runner's topics:
+-- The Worker's tick, as before, minus the Scout team's public topics (always):
 --   1. reap: running runs older than 10 minutes fail an attempt; queued runs
 --      of deleted or hidden interests fail;
 --   2. stop when the kill switch is on or today's spend is at the ceiling;
@@ -358,7 +350,7 @@ $$;
 -- ---------------------------------------------------------------------------
 
 revoke execute on function public.is_team_topic(uuid, text),
-  public.on_team_runner(uuid, text), public.due_interests(timestamptz),
+  public.due_interests(timestamptz),
   public.queue_due_runs(timestamptz, boolean),
   public.claim_queued(integer, timestamptz, boolean),
   public.team_claim_runs(integer, timestamptz), public.team_topics(timestamptz),
