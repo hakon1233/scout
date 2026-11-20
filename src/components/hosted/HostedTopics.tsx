@@ -10,7 +10,6 @@ import { useTopicPush } from "@/hooks/useTopicPush";
 import { formatDate } from "@/lib/format-date";
 import {
   HostedError,
-  shareUrl,
   type Cadence,
   type HostedData,
   type HostedHome as Home,
@@ -20,6 +19,7 @@ import {
 import { planFor } from "@/lib/plans";
 import { HostedChat } from "./HostedChat";
 import { hostedMenu } from "./HostedHome";
+import { SharingSection } from "./SharingSection";
 import { useHostedHome } from "./useHostedHome";
 
 const UNDO_MS = 15_000;
@@ -108,6 +108,7 @@ export function HostedTopics() {
           reload={reload}
           onSignedOut={signedOut}
           push={push}
+          onEdit={() => setChatOpen(true)}
         />
       )}
     </AppShell>
@@ -122,12 +123,14 @@ function TopicLists({
   reload,
   onSignedOut,
   push,
+  onEdit,
 }: {
   data: HostedData;
   home: Home;
   reload: () => Promise<void>;
   onSignedOut: (err: unknown) => boolean;
   push: Push;
+  onEdit: () => void;
 }) {
   const [notes, setNotes] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState<Record<string, boolean>>({});
@@ -179,12 +182,21 @@ function TopicLists({
       busy={busy[i.id] ?? false}
       note={notes[i.id] ?? null}
       push={push}
-      onCadence={(c) => act(i.id, () => data.setCadence(i.id, c))}
-      onVisibility={(v) =>
-        act(i.id, async () => {
-          await data.setVisibility(i.id, v);
-        })
+      sharing={
+        <SharingSection
+          data={data}
+          interest={i}
+          publicUsed={publicCount}
+          publicLimit={plan.publicTopics}
+          onChanged={reload}
+          onSignedOut={onSignedOut}
+          onEdit={() => {
+            onEdit();
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
       }
+      onCadence={(c) => act(i.id, () => data.setCadence(i.id, c))}
       onRunNow={() => act(i.id, () => data.runNow(i.id))}
       onRemove={() => remove(i)}
     />
@@ -292,8 +304,8 @@ function TopicRow({
   busy,
   note,
   push,
+  sharing,
   onCadence,
-  onVisibility,
   onRunNow,
   onRemove,
 }: {
@@ -301,8 +313,8 @@ function TopicRow({
   busy: boolean;
   note: string | null;
   push: Push;
+  sharing: React.ReactNode;
   onCadence: (c: Cadence) => void;
-  onVisibility: (v: Visibility) => void;
   onRunNow: () => void;
   onRemove: () => void;
 }) {
@@ -381,25 +393,6 @@ function TopicRow({
                   </option>
                 ))}
               </select>
-              <label className="sr-only" htmlFor={`sharing-${i.id}`}>
-                Privacy for {i.topic}
-              </label>
-              <select
-                id={`sharing-${i.id}`}
-                value={i.visibility}
-                disabled={busy}
-                onChange={(e) => onVisibility(e.target.value as Visibility)}
-                className={SELECT}
-              >
-                {(Object.keys(PRIVACY) as Visibility[])
-                  // Only Scout's server publishes; a public topic shows it.
-                  .filter((v) => v !== "public" || i.visibility === "public")
-                  .map((v) => (
-                    <option key={v} value={v}>
-                      {PRIVACY[v]}
-                    </option>
-                  ))}
-              </select>
               <Button
                 variant="secondary"
                 size="sm"
@@ -410,7 +403,6 @@ function TopicRow({
               >
                 {i.run ? "Running" : "Run now"}
               </Button>
-              {i.shareSlug && <CopyLink slug={i.shareSlug} />}
             </>
           )}
           <Button variant="ghost" size="sm" disabled={busy} onClick={onRemove}>
@@ -418,35 +410,12 @@ function TopicRow({
           </Button>
         </div>
       )}
+      {open && !i.following && <div className="pb-3 pr-2">{sharing}</div>}
       {note && (
         <p role="alert" className="pb-2 text-body-sm text-danger">
           {note}
         </p>
       )}
     </li>
-  );
-}
-
-function CopyLink({ slug }: { slug: string }) {
-  const [copied, setCopied] = React.useState(false);
-  React.useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2_000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="min-w-24"
-      onClick={() =>
-        navigator.clipboard
-          .writeText(shareUrl(slug))
-          .then(() => setCopied(true))
-          .catch(() => window.prompt("Copy this link", shareUrl(slug)))
-      }
-    >
-      <span aria-live="polite">{copied ? "Copied" : "Copy link"}</span>
-    </Button>
   );
 }

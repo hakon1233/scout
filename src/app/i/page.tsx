@@ -7,11 +7,13 @@ import { ScoutWordmark } from "@/components/shell/AppShell";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { BriefLayout } from "@/components/BriefLayout";
 import { PushBell } from "@/components/PushBell";
+import { ReportLink } from "@/components/ReportSheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button, buttonClasses } from "@/components/ui";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { hostedAuth } from "@/lib/auth";
 import { HostedError, hostedData, type SharedInterest } from "@/lib/hosted";
+import { startUsage } from "@/lib/usage";
 
 // A share link's page: `/i/?s=<slug>`. Anyone can read the interest's latest
 // brief, signed in or out; a signed-in reader can follow it. The site is a
@@ -48,6 +50,13 @@ function Shared() {
   const [followError, setFollowError] = React.useState<string | null>(null);
   // The topic's bell, for a signed-in reader who owns or follows it.
   const push = useTopicPush(signedIn ? data : null);
+  const ready = view.kind === "ready" ? view.interest : null;
+
+  // A signed-in reader's reading here counts toward their picks too.
+  React.useEffect(() => {
+    if (data && signedIn && ready)
+      startUsage(data, [{ id: ready.id, topic: ready.topic }]);
+  }, [data, signedIn, ready]);
 
   React.useEffect(() => {
     if (!data) return;
@@ -176,6 +185,16 @@ function Shared() {
           </section>
         )}
       </div>
+      {signedIn && !i.owned && (
+        <footer className="border-t border-border-default pt-4">
+          <ReportLink
+            data={data}
+            interestId={i.id}
+            topic={i.topic}
+            label="Report this topic"
+          />
+        </footer>
+      )}
     </>
   );
 }

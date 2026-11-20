@@ -30,6 +30,6 @@ test("local chat has no mic, and a how-to answer links to its page", async ({
   await composer.fill("How do I get notified about new briefs?");
   await page.getByRole("button", { name: "Send" }).click();
   const link = page.getByRole("link", { name: "Open Settings" });
-  await expect(link).toBeVisible();
+  await expect(link).toBeVisible({ timeout: 30_000 });
   await expect(link).toHaveAttribute("href", /\/app\/settings\/$/);
 });

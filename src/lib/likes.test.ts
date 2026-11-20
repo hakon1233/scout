@@ -4,11 +4,14 @@ import test from "node:test";
 import {
   followLikes,
   isLiked,
+  isSaved,
   type LikedStory,
   likeKey,
   type LikesSync,
   setLikesUser,
+  setSavesUser,
   toggleLike,
+  toggleSave,
 } from "./likes";
 
 // The likes store: likes persist, a swallowed persist still holds for the
@@ -307,6 +310,27 @@ test("following the session, sign-out and an account switch drop the previous re
   } finally {
     stop();
     await setLikesUser(null);
+    restore();
+  }
+});
+
+test("saves are a store of their own: saving doesn't like, and each goes to its own sync", async () => {
+  const { backing, restore } = installStorage({ failWrites: false });
+  const url = "https://example.com/read-later";
+  const likesDb = memorySync();
+  const savesDb = memorySync();
+  try {
+    await setLikesUser("reader-s", likesDb.sync);
+    await setSavesUser("reader-s", savesDb.sync);
+    assert.equal(toggleSave(story(url)), true);
+    assert.equal(isSaved(likeKey(url)), true);
+    assert.equal(isLiked(likeKey(url)), false);
+    assert.deepEqual(savesDb.sent, [`add ${likeKey(url)}`]);
+    assert.deepEqual(likesDb.sent, []);
+    assert.ok(backing.get("scout.saves.v1:reader-s")?.includes(likeKey(url)));
+  } finally {
+    await setLikesUser(null);
+    await setSavesUser(null);
     restore();
   }
 });

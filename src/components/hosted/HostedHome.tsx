@@ -7,6 +7,7 @@ import { FeedNotices, type NoticeView } from "@/components/FeedNotices";
 import { AppShell } from "@/components/shell/AppShell";
 import { ContactEmail } from "@/components/shell/DraftDocument";
 import { TopicFilter } from "@/components/TopicFilter";
+import { startUsage } from "@/lib/usage";
 import { Banner, Button } from "@/components/ui";
 import {
   dismissLocally,
@@ -133,6 +134,11 @@ function Feed({
   );
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  // Reading events for picks; only this signed-in hosted feed records them.
+  React.useEffect(
+    () => startUsage(data, home.interests),
+    [data, home.interests],
+  );
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage read on mount
     setDismissed(readDismissed());
