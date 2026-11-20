@@ -15,7 +15,9 @@ import {
 import { responseCostUsd, type ClaudeClient } from "@scout/research";
 
 export const PICKS_MODEL = HAIKU_MODEL;
-const MAX_OUTPUT_TOKENS = 1024;
+// Haiku 5.5 thinks by default (even at effort low), and its thinking counts
+// against max_tokens: leave it room before the answer (about 300 tokens).
+const MAX_OUTPUT_TOKENS = 4096;
 const PICKS_TIMEOUT_MS = 30_000;
 
 export type PicksJob = {
@@ -68,9 +70,17 @@ export function createPicks(deps: { claude: ClaudeClient; store: PicksStore }) {
       },
       AbortSignal.timeout(PICKS_TIMEOUT_MS),
     );
+    const costUsd = responseCostUsd(response.usage);
+    // A cut-off reply says nothing about the reader: a failed call, not "none fit".
+    if (response.stop_reason === "max_tokens") {
+      return {
+        picks: null,
+        costUsd,
+        error: "the reply was cut off at max_tokens",
+      };
+    }
     const text =
-      response.stop_reason !== "refusal" &&
-      response.stop_reason !== "max_tokens"
+      response.stop_reason !== "refusal"
         ? response.content
             .flatMap((b) =>
               b.type === "text" && typeof b.text === "string" ? [b.text] : [],
@@ -79,7 +89,8 @@ export function createPicks(deps: { claude: ClaudeClient; store: PicksStore }) {
         : "";
     return {
       picks: parsePicks(text, input.candidates, input),
-      costUsd: responseCostUsd(response.usage),
+      costUsd,
+      error: null,
     };
   }
 
@@ -90,10 +101,11 @@ export function createPicks(deps: { claude: ClaudeClient; store: PicksStore }) {
       result.stored++;
       return;
     }
-    let picks: Pick[];
+    let picks: Pick[] | null;
     let costUsd: number;
+    let error: string | null;
     try {
-      ({ picks, costUsd } = await pick(job.input));
+      ({ picks, costUsd, error } = await pick(job.input));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[picks] call failed:", message);
@@ -101,9 +113,14 @@ export function createPicks(deps: { claude: ClaudeClient; store: PicksStore }) {
       result.failed++;
       return;
     }
-    await store.finish(job, picks, costUsd, null);
-    result.stored++;
+    await store.finish(job, picks, costUsd, error);
     result.costUsd += costUsd;
+    if (picks) {
+      result.stored++;
+    } else {
+      console.error("[picks] call failed:", error);
+      result.failed++;
+    }
   }
 
   return {

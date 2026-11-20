@@ -37,7 +37,7 @@ export type PicksInput = {
 export type Pick = { interestId: string; reason: string };
 
 /** The version of this prompt and filter; see the note at the top. */
-export const PICKS_VERSION = 2;
+export const PICKS_VERSION = 3;
 
 /** What a reason may cite about the reader. */
 export type PicksReader = {

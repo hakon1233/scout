@@ -152,6 +152,31 @@ test("a failed call keeps the cached picks; a refusal stores none", async () => 
   assert.ok(failed.error);
 });
 
+test("a reply cut off at max_tokens keeps the cached picks, with its cost and an error", async () => {
+  // Haiku thinks by default and the thinking counts against max_tokens: a
+  // cut-off reply says nothing about the reader, so it must not store "none".
+  const cut: MessagesResponse = {
+    content: [{ type: "thinking", thinking: "" }],
+    stop_reason: "max_tokens",
+    usage: { input_tokens: 4500, output_tokens: 4096 },
+  };
+  const claude = recordedClient([cut]);
+  const { store, finished } = memoryStore([job("pia")]);
+  const result = await createPicks({ claude, store }).refresh(3);
+  assert.equal(result.failed, 1);
+  assert.equal(result.stored, 0);
+  assert.equal(finished[0].picks, null);
+  assert.match(finished[0].error ?? "", /max_tokens/);
+  assert.ok(finished[0].costUsd > 0);
+});
+
+test("the call leaves room for thinking before the answer", async () => {
+  const claude = recordedClient([answer({ picks: [] })]);
+  const { store } = memoryStore([job("pia")]);
+  await createPicks({ claude, store }).refresh(3);
+  assert.ok(claude.requests[0].max_tokens >= 4096);
+});
+
 test("refresh claims at most the batch, and nothing for a zero batch", async () => {
   const claude = recordedClient([]);
   const { store, limits } = memoryStore([]);
