@@ -13,7 +13,8 @@
 // matching (case / punctuation / whitespace insensitive), and distinguishes
 // three honest states per topic:
 //   - "covered": a matching section exists and carries real content (a citation).
-//   - "empty":   a matching section exists but the model said `_no fresh news_`
+//   - "empty":   a matching section exists but the model said `No change since …`,
+//                `No news yet.` or the older `_no fresh news_`
 //                (or produced no citation) — a genuine "nothing today", not a bug.
 //   - "missing": no matching section at all — the model dropped/merged the topic.
 //                This is the only state that warrants an automatic retry.
@@ -89,7 +90,11 @@ export function computeCoverage(
       .some((line) =>
         /\]\(https?:\/\//.test(line.replace(/!\[[^\]]*\]\([^)]*\)/g, "")),
       );
-    const noNews = /_+\s*no fresh news\s*_+/i.test(body);
+    // The honest "nothing" lines: "No change since <date>." / "No news yet."
+    // (relevance-skills.ts), and the older "_no fresh news_".
+    const noNews =
+      /_+\s*no fresh news\s*_+/i.test(body) ||
+      /^\s*_?\s*No (?:change since|news yet)\b/im.test(body);
     if (noNews || !hasCitation) return { topic, status: "empty" as const };
     return { topic, status: "covered" as const };
   });
@@ -186,18 +191,6 @@ export function sortSectionStoriesNewestFirst(body: string): string {
 // Ordinary news older than this many days is dropped. "~30 days" in the search
 // rules; we treat strictly-older-than-30-days as stale.
 const FRESHNESS_CUTOFF_DAYS = 30;
-
-// Words in an interest's topic or its intent doc that explicitly opt the topic
-// into background / evergreen / historical content. Such a topic is EXEMPT from
-// the freshness cutoff — the reader asked for older material on purpose.
-const EVERGREEN_RE =
-  /\b(evergreen|background|historical|history|retrospective|timeline|explainer|primer|deep[ -]dive|long[ -]read)\b/i;
-
-// Does this interest explicitly ask for background / evergreen / historical
-// context? Checked against BOTH the topic wording and its intent doc.
-export function interestWantsEvergreen(topic: string, doc: string): boolean {
-  return EVERGREEN_RE.test(topic) || EVERGREEN_RE.test(doc);
-}
 
 // A story is one dated item (article, post, release). A story whose every
 // citation is a site's root (`https://host/`, no path or query) cites a

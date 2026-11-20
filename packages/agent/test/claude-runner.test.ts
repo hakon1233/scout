@@ -83,6 +83,8 @@ test("a web-research run can use WebSearch and WebFetch and nothing else", async
     "WebSearch,WebFetch",
     "--allowed-tools",
     "WebSearch,WebFetch",
+    "--max-turns",
+    "25",
     "--strict-mcp-config",
     "--safe-mode",
     "--setting-sources",

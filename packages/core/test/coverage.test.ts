@@ -10,7 +10,6 @@ import {
   extractTopicSection,
   sortSectionStoriesNewestFirst,
   enforceBriefFreshness,
-  interestWantsEvergreen,
 } from "../src/coverage.ts";
 
 test("normalizeTopic collapses casing, punctuation and whitespace", () => {
@@ -289,13 +288,7 @@ test("evergreen/background interests keep older items", () => {
     "  [example.com — Old](https://example.com/old)",
     "",
   ].join("\n");
-  // The interest doc explicitly opts into historical/background context.
-  assert.ok(
-    interestWantsEvergreen(
-      "history of computing",
-      "I want background and historical context on this topic.",
-    ),
-  );
+  // The interest's settings mark it evergreen.
   const evergreenKeys = new Set([normalizeTopic("history of computing")]);
   const out = enforceBriefFreshness(brief, { now: NOW, evergreenKeys });
   // Untouched: the old item and its citation remain.
@@ -376,12 +369,6 @@ test("per-topic no-news state recorded when everything drops", () => {
   ]);
 });
 
-test("interestWantsEvergreen matches topic wording too, not just the doc", () => {
-  assert.ok(interestWantsEvergreen("WW2 history", ""));
-  assert.ok(interestWantsEvergreen("ai explainer", ""));
-  assert.ok(!interestWantsEvergreen("ai", "latest model releases this week"));
-});
-
 test("a story citing a site root (homepage) is dropped, in every section", () => {
   const brief = [
     "# Your brief",
@@ -414,4 +401,18 @@ test("a story citing a site root (homepage) is dropped, in every section", () =>
     "evergreen homepage dropped",
   );
   assert.ok(out.includes("https://example.net/piece"));
+});
+
+test("computeCoverage reads the relevance bar's nothing-new lines as empty", () => {
+  const md = [
+    "## Fusion",
+    "No change since 2026-09-12.",
+    "",
+    "## Sea ice",
+    "_No news yet._",
+  ].join("\n");
+  assert.deepEqual(computeCoverage(["fusion", "sea ice"], md), [
+    { topic: "fusion", status: "empty" },
+    { topic: "sea ice", status: "empty" },
+  ]);
 });

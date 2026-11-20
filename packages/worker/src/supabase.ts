@@ -1,6 +1,7 @@
 // The Supabase side of the run queue, over PostgREST with plain fetch (no
 // supabase-js: less to bundle and less CPU per tick). Host-neutral.
 
+import { briefSettingsFromRow, type BriefSettingsRow } from "@scout/core";
 import type { PushStore, PushTarget } from "./push.ts";
 import type { ClaimedRun, RunOutcome, RunQueue } from "./run-due.ts";
 
@@ -17,22 +18,31 @@ export function supabaseQueue(opts: {
   const auth = { apikey: opts.serviceKey, bearer: opts.serviceKey };
   return {
     async claim(limit) {
-      const rows = (await rpc(
-        "claim_runs",
-        { p_limit: limit },
-        auth,
-      )) as Array<{
-        run_id: string;
-        topic: string;
-        doc: string;
-        searches_per_run: number;
-      }>;
+      const rows = (await rpc("claim_runs", { p_limit: limit }, auth)) as Array<
+        Partial<BriefSettingsRow> & {
+          run_id: string;
+          topic: string;
+          doc: string;
+          searches_per_run: number;
+          prior?: Array<{ date: string; section_md: string }> | null;
+          cadence?: string | null;
+          last_story_at?: string | null;
+        }
+      >;
       return rows.map(
         (r): ClaimedRun => ({
           runId: r.run_id,
           topic: r.topic,
           doc: r.doc,
           searchesPerRun: r.searches_per_run,
+          settings: briefSettingsFromRow(r),
+          prior: (r.prior ?? []).map((p) => ({
+            date: p.date,
+            markdown: p.section_md,
+          })),
+          cadence:
+            r.cadence === "daily" || r.cadence === "weekly" ? r.cadence : null,
+          lastStoryAt: r.last_story_at ?? null,
         }),
       );
     },
@@ -46,6 +56,7 @@ export function supabaseQueue(opts: {
           p_searches: outcome.searches,
           p_cost_usd: outcome.costUsd,
           p_error: outcome.error ?? null,
+          p_retry: outcome.retry ?? true,
         },
         auth,
       );

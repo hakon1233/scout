@@ -23,15 +23,37 @@ function check(name: string, pass: boolean, detail?: string): Check {
   return pass ? { name, pass } : { name, pass, detail };
 }
 
-// One research session's output for one topic.
+// The one line a section with no story carries (relevance-skills.ts):
+// "No change since YYYY-MM-DD." or "No news yet.", optionally in italics, or
+// the intent doc's own "No change…" text.
+const EMPTY_LINE_RE = /^\s*_?\s*No (?:change|news)\b/im;
+const NO_CHANGE_SINCE_RE = /No change since (\d{4}-\d{2}-\d{2})/i;
+
+// One research session's output for one topic. `lastStory` is the date of the
+// topic's last posted story; `past` the titles and URLs already posted.
 export function checkResearchOutput(
   raw: string,
-  opts: { topic: string; today: string },
+  opts: {
+    topic: string;
+    today: string;
+    lastStory?: string;
+    past?: string[];
+  },
 ): Check[] {
   const firstLine = raw.trim().split("\n")[0] ?? "";
   const { topics, entries } = parseBrief(raw);
   const stories = entries.flatMap((e) => (e.kind === "story" ? [e] : []));
-  const noFreshNews = /_+\s*no fresh news\s*_+/i.test(raw);
+  const emptyLine = EMPTY_LINE_RE.test(raw);
+  const noChangeDate = NO_CHANGE_SINCE_RE.exec(raw)?.[1] ?? null;
+  const noNewsYet = /No news yet\./i.test(raw);
+  const past = new Set((opts.past ?? []).map((p) => p.toLowerCase()));
+  const repeats = stories.filter((s) =>
+    s.links.some(
+      (l) =>
+        past.has(l.url.toLowerCase()) ||
+        past.has((l.label.split(" — ")[1] ?? l.label).toLowerCase()),
+    ),
+  );
   const dates = stories.map((s) => DATE_MARKER_RE.exec(s.raw)?.[1] ?? null);
   const dated = dates.filter((d): d is string => d !== null && d !== "undated");
   const todayMs = Date.parse(opts.today);
@@ -52,9 +74,32 @@ export function checkResearchOutput(
     ),
     check(
       "story-count",
-      (stories.length >= 2 && stories.length <= 4) ||
-        (stories.length === 0 && noFreshNews),
+      (stories.length >= 1 && stories.length <= 4) ||
+        (stories.length === 0 && emptyLine),
       `${stories.length} stories`,
+    ),
+    check(
+      "no-change-line",
+      (noChangeDate === null || noChangeDate === opts.lastStory) &&
+        (!noNewsYet || !opts.lastStory),
+      noChangeDate
+        ? `says ${noChangeDate}, last story ${opts.lastStory ?? "none"}`
+        : "says No news yet. but the topic has posted before",
+    ),
+    check(
+      "novel",
+      repeats.length === 0,
+      `already posted: ${repeats.map((s) => s.links[0]?.url).join(", ")}`,
+    ),
+    check(
+      "after-last-story",
+      !opts.lastStory || dated.every((d) => d >= opts.lastStory!),
+      `before ${opts.lastStory}: ${dated.filter((d) => d < (opts.lastStory ?? "")).join(", ")}`,
+    ),
+    check(
+      "no-padding-banner",
+      !/showing older items/i.test(raw),
+      'the old "showing older items" banner pads a quiet topic',
     ),
     check(
       "every-story-dated",
@@ -79,16 +124,17 @@ export function checkResearchOutput(
     ),
     check(
       "in-depth-body",
-      stories.every(
-        (s) => (s.body?.split("\n\n").filter(Boolean).length ?? 0) >= 4,
-      ),
-      "every story needs a lead plus at least 3 paragraphs",
+      stories.every((s) => {
+        const n = s.body?.split("\n\n").filter(Boolean).length ?? 0;
+        return n >= 1 && n <= 3;
+      }),
+      "every story needs a body of 1-3 paragraphs (the lead first)",
     ),
     check(
       "source-images-https",
       stories.every((s) => s.image === null || s.image.startsWith("https://")),
     ),
-    check("length", words <= 950, `${words} words`),
+    check("length", words <= 700, `${words} words`),
   ];
 }
 

@@ -9,7 +9,6 @@ import {
   computeCoverage,
   enforceBriefFreshness,
   extractTopicSection,
-  interestWantsEvergreen,
   normalizeTopic,
   stripBriefPreamble,
   type ResearchInterest,
@@ -25,7 +24,7 @@ import { responseCostUsd } from "./pricing.ts";
 
 export const RESEARCH_MODEL = "claude-haiku-5-5";
 
-// Room for adaptive thinking plus a ~950-word section.
+// Room for adaptive thinking plus a long (~1100-word) section.
 const MAX_TOKENS = 16_000;
 // Each fetched page is cut to about this many tokens. Every step of the
 // server-tool loop re-reads earlier tool results, so long pages pushed real
@@ -41,6 +40,11 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 // server-side steps, and max_uses caps the tool calls, so a healthy run needs
 // at most one or two.
 const MAX_CONTINUATIONS = 3;
+// A run stops before its next continuation once it has spent this much. A
+// healthy run costs a few cents (five searches plus cached prompt reads).
+export const DEFAULT_MAX_COST_USD = 0.25;
+// Tool error codes that mean a limit was hit: running again won't help.
+const LIMIT_TOOL_ERRORS = new Set(["max_uses_exceeded", "too_many_requests"]);
 
 export type ResearchDeps = {
   claude: ClaudeClient;
@@ -48,6 +52,7 @@ export type ResearchDeps = {
   maxSearches?: number; // the plan's searches_per_run
   maxFetches?: number;
   timeoutMs?: number;
+  maxCostUsd?: number; // the per-run spend cap
 };
 
 export type ResearchUsage = {
@@ -67,19 +72,31 @@ export type ResearchResult = {
   coverage: TopicCoverage;
   // What the call cost, failed or not, so a ledger records every dollar.
   usage: ResearchUsage;
-  // Why the section is missing. Only set when sectionMd is null.
+  // Why the section is missing, and whether one more attempt could help
+  // (a 5xx, a dropped connection, a bad answer) or not (a 4xx, a rate or
+  // spend limit, a timeout, a refusal). Only set when sectionMd is null.
   error?: string;
+  retryable?: boolean;
 };
 
 // Basic tool versions: no dynamic filtering, so max_uses caps every search
 // and fetch across pause_turn continuations. The _20260209 versions filter
 // results in code first, but their code-run searches escape max_uses.
-function webTools(maxSearches: number, maxFetches: number): ContentBlock[] {
+// A search locale with a region ("nb-NO") also tells web_search where the
+// reader is, so local results rank first. No allowed_domains: the intent doc
+// steers sources, the tool never fences them.
+function webTools(
+  maxSearches: number,
+  maxFetches: number,
+  searchLocale: string | null,
+): ContentBlock[] {
+  const country = searchLocale?.split("-")[1];
   return [
     {
       type: "web_search_20250305",
       name: API_RESEARCH_TOOLS.search,
       max_uses: maxSearches,
+      ...(country ? { user_location: { type: "approximate", country } } : {}),
     },
     {
       type: "web_fetch_20250910",
@@ -100,11 +117,13 @@ export async function researchInterest(
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const signal = AbortSignal.timeout(timeoutMs);
   const usage = emptyUsage();
-  const missing = (error: string): ResearchResult => ({
+  const maxCostUsd = deps.maxCostUsd ?? DEFAULT_MAX_COST_USD;
+  const missing = (error: string, retryable: boolean): ResearchResult => ({
     sectionMd: null,
     coverage: { topic: interest.topic, status: "missing" },
     usage,
     error,
+    retryable,
   });
 
   // The prompt is the cache breakpoint, so each pause_turn continuation
@@ -122,6 +141,7 @@ export async function researchInterest(
   const tools = webTools(
     deps.maxSearches ?? DEFAULT_MAX_SEARCHES,
     deps.maxFetches ?? DEFAULT_MAX_FETCHES,
+    interest.settings?.searchLocale ?? null,
   );
 
   // Claude's turn so far, across continuations.
@@ -140,38 +160,58 @@ export async function researchInterest(
       res = await deps.claude.createMessage(body, signal);
     } catch (err) {
       if (signal.aborted)
-        return missing(`timed out after ${Math.round(timeoutMs / 1000)} s`);
-      return missing(err instanceof Error ? err.message : String(err));
+        return missing(
+          `timed out after ${Math.round(timeoutMs / 1000)} s`,
+          false,
+        );
+      // An HTTP error carries its status: only a 5xx (not 529, overloaded)
+      // is worth one more go. No status: the connection broke.
+      const status = (err as { status?: unknown }).status;
+      return missing(
+        err instanceof Error ? err.message : String(err),
+        typeof status !== "number" || (status >= 500 && status !== 529),
+      );
     }
     addUsage(usage, res);
     turn.push(...res.content);
 
     if (res.stop_reason === "end_turn") break;
     if (res.stop_reason === "pause_turn") {
+      if (usage.costUsd >= maxCostUsd)
+        return missing(
+          `stopped at the spend cap of ${maxCostUsd.toFixed(2)} USD`,
+          false,
+        );
       if (request < MAX_CONTINUATIONS) continue;
-      return missing(`still paused after ${MAX_CONTINUATIONS} continuations`);
+      return missing(
+        `still paused after ${MAX_CONTINUATIONS} continuations`,
+        false,
+      );
     }
-    if (res.stop_reason === "refusal") return missing("Claude refused");
+    if (res.stop_reason === "refusal") return missing("Claude refused", false);
     if (res.stop_reason === "max_tokens")
-      return missing("the section was cut off at max_tokens");
-    return missing(`unexpected stop reason: ${res.stop_reason}`);
+      return missing("the section was cut off at max_tokens", false);
+    return missing(`unexpected stop reason: ${res.stop_reason}`, true);
   }
 
   // Tool errors come back inside a 200. Claude reads them and carries on, so
   // they only fail the session when no search or fetch worked at all: its
-  // "_no fresh news_" would otherwise read as an honest empty topic.
+  // "No change since …" line would otherwise read as an honest empty topic.
   const toolErrors = turnToolErrors(turn);
   if (toolErrors.length && !usage.webSearches && !usage.webFetches)
-    return missing(`web tools failed: ${toolErrors.join(", ")}`);
+    return missing(
+      `web tools failed: ${toolErrors.join(", ")}`,
+      !toolErrors.some((code) => LIMIT_TOOL_ERRORS.has(code)),
+    );
 
   const section = extractTopicSection(
     stripBriefPreamble(finalText(turn)),
     interest.topic,
   );
-  if (!section) return missing("Claude returned no section");
+  if (!section) return missing("Claude returned no section", true);
   const sectionMd = enforceBriefFreshness(bulletDatedStories(section), {
     now,
-    evergreenKeys: interestWantsEvergreen(interest.topic, interest.doc)
+    evergreenKeys: interest.settings?.evergreen
       ? new Set([normalizeTopic(interest.topic)])
       : new Set(),
   });

@@ -585,3 +585,54 @@ test("a device the server would not save is unsubscribed again", async () => {
   await assert.rejects(data(fetch, true, device).pushEnable(), HostedError);
   assert.equal(state.sub, null);
 });
+
+test("brief settings are read with the interests and changed field by field", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/interests": {
+      body: [
+        {
+          ...ownRow("i-tax", "Norwegian tax rules", "weekly"),
+          brief_length: "short",
+          story_count: 2,
+          stories_relevant_only: false,
+          evergreen: true,
+          search_locale: "nb-NO",
+          brief_language: "en",
+        },
+      ],
+    },
+    "/rest/v1/follows": { body: [] },
+    "/rest/v1/rpc/allowance": { body: ALLOWANCE },
+    "/rest/v1/profiles": { body: [] },
+    "/rest/v1/notifications": { body: [] },
+    "/rest/v1/runs": { body: [] },
+  });
+  const home = await data(fetch).home();
+  assert.deepEqual(home.interests[0].settings, {
+    length: "short",
+    stories: 2,
+    evergreen: true,
+    searchLocale: "nb-NO",
+    briefLanguage: "en",
+  });
+  assert.match(calls[0].url, /brief_length,story_count/);
+
+  calls.length = 0;
+  await data(fetch).setBriefSettings("i-tax", {
+    stories: "relevant",
+    length: "long",
+  });
+  assert.equal(calls[0].method, "PATCH");
+  assert.match(calls[0].url, /interests\?id=eq\.i-tax$/);
+  assert.deepEqual(calls[0].body, {
+    brief_length: "long",
+    stories_relevant_only: true,
+  });
+
+  calls.length = 0;
+  await assert.rejects(
+    data(fetch).setBriefSettings("i-tax", { stories: 9 }),
+    /stories must be 1 to 4/,
+  );
+  assert.equal(calls.length, 0, "a bad value never reaches Supabase");
+});

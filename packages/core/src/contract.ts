@@ -16,6 +16,7 @@ export const PATHS = {
   chatStop: "/v0/chat/stop",
   chatConfirmDelete: "/v0/chat/confirm-delete",
   chatConfirmRewrite: "/v0/chat/confirm-rewrite",
+  interestSettings: "/v0/interest-settings",
 } as const;
 
 // Something the reader wants news about. `id` is stable and opaque (it names
@@ -24,6 +25,31 @@ export const PATHS = {
 export type Interest = {
   id: string;
   topic: string;
+};
+
+// How one interest's section reads (brief-settings.ts reads and checks it).
+//   length       — short: lead paragraph only; normal: 1-3 paragraphs per
+//                  story; long: 3-5.
+//   stories      — at most this many stories (1..MAX_STORIES), or "relevant":
+//                  only the stories that clearly match the intent doc.
+//   evergreen    — older background is welcome: no 30-day cutoff.
+//   searchLocale — BCP 47 tag of where to search ("nb-NO", "de"); null: anywhere.
+//   briefLanguage — language to write in ("en", "nb"); null: the intent doc's.
+export type BriefLength = "short" | "normal" | "long";
+export type BriefSettings = {
+  length: BriefLength;
+  stories: number | "relevant";
+  evergreen: boolean;
+  searchLocale: string | null;
+  briefLanguage: string | null;
+};
+
+// PUT /v0/interest-settings: change one interest's brief settings. Fields
+// left out keep their stored value. The answer is the same shape with the
+// whole settings as stored. GET /v0/interests carries each one's `settings`.
+export type InterestSettingsBody = {
+  interestId: string;
+  settings: Partial<BriefSettings>;
 };
 
 // Per-topic outcome of a run:

@@ -49,9 +49,8 @@ FRESHNESS ENFORCED, NOT JUST REQUESTED:
 - Ordinary news older than ~30 days is dropped from your brief in code before it's
   saved — not merely discouraged in the research instructions — so a months-old
   story can't slip through even if a research session surfaces one.
-- Interests that explicitly ask for background, evergreen, historical, or
-  explainer-style context are exempt: there Scout keeps the older material you
-  asked for on purpose.
+- Topics you mark evergreen in their brief settings are exempt: there Scout
+  keeps the older material you asked for on purpose.
 - If enforcing freshness empties a topic, it's shown honestly as "nothing fresh"
   rather than padded with stale items.
 

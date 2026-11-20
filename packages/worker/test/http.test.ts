@@ -138,7 +138,23 @@ test("CORS allows each origin in a comma-separated list, and only those", async 
 
 test("the queue adapter calls claim_runs and finish_run with the service key", async () => {
   const claim = stubFetch(200, [
-    { run_id: "run-1", topic: "AI policy", doc: "EU", searches_per_run: 5 },
+    {
+      run_id: "run-1",
+      topic: "AI policy",
+      doc: "EU",
+      searches_per_run: 5,
+      brief_length: "short",
+      story_count: 2,
+      stories_relevant_only: false,
+      evergreen: false,
+      search_locale: "nb-NO",
+      brief_language: null,
+      prior: [
+        { date: "2026-11-19T07:00:00+00:00", section_md: "## AI policy" },
+      ],
+      cadence: "weekly",
+      last_story_at: "2026-11-12T07:00:00+00:00",
+    },
   ]);
   const queue = supabaseQueue({
     url: SUPABASE,
@@ -146,7 +162,22 @@ test("the queue adapter calls claim_runs and finish_run with the service key", a
     fetch: claim.fetch,
   });
   assert.deepEqual(await queue.claim(2), [
-    { runId: "run-1", topic: "AI policy", doc: "EU", searchesPerRun: 5 },
+    {
+      runId: "run-1",
+      topic: "AI policy",
+      doc: "EU",
+      searchesPerRun: 5,
+      settings: {
+        length: "short",
+        stories: 2,
+        evergreen: false,
+        searchLocale: "nb-NO",
+        briefLanguage: null,
+      },
+      prior: [{ date: "2026-11-19T07:00:00+00:00", markdown: "## AI policy" }],
+      cadence: "weekly",
+      lastStoryAt: "2026-11-12T07:00:00+00:00",
+    },
   ]);
   assert.equal(claim.calls[0].url, `${SUPABASE}/rest/v1/rpc/claim_runs`);
   assert.equal(claim.calls[0].headers.authorization, "Bearer service-key");
@@ -163,6 +194,7 @@ test("the queue adapter calls claim_runs and finish_run with the service key", a
     searches: 1,
     costUsd: 0.012,
     error: "timed out after 300 s",
+    retry: false,
   });
   assert.deepEqual(finish.calls[0].body, {
     p_run: "run-1",
@@ -171,6 +203,7 @@ test("the queue adapter calls claim_runs and finish_run with the service key", a
     p_searches: 1,
     p_cost_usd: 0.012,
     p_error: "timed out after 300 s",
+    p_retry: false,
   });
 
   const down = stubFetch(500, { message: "boom" });

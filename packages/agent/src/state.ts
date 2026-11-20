@@ -6,7 +6,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { Brief, ChatTurn, Interest, ScheduleRunStatus } from "#core";
+import type {
+  Brief,
+  BriefSettings,
+  ChatTurn,
+  Interest,
+  ScheduleRunStatus,
+} from "#core";
 import { CONFIG_DIR, atomicWriteFile, readJsonFile } from "./persistence.js";
 
 export const STATE_FILE = path.join(CONFIG_DIR, "state.json");
@@ -60,6 +66,9 @@ export type State = {
   // applied changes; the durable record of WHAT changed lives in the docs/state
   // the turn already wrote.
   last_chat?: ChatTurn;
+  // Per-interest brief settings, keyed by interest id; an interest with no
+  // entry uses DEFAULT_BRIEF_SETTINGS. Written by PUT /v0/interest-settings.
+  brief_settings?: Record<string, BriefSettings>;
 };
 
 // Mint a fresh, opaque, filename-safe interest id. Random (not derived from the

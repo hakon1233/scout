@@ -16,7 +16,23 @@ export type {
   TopicBasis,
   TopicCoverage,
 } from "./contract.ts";
+export type {
+  BriefLength,
+  BriefSettings,
+  InterestSettingsBody,
+} from "./contract.ts";
 export { PATHS } from "./contract.ts";
+export {
+  BRIEF_SETTINGS_COLUMNS,
+  DEFAULT_BRIEF_SETTINGS,
+  MAX_STORIES,
+  briefSettingsFromRow,
+  briefSettingsOrDefault,
+  briefSettingsToRow,
+  parseBriefSettings,
+  type BriefSettingsParse,
+  type BriefSettingsRow,
+} from "./brief-settings.ts";
 export { plural, quotaMessage } from "./quota.ts";
 export { SEARCH_SKILLS } from "./search-skills.ts";
 export { ASSEMBLY_SKILLS } from "./assembly-skills.ts";
@@ -24,16 +40,19 @@ export {
   API_RESEARCH_TOOLS,
   CLI_RESEARCH_TOOLS,
   buildResearchPrompt,
+  reportedStories,
   stripBriefPreamble,
+  type PriorBrief,
+  type ReportedBrief,
   type ResearchInterest,
   type ResearchTools,
 } from "./research-prompt.ts";
+export { RELEVANCE_SKILLS } from "./relevance-skills.ts";
 export {
   assembleBrief,
   computeCoverage,
   enforceBriefFreshness,
   extractTopicSection,
-  interestWantsEvergreen,
   mergeBriefSections,
   normalizeTopic,
 } from "./coverage.ts";

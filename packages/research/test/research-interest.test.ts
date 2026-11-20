@@ -12,6 +12,7 @@ import {
   type MessagesResponse,
 } from "../src/index.ts";
 import { checkResearchOutput } from "../../agent/eval/checks.ts";
+import { DEFAULT_BRIEF_SETTINGS } from "@scout/core";
 
 const NOW = new Date("2026-11-20T12:00:00Z");
 const INTEREST = {
@@ -135,7 +136,7 @@ test("stories written without their bullet still parse as dated stories", async 
   const loose = (date: string, n: number) =>
     `\`${date}\` — Story ${n} happened. [example.org — Story ${n}](https://example.org/${n})\n` +
     `![source image](https://example.org/${n}.jpg)\n\n` +
-    `> **Lead ${n}.**\n>\n> One.\n>\n> Two.\n>\n> Three.\n`;
+    `> **Lead ${n}.**\n>\n> One.\n>\n> Two.\n`;
   const result = await researchInterest(INTEREST, {
     claude: recordedClient([
       answer(
@@ -182,9 +183,12 @@ test("stale stories are dropped; a topic left with none is empty", async () => {
   assert.equal(result.coverage.status, "empty");
 });
 
-test("an interest that asks for background keeps older stories", async () => {
+test("an interest marked evergreen keeps older stories", async () => {
   const result = await researchInterest(
-    { ...INTEREST, doc: "Background and history of agent runtimes." },
+    {
+      ...INTEREST,
+      settings: { ...DEFAULT_BRIEF_SETTINGS, evergreen: true },
+    },
     {
       claude: recordedClient([
         answer(`## Open-source AI agents\n${STORY("2026-09-01", 1)}`),
@@ -194,6 +198,46 @@ test("an interest that asks for background keeps older stories", async () => {
   );
   assert.match(result.sectionMd ?? "", /2026-09-01/);
   assert.equal(result.coverage.status, "covered");
+});
+
+test("a run stops before its next continuation once it reaches the spend cap", async () => {
+  // Each paused response costs 1000 input tokens plus 3 searches (~3 cents).
+  const paused: MessagesResponse = {
+    ...stop("pause_turn"),
+    usage: {
+      input_tokens: 1000,
+      output_tokens: 100,
+      server_tool_use: { web_search_requests: 3 },
+    },
+  };
+  const claude = recordedClient([paused, paused, paused]);
+  const result = await researchInterest(INTEREST, {
+    claude,
+    now: NOW,
+    maxCostUsd: 0.05,
+  });
+  assert.equal(claude.requests.length, 2);
+  assert.equal(result.error, "stopped at the spend cap of 0.05 USD");
+  assert.equal(result.retryable, false);
+});
+
+test("a search locale with a region tells web_search where to look", async () => {
+  const claude = recordedClient([
+    answer("## Open-source AI agents\n_no fresh news_"),
+  ]);
+  await researchInterest(
+    {
+      ...INTEREST,
+      settings: { ...DEFAULT_BRIEF_SETTINGS, searchLocale: "nb-NO" },
+    },
+    { claude, now: NOW },
+  );
+  const [search] = claude.requests[0].tools ?? [];
+  assert.deepEqual(search.user_location, {
+    type: "approximate",
+    country: "NO",
+  });
+  assert.equal(search.allowed_domains, undefined);
 });
 
 test("every web tool failing makes the topic missing, not empty", async () => {
@@ -230,6 +274,7 @@ test("every web tool failing makes the topic missing, not empty", async () => {
   assert.equal(result.sectionMd, null);
   assert.equal(result.coverage.status, "missing");
   assert.equal(result.error, "web tools failed: unavailable");
+  assert.equal(result.retryable, true);
   assert.ok(result.usage.costUsd > 0, "the failed call is still costed");
 });
 
@@ -243,6 +288,7 @@ test("refusal, max_tokens and endless pausing fail the topic with the cost kept"
     const claude = recordedClient(responses);
     const result = await researchInterest(INTEREST, { claude, now: NOW });
     assert.equal(result.error, error);
+    assert.equal(result.retryable, false, "never retried: " + error);
     assert.equal(result.coverage.status, "missing");
     assert.equal(result.usage.inputTokens, 1000 * responses.length);
     assert.equal(claude.requests.length, responses.length);
@@ -259,11 +305,35 @@ test("a client error or an empty answer fails the topic", async () => {
   assert.equal(a.error, "Claude API 529: overloaded_error: Overloaded");
   assert.equal(a.coverage.status, "missing");
 
+  // One retry later for a server error or a broken connection; never for a
+  // 4xx (a bad request, a rate limit) or an overload.
+  const failing = (err: Error): ClaudeClient => ({
+    createMessage: async () => {
+      throw err;
+    },
+  });
+  const httpError = (status: number) =>
+    Object.assign(new Error(`Claude API ${status}`), { status });
+  for (const [err, retryable] of [
+    [httpError(500), true],
+    [new Error("fetch failed"), true],
+    [httpError(429), false],
+    [httpError(400), false],
+    [httpError(529), false],
+  ] as const) {
+    const r = await researchInterest(INTEREST, {
+      claude: failing(err),
+      now: NOW,
+    });
+    assert.equal(r.retryable, retryable, err.message);
+  }
+
   const b = await researchInterest(INTEREST, {
     claude: recordedClient([answer("   ")]),
     now: NOW,
   });
   assert.equal(b.error, "Claude returned no section");
+  assert.equal(b.retryable, true);
 });
 
 test("the call is cut off at the timeout", async () => {
@@ -284,6 +354,7 @@ test("the call is cut off at the timeout", async () => {
     timeoutMs: 20,
   });
   assert.equal(result.error, "timed out after 0 s");
+  assert.equal(result.retryable, false);
   assert.equal(result.coverage.status, "missing");
 });
 
