@@ -163,7 +163,7 @@ export async function researchInterest(
     interest.topic,
   );
   if (!section) return missing("Claude returned no section");
-  const sectionMd = enforceBriefFreshness(section, {
+  const sectionMd = enforceBriefFreshness(bulletDatedStories(section), {
     now,
     evergreenKeys: interestWantsEvergreen(interest.topic, interest.doc)
       ? new Set([normalizeTopic(interest.topic)])
@@ -194,6 +194,14 @@ function addUsage(total: ResearchUsage, res: MessagesResponse): void {
   total.webSearches += u.server_tool_use?.web_search_requests ?? 0;
   total.webFetches += u.server_tool_use?.web_fetch_requests ?? 0;
   total.costUsd += responseCostUsd(u);
+}
+
+// A story line Claude wrote without its `- ` bullet (Haiku does this now and
+// then): a line that starts with the date marker. Without the bullet the brief
+// parses as no stories and freshness can't see them.
+const UNBULLETED_STORY_RE = /^(`(?:\d{4}-\d{2}-\d{2}|undated)`\s*[—–-])/gm;
+function bulletDatedStories(section: string): string {
+  return section.replace(UNBULLETED_STORY_RE, "- $1");
 }
 
 // The answer is the text after Claude's last tool result: earlier text is its

@@ -115,6 +115,32 @@ test("usage sums every response and prices it from the table", async () => {
   assert.ok(Math.abs(costUsd - 0.013475) < 1e-9, `costUsd ${costUsd}`);
 });
 
+test("stories written without their bullet still parse as dated stories", async () => {
+  // Haiku sometimes drops the `- ` before a story's date (seen in a real
+  // run): the brief then parsed as zero stories yet counted as covered.
+  const loose = (date: string, n: number) =>
+    `\`${date}\` — Story ${n} happened. [example.org — Story ${n}](https://example.org/${n})\n` +
+    `![source image](https://example.org/${n}.jpg)\n\n` +
+    `> **Lead ${n}.**\n>\n> One.\n>\n> Two.\n>\n> Three.\n`;
+  const result = await researchInterest(INTEREST, {
+    claude: recordedClient([
+      answer(
+        `## Open-source AI agents\n\n${loose("2026-11-19", 1)}\n${loose("2026-11-18", 2)}\n${loose("2026-09-01", 3)}`,
+      ),
+    ]),
+    now: NOW,
+  });
+  const md = result.sectionMd ?? "";
+  const failed = checkResearchOutput(md, {
+    topic: INTEREST.topic,
+    today: "2026-11-20",
+  }).filter((c) => !c.pass);
+  assert.deepEqual(failed, []);
+  assert.match(md, /^- `2026-11-19` — Story 1/m);
+  // Freshness sees them too: the stale one is dropped.
+  assert.doesNotMatch(md, /Story 3/);
+});
+
 test("a prompt over 100K tokens is billed at the long-prompt rates", async () => {
   const result = await researchInterest(INTEREST, {
     claude: recordedClient([
