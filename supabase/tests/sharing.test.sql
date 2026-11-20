@@ -1,5 +1,5 @@
--- Sharing tests: set_visibility, follow and unfollow, interest_by_slug signed out,
--- stopped_sharing notices on private and on delete, and host_copy within limits.
+-- Sharing tests: set_sharing and set_visibility, follow and unfollow, what a
+-- signed-out visitor reads, unshared and deleted notices, and host_copy.
 -- Run with `pnpm test:rls` against `supabase start`, or `pnpm test:rls:hosted`.
 -- Everything rolls back at the end. `set local role` + request.jwt.claims act as
 -- a reader; `reset role` returns to postgres for setup and checks.
@@ -35,36 +35,46 @@ insert into public.runs (interest_id, status, section_md, finished_at) values
   ('00000000-0000-0000-0000-00000000a001', 'ready', '## Latest', now() - interval '1 day');
 
 -- ---------------------------------------------------------------------------
--- set_visibility
+-- set_sharing (readers) and set_visibility (service role: publishing)
 -- ---------------------------------------------------------------------------
 
 set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"aaaaaaaa-0000-0000-0000-00000000000a","role":"authenticated"}', true);
 
-select ok(char_length(public.set_visibility('00000000-0000-0000-0000-00000000a001', 'shared')) >= 20,
+select ok(char_length(public.set_sharing('00000000-0000-0000-0000-00000000a001', 'shared')) >= 20,
   'sharing mints a link slug');
-select is(public.set_visibility('00000000-0000-0000-0000-00000000a001', 'shared'),
+select is(public.set_sharing('00000000-0000-0000-0000-00000000a001', 'shared'),
   (select share_slug from public.interests where id = '00000000-0000-0000-0000-00000000a001'),
   'sharing again keeps the same slug');
-select ok(char_length(public.set_visibility('00000000-0000-0000-0000-00000000a002', 'public')) >= 20,
-  'an admin may make an interest public');
-select throws_ok($$ select public.set_visibility('00000000-0000-0000-0000-00000000c001', 'shared') $$,
-  'P0002', null, 'no one sets the visibility of someone else''s interest');
-select throws_ok($$ select public.set_visibility('00000000-0000-0000-0000-00000000a001', 'secret') $$,
+select throws_ok($$ select public.set_sharing('00000000-0000-0000-0000-00000000a002', 'public') $$,
+  '22023', null, 'not even an admin makes an interest public with set_sharing');
+select throws_ok($$ select public.set_sharing('00000000-0000-0000-0000-00000000c001', 'shared') $$,
+  'P0002', null, 'no one shares someone else''s interest');
+select throws_ok($$ select public.set_sharing('00000000-0000-0000-0000-00000000a001', 'secret') $$,
   '22023', null, 'an unknown visibility is refused');
 select throws_ok($$ update public.interests set visibility = 'public'
   where id = '00000000-0000-0000-0000-00000000a001' $$,
-  '42501', null, 'visibility has no column grant: only set_visibility changes it');
+  '42501', null, 'visibility has no column grant');
 
 select set_config('request.jwt.claims',
   '{"sub":"cccccccc-0000-0000-0000-00000000000c","role":"authenticated"}', true);
-select throws_ok($$ select public.set_visibility('00000000-0000-0000-0000-00000000c001', 'public') $$,
-  '42501', null, 'a reader who is not an admin cannot make an interest public');
-select lives_ok($$ select public.set_visibility('00000000-0000-0000-0000-00000000c001', 'shared') $$,
+select lives_ok($$ select public.set_sharing('00000000-0000-0000-0000-00000000c001', 'shared') $$,
   'any reader may share by link');
-select is(public.set_visibility('00000000-0000-0000-0000-00000000c001', 'private'), null,
+select is(public.set_sharing('00000000-0000-0000-0000-00000000c001', 'private'), null,
   'making it private clears the slug');
+reset role;
+
+select ok(not has_function_privilege('authenticated', 'public.set_visibility(uuid, uuid, text)', 'execute'),
+  'a reader cannot call set_visibility: only the service role publishes');
+set local role service_role;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+select ok(char_length(public.set_visibility('aaaaaaaa-0000-0000-0000-00000000000a',
+    '00000000-0000-0000-0000-00000000a002', 'public')) >= 20,
+  'the service role makes an interest public for its owner');
+select throws_ok($$ select public.set_visibility('aaaaaaaa-0000-0000-0000-00000000000a',
+    '00000000-0000-0000-0000-00000000c001', 'public') $$,
+  'P0002', null, 'set_visibility checks the owner');
 
 reset role;
 create temp table slugs on commit drop as
@@ -88,8 +98,16 @@ select is((public.interest_by_slug((select share_slug from slugs
     where id = '00000000-0000-0000-0000-00000000a002')) ->> 'visibility'),
   'public', 'a signed-out visitor reads a public interest by its link');
 select is(public.interest_by_slug('no-such-slug-aaaaaaaaaaaa'), null, 'an unknown link shows nothing');
-select results_eq('select topic from public.interests where id::text like ''00000000-%'' order by topic', array['Heat pumps'],
-  'signed out, the table still shows only public interests');
+select throws_ok('select topic from public.interests', '42501', null,
+  'signed out, the interests table is not readable');
+select throws_ok('select id from public.runs', '42501', null,
+  'signed out, the runs table is not readable');
+select results_eq($$ select c ->> 'title' from public.public_topics() c
+    where c ->> 'id' like '00000000-%' $$, array['Heat pumps'],
+  'signed out, public_topics lists only public interests');
+select ok(not (public.interest_by_slug((select share_slug from slugs
+    where id = '00000000-0000-0000-0000-00000000a002')) ? 'doc'),
+  'a link never shows the intent doc');
 select ok(not has_function_privilege('anon', 'public.follow(text)', 'execute'),
   'a signed-out visitor cannot follow');
 
@@ -152,19 +170,19 @@ insert into public.follows (user_id, interest_id) values
 set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"aaaaaaaa-0000-0000-0000-00000000000a","role":"authenticated"}', true);
-select is(public.set_visibility('00000000-0000-0000-0000-00000000a001', 'private'), null,
+select is(public.set_sharing('00000000-0000-0000-0000-00000000a001', 'private'), null,
   'the host makes the shared interest private');
 update public.interests set deleted_at = now() where id = '00000000-0000-0000-0000-00000000a002';
 reset role;
 
 select is((select count(*)::int from public.follows), 0, 'every follow ended');
 select results_eq($$
-  select user_id::text || ' ' || (payload ->> 'topic') from public.notifications
-  where kind = 'stopped_sharing' order by 1 $$,
-  array['bbbbbbbb-0000-0000-0000-00000000000b Heat pumps',
-        'bbbbbbbb-0000-0000-0000-00000000000b Trondheim events',
-        'cccccccc-0000-0000-0000-00000000000c Heat pumps',
-        'cccccccc-0000-0000-0000-00000000000c Trondheim events'],
+  select user_id::text || ' ' || (payload ->> 'topic') || ' ' || kind from public.notifications
+  where kind in ('unshared', 'deleted') order by 1 $$,
+  array['bbbbbbbb-0000-0000-0000-00000000000b Heat pumps deleted',
+        'bbbbbbbb-0000-0000-0000-00000000000b Trondheim events unshared',
+        'cccccccc-0000-0000-0000-00000000000c Heat pumps deleted',
+        'cccccccc-0000-0000-0000-00000000000c Trondheim events unshared'],
   'each follower got one notice per interest, on private and on delete');
 select is((select payload ->> 'doc' from public.notifications
     where user_id = 'bbbbbbbb-0000-0000-0000-00000000000b' and payload ->> 'topic' = 'Trondheim events'),

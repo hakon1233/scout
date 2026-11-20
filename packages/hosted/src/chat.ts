@@ -97,11 +97,17 @@ export function createChat(deps: {
 
   // One chat turn. Always resolves to the committed turn: `ready` with what
   // landed and what waits for a confirm, or `failed` with a message for the
-  // reader. Only a store failure rejects.
-  async function turn(userId: string, message: string): Promise<ChatTurn> {
+  // reader. Only a store failure rejects. `turnId` is the id the host reserved
+  // for this turn before the call (the Worker's begin_chat_turn); the commit
+  // completes that reservation.
+  async function turn(
+    userId: string,
+    message: string,
+    opts: { turnId?: string } = {},
+  ): Promise<ChatTurn> {
     const { interests, transcript, limits } = await store.load(userId);
     const base = {
-      id: newId(),
+      id: opts.turnId ?? newId(),
       created_at: now().toISOString(),
       message,
     };

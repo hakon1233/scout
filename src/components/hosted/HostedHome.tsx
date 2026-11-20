@@ -345,7 +345,6 @@ function Interests({
             interest={i}
             busy={busy[i.id] ?? false}
             note={notes[i.id] ?? null}
-            canPublish={home.isAdmin}
             onCadence={(c) => act(i.id, () => data.setCadence(i.id, c))}
             onVisibility={(v) =>
               act(i.id, async () => {
@@ -406,7 +405,6 @@ function InterestRow({
   interest: i,
   busy,
   note,
-  canPublish,
   onCadence,
   onVisibility,
   onRunNow,
@@ -415,8 +413,6 @@ function InterestRow({
   interest: HostedInterest;
   busy: boolean;
   note: string | null;
-  // Only an admin may make an interest public (the catalog).
-  canPublish: boolean;
   onCadence: (c: Cadence) => void;
   onVisibility: (v: Visibility) => void;
   onRunNow: () => void;
@@ -494,8 +490,8 @@ function InterestRow({
             className="min-h-9 rounded-md border border-border-default bg-transparent px-2 text-body-sm text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
           >
             {SHARING.filter(
-              (o) =>
-                o.value !== "public" || canPublish || i.visibility === "public",
+              // Only Scout's server publishes; a public interest shows it.
+              (o) => o.value !== "public" || i.visibility === "public",
             ).map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}

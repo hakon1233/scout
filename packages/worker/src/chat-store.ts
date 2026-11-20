@@ -1,6 +1,8 @@
 // The hosted chat's store (packages/hosted ChatStore) over PostgREST with the
 // service role. The Worker has already verified the reader's JWT, so every
-// query names the reader's id itself. Writes go through commit_chat_turn, one
+// query names the reader's id itself. The transcript leaves out pending turns
+// (reserved by begin_chat_turn, still waiting for Claude); the catalog is the
+// listed public interests (interest_is_listed, a computed column). Writes go through commit_chat_turn, one
 // transaction per turn (supabase/migrations/20261120030000_chat.sql).
 
 import {
@@ -56,7 +58,7 @@ export function supabaseChatStore(opts: {
         ),
         select<ChatTurnRow>(
           "chat_turns",
-          `select=id,created_at,status,message,reply,changes,pending,error_msg&user_id=eq.${user}&order=created_at.desc&limit=${TRANSCRIPT_TURNS}`,
+          `select=id,created_at,status,message,reply,changes,pending,error_msg&user_id=eq.${user}&status=neq.pending&order=created_at.desc&limit=${TRANSCRIPT_TURNS}`,
         ),
         rpc("allowance", { p_user: userId }, auth) as Promise<{
           limits: { max_interests: number; max_doc_chars: number };
@@ -77,7 +79,7 @@ export function supabaseChatStore(opts: {
       const [pool, follows] = await Promise.all([
         select<Interest>(
           "interests",
-          `select=id,topic&visibility=eq.public&deleted_at=is.null&owner_id=neq.${user}&limit=${PUBLIC_POOL}`,
+          `select=id,topic&visibility=eq.public&interest_is_listed=is.true&owner_id=neq.${user}&limit=${PUBLIC_POOL}`,
         ),
         select<{ interest_id: string }>(
           "follows",

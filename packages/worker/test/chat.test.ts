@@ -12,6 +12,7 @@ import { handleRequest } from "../src/http.ts";
 const SUPABASE = "https://ref.supabase.test";
 const ORIGIN = "https://app.example.test";
 const USER = "00000000-0000-0000-0000-0000000000a1";
+const TURN = "00000000-0000-0000-0000-0000000000c1";
 
 function recorded(name: string): MessagesResponse {
   const url = new URL(
@@ -30,6 +31,7 @@ function stubSupabase(
     userOk?: boolean;
     commitError?: unknown;
     publicInterests?: { id: string; topic: string }[];
+    deleteStatus?: number;
   } = {},
 ) {
   const calls: Call[] = [];
@@ -50,11 +52,18 @@ function stubSupabase(
         : ok({ id: USER });
     if (path === "/rest/v1/rpc/chat_block_reason")
       return ok(over.blocked ?? null);
+    if (path === "/rest/v1/rpc/begin_chat_turn")
+      return ok(over.blocked ? { blocked: over.blocked } : { id: TURN });
+    if (path === "/rest/v1/rpc/prepare_account_delete") return ok(2);
+    if (path === `/auth/v1/admin/users/${USER}` && init.method === "DELETE")
+      return over.deleteStatus
+        ? new Response("{}", { status: over.deleteStatus })
+        : ok({});
     if (path === "/rest/v1/rpc/allowance")
       return ok({ limits: { max_interests: 15, max_doc_chars: 4000 } });
     if (path === "/rest/v1/interests")
       return ok(
-        url.includes("visibility=eq.public")
+        url.includes("interest_is_listed=is.true")
           ? (over.publicInterests ?? [])
           : [],
       );
@@ -95,7 +104,7 @@ function post(
     new Request(`https://runs.example.test${path}`, {
       method: "POST",
       headers: { origin: ORIGIN, authorization: auth },
-      body: JSON.stringify(body),
+      body: typeof body === "string" ? body : JSON.stringify(body),
     }),
     {
       supabaseUrl: SUPABASE,
@@ -127,6 +136,11 @@ test("a chat turn verifies the reader, runs the chat and commits the new interes
   const user = db.calls.find((c) => c.url.endsWith("/auth/v1/user"));
   assert.equal(user?.auth, "Bearer user-jwt");
 
+  // The turn is reserved before Claude is asked, and the commit completes it.
+  const begin = db.calls.find((c) => c.url.endsWith("/rpc/begin_chat_turn"));
+  assert.equal(begin?.auth, "Bearer service-key");
+  assert.deepEqual(begin?.body, { p_user: USER, p_message: "Rust releases" });
+
   const commit = db.calls.find((c) => c.url.endsWith("/rpc/commit_chat_turn"));
   assert.equal(commit?.auth, "Bearer service-key");
   const args = commit?.body as {
@@ -134,6 +148,7 @@ test("a chat turn verifies the reader, runs the chat and commits the new interes
     p_turn: { message: string; changes: { op: string; topic: string }[] };
   };
   assert.equal(args.p_user, USER);
+  assert.equal((args.p_turn as { id?: string }).id, TURN);
   assert.equal(args.p_turn.message, "Rust releases");
   assert.equal(args.p_turn.changes[0].topic, "Rust releases");
 });
@@ -149,6 +164,39 @@ test("a chat turn is refused with the SQL's own words when the reader is out of 
     error: "You have used today's 40 chat messages. Try again tomorrow.",
   });
   assert.equal(stub.calls(), 0);
+  assert.ok(!db.calls.some((c) => c.url.endsWith("/rpc/commit_chat_turn")));
+});
+
+test("the chat reads only listed public interests and leaves reserved turns out of the transcript", async () => {
+  const db = stubSupabase();
+  const { claude } = stubClaude([recorded("create")]);
+  await post("/chat", { message: "Rust" }, db.fetch, claude);
+  const urls = db.calls.map((c) => decodeURIComponent(c.url));
+  assert.ok(
+    urls.some(
+      (u) =>
+        u.includes("/interests?") && u.includes("interest_is_listed=is.true"),
+    ),
+  );
+  assert.ok(
+    urls.some(
+      (u) => u.includes("/chat_turns?") && u.includes("status=neq.pending"),
+    ),
+  );
+});
+
+test("a body over 16 KB is refused before it is read or Claude is asked", async () => {
+  const db = stubSupabase();
+  const stub = stubClaude([recorded("create")]);
+  const res = await post(
+    "/chat",
+    JSON.stringify({ message: "x".repeat(20_000) }),
+    db.fetch,
+    stub.claude,
+  );
+  assert.equal(res.status, 413);
+  assert.equal(stub.calls(), 0);
+  assert.ok(!db.calls.some((c) => c.url.includes("/rpc/")));
 });
 
 test("a chat turn that hits the interest cap in the database says so in plain words", async () => {
@@ -225,5 +273,39 @@ test("a confirm with nothing pending answers 409; a malformed one 400", async ()
   assert.equal(
     (await post("/chat/confirm", { kind: "delete" }, db.fetch, claude)).status,
     400,
+  );
+});
+
+test("delete account deletes the reader's topics, then their auth user, with the service key", async () => {
+  const db = stubSupabase();
+  const { claude } = stubClaude([]);
+  const res = await post("/account/delete", {}, db.fetch, claude);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { deleted: true });
+
+  const paths = db.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`);
+  assert.deepEqual(paths, [
+    "GET /auth/v1/user",
+    "POST /rest/v1/rpc/prepare_account_delete",
+    `DELETE /auth/v1/admin/users/${USER}`,
+  ]);
+  assert.deepEqual(db.calls[1].body, { p_user: USER });
+  assert.equal(db.calls[1].auth, "Bearer service-key");
+  assert.equal(db.calls[2].auth, "Bearer service-key");
+});
+
+test("delete account needs a live session, and says so when Supabase fails", async () => {
+  const { claude } = stubClaude([]);
+  const expired = stubSupabase({ userOk: false });
+  assert.equal(
+    (await post("/account/delete", {}, expired.fetch, claude)).status,
+    401,
+  );
+  assert.ok(!expired.calls.some((c) => c.url.includes("/rpc/")));
+
+  const failing = stubSupabase({ deleteStatus: 500 });
+  assert.equal(
+    (await post("/account/delete", {}, failing.fetch, claude)).status,
+    502,
   );
 });

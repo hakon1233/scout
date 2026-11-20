@@ -57,7 +57,7 @@ function batchLimit(batchSize: number | undefined): number {
   return Math.max(0, Math.min(MAX_BATCH, size));
 }
 
-/** The subrequests a tick's pushes may use: what the claim and the runs leave. */
+/** The subrequests a tick's outbox drain may use: what the claim and the runs leave. */
 export function notifyBudget(batchSize: number | undefined): number {
   return SUBREQUEST_LIMIT - 1 - batchLimit(batchSize) * SUBREQUESTS_PER_RUN;
 }
@@ -67,9 +67,6 @@ export type RunDueDeps = {
   claude: ClaudeClient;
   batchSize?: number;
   timeoutMs?: number; // per run; researchInterest's own default is 300 s
-  // Tells the run's readers its brief is ready (push.ts). Called once a run
-  // with stories is recorded; its failures are swallowed, never the run's.
-  notify?: (runId: string) => Promise<void>;
 };
 
 export type TickSummary = {
@@ -110,15 +107,12 @@ export async function runDue(deps: RunDueDeps): Promise<TickSummary> {
         ...(result.error ? { error: result.error } : {}),
       };
       try {
+        // finish_run also queues the "brief is ready" pushes (push.ts sends them).
         await deps.queue.finish(run.runId, outcome);
         if (outcome.sectionMd === null) summary.failed++;
         else summary.ready++;
       } catch {
         summary.unrecorded++;
-        return;
-      }
-      if (deps.notify && outcome.coverage.status === "covered") {
-        await deps.notify(run.runId).catch(() => undefined);
       }
     }),
   );

@@ -101,7 +101,7 @@ test("home lists the interests with their run state and builds one brief from th
       ],
     },
     "/rest/v1/rpc/allowance": { body: ALLOWANCE },
-    "/rest/v1/profiles": { body: [{ is_admin: true }] },
+    "/rest/v1/profiles": { body: [{ is_admin: true, timezone_set: true }] },
     "/rest/v1/notifications": {
       body: [
         {
@@ -144,7 +144,10 @@ test("home lists the interests with their run state and builds one brief from th
     { id: "n1", topic: "Oslo jazz", createdAt: "2026-11-20T06:00:00Z" },
   ]);
   const notices = calls.find((c) => c.url.includes("/rest/v1/notifications"));
-  assert.match(notices?.url ?? "", /kind=eq\.stopped_sharing&read_at=is\.null/);
+  assert.match(
+    notices?.url ?? "",
+    /kind=in\.\(unshared,deleted,stopped\)&read_at=is\.null/,
+  );
   assert.equal(home.interests[0].updatedAt, "2026-11-20T07:03:00Z");
   assert.equal(home.interests[1].updatedAt, null);
   assert.match(home.interests[2].failed ?? "", /failed/);
@@ -340,13 +343,61 @@ test("signed out or a dead session is a signed-out error", async () => {
 test("sharing sets visibility through the RPC and returns the link's slug", async () => {
   const slug = "a".repeat(32);
   const { fetch, calls } = stubFetch({
-    "/rest/v1/rpc/set_visibility": { body: slug },
+    "/rest/v1/rpc/set_sharing": { body: slug },
   });
   assert.equal(await data(fetch).setVisibility("i-rust", "shared"), slug);
   assert.deepEqual(calls[0].body, {
     p_interest: "i-rust",
     p_visibility: "shared",
   });
+  assert.equal(calls[0].headers.authorization, "Bearer jwt-anna");
+});
+
+test("publishing is refused in the web app: only Scout's server publishes", async () => {
+  const { fetch, calls } = stubFetch({});
+  await assert.rejects(data(fetch).setVisibility("i-rust", "public"), (e) => {
+    assert.ok(e instanceof HostedError);
+    assert.equal(e.kind, "failed");
+    return true;
+  });
+  assert.equal(calls.length, 0);
+});
+
+test("the first home sets the browser's time zone once; Settings sets it later", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/interests": { body: [] },
+    "/rest/v1/follows": { body: [] },
+    "/rest/v1/rpc/allowance": { body: ALLOWANCE },
+    "/rest/v1/profiles": { body: [{ is_admin: false, timezone_set: false }] },
+    "/rest/v1/notifications": { body: [] },
+    "/rest/v1/rpc/set_timezone": { body: "Europe/Oslo" },
+  });
+  await data(fetch).home();
+  const first = calls.filter((c) => c.url.endsWith("/rpc/set_timezone"));
+  assert.equal(first.length, 1);
+  const body = first[0].body as { p_tz: unknown; p_first_time: unknown };
+  assert.equal(body.p_first_time, true);
+  assert.equal(typeof body.p_tz, "string");
+
+  await data(fetch).setTimeZone("Europe/Oslo");
+  assert.deepEqual(calls.at(-1)?.body, { p_tz: "Europe/Oslo" });
+});
+
+test("push per topic goes through set_topic_push", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/rpc/set_topic_push": { body: true },
+  });
+  await data(fetch).setTopicPush("i-rust", true);
+  assert.deepEqual(calls[0].body, { p_interest: "i-rust", p_on: true });
+});
+
+test("delete account asks the Worker with the reader's session", async () => {
+  const { fetch, calls } = stubFetch({
+    "/account/delete": { body: { deleted: true } },
+  });
+  await data(fetch).deleteAccount();
+  assert.equal(calls[0].url, `${WORKER}/account/delete`);
+  assert.equal(calls[0].method, "POST");
   assert.equal(calls[0].headers.authorization, "Bearer jwt-anna");
 });
 

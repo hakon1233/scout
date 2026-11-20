@@ -12,15 +12,16 @@ name = "scout-runs"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"
 
-# One tick a minute. Each tick claims at most RUN_BATCH runs (see src/run-due.ts
+# One tick a minute, then queued pushes; daily at 03:17 UTC, cleanup and (Mondays)
+# the weekly push. Each minute tick claims at most RUN_BATCH runs (see src/run-due.ts
 # for the free plan's limits).
 [triggers]
-crons = ["* * * * *"]
+crons = ["* * * * *", "17 3 * * *"]
 
 [vars]
 SUPABASE_URL = "https://qctcuajvefuicasakgkq.supabase.co"
 # The web app's origins, comma-separated.
-ALLOWED_ORIGIN = "https://scout-ideas.pages.dev,https://hakon1233.github.io"
+ALLOWED_ORIGIN = "https://scout-ideas.pages.dev"
 RUN_BATCH = "2"
 # Web Push: the public half of the VAPID pair (the web app's
 # NEXT_PUBLIC_VAPID_PUBLIC_KEY) and the contact push services see.

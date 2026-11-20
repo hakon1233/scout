@@ -26,7 +26,8 @@ import type { Brief } from "./types";
 
 export type Cadence = "daily" | "weekly" | "off";
 // private: the owner's only. shared: anyone with the link may follow.
-// public: in the catalog (an admin's call), readable signed out.
+// public: in the catalog, readable signed out. Only Scout's server publishes
+// (after its check); the web app sets private or shared.
 export type Visibility = "private" | "shared" | "public";
 
 export type HostedInterest = {
@@ -61,7 +62,8 @@ export type HostedHome = {
   allowance: Allowance;
   // May make an interest public.
   isAdmin: boolean;
-  // Unread: interests the reader followed whose host stopped sharing them.
+  // Unread: interests the reader followed that were unshared, deleted or
+  // stopped by their host; each may be hosted as the reader's own.
   notices: Notice[];
 };
 
@@ -90,7 +92,7 @@ export interface HostedData {
   restore(interestId: string): Promise<void>;
   unfollow(interestId: string): Promise<void>;
   runNow(interestId: string): Promise<void>;
-  // Returns the share slug, or null once private.
+  // Private or shared; returns the share slug, or null once private.
   setVisibility(
     interestId: string,
     visibility: Visibility,
@@ -104,6 +106,13 @@ export interface HostedData {
   // private, within their limits. Returns the new interest id.
   hostCopy(noticeId: string): Promise<string>;
   dismiss(noticeId: string): Promise<void>;
+  // The reader's time zone (IANA name), from Settings.
+  setTimeZone(timeZone: string): Promise<void>;
+  // "Notify me about this topic": push for one interest, owned or followed.
+  // Off by default; topics with it off come in the Monday digest instead.
+  setTopicPush(interestId: string, on: boolean): Promise<void>;
+  // Deletes the account: topics first (followers are told), then the user.
+  deleteAccount(): Promise<void>;
   // "Notify me when a brief is ready" on this device.
   pushStatus(): Promise<PushState>;
   // Call from the tap itself: browsers ask permission only in a user gesture.
@@ -327,11 +336,22 @@ export function createHostedData(deps: {
           method: "POST",
           body: { p_user: s.userId },
         }),
-        rest<{ is_admin: boolean }[]>(`profiles?select=is_admin&id=eq.${user}`),
+        rest<{ is_admin: boolean; timezone_set: boolean }[]>(
+          `profiles?select=is_admin,timezone_set&id=eq.${user}`,
+        ),
         rest<NoticeRow[]>(
-          `notifications?select=id,payload,created_at&user_id=eq.${user}&kind=eq.stopped_sharing&read_at=is.null&order=created_at.desc`,
+          `notifications?select=id,payload,created_at&user_id=eq.${user}&kind=in.(unshared,deleted,stopped)&read_at=is.null&order=created_at.desc`,
         ),
       ]);
+      // First sign-in: the browser's time zone, once. Later only Settings.
+      if (profile[0] && !profile[0].timezone_set) {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz)
+          await rest("rpc/set_timezone", {
+            method: "POST",
+            body: { p_tz: tz, p_first_time: true },
+          }).catch(() => null);
+      }
       const rows: (InterestRow & { following: boolean })[] = [
         ...own.map((i) => ({ ...i, following: false })),
         ...follows
@@ -361,7 +381,7 @@ export function createHostedData(deps: {
     async transcript() {
       const s = await session();
       const rows = await rest<ChatTurnRow[]>(
-        `chat_turns?select=id,created_at,status,message,reply,changes,pending,error_msg&user_id=eq.${encodeURIComponent(s.userId)}&order=created_at.desc&limit=${TRANSCRIPT_TURNS}`,
+        `chat_turns?select=id,created_at,status,message,reply,changes,pending,error_msg&user_id=eq.${encodeURIComponent(s.userId)}&status=neq.pending&order=created_at.desc&limit=${TRANSCRIPT_TURNS}`,
       );
       return rows.reverse().map(chatTurnFromRow);
     },
@@ -399,7 +419,12 @@ export function createHostedData(deps: {
     },
 
     async setVisibility(interestId, visibility) {
-      return await rest<string | null>("rpc/set_visibility", {
+      if (visibility === "public")
+        throw new HostedError(
+          "failed",
+          "Publishing goes through Scout's check. Share the link instead.",
+        );
+      return await rest<string | null>("rpc/set_sharing", {
         method: "POST",
         body: { p_interest: interestId, p_visibility: visibility },
       });
@@ -449,6 +474,24 @@ export function createHostedData(deps: {
         body: { read_at: new Date().toISOString() },
         prefer: "return=minimal",
       });
+    },
+
+    async setTimeZone(timeZone) {
+      await rest("rpc/set_timezone", {
+        method: "POST",
+        body: { p_tz: timeZone },
+      });
+    },
+
+    async setTopicPush(interestId, on) {
+      await rest("rpc/set_topic_push", {
+        method: "POST",
+        body: { p_interest: interestId, p_on: on },
+      });
+    },
+
+    async deleteAccount() {
+      await worker("/account/delete", {});
     },
   };
 }
