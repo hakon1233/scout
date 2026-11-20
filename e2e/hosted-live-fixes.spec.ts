@@ -4,7 +4,8 @@ import { HOSTED_PORT } from "./port";
 // Fixes from testing the hosted site, checked on the fake backend
 // (src/lib/hosted-fake.ts): no hydration errors, legal links at sign-in, back
 // links that fit a signed-out reader, a title per screen, a story that lives
-// in the URL, and a bell that turns push on by itself.
+// in the URL, a bell that turns push on by itself, and Run now on a
+// topic's page.
 
 const ORIGIN = `http://127.0.0.1:${HOSTED_PORT}`;
 const STORY = "NO3 day-ahead price hits 142 øre/kWh";
@@ -115,4 +116,16 @@ test("a topic's bell turns on even while push is off on this device", async ({
   });
   await bell.click();
   await expect(bell).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a topic's page runs it now and shows the run until it ends", async ({
+  page,
+}) => {
+  await blockNonLoopback(page);
+  await page.goto(`${ORIGIN}/app/topics/?id=power`);
+  const run = page.getByRole("button", { name: "Run now" });
+  await run.click({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: "Running" })).toBeVisible();
+  await expect(page.getByText("Waiting to start…")).toBeVisible();
+  await expect(run).toBeVisible({ timeout: 15_000 });
 });

@@ -391,6 +391,12 @@ export function createFakeHostedData(): HostedData {
     confirm: async () => reply("", "Done."),
     async setCadence(id, cadence) {
       patch(id, { cadence });
+      // Like due_interests: a scheduled topic that never ran gets its first brief.
+      const i = find(id);
+      if (cadence !== "off" && !i.updatedAt && !i.run) {
+        patch(id, { run: "queued" });
+        setTimeout(() => patch(id, { run: null, updatedAt: day(0) }), 3_000);
+      }
     },
     async setBriefSettings(id, change) {
       const parsed = parseBriefSettings(change);

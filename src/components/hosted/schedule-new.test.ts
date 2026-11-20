@@ -30,19 +30,20 @@ function stubData(daily: [number, number], weekly: [number, number]) {
 
 test("a new topic gets the cadence the reader asked for", async () => {
   const { data, set, ran } = stubData([0, 2], [0, 3]);
-  await scheduleNew(data, ["zigbee"], true, { zigbee: "weekly" });
+  await scheduleNew(data, ["zigbee"], { zigbee: "weekly" });
   assert.deepEqual(set, [["zigbee", "weekly"]]);
-  assert.deepEqual(ran, ["zigbee"]);
+  // The server queues its first brief; the day's Run now stays free.
+  assert.deepEqual(ran, []);
 });
 
 test("an asked-for cadence with no free slot leaves the topic paused, never the other one", async () => {
   const { data, set } = stubData([0, 2], [3, 3]);
-  await scheduleNew(data, ["zigbee"], false, { zigbee: "weekly" });
+  await scheduleNew(data, ["zigbee"], { zigbee: "weekly" });
   assert.deepEqual(set, []);
 });
 
 test("without an asked-for cadence a topic takes the first free slot", async () => {
   const { data, set } = stubData([2, 2], [0, 3]);
-  await scheduleNew(data, ["a"], false);
+  await scheduleNew(data, ["a"]);
   assert.deepEqual(set, [["a", "weekly"]]);
 });

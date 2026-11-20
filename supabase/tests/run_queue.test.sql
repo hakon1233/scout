@@ -46,13 +46,14 @@ insert into public.interests
   -- Due: Fridays 11:00 UTC.
   ('00000000-0000-0000-0000-0000000000b2', 'bbbbbbbb-0000-0000-0000-000000000002',
    'Ben weekly', 'weekly', '11:00', 5, 'private', '2026-11-01'),
-  -- Not due: created after today's slot.
+  -- Not due: created after today's slot, and its first brief already ran.
   ('00000000-0000-0000-0000-0000000000b3', 'bbbbbbbb-0000-0000-0000-000000000002',
    'Ben new weekly', 'weekly', '09:00', 5, 'private', '2026-11-20 10:00+00');
 
 insert into public.runs (interest_id, status, scheduled_for, started_at, finished_at, cost_usd) values
   ('00000000-0000-0000-0000-0000000000a2', 'ready', '2026-11-16 06:00+00', '2026-11-16 06:00+00', '2026-11-16 06:02+00', 0),
-  ('00000000-0000-0000-0000-0000000000b1', 'ready', '2026-11-19 14:00+00', '2026-11-19 14:00+00', '2026-11-19 14:02+00', 0);
+  ('00000000-0000-0000-0000-0000000000b1', 'ready', '2026-11-19 14:00+00', '2026-11-19 14:00+00', '2026-11-19 14:02+00', 0),
+  ('00000000-0000-0000-0000-0000000000b3', 'ready', '2026-11-20 10:01+00', '2026-11-20 10:01+00', '2026-11-20 10:03+00', 0);
 
 create temp table tick (run_id uuid, topic text, doc text, searches_per_run integer,
   brief_length text, story_count smallint, stories_relevant_only boolean, evergreen boolean,
@@ -236,6 +237,36 @@ select results_eq(
   $$select requested_by::text from public.runs where status = 'queued' order by requested_by$$,
   array['bbbbbbbb-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002'],
   'run-now requests wait in the same queue');
+
+-- ---------------------------------------------------------------------------
+-- First brief: a new scheduled topic that never ran is due at once, as a
+-- scheduled run (not a Run now), dated its last slot so the next one still runs
+-- ---------------------------------------------------------------------------
+
+select set_config('request.jwt.claims', '', true);
+
+insert into public.interests
+  (id, owner_id, topic, cadence, run_at, run_weekday, visibility, created_at) values
+  ('00000000-0000-0000-0000-0000000000c1', 'aaaaaaaa-0000-0000-0000-000000000001',
+   'Anna new weekly', 'weekly', '07:00', 1, 'private', '2026-11-20 12:30+00'),
+  ('00000000-0000-0000-0000-0000000000c2', 'aaaaaaaa-0000-0000-0000-000000000001',
+   'Anna new paused', 'off', '07:00', 1, 'private', '2026-11-20 12:30+00');
+select is((select count(*)::int from public.claim_runs(0, '2026-11-20 12:31+00')), 0, 'queued only');
+select is(
+  (select count(*)::int || ' ' || min(scheduled_for)::text || ' ' || bool_and(requested_by is null)
+   from public.runs where interest_id = '00000000-0000-0000-0000-0000000000c1'),
+  '1 2026-11-16 06:00:00+00 true',
+  'a new weekly topic gets its first brief now, as a scheduled run at its last slot');
+select is((select count(*)::int from public.runs where interest_id = '00000000-0000-0000-0000-0000000000c2'),
+  0, 'a paused new topic waits for Run now');
+update public.runs set status = 'ready', finished_at = '2026-11-20 12:33+00'
+  where interest_id = '00000000-0000-0000-0000-0000000000c1';
+select is((select count(*)::int from public.claim_runs(0, '2026-11-20 13:00+00')), 0, 'queued only');
+select is((select count(*)::int from public.runs where interest_id = '00000000-0000-0000-0000-0000000000c1'),
+  1, 'the first brief runs once');
+select is((select count(*)::int from public.claim_runs(0, '2026-11-23 06:01+00')), 0, 'queued only');
+select is((select count(*)::int from public.runs where interest_id = '00000000-0000-0000-0000-0000000000c1'),
+  2, 'and its first Monday still runs');
 
 select * from finish();
 rollback;

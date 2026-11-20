@@ -207,7 +207,7 @@ function Feed({
           onClick={() =>
             void act(n.id, async () => {
               const id = await data.hostCopy(n.id);
-              await scheduleNew(data, [id], false);
+              await scheduleNew(data, [id]);
             })
           }
         >

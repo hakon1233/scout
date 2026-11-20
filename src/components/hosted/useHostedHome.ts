@@ -73,8 +73,14 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
     };
   }, [data, failed, chat]);
 
-  // Poll while a run is queued or running, so its brief shows when ready.
-  const waiting = home?.interests.some((i) => i.run !== null) ?? false;
+  // Poll while a run is queued or running, or a new scheduled topic waits
+  // for its first brief (the server queues it on its next tick).
+  const waiting =
+    home?.interests.some(
+      (i) =>
+        i.run !== null ||
+        (!i.following && i.cadence !== "off" && !i.updatedAt && !i.failed),
+    ) ?? false;
   React.useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(() => void reload(), POLL_MS);
@@ -92,7 +98,6 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
   const send = React.useCallback(
     async (message: string) => {
       if (!data || !home) return;
-      const hadNone = home.interests.length === 0;
       const turn = await data.chat(message);
       setTurns((t) => [...t, turn]);
       const creates = (turn.changes ?? []).filter((c) => c.op === "create");
@@ -100,7 +105,7 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
         creates.flatMap((c) => (c.cadence ? [[c.interestId, c.cadence]] : [])),
       );
       const created = creates.map((c) => c.interestId);
-      if (created.length > 0) await scheduleNew(data, created, hadNone, asked);
+      if (created.length > 0) await scheduleNew(data, created, asked);
       await reload();
     },
     [data, home, reload],
@@ -141,11 +146,11 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
 // A new topic takes the cadence the reader asked for in the chat (`asked`)
 // when that slot is free, else stays paused: never the other cadence. One
 // with none asked takes the first free slot (daily, then weekly) or stays
-// paused. The reader's very first one also runs now, so a brief shows soon.
+// paused. A scheduled one gets its first brief from the server's next tick
+// (due_interests), so it never spends the day's Run now.
 export async function scheduleNew(
   data: HostedData,
   ids: string[],
-  first: boolean,
   asked: Partial<Record<string, "daily" | "weekly">> = {},
 ) {
   let home: HostedHome;
@@ -170,7 +175,6 @@ export async function scheduleNew(
       // The plan said no after all: it stays paused, and its row says so.
     }
   }
-  if (first && ids[0]) await data.runNow(ids[0]).catch(() => undefined);
 }
 
 function freeSlot(a: Allowance): "daily" | "weekly" | null {

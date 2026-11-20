@@ -8,7 +8,7 @@ import { BriefSettingsGroup } from "@/components/BriefSettingsGroup";
 import { FeedView } from "@/components/FeedView";
 import { PushBell } from "@/components/PushBell";
 import { AppShell, PageHeader } from "@/components/shell/AppShell";
-import { Segmented, SettingsGroup, SettingsRow } from "@/components/ui";
+import { Button, Segmented, SettingsGroup, SettingsRow } from "@/components/ui";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { formatDate } from "@/lib/format-date";
 import { planFor } from "@/lib/plans";
@@ -92,6 +92,8 @@ function TopicPage({
 }) {
   const router = useRouter();
   const [runsError, setRunsError] = React.useState<string | null>(null);
+  const [running, setRunning] = React.useState(false);
+  const [runError, setRunError] = React.useState<string | null>(null);
   const [cadence, setCadence] = React.useState<Cadence>(i.cadence);
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reload wins
@@ -137,6 +139,24 @@ function TopicPage({
             ? err.message
             : "Couldn't change the schedule. Try again.",
         );
+    }
+  }
+
+  async function runNow() {
+    setRunning(true);
+    setRunError(null);
+    try {
+      await data.runNow(i.id);
+      await reload();
+    } catch (err) {
+      if (!signedOut(err))
+        setRunError(
+          err instanceof HostedError
+            ? err.message
+            : "Couldn't start a run. Try again.",
+        );
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -186,9 +206,28 @@ function TopicPage({
         aria-labelledby="topic-latest"
         data-main
       >
-        <h2 id="topic-latest" className="px-1 text-body-sm text-muted">
-          Latest
-        </h2>
+        <div className="flex items-center justify-between gap-3 px-1">
+          <h2 id="topic-latest" className="text-body-sm text-muted">
+            Latest
+          </h2>
+          {!i.following && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="min-w-28"
+              loading={i.run !== null || running}
+              disabled={running}
+              onClick={() => void runNow()}
+            >
+              {i.run ? "Running" : "Run now"}
+            </Button>
+          )}
+        </div>
+        {runError && (
+          <p role="alert" className="px-1 text-body-sm text-danger">
+            {runError}
+          </p>
+        )}
         {brief ? (
           <FeedView brief={brief} />
         ) : (
