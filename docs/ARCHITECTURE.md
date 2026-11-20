@@ -36,7 +36,8 @@ as `@scout/core`, the companion as `#core`.
 - `search-skills.ts`, `assembly-skills.ts`: the rules every research session gets, and
   how sections become a brief. The web app's skills page shows them verbatim.
 - `research-prompt.ts`: one interest's research prompt (search rules, then its intent
-  doc verbatim, then today's date), and the clean-up of the model's lead-in.
+  doc verbatim, then today's date), and the clean-up of the model's lead-in. It names
+  the session's web tools: `CLI_RESEARCH_TOOLS` (companion) or `API_RESEARCH_TOOLS`.
 - `coverage.ts`: a run's assembly. It cuts each topic's section, sorts stories newest
   first, drops stale ones and records coverage.
 - `brief-document.ts`: the brief's markdown grammar, read side (topics, stories,
@@ -115,7 +116,8 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   `chat_block_reason` (kill switch, daily chat turns), and run `packages/hosted`'s chat.
 - `chat-store.ts`: the chat's store over PostgREST with the service key. A turn's
   changes, follows and its `chat_turns` row land in one `commit_chat_turn` call
-  (`supabase/migrations/*_chat.sql`, which also adds `plans.max_interests`).
+  (`supabase/migrations/*_chat.sql`, which also adds `plans.max_interests`; the
+  interests trigger enforces that cap, `*_max_interests.sql`).
 - `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`.
 
 ### Web app (`src`)

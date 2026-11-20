@@ -3,7 +3,10 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResearchPrompt } from "../src/research-prompt.ts";
+import {
+  API_RESEARCH_TOOLS,
+  buildResearchPrompt,
+} from "../src/research-prompt.ts";
 import { SEARCH_SKILLS, STORY_DATE_RE } from "../src/search-skills.ts";
 
 test("the built prompt contains the shared search-skills fragment VERBATIM", () => {
@@ -91,4 +94,15 @@ test("the prompt scopes the session to the single topic and its output section",
   assert.match(prompt, /## claude code/);
   // The empty-topic marker is still mandated so coverage stays honest.
   assert.match(prompt, /_no fresh news_/);
+});
+
+test("the prompt names the web tools of the session that runs it", () => {
+  const interest = { topic: "ai", doc: "track ai" };
+  const cli = buildResearchPrompt(interest);
+  assert.match(cli, /Use the WebSearch tool/);
+  assert.match(cli, /Use WebFetch on the/);
+  const api = buildResearchPrompt(interest, new Date(), API_RESEARCH_TOOLS);
+  assert.match(api, /Use the web_search tool/);
+  assert.match(api, /Use web_fetch on the/);
+  assert.doesNotMatch(api, /WebSearch|WebFetch/);
 });

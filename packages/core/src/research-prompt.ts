@@ -12,6 +12,19 @@ export type ResearchInterest = {
   doc: string;
 };
 
+// The web tools a research session has, by the names its prompt uses: the
+// companion's `claude` CLI has WebSearch/WebFetch, the hosted API path has the
+// server tools web_search/web_fetch (packages/research).
+export type ResearchTools = { search: string; fetch: string };
+export const CLI_RESEARCH_TOOLS: ResearchTools = {
+  search: "WebSearch",
+  fetch: "WebFetch",
+};
+export const API_RESEARCH_TOOLS: ResearchTools = {
+  search: "web_search",
+  fetch: "web_fetch",
+};
+
 // Strip the `claude` CLI's conversational lead-in before the actual brief.
 //
 // Even with "No preamble" in the prompt, the headless `claude` run sometimes
@@ -55,6 +68,7 @@ export function stripBriefPreamble(raw: string): string {
 export function buildResearchPrompt(
   interest: ResearchInterest,
   now: Date = new Date(),
+  tools: ResearchTools = CLI_RESEARCH_TOOLS,
 ): string {
   const today = [
     now.getFullYear(),
@@ -88,7 +102,7 @@ export function buildResearchPrompt(
   );
   lines.push("");
   lines.push(
-    "Use the WebSearch tool to find news on this topic. Use WebFetch on the",
+    `Use the ${tools.search} tool to find news on this topic. Use ${tools.fetch} on the`,
   );
   lines.push(
     "most promising results to confirm the facts AND the publish date, so you",

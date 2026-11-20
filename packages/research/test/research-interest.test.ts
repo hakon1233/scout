@@ -83,6 +83,10 @@ test("the request: Haiku, capped web tools, cached prompt, resumed turn sent bac
   assert.deepEqual(prompt.cache_control, { type: "ephemeral" });
   assert.match(String(prompt.text), /<intent-doc>\nReleases and standards/);
   assert.match(String(prompt.text), /Today's date is 2026-11-20/);
+  // The prompt names the API's server tools, not the claude CLI's.
+  assert.match(String(prompt.text), /the web_search tool/);
+  assert.match(String(prompt.text), /web_fetch on the/);
+  assert.doesNotMatch(String(prompt.text), /WebSearch|WebFetch/);
   assert.equal(first.messages.length, 1);
   // pause_turn: same user message, then the paused assistant content as is,
   // with no extra "continue" message.

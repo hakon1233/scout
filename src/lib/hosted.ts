@@ -379,6 +379,11 @@ function restError(body: unknown): HostedError {
         "limit",
         `Your plan has room for ${plural(limit, "weekly interest")}, and they're in use. Pause one first.`,
       );
+    if (err.hint === "max_interests")
+      return new HostedError(
+        "limit",
+        `Your plan has room for ${plural(limit, "interest")}, and they're in use. Delete one first.`,
+      );
     if (err.hint === "max_doc_chars")
       return new HostedError(
         "limit",

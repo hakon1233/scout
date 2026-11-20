@@ -20,9 +20,12 @@ export { PATHS } from "./contract.ts";
 export { SEARCH_SKILLS } from "./search-skills.ts";
 export { ASSEMBLY_SKILLS } from "./assembly-skills.ts";
 export {
+  API_RESEARCH_TOOLS,
+  CLI_RESEARCH_TOOLS,
   buildResearchPrompt,
   stripBriefPreamble,
   type ResearchInterest,
+  type ResearchTools,
 } from "./research-prompt.ts";
 export {
   assembleBrief,

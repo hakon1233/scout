@@ -55,7 +55,7 @@ RECENCY (the whole point of this brief):
 
 PUBLISH DATES (one per item, mandatory, captured as a field — not buried in link text):
 - Every story item MUST carry its real publish date. Verify it from the source;
-  if the search snippet doesn't show a date, WebFetch the page to confirm it.
+  if the search snippet doesn't show a date, fetch the page to confirm it.
   Use the article's own publish/updated date — never substitute today's date.
 - Format every story bullet so the publish date comes FIRST as an ISO date in
   backticks, then an em dash, then a one-sentence summary, then the citation on
@@ -70,7 +70,7 @@ PUBLISH DATES (one per item, mandatory, captured as a field — not buried in li
 
 SOURCE IMAGE (one per item, OPTIONAL, handpicked from the source — never invented):
 - For each story, try to capture ONE representative image taken FROM THE NEWS
-  SOURCE PAGE ITSELF — the article's own lead image. WebFetch the cited page and
+  SOURCE PAGE ITSELF — the article's own lead image. Fetch the cited page and
   read, in order of preference: \`<meta property="og:image">\`, then
   \`<meta name="twitter:image">\`, then the first meaningful inline \`<img>\` in the
   article body. Use the absolute (https) image URL.

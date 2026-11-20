@@ -4,6 +4,7 @@
 // all come from @scout/core; this module adds only the API call around them.
 
 import {
+  API_RESEARCH_TOOLS,
   buildResearchPrompt,
   computeCoverage,
   enforceBriefFreshness,
@@ -70,8 +71,16 @@ export type ResearchResult = {
 // results in code first, but their code-run searches escape max_uses.
 function webTools(maxSearches: number, maxFetches: number): ContentBlock[] {
   return [
-    { type: "web_search_20250305", name: "web_search", max_uses: maxSearches },
-    { type: "web_fetch_20250910", name: "web_fetch", max_uses: maxFetches },
+    {
+      type: "web_search_20250305",
+      name: API_RESEARCH_TOOLS.search,
+      max_uses: maxSearches,
+    },
+    {
+      type: "web_fetch_20250910",
+      name: API_RESEARCH_TOOLS.fetch,
+      max_uses: maxFetches,
+    },
   ];
 }
 
@@ -99,7 +108,7 @@ export async function researchInterest(
     content: [
       {
         type: "text",
-        text: buildResearchPrompt(interest, now),
+        text: buildResearchPrompt(interest, now, API_RESEARCH_TOOLS),
         cache_control: { type: "ephemeral" },
       },
     ],

@@ -159,6 +159,28 @@ test("setting a schedule over the plan's limit says so in plain words", async ()
   assert.deepEqual(calls[0].body, { cadence: "daily" });
 });
 
+test("restoring past the plan's interest cap says so in plain words", async () => {
+  const { fetch } = stubFetch({
+    "/rest/v1/interests": {
+      status: 400,
+      body: {
+        code: "P0001",
+        message: "quota: 15 of 15 interests used",
+        hint: "max_interests",
+      },
+    },
+  });
+  await assert.rejects(data(fetch).restore("i-rust"), (e: unknown) => {
+    assert.ok(e instanceof HostedError);
+    assert.equal(e.kind, "limit");
+    assert.equal(
+      e.message,
+      "Your plan has room for 15 interests, and they're in use. Delete one first.",
+    );
+    return true;
+  });
+});
+
 test("delete is a soft delete that restore undoes", async () => {
   const { fetch, calls } = stubFetch({ "/rest/v1/interests": { body: null } });
   const d = data(fetch);

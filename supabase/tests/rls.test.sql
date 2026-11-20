@@ -300,11 +300,11 @@ select lives_ok(
 
 select is(
   public.allowance() -> 'used',
-  '{"daily_interests": 1, "weekly_interests": 3, "on_demand_runs_today": 0, "chat_turns_today": 1}'::jsonb,
+  '{"interests": 8, "daily_interests": 1, "weekly_interests": 3, "on_demand_runs_today": 0, "chat_turns_today": 1}'::jsonb,
   'allowance counts what Anna uses');
 select is(
   public.allowance() -> 'limits',
-  '{"daily_interests": 1, "weekly_interests": 3, "on_demand_runs_per_day": 3, "chat_turns_per_day": 40, "searches_per_run": 5, "max_doc_chars": 4000}'::jsonb,
+  '{"daily_interests": 1, "weekly_interests": 3, "on_demand_runs_per_day": 3, "chat_turns_per_day": 40, "searches_per_run": 5, "max_doc_chars": 4000, "max_interests": 15}'::jsonb,
   'allowance reads the limits from the plans table');
 
 reset role;
