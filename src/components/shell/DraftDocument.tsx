@@ -1,16 +1,16 @@
 import * as React from "react";
 import { useBackLink } from "@/hooks/useSignedIn";
-import { contactEmail } from "@/lib/contact";
+import { contactLine } from "@/lib/contact";
 import { AppShell, PageHeader } from "./AppShell";
 
 /**
  * The contact address as a link. Until the owner sets one (lib/contact.ts)
- * it says so in words, never as a link that bounces.
+ * it shows the placeholder as text, never as a link that bounces.
  */
 export function ContactEmail() {
-  const email = contactEmail();
-  if (!email) return <>the address we publish here before launch</>;
-  return <a href={`mailto:${email}`}>{email}</a>;
+  const line = contactLine();
+  if (line.kind === "placeholder") return <span>{line.text}</span>;
+  return <a href={`mailto:${line.text}`}>{line.text}</a>;
 }
 
 // Privacy and Terms: a plain reading page marked Draft until a lawyer reads it.

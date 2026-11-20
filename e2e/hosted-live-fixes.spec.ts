@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { CONTACT_PLACEHOLDER } from "../src/lib/contact";
 import { HOSTED_PORT } from "./port";
 
 // Fixes from testing the hosted site, checked on the fake backend
@@ -61,6 +62,12 @@ test("sign-in names the Terms and Privacy policy; back links fit a signed-out re
 
   await page.goto(`${ORIGIN}/app/terms/`);
   await expect(page.getByRole("link", { name: "‹ Sign in" })).toBeVisible({
+    timeout: 30_000,
+  });
+  // No mailbox is set yet: the placeholder contact line shows, not nothing.
+  await expect(page.getByText(CONTACT_PLACEHOLDER)).toBeVisible();
+  await page.goto(`${ORIGIN}/app/privacy/`);
+  await expect(page.getByText(CONTACT_PLACEHOLDER)).toBeVisible({
     timeout: 30_000,
   });
   await page.goto(`${ORIGIN}/app/browse/`);

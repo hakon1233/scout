@@ -12,3 +12,19 @@ export function contactEmail(
   if (!domain || /(^|\.)(pages|workers)\.dev$/.test(domain)) return null;
   return value;
 }
+
+// What Privacy, Terms and the notice show while no address is set: plainly a
+// placeholder, as text, never a link.
+export const CONTACT_PLACEHOLDER =
+  "privacy@<your domain> (placeholder until launch)";
+
+/** The contact line to show: the real address, or the placeholder. */
+export function contactLine(value: string | null = CONTACT_EMAIL): {
+  kind: "email" | "placeholder";
+  text: string;
+} {
+  const email = contactEmail(value);
+  return email
+    ? { kind: "email", text: email }
+    : { kind: "placeholder", text: CONTACT_PLACEHOLDER };
+}
