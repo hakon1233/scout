@@ -248,6 +248,20 @@ test("setting a schedule over the plan's limit says so in plain words", async ()
   assert.deepEqual(calls[0].body, { cadence: "daily" });
 });
 
+test("createTopic inserts a paused topic with its intent doc and returns its id", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/interests": { status: 201, body: [{ id: "i-new" }] },
+  });
+  assert.equal(
+    await data(fetch).createTopic("New rules", "# New rules"),
+    "i-new",
+  );
+  assert.equal(calls[0].method, "POST");
+  assert.match(calls[0].url, /\/rest\/v1\/interests\?select=id$/);
+  assert.equal(calls[0].headers.prefer, "return=representation");
+  assert.deepEqual(calls[0].body, { topic: "New rules", doc: "# New rules" });
+});
+
 test("restoring past the plan's interest cap says so in plain words", async () => {
   const { fetch } = stubFetch({
     "/rest/v1/interests": {
