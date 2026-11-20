@@ -10,12 +10,14 @@
 // cannot call them. Host-neutral: Request and Response only.
 
 import {
+  claimedRunFromRow,
   TEAM_PATHS,
-  type TeamRun,
+  type ClaimedRunRow,
   type TeamRunResult,
   type TeamTopic,
   type TopicCoverage,
 } from "@scout/core";
+import { bearerToken, jsonResponder, readJsonBody } from "./request.ts";
 import { RpcError, rpcCaller } from "./supabase.ts";
 
 export type TeamDeps = {
@@ -33,16 +35,14 @@ const STATUSES = new Set(["covered", "empty", "missing"]);
 const MAX_CLAIM = 3;
 const MAX_REASON_CHARS = 500;
 const MAX_SECTION_CHARS = 40_000;
+// Room for the largest section (4 bytes a character at most) and the rest.
+const MAX_BODY_BYTES = 192 * 1024;
 
 export function isTeamPath(path: string): boolean {
   return (Object.values(TEAM_PATHS) as string[]).includes(path);
 }
 
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+const json = jsonResponder();
 
 export async function handleTeamRequest(
   request: Request,
@@ -55,20 +55,17 @@ export async function handleTeamRequest(
   if (request.method !== "POST")
     return json(405, { error: "method not allowed" });
 
-  const given = /^Bearer (\S+)$/.exec(
-    request.headers.get("authorization") ?? "",
-  )?.[1];
+  const given = bearerToken(request);
   if (!given || !(await sameSecret(given, token)))
     return json(401, { error: "wrong token" });
 
-  let body: Record<string, unknown> = {};
-  try {
-    const parsed: unknown = await request.json();
-    if (parsed && typeof parsed === "object")
-      body = parsed as Record<string, unknown>;
-  } catch {
-    // An empty or garbled body reads as {}; each route checks its fields.
-  }
+  const read = await readJsonBody(request, MAX_BODY_BYTES);
+  if (!read) return json(413, { error: "that request is too large" });
+  // An empty or garbled body reads as {}; each route checks its fields.
+  const body: Record<string, unknown> =
+    read.body && typeof read.body === "object"
+      ? (read.body as Record<string, unknown>)
+      : {};
 
   const rpc = rpcCaller(deps.supabaseUrl, deps.fetch);
   const service = { apikey: deps.serviceKey, bearer: deps.serviceKey };
@@ -94,16 +91,16 @@ export async function handleTeamRequest(
           : 1;
         const rows = (await call("team_claim_runs", {
           p_limit: limit,
-        })) as RunRow[];
-        return json(200, { runs: rows.map(teamRun) });
+        })) as ClaimedRunRow[];
+        return json(200, { runs: rows.map(claimedRunFromRow) });
       }
       case TEAM_PATHS.start: {
         if (typeof body.interestId !== "string" || !UUID.test(body.interestId))
           return json(400, { error: "interestId must be an interest's id" });
         const rows = (await call("team_start_run", {
           p_interest: body.interestId,
-        })) as RunRow[];
-        return json(200, { run: teamRun(rows[0]) });
+        })) as ClaimedRunRow[];
+        return json(200, { run: claimedRunFromRow(rows[0]) });
       }
       case TEAM_PATHS.finish: {
         const result = parseResult(body);
@@ -156,22 +153,6 @@ type TopicRow = {
   searches_per_run: number;
   due: boolean;
 };
-type RunRow = {
-  run_id: string;
-  topic: string;
-  doc: string;
-  searches_per_run: number;
-};
-
-function teamRun(r: RunRow): TeamRun {
-  return {
-    runId: r.run_id,
-    topic: r.topic,
-    doc: r.doc,
-    searchesPerRun: r.searches_per_run,
-  };
-}
-
 function parseResult(b: Record<string, unknown>): TeamRunResult | null {
   const c = b.coverage as Partial<TopicCoverage> | undefined;
   const ok =

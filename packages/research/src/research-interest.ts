@@ -6,6 +6,7 @@
 import {
   API_RESEARCH_TOOLS,
   buildResearchPrompt,
+  HAIKU_MODEL,
   sectionFromAnswer,
   type ResearchInterest,
   type TopicCoverage,
@@ -18,7 +19,7 @@ import type {
 } from "./claude-client.ts";
 import { responseCostUsd } from "./pricing.ts";
 
-export const RESEARCH_MODEL = "claude-haiku-5-5";
+export const RESEARCH_MODEL = HAIKU_MODEL;
 
 // Room for adaptive thinking plus a long (~1100-word) section.
 const MAX_TOKENS = 16_000;

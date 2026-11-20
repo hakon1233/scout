@@ -15,7 +15,11 @@
 // The /team routes (team.ts) take their own tokens instead of a reader's JWT.
 // Host-neutral: Request and Response only.
 
-import { quotaMessage, type PublishVerdict } from "@scout/core";
+import {
+  MAX_CHAT_MESSAGE_CHARS,
+  quotaMessage,
+  type PublishVerdict,
+} from "@scout/core";
 import {
   PublishCheckFailed,
   createChat,
@@ -24,7 +28,15 @@ import {
   type PublishStart,
 } from "@scout/hosted";
 import type { ClaudeClient } from "@scout/research";
-import { supabaseChatStore, verifiedUserId } from "./chat-store.ts";
+import { supabaseChatStore } from "./chat-store.ts";
+import {
+  bearerToken,
+  corsHeaders,
+  jsonResponder,
+  readJsonBody,
+  signedInUser,
+  type Json,
+} from "./request.ts";
 import { requestRun, RpcError, rpcCaller } from "./supabase.ts";
 import { handleTeamRequest, isTeamPath, type TeamDeps } from "./team.ts";
 import { handleVoiceRequest, type VoiceAi } from "./voice.ts";
@@ -43,8 +55,6 @@ export type HttpDeps = {
 } & Pick<TeamDeps, "teamToken" | "moderationToken">;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_MESSAGE_CHARS = 4000;
-const MAX_BODY_BYTES = 16 * 1024;
 const ROUTES = new Set([
   "/runs",
   "/chat",
@@ -68,22 +78,8 @@ export async function handleRequest(
   if (isTeamPath(path)) return handleTeamRequest(request, deps);
   if (path === "/voice") return handleVoiceRequest(request, deps);
 
-  const origin = request.headers.get("origin");
-  const allowed = deps.allowedOrigin.split(",").map((o) => o.trim());
-  const cors: Record<string, string> =
-    origin && allowed.includes(origin)
-      ? {
-          "access-control-allow-origin": origin,
-          "access-control-allow-methods": "POST",
-          "access-control-allow-headers": "authorization, content-type",
-          vary: "origin",
-        }
-      : {};
-  const json = (status: number, body: unknown) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "content-type": "application/json", ...cors },
-    });
+  const cors = corsHeaders(request, deps.allowedOrigin);
+  const json = jsonResponder(cors);
 
   if (!ROUTES.has(path)) return json(404, { error: "not found" });
   if (request.method === "OPTIONS")
@@ -91,38 +87,21 @@ export async function handleRequest(
   if (request.method !== "POST")
     return json(405, { error: "method not allowed" });
 
-  const jwt = /^Bearer (\S+)$/.exec(
-    request.headers.get("authorization") ?? "",
-  )?.[1];
+  const jwt = bearerToken(request);
   if (!jwt) return json(401, { error: "sign in first" });
 
   let userId: string | null = null;
   if (SERVICE_ROUTES.has(path)) {
     if (!deps.serviceKey || !deps.claude)
       return json(404, { error: "not found" });
-    try {
-      userId = await verifiedUserId({
-        url: deps.supabaseUrl,
-        anonKey: deps.anonKey,
-        userJwt: jwt,
-        fetch: deps.fetch,
-      });
-    } catch {
-      return json(502, {
-        error: "Scout couldn't check your sign-in. Try again.",
-      });
-    }
-    if (!userId) return json(401, { error: "sign in first" });
+    const user = await signedInUser(jwt, deps, json);
+    if (user instanceof Response) return user;
+    userId = user;
   }
 
-  const text = await readCapped(request, MAX_BODY_BYTES);
-  if (text === null) return json(413, { error: "that request is too large" });
-  let body: unknown;
-  try {
-    body = text ? JSON.parse(text) : undefined;
-  } catch {
-    body = undefined;
-  }
+  const read = await readJsonBody(request);
+  if (!read) return json(413, { error: "that request is too large" });
+  const { body } = read;
 
   if (path === "/runs") return runNow(body, jwt, deps, json);
   if (path === "/account/delete")
@@ -130,36 +109,6 @@ export async function handleRequest(
   if (path === "/publish")
     return publishRoute(body, userId as string, deps, json);
   return chatRoute(path, body, userId as string, deps, json);
-}
-
-// The body as text, or null when it is over `max` bytes. Stops reading there.
-async function readCapped(
-  request: Request,
-  max: number,
-): Promise<string | null> {
-  const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > max) return null;
-  if (!request.body) return "";
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > max) {
-      await reader.cancel().catch(() => undefined);
-      return null;
-    }
-    chunks.push(value);
-  }
-  const all = new Uint8Array(size);
-  let at = 0;
-  for (const c of chunks) {
-    all.set(c, at);
-    at += c.byteLength;
-  }
-  return new TextDecoder().decode(all);
 }
 
 async function deleteAccount(
@@ -191,8 +140,6 @@ async function deleteAccount(
     });
   }
 }
-
-type Json = (status: number, body: unknown) => Response;
 
 async function runNow(
   body: unknown,
@@ -248,7 +195,7 @@ async function chatRoute(
     input =
       typeof message === "string" &&
       message.trim() !== "" &&
-      message.length <= MAX_MESSAGE_CHARS
+      message.length <= MAX_CHAT_MESSAGE_CHARS
         ? { message: message.trim() }
         : null;
   } else {

@@ -129,27 +129,59 @@ test("/team/topics lists the team's topics with the service key", async () => {
   assert.deepEqual(sb.calls[0].body, {});
 });
 
+// A team claim's row is claim_runs' row (run_facts): settings, the last
+// sections, the cadence and the last story's date reach the runner's prompt.
+const RUN_ROW = {
+  run_id: RUN,
+  topic: "T",
+  doc: "D",
+  searches_per_run: 5,
+  brief_length: "short",
+  story_count: 2,
+  stories_relevant_only: false,
+  evergreen: true,
+  search_locale: "nb-NO",
+  brief_language: null,
+  prior: [
+    { date: "2026-11-19T07:05:00+00:00", section_md: "## T\nNo news yet." },
+  ],
+  cadence: "daily",
+  last_story_at: "2026-11-18T07:05:00+00:00",
+};
+const CLAIMED = {
+  runId: RUN,
+  topic: "T",
+  doc: "D",
+  searchesPerRun: 5,
+  settings: {
+    length: "short",
+    stories: 2,
+    evergreen: true,
+    searchLocale: "nb-NO",
+    briefLanguage: null,
+  },
+  prior: [
+    { date: "2026-11-19T07:05:00+00:00", markdown: "## T\nNo news yet." },
+  ],
+  cadence: "daily",
+  lastStoryAt: "2026-11-18T07:05:00+00:00",
+};
+
 test("/team/claim claims the team's due runs, at most 3 at a time", async () => {
   const sb = stubSupabase({
-    team_claim_runs: [
-      200,
-      [{ run_id: RUN, topic: "T", doc: "D", searches_per_run: 5 }],
-    ],
+    team_claim_runs: [200, [RUN_ROW]],
   });
   const res = await team("/team/claim", { limit: 50 }, { fetch: sb.fetch });
   assert.equal(res.status, 200);
   assert.deepEqual(await res.json(), {
-    runs: [{ runId: RUN, topic: "T", doc: "D", searchesPerRun: 5 }],
+    runs: [CLAIMED],
   });
   assert.deepEqual(sb.calls[0].body, { p_limit: 3 });
 });
 
 test("/team/start starts a one-off run; the SQL's refusals map to statuses", async () => {
   const ok = stubSupabase({
-    team_start_run: [
-      200,
-      [{ run_id: RUN, topic: "T", doc: "D", searches_per_run: 5 }],
-    ],
+    team_start_run: [200, [RUN_ROW]],
   });
   const res = await team(
     "/team/start",
@@ -158,7 +190,7 @@ test("/team/start starts a one-off run; the SQL's refusals map to statuses", asy
   );
   assert.equal(res.status, 200);
   assert.deepEqual(await res.json(), {
-    run: { runId: RUN, topic: "T", doc: "D", searchesPerRun: 5 },
+    run: CLAIMED,
   });
   assert.deepEqual(ok.calls[0].body, { p_interest: INTEREST });
 
@@ -342,4 +374,29 @@ test("/team/hide does not exist without MODERATION_TOKEN", async () => {
     "Bearer mod-secret",
   );
   assert.equal(res.status, 404);
+});
+
+test("a team body over the cap is refused unread", async () => {
+  const sb = stubSupabase({ team_finish_run: [200, true] });
+  const huge = {
+    runId: RUN,
+    sectionMd: "x".repeat(300 * 1024),
+    coverage: { topic: "T", status: "covered" },
+  };
+  const res = await team("/team/runs", huge, { fetch: sb.fetch });
+  assert.equal(res.status, 413);
+  assert.deepEqual(await res.json(), { error: "that request is too large" });
+  assert.equal(sb.calls.length, 0);
+
+  // A wrong token still answers 401 first, whatever the size.
+  const wrong = await team("/team/runs", huge, { fetch: sb.fetch }, "Bearer x");
+  assert.equal(wrong.status, 401);
+
+  // The largest section the route takes (40,000 characters, all multi-byte) fits.
+  const big = await team(
+    "/team/runs",
+    { ...huge, sectionMd: "å".repeat(40_000) },
+    { fetch: sb.fetch },
+  );
+  assert.equal(big.status, 200);
 });

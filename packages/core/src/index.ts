@@ -35,6 +35,12 @@ export {
   type BriefSettingsRow,
 } from "./brief-settings.ts";
 export { plural, quotaMessage } from "./quota.ts";
+export {
+  HAIKU_MODEL,
+  MAX_CHAT_MESSAGE_CHARS,
+  MAX_TOPIC_CHARS,
+} from "./limits.ts";
+export { quotedList } from "./quoted-list.ts";
 export { SEARCH_SKILLS } from "./search-skills.ts";
 export { ASSEMBLY_SKILLS } from "./assembly-skills.ts";
 export {
@@ -59,6 +65,12 @@ export {
   normalizeTopic,
 } from "./coverage.ts";
 export { sectionFromAnswer } from "./research-section.ts";
+export {
+  claimedRunFromRow,
+  researchInterestOf,
+  type ClaimedRun,
+  type ClaimedRunRow,
+} from "./claimed-run.ts";
 export {
   TEAM_PATHS,
   type TeamRun,

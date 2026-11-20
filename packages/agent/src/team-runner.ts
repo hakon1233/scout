@@ -14,6 +14,8 @@
 
 import type { spawn } from "node:child_process";
 import {
+  DEFAULT_BRIEF_SETTINGS,
+  researchInterestOf,
   sectionFromAnswer,
   TEAM_PATHS,
   type TeamRun,
@@ -51,7 +53,9 @@ export async function researchTeamRun(
   run: TeamRun,
   deps: TeamRunnerDeps,
 ): Promise<TeamRunResult> {
-  const interest = { topic: run.topic, doc: run.doc };
+  // The same input the Worker's cron gives researchInterest: settings, the
+  // last sections ("already posted"), cadence and the last story's date.
+  const interest = researchInterestOf(run);
   const searches =
     run.searchesPerRun > 0 ? run.searchesPerRun : DEFAULT_SEARCHES;
   const missing = (error: string): TeamRunResult => ({
@@ -197,6 +201,12 @@ export async function dryRun(
         topic: t.topic,
         doc: t.doc,
         searchesPerRun: t.searchesPerRun,
+        // team_topics carries no settings or history: a dry run uses the
+        // defaults and treats the topic as never posted.
+        settings: DEFAULT_BRIEF_SETTINGS,
+        prior: [],
+        cadence: null,
+        lastStoryAt: null,
       },
       deps,
     );

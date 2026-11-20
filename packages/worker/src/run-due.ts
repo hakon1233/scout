@@ -6,25 +6,14 @@
 // the stale-run reaper all live in SQL (claim_runs, finish_run); this module
 // never decides whether a run may start.
 
-import type { BriefSettings, PriorBrief } from "@scout/core";
+import { researchInterestOf, type ClaimedRun } from "@scout/core";
 import {
   researchInterest,
   type ClaudeClient,
   type ResearchResult,
 } from "@scout/research";
 
-export type ClaimedRun = {
-  runId: string;
-  topic: string;
-  doc: string;
-  searchesPerRun: number;
-  settings: BriefSettings;
-  // The interest's last ready sections, newest first: "already reported".
-  prior: PriorBrief[];
-  cadence: "daily" | "weekly" | null;
-  // When the interest last had a story (ISO); null: never.
-  lastStoryAt: string | null;
-};
+export type { ClaimedRun };
 
 export type RunOutcome = {
   sectionMd: string | null; // null: the attempt failed
@@ -123,21 +112,11 @@ export async function runDue(deps: RunDueDeps): Promise<TickSummary> {
 
   await Promise.all(
     runs.map(async (run) => {
-      const result = await researchInterest(
-        {
-          topic: run.topic,
-          doc: run.doc,
-          settings: run.settings,
-          prior: run.prior,
-          cadence: run.cadence,
-          lastPosted: run.lastStoryAt,
-        },
-        {
-          claude: deps.claude,
-          maxSearches: run.searchesPerRun,
-          timeoutMs: deps.timeoutMs,
-        },
-      );
+      const result = await researchInterest(researchInterestOf(run), {
+        claude: deps.claude,
+        maxSearches: run.searchesPerRun,
+        timeoutMs: deps.timeoutMs,
+      });
       const outcome: RunOutcome = {
         sectionMd: result.sectionMd,
         coverage: result.coverage,

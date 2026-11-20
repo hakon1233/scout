@@ -17,6 +17,9 @@ import {
   type ChatTurn,
   type Interest,
   type InterestSnapshot,
+  HAIKU_MODEL,
+  MAX_TOPIC_CHARS,
+  quotedList,
 } from "@scout/core";
 import {
   responseCostUsd,
@@ -51,10 +54,9 @@ export type ChatStore = {
 // The confirm body is part of the Worker's HTTP contract, so it lives in core.
 export type { ChatConfirm };
 
-export const CHAT_MODEL = "claude-haiku-5-5";
+export const CHAT_MODEL = HAIKU_MODEL;
 // The public catalog the model sees: topics only, so a short list stays cheap.
 const PUBLIC_INTEREST_LIMIT = 20;
-const MAX_TOPIC_LEN = 200; // interests.topic's check in the schema
 const MAX_OUTPUT_TOKENS = 8192;
 const TURN_TIMEOUT_MS = 60_000;
 
@@ -150,7 +152,7 @@ export function createChat(deps: {
       const output = parseChatOutput(responseText(response));
       const plan = planChatChanges(interests, output.changes, {
         ...limits,
-        maxTopicLen: MAX_TOPIC_LEN,
+        maxTopicLen: MAX_TOPIC_CHARS,
         newId,
         publicInterests,
       });
@@ -314,12 +316,4 @@ function failureMessage(err: unknown): string {
     return "Claude's answer couldn't be read. Try again.";
   }
   return "Something went wrong. Try again.";
-}
-
-// "A", "A" and "B", or "A", "B" and "C".
-function quotedList(items: string[]): string {
-  const quoted = items.map((t) => `"${t}"`);
-  return quoted.length < 2
-    ? quoted.join("")
-    : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`;
 }
