@@ -9,7 +9,7 @@ test("each quota hint reads as a sentence with the plan's number", () => {
       hint: "max_interests",
       message: "quota: 15 of 15 interests used",
     }),
-    "Your plan has room for 15 interests, and they're in use. Delete one first.",
+    "Your plan has room for 15 topics, and they're in use. Delete one first.",
   );
   assert.equal(
     quotaMessage({
@@ -17,7 +17,7 @@ test("each quota hint reads as a sentence with the plan's number", () => {
       hint: "daily_interests",
       message: "quota: 1 of 1 daily interests used",
     }),
-    "Your plan has room for 1 daily interest, and it's in use. Set one to weekly or pause it first.",
+    "Your plan has room for 1 daily topic, and it's in use. Set one to weekly or pause it first.",
   );
   assert.match(
     quotaMessage({ code: "P0001", hint: "max_doc_chars" }) ?? "",

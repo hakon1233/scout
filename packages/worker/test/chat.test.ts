@@ -170,7 +170,7 @@ test("a chat turn that hits the interest cap in the database says so in plain wo
   assert.equal(res.status, 429);
   assert.deepEqual(await res.json(), {
     error:
-      "Your plan has room for 15 interests, and they're in use. Delete one first.",
+      "Your plan has room for 15 topics, and they're in use. Delete one first.",
   });
 });
 

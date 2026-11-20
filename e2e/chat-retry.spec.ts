@@ -53,7 +53,7 @@ test("a failed turn gets its own Retry, which re-runs that message; replies that
   // failure after it, and the earlier create was not run again.
   await expect(page.getByText(message, { exact: true })).toHaveCount(1);
   await expect(log.last()).toContainText("I couldn't finish that turn:");
-  const rail = page.getByRole("link", { name: `Interest: ${TOPIC}` });
+  const rail = page.getByRole("link", { name: `Topic: ${TOPIC}` });
   await expect(rail).toHaveCount(1);
 
   // Leave the shared companion as we found it.

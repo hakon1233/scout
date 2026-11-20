@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ScoutWordmark } from "@/components/AppNav";
+import { ScoutWordmark } from "@/components/shell/AppShell";
 import { Banner, Button, buttonClasses } from "@/components/ui";
 import { hostedAuth, type AuthUser } from "@/lib/auth";
 
@@ -89,7 +89,7 @@ export default function SignInPage() {
 
   return (
     <main className="flex min-h-screen flex-col bg-page font-sans text-primary">
-      <div className="mx-auto w-full max-w-sm px-4 py-8 sm:px-6">
+      <div className="mx-auto w-full max-w-sm px-4 pt-3 sm:px-6 sm:pt-4">
         <ScoutWordmark />
       </div>
       <div

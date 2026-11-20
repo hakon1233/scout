@@ -101,8 +101,8 @@ export function ChatDeleteConfirm({
         {resolved ? (
           <span className="font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
             {resolved === "deleted"
-              ? "Removed from your interests"
-              : "Left your interests unchanged"}
+              ? "Removed from your topics"
+              : "Left your topics unchanged"}
           </span>
         ) : (
           <>

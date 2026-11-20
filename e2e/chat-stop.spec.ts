@@ -25,7 +25,7 @@ const TOPIC = "Ephemeral stop-test topic";
 const STALL_MARKER = "__STALL_FOR_STOP__";
 
 async function interestLinkCount(page: Page): Promise<number> {
-  return page.getByRole("link", { name: `Interest: ${TOPIC}` }).count();
+  return page.getByRole("link", { name: `Topic: ${TOPIC}` }).count();
 }
 
 test("chat Stop aborts the in-flight turn server-side: no change persists", async ({

@@ -15,7 +15,7 @@ test.describe("legacy /app/chat redirect", () => {
       timeout: 15_000,
     });
     await expect(
-      page.getByRole("heading", { name: "Interests", level: 2 }),
+      page.getByRole("heading", { name: "Topics", level: 2 }),
     ).toBeVisible();
     await expect(page.getByLabel("Chat with Scout")).toBeVisible();
 
@@ -39,7 +39,7 @@ test.describe("legacy /app/chat redirect", () => {
     // focusKey, so the AI policy card renders already toggled into its
     // "Editing" (focused) state, exactly as InterestDocCard.tsx renders a
     // focused card (aria-pressed + "Editing" label on the toggle button).
-    const card = page.getByLabel("Interest: AI policy & regulation");
+    const card = page.getByLabel("Topic: AI policy & regulation");
     await expect(card).toBeVisible();
     const toggle = card.getByRole("button", { name: "Editing" });
     await expect(toggle).toBeVisible();

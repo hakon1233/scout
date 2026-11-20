@@ -137,7 +137,7 @@ export default function InterestScopePage() {
             href="/app/interests"
             className="transition-colors hover:text-primary"
           >
-            ← Interests
+            ← Topics
           </a>
           <div className="flex items-center gap-3">
             <span>Assignment</span>
@@ -149,8 +149,8 @@ export default function InterestScopePage() {
           <ScopeSkeleton />
         ) : !model ? (
           <EmptyState
-            title="Interest not found"
-            body="Return to Interests and open an interest from the list."
+            title="Topic not found"
+            body="Return to Topics and open a topic from the list."
           />
         ) : (
           <>
@@ -176,13 +176,13 @@ export default function InterestScopePage() {
                 </div>
               ) : model.meta.hasDoc ? (
                 <p className="font-reading text-[16px] leading-relaxed text-secondary">
-                  Scout has an assignment for this interest, but the companion
-                  did not return its markdown in this session.
+                  Scout has an assignment for this topic, but the companion did
+                  not return its markdown in this session.
                 </p>
               ) : (
                 <EmptyState
                   title="No assignment yet"
-                  body="Refine this interest in chat to create the assignment Scout will follow."
+                  body="Refine this topic in chat to create the assignment Scout will follow."
                 />
               )}
             </section>

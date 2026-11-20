@@ -113,7 +113,10 @@ test("opening a story collapses the feed to that single story", async ({
   await page.goto(`${ORIGIN}/app/`);
 
   // Feed view: the brief header and both story cards are present.
-  const briefHeader = page.getByRole("heading", { name: /Your brief —/ });
+  const briefHeader = page.getByRole("heading", {
+    name: "Your brief",
+    level: 1,
+  });
   await expect(briefHeader).toBeVisible();
   await expect(
     page.getByRole("heading", { name: LEAD_HEADLINE }),
@@ -165,7 +168,7 @@ test("the in-app Back button restores the full feed", async ({ page }) => {
 
   // Both cards and the brief header are back; the detail is gone.
   await expect(
-    page.getByRole("heading", { name: /Your brief —/ }),
+    page.getByRole("heading", { name: "Your brief", level: 1 }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: LEAD_HEADLINE }),
@@ -196,7 +199,7 @@ test("the browser Back button closes the story detail (popstate)", async ({
   await page.goBack();
 
   await expect(
-    page.getByRole("heading", { name: /Your brief —/ }),
+    page.getByRole("heading", { name: "Your brief", level: 1 }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: OTHER_HEADLINE }),

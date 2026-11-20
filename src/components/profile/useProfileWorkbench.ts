@@ -434,7 +434,7 @@ export function useProfileWorkbench() {
                     ? `Want me to remove ${pendingDeletes.map((d) => `“${d.topic}”`).join(" and ")}?`
                     : pendingRewrite
                       ? `Here's a proposed rewrite of “${pendingRewrite.topic}” — apply below.`
-                      : "Done — updated your interests."),
+                      : "Done — updated your topics."),
                 ts: replyAt,
                 changes,
                 prev,

@@ -51,7 +51,7 @@ test("chat action cards: create applies, rewrite + delete are confirm-gated", as
   await expect(page.getByText(`# ${TOPIC}`)).toBeVisible();
   // The doc actually landed in the interest rail (confirmed write).
   await expect(
-    page.getByRole("link", { name: `Interest: ${TOPIC}` }),
+    page.getByRole("link", { name: `Topic: ${TOPIC}` }),
   ).toBeVisible();
 
   // ── 2. REWRITE — confirm-gated, then Apply (real confirm-rewrite route) ────
@@ -89,12 +89,10 @@ test("chat action cards: create applies, rewrite + delete are confirm-gated", as
     timeout: 30_000,
   });
   await confirm1.getByRole("button", { name: "Cancel" }).click();
-  await expect(
-    confirm1.getByText("Left your interests unchanged"),
-  ).toBeVisible();
+  await expect(confirm1.getByText("Left your topics unchanged")).toBeVisible();
   // The gate held: the interest is still in the rail.
   await expect(
-    page.getByRole("link", { name: `Interest: ${TOPIC}` }),
+    page.getByRole("link", { name: `Topic: ${TOPIC}` }),
   ).toBeVisible();
 
   // ── 3b. DELETE — fresh confirm, Delete REMOVES (real confirm-delete route) ─
@@ -105,11 +103,11 @@ test("chat action cards: create applies, rewrite + delete are confirm-gated", as
     timeout: 30_000,
   });
   await confirm2.getByRole("button", { name: "Delete" }).click();
-  await expect(confirm2.getByText("Removed from your interests")).toBeVisible({
+  await expect(confirm2.getByText("Removed from your topics")).toBeVisible({
     timeout: 30_000,
   });
   // The destructive round-trip landed: the interest is gone from the rail.
-  await expect(
-    page.getByRole("link", { name: `Interest: ${TOPIC}` }),
-  ).toBeHidden({ timeout: 30_000 });
+  await expect(page.getByRole("link", { name: `Topic: ${TOPIC}` })).toBeHidden({
+    timeout: 30_000,
+  });
 });

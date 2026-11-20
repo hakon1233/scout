@@ -45,6 +45,9 @@ export type HostedInterest = {
   updatedAt: string | null;
   // Set when the newest run failed and nothing newer is ready: why, for the reader.
   failed: string | null;
+  // The owner's display name for a followed topic; null shows "Scout team".
+  // TODO(profile backend): fill from the owner's profile once it has a name.
+  ownerName: string | null;
 };
 
 export type Allowance = {
@@ -109,6 +112,18 @@ export interface HostedData {
   // Call from the tap itself: browsers ask permission only in a user gesture.
   pushEnable(): Promise<PushState>;
   pushDisable(): Promise<PushState>;
+
+  // --- Seams for the backend jobs running alongside the redesign. Each one
+  // rejects with "isn't ready yet" until its API lands, so the UI rolls back
+  // honestly instead of pretending to save.
+  // Topic ids with push turned on (each topic's bell; off by default).
+  topicPush(): Promise<string[]>;
+  setTopicPush(interestId: string, on: boolean): Promise<void>;
+  // The reader's saved time zone (IANA name), or null when never set.
+  timeZone(): Promise<string | null>;
+  setTimeZone(timeZone: string): Promise<void>;
+  // Deletes the account and everything in it. Irreversible.
+  deleteAccount(): Promise<void>;
 }
 
 /** Push on this device: `needs-install` is an iPhone outside the Home Screen
@@ -352,7 +367,7 @@ export function createHostedData(deps: {
         isAdmin: profile[0]?.is_admin === true,
         notices: notices.map((n) => ({
           id: n.id,
-          topic: n.payload?.topic ?? "An interest",
+          topic: n.payload?.topic ?? "A topic",
           createdAt: n.created_at,
         })),
       };
@@ -450,7 +465,30 @@ export function createHostedData(deps: {
         prefer: "return=minimal",
       });
     },
+
+    // TODO(brief settings backend): per-topic push, read and write.
+    async topicPush() {
+      return [];
+    },
+    async setTopicPush() {
+      throw notReady("Per-topic notifications");
+    },
+    // TODO(brief settings backend): the reader's time zone on their profile.
+    async timeZone() {
+      return null;
+    },
+    async setTimeZone() {
+      throw notReady("Saving your time zone");
+    },
+    // TODO(account backend): delete the account and its rows.
+    async deleteAccount() {
+      throw notReady("Deleting your account here");
+    },
   };
+}
+
+function notReady(what: string): HostedError {
+  return new HostedError("failed", `${what} isn't ready yet. Try again soon.`);
 }
 
 const INTEREST_COLUMNS = "id,topic,cadence,visibility,share_slug";
@@ -546,6 +584,7 @@ function assembleHome(
         lastDone?.status === "failed"
           ? "The last run failed. Run it again, or wait for the next one."
           : null,
+      ownerName: null,
     };
   });
 

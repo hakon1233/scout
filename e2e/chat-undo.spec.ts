@@ -57,7 +57,7 @@ test("chat Undo on a created interest is a live control: reverses through the co
   await expect(undo).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(`Created · ${TOPIC}`)).toBeVisible();
   // The doc actually landed in the interest rail (confirmed write).
-  const railLink = page.getByRole("link", { name: `Interest: ${TOPIC}` });
+  const railLink = page.getByRole("link", { name: `Topic: ${TOPIC}` });
   await expect(railLink).toBeVisible();
 
   // ── PRESS UNDO — it is live, not decorative ───────────────────────────────
@@ -78,7 +78,7 @@ test("chat Undo on a created interest is a live control: reverses through the co
 
   // ── CONFIRM — the real confirm-delete route removes it ────────────────────
   await confirm.getByRole("button", { name: "Delete" }).click();
-  await expect(confirm.getByText("Removed from your interests")).toBeVisible({
+  await expect(confirm.getByText("Removed from your topics")).toBeVisible({
     timeout: 30_000,
   });
   // The reversal landed: the created interest is gone from the rail.
@@ -89,7 +89,7 @@ test("chat Undo on a created interest is a live control: reverses through the co
   // not. This is the part chat-actions.spec never checks.
   await page.reload();
   await expect(page.getByLabel("Message Scout")).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: `Interest: ${TOPIC}` }),
-  ).toBeHidden({ timeout: 30_000 });
+  await expect(page.getByRole("link", { name: `Topic: ${TOPIC}` })).toBeHidden({
+    timeout: 30_000,
+  });
 });

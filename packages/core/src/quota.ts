@@ -12,13 +12,13 @@ export function quotaMessage(err: {
   const limit = /of (\d+)/.exec(err.message ?? "")?.[1];
   switch (err.hint) {
     case "daily_interests":
-      return `Your plan has room for ${plural(limit, "daily interest")}, and it's in use. Set one to weekly or pause it first.`;
+      return `Your plan has room for ${plural(limit, "daily topic")}, and it's in use. Set one to weekly or pause it first.`;
     case "weekly_interests":
-      return `Your plan has room for ${plural(limit, "weekly interest")}, and they're in use. Pause one first.`;
+      return `Your plan has room for ${plural(limit, "weekly topic")}, and they're in use. Pause one first.`;
     case "max_interests":
-      return `Your plan has room for ${plural(limit, "interest")}, and they're in use. Delete one first.`;
+      return `Your plan has room for ${plural(limit, "topic")}, and they're in use. Delete one first.`;
     case "max_doc_chars":
-      return "That interest's description is too long for your plan.";
+      return "That topic's description is too long for your plan.";
     default:
       return null;
   }

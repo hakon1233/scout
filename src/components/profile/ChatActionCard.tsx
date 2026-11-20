@@ -54,7 +54,7 @@ export function ChatActionCard({
   const [requested, setRequested] = useState(false);
   const { change, prev } = model;
   const { glyph, verb, tone } = opMeta(change.op);
-  const topic = change.topic ?? "interest";
+  const topic = change.topic ?? "topic";
   const diff = diffFor(change, prev);
 
   const iconBg =

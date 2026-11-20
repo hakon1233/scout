@@ -403,7 +403,7 @@ function Composer({
                 type="button"
                 onClick={onClearFocus}
                 className="inline-flex max-w-full items-center gap-1.5 rounded-pill border border-signal/40 bg-surface-muted px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.05em] text-signal transition-colors hover:border-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
-                aria-label={`Editing ${focusTopic} — clear focus to talk about all interests`}
+                aria-label={`Editing ${focusTopic} — clear focus to talk about all topics`}
               >
                 <span
                   aria-hidden="true"
@@ -457,7 +457,7 @@ function Composer({
               placeholder={
                 focusTopic
                   ? `Refine “${focusTopic}”…`
-                  : "Message Scout — add, refine, or remove an interest…"
+                  : "Message Scout — add, refine, or remove a topic…"
               }
               className="max-h-[200px] min-h-[28px] flex-1 resize-none self-center bg-transparent font-reading text-[16px] leading-[1.5] text-primary placeholder:text-muted focus:outline-none"
             />
@@ -506,7 +506,7 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
       </h2>
       <p className="mt-2 max-w-prose font-reading text-[17px] leading-[1.6] text-secondary">
         Tell me a topic and I&apos;ll draft an assignment that steers every
-        research run. Refine or drop interests any time — just say so.
+        research run. Refine or drop topics any time — just say so.
       </p>
       <div className="mt-5 flex flex-wrap gap-2">
         {SUGGESTED_PROMPTS.map((p) => (

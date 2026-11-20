@@ -43,7 +43,7 @@ async function blockNonLoopback(page: Page) {
 // land. Each call persists one daily brief into the companion's rolling
 // history (same helper shape as weekly-brief.spec.ts's runDailyBrief).
 async function runDailyBrief(page: Page) {
-  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: "Menu" }).click();
   const runNow = page.getByRole("button", { name: "Run now" });
   await expect(runNow).toBeEnabled({ timeout: 15_000 });
   await runNow.click();
@@ -122,16 +122,16 @@ test("brief history pager: pagination and single-story isolation", async ({
   ).toBeVisible();
   await expect(openButtons).toHaveCount(0);
   await expect(page.getByText(/Showing \d+ previous briefs/)).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Manage interests" }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Manage topics" })).toHaveCount(
+    0,
+  );
 
   // Back out: every edition and the pager footer return, exactly as before.
   await page.getByRole("button", { name: "← Back to feed" }).click();
   await expect(openButtons).toHaveCount(finalCount);
   await expect(page.getByText(/Showing \d+ previous briefs/)).toBeVisible();
 
-  // "Manage interests" is a real navigation, not a dead label.
-  await page.getByRole("button", { name: "Manage interests" }).click();
+  // "Manage topics" is a real navigation, not a dead label.
+  await page.getByRole("button", { name: "Manage topics" }).click();
   await expect(page).toHaveURL(/\/app\/interests\/?$/);
 });

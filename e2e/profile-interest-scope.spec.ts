@@ -46,7 +46,7 @@ test.describe("standalone interest scope page", () => {
     await page.goto(`${ORIGIN}/app/profile/interest/?mock=full&id=ai-policy`);
 
     // The standalone chrome — distinct from the workbench drill-in.
-    await expect(page.getByRole("link", { name: "← Interests" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "← Topics" })).toBeVisible();
     // The chrome label is "Assignment" (formerly "Interest scope"); it is the
     // first of the two "Assignment" labels (chrome, then the header eyebrow).
     await expect(
@@ -71,7 +71,7 @@ test.describe("standalone interest scope page", () => {
     // would contradict hasDoc:true).
     await expect(
       page.getByText(
-        "Scout has an assignment for this interest, but the companion did not return its markdown in this session.",
+        "Scout has an assignment for this topic, but the companion did not return its markdown in this session.",
       ),
     ).toBeVisible();
     await expect(page.getByText("No assignment yet")).toBeHidden();
@@ -98,10 +98,10 @@ test.describe("standalone interest scope page", () => {
     // The id resolves to no interest → the guarded empty state, never a thrown
     // render (model is null, not undefined-access).
     await expect(
-      page.getByRole("heading", { name: "Interest not found" }),
+      page.getByRole("heading", { name: "Topic not found" }),
     ).toBeVisible();
     await expect(
-      page.getByText("Return to Interests and open an interest from the list."),
+      page.getByText("Return to Topics and open a topic from the list."),
     ).toBeVisible();
 
     // The scope header must NOT be on screen when nothing resolved.
@@ -121,7 +121,7 @@ test.describe("standalone interest scope page", () => {
       page.locator("header").getByText("Assignment", { exact: true }),
     ).toBeVisible();
 
-    await page.getByRole("link", { name: "← Interests" }).click();
+    await page.getByRole("link", { name: "← Topics" }).click();
     await expect(page).toHaveURL(/\/app\/interests/);
   });
 });

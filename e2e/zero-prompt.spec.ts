@@ -64,7 +64,7 @@ test("zero-prompt first run: no paste, brief renders with citations, no preamble
   await expect(page.getByText(/scout-agent run/)).toHaveCount(0);
 
   // Run-now lives in the profile menu. Open it and fire the run.
-  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: "Menu" }).click();
   const generate = page.getByRole("button", { name: "Run now" });
   await expect(generate).toBeEnabled({ timeout: 15_000 });
 

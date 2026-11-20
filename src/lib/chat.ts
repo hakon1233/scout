@@ -123,8 +123,8 @@ export async function confirmDeleteInterest(
       body: { interestId: interestIds[0], interestIds },
       timeoutMs: 10_000,
       signal: opts.signal,
-      failure: "Couldn't remove that interest",
-      messages: { 409: BUSY, 404: "That interest was already removed." },
+      failure: "Couldn't remove that topic",
+      messages: { 409: BUSY, 404: "That topic was already removed." },
     },
   );
   if (!body.turn) throw new Error("Scout didn't confirm the removal.");

@@ -200,7 +200,7 @@ test("setting a schedule over the plan's limit says so in plain words", async ()
       assert.equal(e.kind, "limit");
       assert.equal(
         e.message,
-        "Your plan has room for 1 daily interest, and it's in use. Set one to weekly or pause it first.",
+        "Your plan has room for 1 daily topic, and it's in use. Set one to weekly or pause it first.",
       );
       return true;
     },
@@ -226,7 +226,7 @@ test("restoring past the plan's interest cap says so in plain words", async () =
     assert.equal(e.kind, "limit");
     assert.equal(
       e.message,
-      "Your plan has room for 15 interests, and they're in use. Delete one first.",
+      "Your plan has room for 15 topics, and they're in use. Delete one first.",
     );
     return true;
   });
@@ -433,7 +433,7 @@ test("hosting a stopped interest yourself respects the plan; dismiss marks it re
   await assert.rejects(d.hostCopy("n1"), (e: unknown) => {
     assert.ok(e instanceof HostedError);
     assert.equal(e.kind, "limit");
-    assert.match(e.message, /room for 15 interests/);
+    assert.match(e.message, /room for 15 topics/);
     return true;
   });
   await d.dismiss("n1");

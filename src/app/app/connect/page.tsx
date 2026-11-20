@@ -101,7 +101,7 @@ export default function ConnectPage() {
   const handleGenerate = useCallback(async () => {
     const settings = loadSettings();
     if (!settings || settings.interests.length === 0) {
-      setGenMsg("No interests set yet.");
+      setGenMsg("No topics set yet.");
       setGenState("error");
       return;
     }
@@ -203,7 +203,7 @@ export default function ConnectPage() {
 
   const generateLabel =
     genState === "posting"
-      ? "Sending interests…"
+      ? "Sending topics…"
       : genState === "polling"
         ? "Generating brief…"
         : genState === "done"
@@ -225,7 +225,7 @@ export default function ConnectPage() {
             <a
               href="/app/interests"
               aria-label="Open your profile"
-              title="Profile & interests"
+              title="Topics"
               className="inline-flex size-7 items-center justify-center rounded-pill border border-border-default text-muted transition-colors hover:text-primary"
             >
               <svg
@@ -316,12 +316,12 @@ export default function ConnectPage() {
 
               {!hasInterests && genState === "idle" && (
                 <p className="text-sm text-secondary">
-                  No interests set yet.{" "}
+                  No topics set yet.{" "}
                   <a
                     href="/app"
                     className="text-signal underline underline-offset-2"
                   >
-                    Set your interests first →
+                    Set your topics first →
                   </a>
                 </p>
               )}
@@ -344,7 +344,7 @@ export default function ConnectPage() {
                         href="/app"
                         className="text-signal underline underline-offset-2"
                       >
-                        Set your interests first →
+                        Set your topics first →
                       </a>
                     </>
                   )}
@@ -496,7 +496,7 @@ export default function ConnectPage() {
               </h2>
               <p className="text-sm text-secondary">
                 With the companion running, click below to kick off a brief
-                using your saved interests.
+                using your saved topics.
               </p>
               <Button
                 variant="primary"

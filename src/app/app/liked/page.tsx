@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AppNav } from "@/components/AppNav";
+import { AppShell, PageHeader } from "@/components/shell/AppShell";
 import { LikeButton } from "@/components/LikeButton";
 import { FeedImage, SourceBadge, formatDate } from "@/components/FeedView";
 import { EmptyState } from "@/components/ui";
@@ -27,19 +27,14 @@ export default function LikedPage() {
   const stories = useLikedStories();
 
   return (
-    <main className="min-h-screen bg-page px-4 py-8 text-primary sm:px-6 sm:py-12">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-        <AppNav />
-
-        <header className="flex flex-col gap-1">
-          <h1 className="font-serif text-title-1 leading-tight text-primary">
-            Liked stories
-          </h1>
-          <p className="font-reading text-body-sm text-muted">
-            Stories you saved, newest first. Saved on this device.
-          </p>
-        </header>
-
+    <AppShell>
+      <PageHeader
+        title="Liked stories"
+        back={{ href: "/app/profile/", label: "Profile" }}
+      >
+        Stories you saved, newest first. Saved on this device.
+      </PageHeader>
+      <div data-main>
         {stories.length === 0 ? (
           <LikedEmptyState />
         ) : (
@@ -50,7 +45,7 @@ export default function LikedPage() {
           </div>
         )}
       </div>
-    </main>
+    </AppShell>
   );
 }
 

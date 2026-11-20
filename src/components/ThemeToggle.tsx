@@ -9,7 +9,7 @@ type Theme = "light" | "dark" | "system";
 const STORAGE_KEY = "scout.theme";
 // Same-tab broadcast so every mounted <ThemeToggle> stays in sync. The native
 // `storage` event only fires in OTHER tabs, so two toggles in the SAME document
-// (e.g. the settings page body control + the one in AppNav's profile menu, or the
+// (e.g. the settings page body control + the one in the old profile menu, or the
 // landing page's desktop/mobile pair) would otherwise show a stale selection /
 // wrong `aria-checked` after one of them changes the theme.
 const THEME_EVENT = "scout:theme-change";
