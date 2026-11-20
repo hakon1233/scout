@@ -12,10 +12,11 @@ import {
   type PublishInput,
   type PublishResponse,
   type PublishVerdict,
+  HAIKU_MODEL,
 } from "@scout/core";
 import { responseCostUsd, type ClaudeClient } from "@scout/research";
 
-export const PUBLISH_MODEL = "claude-haiku-5-5";
+export const PUBLISH_MODEL = HAIKU_MODEL;
 const MAX_OUTPUT_TOKENS = 1024;
 const CHECK_TIMEOUT_MS = 30_000;
 

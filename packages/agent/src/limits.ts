@@ -7,9 +7,11 @@
 // confusing 413s rather than a clear validation error. They live together so
 // the arithmetic is checkable in one place.
 //
-// This module deliberately imports nothing: routes/interests.ts reaches
-// chat.ts through routes/types.ts, so a constant shared between them has to
-// sit in a leaf or the import cycle puts it in the temporal dead zone.
+// This module imports only core (a leaf for the agent): routes/interests.ts
+// reaches chat.ts through routes/types.ts, so a constant shared between them
+// has to sit in a leaf or the import cycle puts it in the temporal dead zone.
+
+import { MAX_TOPIC_CHARS } from "#core";
 
 /** Maximum number of interests a user may hold. */
 export const MAX_INTERESTS = 15;
@@ -19,7 +21,7 @@ export const MAX_INTERESTS = 15;
  * other two dimensions; this one stops a single oversized topic being
  * forwarded into the (expensive, ~5-min) Claude synthesis prompt.
  */
-export const MAX_INTEREST_LEN = 200;
+export const MAX_INTEREST_LEN = MAX_TOPIC_CHARS;
 
 /**
  * Request-body cap, applied uniformly to every mutating /v0 route via

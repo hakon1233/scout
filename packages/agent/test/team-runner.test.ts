@@ -20,7 +20,7 @@ const PAUSED = "5c0a7000-0000-4000-8000-000000000113";
 
 // The SQL side, as the team_* functions behave (supabase/tests/team_runner.test.sql
 // pins the real ones).
-function fakeSupabase(opts: { runnerOn?: boolean } = {}) {
+function fakeSupabase(opts: { runnerOn?: boolean; facts?: boolean } = {}) {
   const topics = [
     { id: DUE, topic: "LLM releases, prices and retirements", due: true },
     { id: PAUSED, topic: "Emulator releases", due: false }, // paused
@@ -33,6 +33,32 @@ function fakeSupabase(opts: { runnerOn?: boolean } = {}) {
     topic: t.topic,
     doc: `# ${t.topic}\n## Report\nWhat changed this week.`,
     searches_per_run: 5,
+    // What claim_runs also returns (run_facts): settings, the last sections,
+    // the cadence and the last story's date.
+    ...(opts.facts
+      ? {
+          brief_length: "short",
+          story_count: 2,
+          stories_relevant_only: false,
+          evergreen: true,
+          search_locale: "nb-NO",
+          brief_language: "nb",
+          prior: [
+            {
+              date: "2026-11-19T07:05:00+00:00",
+              section_md: `## ${t.topic}\nNo change since 2026-11-18.`,
+            },
+            {
+              date: "2026-11-18T07:05:00+00:00",
+              section_md:
+                `## ${t.topic}\n- \`2026-11-17\` — **Old news.** Said before.\n` +
+                "  [example.com — The old story](https://example.com/old-story)\n",
+            },
+          ],
+          cadence: "daily",
+          last_story_at: "2026-11-18T07:05:00+00:00",
+        }
+      : {}),
   });
   const fetch = (async (url: string, init: RequestInit) => {
     const fn = url.replace(`${SUPABASE}/rest/v1/rpc/`, "");
@@ -138,7 +164,9 @@ function stubClaude(reply: { fail?: boolean } = {}) {
   return { spawnFn, spawns };
 }
 
-function setup(opts: { runnerOn?: boolean; fail?: boolean } = {}) {
+function setup(
+  opts: { runnerOn?: boolean; fail?: boolean; facts?: boolean } = {},
+) {
   const sb = fakeSupabase(opts);
   const claude = stubClaude(opts);
   const lines: string[] = [];
@@ -191,6 +219,24 @@ test("a team session is capped: the search budget in the prompt and --max-turns"
     /Use WebSearch at most 5 times and WebFetch at most 5 times\./,
   );
   assert.ok(args.includes("WebSearch,WebFetch"));
+});
+
+test("a team run's prompt carries its brief settings, cadence and what was already posted", async () => {
+  for (const argv of [[], ["--only", "Emulator releases"]]) {
+    const s = setup({ runnerOn: true, facts: true });
+    assert.equal(
+      await teamRunMain(argv, { SCOUT_TEAM_RUNNER: "on" }, CONFIG, s.deps),
+      0,
+    );
+    const [{ prompt }] = s.claude.spawns;
+    assert.match(prompt, /Cadence: daily\./);
+    assert.match(prompt, /Last posted story: 2026-11-18 \(2 days ago\)\./);
+    assert.match(prompt, /Stories already posted \(newest brief first\):/);
+    assert.match(prompt, /The old story — https:\/\/example\.com\/old-story/);
+    assert.match(prompt, /Search in Norwegian Bokmål \(Norway\)/);
+    assert.match(prompt, /marked evergreen/);
+    assert.match(prompt, /0-2 story bullets/);
+  }
 });
 
 test("the runner refuses to start without SCOUT_TEAM_RUNNER=on", async () => {

@@ -13,7 +13,13 @@
 // fallback.
 
 import { VOICE_USED_UP } from "@scout/core";
-import { verifiedUserId } from "./chat-store.ts";
+import {
+  bearerToken,
+  corsHeaders,
+  jsonResponder,
+  readCappedBytes,
+  signedInUser,
+} from "./request.ts";
 import { rpcCaller } from "./supabase.ts";
 
 export { VOICE_USED_UP };
@@ -48,22 +54,8 @@ export async function handleVoiceRequest(
   request: Request,
   deps: VoiceDeps,
 ): Promise<Response> {
-  const origin = request.headers.get("origin");
-  const allowed = deps.allowedOrigin.split(",").map((o) => o.trim());
-  const cors: Record<string, string> =
-    origin && allowed.includes(origin)
-      ? {
-          "access-control-allow-origin": origin,
-          "access-control-allow-methods": "POST",
-          "access-control-allow-headers": "authorization, content-type",
-          vary: "origin",
-        }
-      : {};
-  const json = (status: number, body: unknown) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "content-type": "application/json", ...cors },
-    });
+  const cors = corsHeaders(request, deps.allowedOrigin);
+  const json = jsonResponder(cors);
 
   if (!deps.serviceKey || !deps.ai) return json(404, { error: "not found" });
   if (request.method === "OPTIONS")
@@ -71,28 +63,14 @@ export async function handleVoiceRequest(
   if (request.method !== "POST")
     return json(405, { error: "method not allowed" });
 
-  const jwt = /^Bearer (\S+)$/.exec(
-    request.headers.get("authorization") ?? "",
-  )?.[1];
+  const jwt = bearerToken(request);
   if (!jwt) return json(401, { error: "sign in first" });
-  let userId: string | null;
-  try {
-    userId = await verifiedUserId({
-      url: deps.supabaseUrl,
-      anonKey: deps.anonKey,
-      userJwt: jwt,
-      fetch: deps.fetch,
-    });
-  } catch {
-    return json(502, {
-      error: "Scout couldn't check your sign-in. Try again.",
-    });
-  }
-  if (!userId) return json(401, { error: "sign in first" });
+  const userId = await signedInUser(jwt, deps, json);
+  if (userId instanceof Response) return userId;
 
   if (!(request.headers.get("content-type") ?? "").startsWith("audio/"))
     return json(415, { error: "Send the recording as audio." });
-  const audio = await readBytes(request, MAX_VOICE_BYTES);
+  const audio = await readCappedBytes(request, MAX_VOICE_BYTES);
   if (audio === null)
     return json(413, {
       error: "That recording is too long. Keep it under a minute.",
@@ -138,36 +116,6 @@ export async function handleVoiceRequest(
   if (!text)
     return json(422, { error: "Scout couldn't hear any words. Try again." });
   return json(200, { text });
-}
-
-// The body's bytes, or null when it is over `max`. Stops reading there.
-async function readBytes(
-  request: Request,
-  max: number,
-): Promise<Uint8Array | null> {
-  const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > max) return null;
-  if (!request.body) return new Uint8Array(0);
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > max) {
-      await reader.cancel().catch(() => undefined);
-      return null;
-    }
-    chunks.push(value);
-  }
-  const all = new Uint8Array(size);
-  let at = 0;
-  for (const c of chunks) {
-    all.set(c, at);
-    at += c.byteLength;
-  }
-  return all;
 }
 
 // Whisper's documented input is the audio as base64.

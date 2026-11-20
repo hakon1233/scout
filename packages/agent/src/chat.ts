@@ -23,7 +23,12 @@
 import type { spawn } from "node:child_process";
 import { USAGE_LIMIT_RE } from "./claude-runner.js";
 import { loadState, newChatTurnId, updateState, type State } from "./state.js";
-import { replayChanges, type ChatChange, type ChatTurn } from "#core";
+import {
+  quotedList,
+  replayChanges,
+  type ChatChange,
+  type ChatTurn,
+} from "#core";
 import { writeInterestDoc } from "./docs.js";
 import { buildInterestSnapshots, chatComplete } from "./chat-model.js";
 import { applyChatChanges, applyConfirmedDelete } from "./chat-changes.js";
@@ -277,14 +282,6 @@ export function confirmDeleteTurn(
       replayInterests: true,
     };
   });
-}
-
-// "A", "A" and "B", or "A", "B" and "C".
-function quotedList(items: string[]): string {
-  const quoted = items.map((t) => `"${t}"`);
-  return quoted.length < 2
-    ? quoted.join("")
-    : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`;
 }
 
 // Confirm-gated rewrite: writes the STORED proposed doc

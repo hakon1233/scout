@@ -10,10 +10,11 @@ import {
   parsePicks,
   type Pick,
   type PicksInput,
+  HAIKU_MODEL,
 } from "@scout/core";
 import { responseCostUsd, type ClaudeClient } from "@scout/research";
 
-export const PICKS_MODEL = "claude-haiku-5-5";
+export const PICKS_MODEL = HAIKU_MODEL;
 const MAX_OUTPUT_TOKENS = 1024;
 const PICKS_TIMEOUT_MS = 30_000;
 

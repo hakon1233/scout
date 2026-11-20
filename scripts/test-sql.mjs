@@ -8,23 +8,12 @@
 // and a pgTAP stand-in), then every migration in order, then the test. A test's
 // `select * from finish()` is swapped for a query of the checks that failed.
 
-import { PGlite } from "@electric-sql/pglite";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { freshDatabase, root } from "./sql-test-db.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const only = process.argv.slice(2);
-const prelude = readFileSync(
-  path.join(root, "scripts/sql-test-prelude.sql"),
-  "utf8",
-);
-const migrationsDir = path.join(root, "supabase/migrations");
 const testsDir = path.join(root, "supabase/tests");
-const migrations = readdirSync(migrationsDir)
-  .filter((f) => f.endsWith(".sql"))
-  .sort()
-  .map((f) => [f, readFileSync(path.join(migrationsDir, f), "utf8")]);
 const tests = readdirSync(testsDir)
   .filter(
     (f) =>
@@ -39,17 +28,9 @@ if (!tests.length) {
 
 let failed = 0;
 for (const file of tests) {
-  const pg = new PGlite();
+  let pg;
   try {
-    await pg.exec(prelude);
-    await pg.exec("set search_path = public, extensions;");
-    for (const [name, sql] of migrations) {
-      try {
-        await pg.exec(sql);
-      } catch (e) {
-        throw new Error(`migration ${name}: ${e.message}`);
-      }
-    }
+    pg = await freshDatabase();
     const sql = readFileSync(path.join(testsDir, file), "utf8")
       .replace(/create extension if not exists pgtap[^;]*;/, "")
       .replace(
@@ -76,7 +57,7 @@ for (const file of tests) {
     failed++;
     console.log(`FAIL ${file}: ${e.message}`);
   } finally {
-    await pg.close();
+    await pg?.close();
   }
 }
 process.exit(failed ? 1 : 0);

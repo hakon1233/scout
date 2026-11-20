@@ -55,7 +55,14 @@ as `@scout/core`, the companion as `#core`.
   `planChatChanges`, the rules for what of a model's change set lands, waits for a
   confirm or is dropped. The companion and the hosted chat both use them.
 - `tags.ts`: the 30 seed tags (browse's chips, the publish check's first choice) and
-  `normalizeTags`; the SQL's `tags_ok` enforces the same pattern.
+  `normalizeTags`; the SQL's `tags_ok` enforces the same pattern
+  (`test/sql-parity.test.mjs` feeds both the same cases).
+- `limits.ts`: the numbers more than one package needs: `MAX_TOPIC_CHARS` (also the
+  schema's topic check), `MAX_CHAT_MESSAGE_CHARS`, and `HAIKU_MODEL`, the model of every
+  hosted call. `quoted-list.ts`: `quotedList`, the chats' "a", "b" and "c".
+- `claimed-run.ts`: a claimed hosted run (`claim_runs`, `team_claim_runs` and
+  `team_start_run` all return the same row) and `researchInterestOf`, its research
+  input. The Worker's cron and the Scout team runner both use it.
 - `publish-check.ts`: what a topic must pass to go public: `publishPrecheck` (title,
   links, length), `buildPublishPrompt` (rules first, the reader's text as JSON-quoted
   data) and `parsePublishCheck`, which fails closed. Also the `POST /publish` shapes.
@@ -141,11 +148,14 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   `finish_run` records a result and its cost; a failed first attempt is queued again
   unless the result says a retry can't help (`p_retry`). `claim_runs` also hands each
   run its brief settings, the last two ready sections, the cadence and the date of the
-  last story (`*_brief_settings.sql`).
+  last story: `run_facts` (`*_team_run_facts.sql`), which the team's claims use too.
   `request_run` is a reader's "run now", limited by `allowance()`.
 - `run-due.ts`: `runDue({queue, claude})`, one tick: claim, research each run with
   `researchInterest`, finish each. Host-neutral; tests use a stub queue.
 - `supabase.ts`: the `RunQueue` adapter over PostgREST, and `requestRun` as the reader.
+- `request.ts`: what every route does first: CORS, JSON answers, the bearer token, the
+  reader's verified sign-in and a size-capped JSON body. `http.ts`, `voice.ts` and
+  `team.ts` all use it.
 - `http.ts`: `POST /runs {interestId}` with the reader's Supabase JWT; it only queues.
   `POST /chat {message}` and `POST /chat/confirm {kind, …}` verify the JWT, check
   `chat_block_reason` (kill switch, daily chat turns), and run `packages/hosted`'s chat.
@@ -171,7 +181,8 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
 - `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`;
   without `VAPID_PRIVATE_KEY` no pushes are sent.
 - `team.ts`: the `/team` routes (paths in core's `team.ts`), with no CORS and their own
-  bearer tokens; a route whose token is unset answers 404. `TEAM_RUNNER_TOKEN`:
+  bearer tokens; a route whose token is unset answers 404. Bodies over 192 KB are
+  refused (413). `TEAM_RUNNER_TOKEN`:
   `topics`, `claim`, `start`, `runs` for the Scout team runner (below). `runs` records a
   result through `team_finish_run`, which queues the same pushes as a cron run.
   `MODERATION_TOKEN`: `POST /team/hide {interestId, reason}` hides a public topic
@@ -198,6 +209,9 @@ companion never imports it.
 - The runner is off unless both switches are on: `SCOUT_TEAM_RUNNER=on` in the shell,
   and `settings.team_runner_on` in the database. While it is off, team topics do not
   run at all. Test with `--dry-run` or the spawn stub, never a real run.
+- A team run's prompt gets what a cron run's gets (brief settings, the last two
+  sections, cadence, last story), since `team_claim_runs` and `team_start_run` return
+  `claim_runs`'s row. `--dry-run` has none of these and researches with the defaults.
 - `interests.paused`: a paused topic is never queued by either side. The test topics
   (`seeds/team-topics.sql`) are seeded paused; `--only <topic>` is a one-off run that
   leaves it paused.
@@ -318,8 +332,10 @@ redirect URLs.
   code through its interfaces, with a stub Claude client that answers with recorded
   responses and an in-memory store or queue. No network.
 - `supabase/tests`: pgTAP tests for RLS, quotas, the sign-up trigger, the run queue, chat,
-  sharing and push devices
-  (`pnpm test:rls`, needs Docker; not part of `pnpm check`).
+  sharing, push devices, usage events, the profile and subscriptions. `pnpm test:sql`
+  runs them in PGlite (part of `pnpm check`); `pnpm test:rls` against Docker.
+- `test/*.test.mjs`: script tests, and `sql-parity.test.mjs`, which checks that core and
+  the schema agree on tags and the topic length (PGlite, no network).
 - `packages/agent/test`: the companion's unit and HTTP contract tests (`node:test`). They
   use a stub `claude`, a temporary state directory and port 0, so they need no network
   and no model quota. A guard makes any test that points at the real `~/.config/scout`

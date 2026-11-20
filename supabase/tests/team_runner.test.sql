@@ -41,6 +41,19 @@ select is((select count(*)::int from public.interests
   'a team account has no interest caps (the free plan allows one daily topic)');
 
 create temp table tick (run_id uuid, topic text, doc text, searches_per_run integer);
+-- What a team claim or start hands the runner: the same row claim_runs hands the Worker.
+create temp table team_tick (
+  run_id uuid, topic text, doc text, searches_per_run integer,
+  brief_length text, story_count smallint, stories_relevant_only boolean,
+  evergreen boolean, search_locale text, brief_language text,
+  prior jsonb, cadence text, last_story_at timestamptz);
+create function pg_temp.facts() returns text language sql as $$
+  select brief_length || ' ' || story_count || ' ' || evergreen || ' ' ||
+         coalesce(search_locale, '-') || ' ' || cadence || ' ' ||
+         jsonb_array_length(prior) || ' ' || coalesce(prior -> 0 ->> 'section_md', '-') || ' ' ||
+         coalesce(to_char(last_story_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI'), 'never')
+  from team_tick
+$$;
 create function pg_temp.queued_topics() returns text[] language sql as $$
   select coalesce(array_agg(i.topic order by i.topic), '{}')
   from public.runs r join public.interests i on i.id = r.interest_id
@@ -86,9 +99,24 @@ select results_eq(
   'team_topics lists the team''s public topics and which are due, claiming nothing');
 select is(pg_temp.queued_topics(), '{}'::text[], 'team_topics queues nothing');
 
-insert into tick select * from public.team_claim_runs(1, '2026-11-21 12:00+00');
+-- Team daily has settings and earlier briefs: a story two days ago, nothing new yesterday.
+update public.interests set brief_length = 'long', story_count = 2, evergreen = true,
+  search_locale = 'nb-NO'
+where id = '7ea70000-0000-4000-8000-0000000000d1';
+insert into public.runs (interest_id, scheduled_for, status, started_at, finished_at, section_md, coverage, attempts) values
+  ('7ea70000-0000-4000-8000-0000000000d1', '2026-11-19 07:00+00', 'ready', '2026-11-19 07:00+00',
+   '2026-11-19 07:05+00', '## Team daily' || chr(10) || '- Old story', '{"topic":"Team daily","status":"covered"}', 1),
+  ('7ea70000-0000-4000-8000-0000000000d1', '2026-11-20 07:00+00', 'ready', '2026-11-20 07:00+00',
+   '2026-11-20 07:05+00', '## Team daily' || chr(10) || 'No change since 19 Nov.', '{"topic":"Team daily","status":"empty"}', 1);
+
+insert into team_tick select * from public.team_claim_runs(1, '2026-11-21 12:00+00');
+insert into tick select run_id, topic, doc, searches_per_run from team_tick;
 select results_eq('select topic from tick', array['Team daily'],
   'the team runner claims its due topic');
+select is(pg_temp.facts(),
+  'long 2 true nb-NO daily 2 ## Team daily' || chr(10) || 'No change since 19 Nov. 2026-11-19 07:05',
+  'a team claim carries the brief settings, the last two sections, the cadence and the last story''s date');
+delete from team_tick;
 select is((select count(*)::int from public.team_claim_runs(10, '2026-11-21 12:01+00')), 0,
   'and never a paused topic');
 
@@ -108,8 +136,16 @@ select is((select count(*)::int from public.outbox where payload ->> 'run_id' = 
 delete from tick;
 
 -- A one-off test run of the paused topic; it stays paused.
-insert into tick select * from public.team_start_run('7ea70000-0000-4000-8000-0000000000f1', '2026-11-21 13:00+00');
+insert into public.runs (interest_id, scheduled_for, status, started_at, finished_at, section_md, coverage, attempts) values
+  ('7ea70000-0000-4000-8000-0000000000f1', '2026-11-20 07:00+00', 'ready', '2026-11-20 07:00+00',
+   '2026-11-20 07:05+00', '## Team paused' || chr(10) || 'No news yet.', '{"topic":"Team paused","status":"empty"}', 1);
+insert into team_tick select * from public.team_start_run('7ea70000-0000-4000-8000-0000000000f1', '2026-11-21 13:00+00');
+insert into tick select run_id, topic, doc, searches_per_run from team_tick;
 select results_eq('select topic from tick', array['Team paused'], 'a one-off run starts');
+select is(pg_temp.facts(),
+  'normal 4 false - daily 1 ## Team paused' || chr(10) || 'No news yet. never',
+  'a one-off run carries the same facts as a claim');
+delete from team_tick;
 select is((select status from public.runs where id = (select run_id from tick)), 'running',
   'it starts running, so the Worker never sees it queued');
 select throws_ok($$select * from public.team_start_run('7ea70000-0000-4000-8000-0000000000f1', '2026-11-21 13:01+00')$$,
@@ -183,6 +219,11 @@ select ok(not has_function_privilege('anon', 'public.team_topics(timestamptz)', 
 select ok(has_function_privilege('service_role',
   'public.team_finish_run(uuid, text, jsonb, text, timestamptz)', 'execute'),
   'the Worker finishes team runs');
+select ok(not has_function_privilege('authenticated', 'public.run_facts(uuid)', 'execute')
+       and not has_function_privilege('anon', 'public.run_facts(uuid)', 'execute'),
+  'readers cannot read a run''s facts (any interest''s doc and history)');
+select ok(not has_function_privilege('authenticated', 'public.team_start_run(uuid, timestamptz)', 'execute'),
+  'readers cannot start team runs');
 
 select * from finish();
 rollback;

@@ -3,6 +3,7 @@
 // a POST with `Authorization: Bearer <token>`: TEAM_RUNNER_TOKEN for the
 // runner's routes, MODERATION_TOKEN for /team/hide.
 
+import type { ClaimedRun } from "./claimed-run.ts";
 import type { TopicCoverage } from "./contract.ts";
 
 export const TEAM_PATHS = {
@@ -27,13 +28,9 @@ export type TeamTopic = {
   due: boolean;
 };
 
-// A run the team runner owns, already marked running.
-export type TeamRun = {
-  runId: string;
-  topic: string;
-  doc: string;
-  searchesPerRun: number;
-};
+// A run the team runner owns, already marked running: the same as a Worker
+// run, settings and earlier sections included.
+export type TeamRun = ClaimedRun;
 
 export type TeamRunResult = {
   runId: string;
