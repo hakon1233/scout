@@ -132,7 +132,7 @@ function PickRow({
       <div className="min-w-0 flex-1">
         <Link
           href={`/i/?s=${pick.slug}`}
-          className="block break-words text-body font-medium text-primary underline-offset-2 hover:underline"
+          className="tap-target block break-words text-body font-medium text-primary underline-offset-2 hover:underline"
         >
           {pick.title}
         </Link>

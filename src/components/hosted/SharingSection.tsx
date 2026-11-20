@@ -110,7 +110,7 @@ export function SharingSection({
             aria-checked={current === o.value}
             disabled={busy}
             onClick={() => choose(o.value)}
-            className={`min-h-9 rounded-[9px] px-2 text-body-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring pointer-coarse:min-h-11 ${
+            className={`min-h-9 rounded-[9px] px-2 text-body-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring phone:min-h-11 ${
               current === o.value
                 ? "bg-surface font-medium text-primary shadow-sm"
                 : "text-secondary hover:text-primary"

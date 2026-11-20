@@ -258,7 +258,7 @@ function AppMenu({ menu }: { menu?: ShellMenu }) {
                 <Link
                   href="/app/upgrade/"
                   onClick={close}
-                  className="font-medium text-primary underline-offset-2 hover:underline"
+                  className="tap-target font-medium text-primary underline-offset-2 hover:underline"
                 >
                   Upgrade
                 </Link>

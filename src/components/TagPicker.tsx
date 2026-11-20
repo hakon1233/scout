@@ -16,7 +16,7 @@ import {
 const CHIP =
   "inline-flex min-h-9 items-center rounded-pill border px-3 text-body-sm transition " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring " +
-  "pointer-coarse:min-h-11";
+  "phone:min-h-11";
 
 export function TagChip({
   tag,

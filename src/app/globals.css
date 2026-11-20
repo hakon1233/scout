@@ -3,6 +3,36 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
+  Phone sizes: tap targets are at least 44 px tall below 640 px wide, and on
+  touch screens; desktop keeps its denser sizes. `phone:min-h-11` grows a
+  control; `tap-target` gives a control drawn smaller (a switch, an inline
+  link) an invisible 44 px hit area around it instead.
+*/
+@custom-variant phone {
+  @media (max-width: 639.98px) {
+    @slot;
+  }
+  @media (pointer: coarse) {
+    @slot;
+  }
+}
+
+@utility tap-target {
+  @variant phone {
+    position: relative;
+    &::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      translate: -50% -50%;
+    }
+  }
+}
+
+/*
   Scout design tokens
 
   Two-layer model:

@@ -241,7 +241,7 @@ function Browse() {
               <button
                 type="button"
                 onClick={() => setMoreTags(true)}
-                className="min-h-9 rounded-pill px-3 text-body-sm text-secondary underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring pointer-coarse:min-h-11"
+                className="min-h-9 rounded-pill px-3 text-body-sm text-secondary underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring phone:min-h-11"
               >
                 More tags
               </button>
@@ -269,7 +269,7 @@ function Browse() {
                 role="radio"
                 aria-checked={sort === s}
                 onClick={() => go({ sort: s })}
-                className={`min-h-9 rounded-pill px-3 text-body-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring pointer-coarse:min-h-11 ${
+                className={`min-h-9 rounded-pill px-3 text-body-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring phone:min-h-11 ${
                   sort === s
                     ? "bg-surface-muted font-medium text-primary"
                     : "text-muted hover:text-primary"

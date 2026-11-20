@@ -236,7 +236,7 @@ function TopicLists({
           {plan.id === "free" && (
             <Link
               href="/app/upgrade/"
-              className="font-medium text-primary underline-offset-2 hover:underline"
+              className="tap-target font-medium text-primary underline-offset-2 hover:underline"
             >
               Upgrade
             </Link>
@@ -332,7 +332,7 @@ function TopicRow({
         <div className="min-w-0 flex-1 py-1">
           <Link
             href={`/app/topics/?id=${encodeURIComponent(i.id)}`}
-            className="break-words text-body font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+            className="tap-target break-words text-body font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
           >
             {i.topic}
           </Link>

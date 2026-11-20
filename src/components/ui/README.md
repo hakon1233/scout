@@ -41,6 +41,10 @@ All tokens live in `src/app/globals.css`. Light values are defined under `:root`
 
 Font stacks: Geist (sans) and Geist Mono — `--font-sans` and `--font-mono`. The previous `body { font-family: Arial, … }` override has been removed.
 
+### Phone sizes
+
+Below 640 px wide (and on touch screens) tap targets are at least 44 px tall; desktop keeps its denser sizes. Use `phone:min-h-11` to grow a control and `tap-target` to give a smaller-drawn control (switch, inline link) an invisible 44 px hit area. Both live in `globals.css`; `Button`, `Segmented` and `Toggle` already use them.
+
 ### Motion
 
 - `--motion-fast: 120ms`

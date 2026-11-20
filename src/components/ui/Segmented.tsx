@@ -44,7 +44,7 @@ export function Segmented<T extends string>({
             suppressHydrationWarning
             onClick={() => onChange(opt.value)}
             className={
-              "inline-flex min-h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-body-sm transition pointer-coarse:min-h-11 " +
+              "inline-flex min-h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-body-sm transition phone:min-h-11 " +
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:cursor-not-allowed disabled:opacity-60 " +
               (active
                 ? "bg-surface font-medium text-primary shadow-sm"

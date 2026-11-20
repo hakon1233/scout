@@ -25,12 +25,13 @@ const variantStyles: Record<Variant, string> = {
 };
 
 const sizeStyles: Record<Size, string> = {
-  sm: "min-h-9 px-3 py-1.5 text-body-sm",
+  sm: "min-h-9 px-3 py-1.5 text-body-sm phone:min-h-11",
   md: "min-h-11 px-4 py-2 text-body-sm",
 };
 
 export function buttonClasses(variant: Variant = "primary", size: Size = "md") {
-  const sizing = variant === "link" ? "text-body-sm" : sizeStyles[size];
+  const sizing =
+    variant === "link" ? "text-body-sm tap-target" : sizeStyles[size];
   return `${base} ${variantStyles[variant]} ${sizing}`;
 }
 
@@ -44,7 +45,8 @@ export function Button({
   type = "button",
   ...rest
 }: ButtonProps) {
-  const sizing = variant === "link" ? "text-body-sm" : sizeStyles[size];
+  const sizing =
+    variant === "link" ? "text-body-sm tap-target" : sizeStyles[size];
   return (
     <button
       type={type}

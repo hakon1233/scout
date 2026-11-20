@@ -106,7 +106,7 @@ export function BriefSettingsGroup({
             const v = e.target.value;
             void apply({ stories: v === RELEVANT ? RELEVANT : Number(v) });
           }}
-          className="min-h-9 rounded-lg bg-surface-muted px-3 text-body-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-60 pointer-coarse:min-h-11"
+          className="min-h-9 rounded-lg bg-surface-muted px-3 text-body-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-60 phone:min-h-11"
         >
           {stories === undefined && <option value="">…</option>}
           {STORY_CHOICES.map((c) => (
