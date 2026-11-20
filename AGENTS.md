@@ -46,5 +46,9 @@ code, tests and comments.
   (`src/lib/boundaries.test.ts`).
 - `claude-runner.ts` is the only place a `claude` child starts, and `updateState` is the
   only writer of `state.json`. Keep it that way.
+- Push notifications use one VAPID pair. The public key is committed (`wrangler.toml`,
+  `scripts/deploy-ideas.mjs`); the private key lives only in the Worker secret
+  `VAPID_PRIVATE_KEY` and the hosted env file outside the repo. A new pair cuts off every
+  saved device.
 - Write a failing test first for a bug fix, at the module's interface (the HTTP routes
   for the companion).

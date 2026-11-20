@@ -49,11 +49,27 @@ export const MAX_BATCH = Math.floor(
 // and re-sends Claude's whole turn (search results included) as JSON.
 export const DEFAULT_BATCH = 2;
 
+// A missing or garbled batch size (an unset RUN_BATCH) means the default.
+function batchLimit(batchSize: number | undefined): number {
+  const size = Number.isFinite(batchSize)
+    ? Math.floor(batchSize as number)
+    : DEFAULT_BATCH;
+  return Math.max(0, Math.min(MAX_BATCH, size));
+}
+
+/** The subrequests a tick's pushes may use: what the claim and the runs leave. */
+export function notifyBudget(batchSize: number | undefined): number {
+  return SUBREQUEST_LIMIT - 1 - batchLimit(batchSize) * SUBREQUESTS_PER_RUN;
+}
+
 export type RunDueDeps = {
   queue: RunQueue;
   claude: ClaudeClient;
   batchSize?: number;
   timeoutMs?: number; // per run; researchInterest's own default is 300 s
+  // Tells the run's readers its brief is ready (push.ts). Called once a run
+  // with stories is recorded; its failures are swallowed, never the run's.
+  notify?: (runId: string) => Promise<void>;
 };
 
 export type TickSummary = {
@@ -67,11 +83,7 @@ export type TickSummary = {
 // Throws only when the claim fails. A run whose result cannot be recorded is
 // left running for the reaper; the other runs carry on.
 export async function runDue(deps: RunDueDeps): Promise<TickSummary> {
-  // A missing or garbled batch size (an unset RUN_BATCH) means the default.
-  const size = Number.isFinite(deps.batchSize)
-    ? Math.floor(deps.batchSize as number)
-    : DEFAULT_BATCH;
-  const limit = Math.max(0, Math.min(MAX_BATCH, size));
+  const limit = batchLimit(deps.batchSize);
   const runs = limit ? await deps.queue.claim(limit) : [];
   const summary: TickSummary = {
     claimed: runs.length,
@@ -103,6 +115,10 @@ export async function runDue(deps: RunDueDeps): Promise<TickSummary> {
         else summary.ready++;
       } catch {
         summary.unrecorded++;
+        return;
+      }
+      if (deps.notify && outcome.coverage.status === "covered") {
+        await deps.notify(run.runId).catch(() => undefined);
       }
     }),
   );

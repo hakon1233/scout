@@ -104,6 +104,34 @@ export interface HostedData {
   // private, within their limits. Returns the new interest id.
   hostCopy(noticeId: string): Promise<string>;
   dismiss(noticeId: string): Promise<void>;
+  // "Notify me when a brief is ready" on this device.
+  pushStatus(): Promise<PushState>;
+  // Call from the tap itself: browsers ask permission only in a user gesture.
+  pushEnable(): Promise<PushState>;
+  pushDisable(): Promise<PushState>;
+}
+
+/** Push on this device: `needs-install` is an iPhone outside the Home Screen
+ *  (iOS 16.4+ pushes only to installed web apps). */
+export type PushState =
+  | "unsupported"
+  | "needs-install"
+  | "denied"
+  | "off"
+  | "on";
+
+type PushKeys = { endpoint: string; p256dh: string; auth: string };
+
+/** The browser's push side, injected so tests need no browser. */
+export interface PushDevice {
+  supported: boolean;
+  needsInstall: boolean;
+  permission(): NotificationPermission;
+  requestPermission(): Promise<NotificationPermission>;
+  subscription(): Promise<PushKeys | null>;
+  subscribe(applicationServerKey: string): Promise<PushKeys>;
+  // Returns the endpoint it dropped, if there was one.
+  unsubscribe(): Promise<string | null>;
 }
 
 /** A failure with a message the page can show as is. `limit` means the
@@ -130,6 +158,8 @@ export function createHostedData(deps: {
   workerUrl: string;
   session: () => Promise<Session | null>;
   fetch?: Fetch;
+  push?: PushDevice;
+  vapidKey?: string; // the Worker's VAPID public key, base64url
 }): HostedData {
   const doFetch: Fetch = deps.fetch ?? ((...a) => globalThis.fetch(...a));
 
@@ -226,7 +256,63 @@ export function createHostedData(deps: {
     });
   }
 
+  async function pushStatus(): Promise<PushState> {
+    const p = deps.push;
+    if (!p || !deps.vapidKey) return "unsupported";
+    if (!p.supported) return p.needsInstall ? "needs-install" : "unsupported";
+    if (p.permission() === "denied") return "denied";
+    return (await p.subscription()) ? "on" : "off";
+  }
+
   return {
+    pushStatus,
+
+    async pushEnable() {
+      const p = deps.push;
+      const key = deps.vapidKey;
+      if (!p || !key || !p.supported) return pushStatus();
+      // Nothing awaited before the prompt: Safari asks only within the tap.
+      const granted =
+        p.permission() === "granted" ||
+        (await p.requestPermission()) === "granted";
+      if (!granted) return pushStatus();
+      let keys: PushKeys;
+      try {
+        keys = await p.subscribe(key);
+      } catch {
+        throw new HostedError(
+          "failed",
+          "This browser wouldn't turn on notifications. Try again.",
+        );
+      }
+      try {
+        await rest("rpc/save_push_subscription", {
+          method: "POST",
+          body: {
+            p_endpoint: keys.endpoint,
+            p_p256dh: keys.p256dh,
+            p_auth: keys.auth,
+          },
+        });
+      } catch (e) {
+        await p.unsubscribe().catch(() => null);
+        throw e;
+      }
+      return "on";
+    },
+
+    async pushDisable() {
+      const p = deps.push;
+      const endpoint = p ? await p.unsubscribe() : null;
+      if (endpoint && (await deps.session())) {
+        await rest(
+          `push_subscriptions?endpoint=eq.${encodeURIComponent(endpoint)}`,
+          { method: "DELETE", prefer: "return=minimal" },
+        );
+      }
+      return pushStatus();
+    },
+
     async home() {
       const s = await session();
       const user = encodeURIComponent(s.userId);
@@ -554,6 +640,69 @@ export function shareUrl(slug: string): string {
   return `${origin}${base}/i/?s=${encodeURIComponent(slug)}`;
 }
 
+/** This browser's push side. The service worker (public/sw.js) shows the
+ *  pushes; it is registered only when the reader turns notifications on. */
+export function browserPushDevice(base: string): PushDevice | undefined {
+  if (typeof window === "undefined") return undefined;
+  const scope = `${base}/`;
+  const nav = navigator as Navigator & { standalone?: boolean };
+  const ios =
+    /iPad|iPhone|iPod/.test(nav.userAgent) ||
+    (nav.platform === "MacIntel" && nav.maxTouchPoints > 1);
+  const installed =
+    nav.standalone === true ||
+    window.matchMedia("(display-mode: standalone)").matches;
+  const keysOf = (sub: PushSubscription | null): PushKeys | null => {
+    const json = sub?.toJSON();
+    return json?.endpoint && json.keys?.p256dh && json.keys.auth
+      ? {
+          endpoint: json.endpoint,
+          p256dh: json.keys.p256dh,
+          auth: json.keys.auth,
+        }
+      : null;
+  };
+  const current = async () =>
+    (await navigator.serviceWorker.getRegistration(scope)) ?? null;
+  return {
+    supported:
+      "serviceWorker" in navigator &&
+      "PushManager" in window &&
+      "Notification" in window,
+    needsInstall: ios && !installed,
+    permission: () => Notification.permission,
+    requestPermission: () => Notification.requestPermission(),
+    async subscription() {
+      const reg = await current();
+      return reg ? keysOf(await reg.pushManager.getSubscription()) : null;
+    },
+    async subscribe(key) {
+      await navigator.serviceWorker.register(`${base}/sw.js`, { scope });
+      const reg = await navigator.serviceWorker.ready;
+      const keys = keysOf(
+        await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: base64urlBytes(key),
+        }),
+      );
+      if (!keys) throw new Error("subscription without keys");
+      return keys;
+    },
+    async unsubscribe() {
+      const sub = await (await current())?.pushManager.getSubscription();
+      if (!sub) return null;
+      await sub.unsubscribe();
+      return sub.endpoint;
+    },
+  };
+}
+
+function base64urlBytes(s: string): Uint8Array<ArrayBuffer> {
+  const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
 let hosted: HostedData | null | undefined;
 
 /** The app's one HostedData, or null in a build without hosted config. */
@@ -574,6 +723,8 @@ export function hostedData(): HostedData | null {
       const token = user ? await auth.accessToken() : null;
       return user && token ? { userId: user.id, accessToken: token } : null;
     },
+    push: browserPushDevice(process.env.NEXT_PUBLIC_BASE_PATH ?? ""),
+    vapidKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
   });
   return hosted;
 }

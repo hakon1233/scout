@@ -118,7 +118,13 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   changes, follows and its `chat_turns` row land in one `commit_chat_turn` call
   (`supabase/migrations/*_chat.sql`, which also adds `plans.max_interests`; the
   interests trigger enforces that cap, `*_max_interests.sql`).
-- `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`.
+- `push.ts`: "Your brief is ready". After a run finishes covered, `briefReadyNotifier`
+  sends a Web Push (aes128gcm, VAPID, via `@block65/webcrypto-web-push`) to every device
+  of the interest's owner and followers (`push_targets`), within what the tick's
+  subrequest budget leaves, and deletes devices the push service calls gone (404/410).
+  A push failure never fails or retries a run. Tables and RPCs: `*_push.sql`.
+- `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`;
+  without `VAPID_PRIVATE_KEY` no pushes are sent.
 
 ### Web app (`src`)
 
@@ -141,13 +147,18 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
 - `lib/hosted.ts`: the hosted app's one data module. `hostedData()` returns `home`,
   `transcript`, `chat`, `confirm`, `setCadence`, `remove`, `restore`, `unfollow`,
   `runNow`, and for sharing `setVisibility`, `shared(slug)`, `follow(slug)`,
-  `hostCopy(notice)` and `dismiss(notice)`, over Supabase REST (as the reader, under
+  `hostCopy(notice)` and `dismiss(notice)`, and `pushStatus`, `pushEnable`,
+  `pushDisable` for this device's notifications, over Supabase REST (as the reader, under
   RLS) and the Worker. `shared` also works signed out, with the anon key. Limits come
   back as `HostedError` with a plain sentence (core's `quotaMessage`, shared with the
   Worker). `components/hosted/` renders it; in a hosted build `app/app/page.tsx` shows
   `HostedHome` instead of the companion feed. `app/i` is a share link's page
   (`/i/?s=<slug>`, read on the client because the site is a static export): the
   interest's latest brief for anyone, and Follow for a signed-in reader.
+- `public/manifest.webmanifest` and `public/sw.js`: installing Scout as a web app (iPhones
+  get pushes only from the Home Screen) and the service worker that shows pushes and
+  opens `app/` on a tap. Both use relative URLs, so they work under any base path. No
+  offline caching. The switch is `components/hosted/PushSwitch.tsx`.
 
 ### Hosted backend (`supabase/`)
 
@@ -159,7 +170,9 @@ only `profiles.is_admin` may set it), through `set_visibility`. Followers read t
 host's runs, at no cost to them. `follow(slug)`, `interest_by_slug(slug)` (anon too)
 and `host_copy(notice)` are the RPCs; when a host makes a followed interest private or
 deletes it, a trigger leaves each follower a `stopped_sharing` notification and drops
-the follows. `seeds/public-interests.sql` is the starter catalog, applied by hand.
+the follows. `*_push.sql` keeps one row per device for push notifications; a reader
+sees and deletes only their own, and the Worker reads them through `push_targets`.
+`seeds/public-interests.sql` is the starter catalog, applied by hand.
 `config.toml` turns on Google (client
 id and secret read from env by name) and the email link, and lists the sign-in page's
 redirect URLs.
@@ -193,8 +206,8 @@ redirect URLs.
 - `packages/research/test`, `packages/hosted/test`, `packages/worker/test`: the hosted
   code through its interfaces, with a stub Claude client that answers with recorded
   responses and an in-memory store or queue. No network.
-- `supabase/tests`: pgTAP tests for RLS, quotas, the sign-up trigger, the run queue, chat
-  and sharing
+- `supabase/tests`: pgTAP tests for RLS, quotas, the sign-up trigger, the run queue, chat,
+  sharing and push devices
   (`pnpm test:rls`, needs Docker; not part of `pnpm check`).
 - `packages/agent/test`: the companion's unit and HTTP contract tests (`node:test`). They
   use a stub `claude`, a temporary state directory and port 0, so they need no network

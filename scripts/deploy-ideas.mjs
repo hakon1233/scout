@@ -15,6 +15,9 @@ const REF = "qctcuajvefuicasakgkq";
 const PAGES_PROJECT = "scout-ideas";
 const BRANCH = "ideas";
 const WORKER_NAME = "scout-runs"; // packages/worker/wrangler.toml
+// The public half of the Worker's VAPID pair (wrangler.toml); public by design.
+const VAPID_PUBLIC_KEY =
+  "BI6UnDSibkd7O63kgma8diRbDNqciOAYM00hAVYqp-nsn-TAP1AsHpGyEmG3Psj6u1ALdIQKAJZzbZYBLnAMyhE";
 
 const env = process.env;
 for (const k of [
@@ -61,6 +64,7 @@ run("pnpm", ["build"], {
   NEXT_PUBLIC_SCOUT_WORKER_URL: subdomain
     ? `https://${WORKER_NAME}.${subdomain}.workers.dev`
     : "",
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: VAPID_PUBLIC_KEY,
 });
 
 const projects = await getJson(

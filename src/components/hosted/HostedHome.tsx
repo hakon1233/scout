@@ -24,6 +24,7 @@ import {
   type Visibility,
 } from "@/lib/hosted";
 import { HostedChat } from "./HostedChat";
+import { PushSwitch } from "./PushSwitch";
 
 const POLL_MS = 5_000;
 const UNDO_MS = 15_000;
@@ -251,6 +252,10 @@ function Frame({
               loading={signingOut}
               onClick={async () => {
                 setSigningOut(true);
+                // This device stops getting the reader's pushes.
+                await hostedData()
+                  ?.pushDisable()
+                  .catch(() => undefined);
                 await hostedAuth()
                   ?.signOut()
                   .catch(() => undefined);
@@ -380,6 +385,7 @@ function Interests({
         )}
       </ul>
       <p className="text-body-sm text-muted">{allowanceLine(home.allowance)}</p>
+      <PushSwitch data={data} />
     </section>
   );
 }

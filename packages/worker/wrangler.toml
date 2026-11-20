@@ -6,6 +6,8 @@
 #   ANTHROPIC_API_KEY          the research and chat calls
 #   SUPABASE_ANON_KEY          the publishable key, for the reader's own calls
 #                              (public by design, but never committed)
+#   VAPID_PRIVATE_KEY          signs "Your brief is ready" pushes (src/push.ts);
+#                              without it no pushes are sent
 name = "scout-runs"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"
@@ -20,3 +22,7 @@ SUPABASE_URL = "https://qctcuajvefuicasakgkq.supabase.co"
 # The web app's origins, comma-separated.
 ALLOWED_ORIGIN = "https://scout-ideas.pages.dev,https://hakon1233.github.io"
 RUN_BATCH = "2"
+# Web Push: the public half of the VAPID pair (the web app's
+# NEXT_PUBLIC_VAPID_PUBLIC_KEY) and the contact push services see.
+VAPID_PUBLIC_KEY = "BI6UnDSibkd7O63kgma8diRbDNqciOAYM00hAVYqp-nsn-TAP1AsHpGyEmG3Psj6u1ALdIQKAJZzbZYBLnAMyhE"
+VAPID_SUBJECT = "https://scout-ideas.pages.dev/"

@@ -11,6 +11,7 @@
     "test": "tsx --conditions=source --test test/*.test.ts"
   },
   "dependencies": {
+    "@block65/webcrypto-web-push": "2.0.0",
     "@scout/core": "workspace:*",
     "@scout/hosted": "workspace:*",
     "@scout/research": "workspace:*"

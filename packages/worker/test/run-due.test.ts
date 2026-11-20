@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { recordedClient, type MessagesResponse } from "@scout/research";
 import {
   MAX_BATCH,
+  notifyBudget,
   runDue,
   type ClaimedRun,
   type RunOutcome,
@@ -117,6 +118,10 @@ test("the batch stays within the free plan's 50 subrequests", async () => {
 
   assert.equal(MAX_BATCH, 9);
   assert.deepEqual(queue.limits, [9, 2, 2]);
+  // Pushes get what the claim and the runs leave.
+  assert.equal(notifyBudget(2), 39);
+  assert.equal(notifyBudget(100), 4);
+  assert.equal(notifyBudget(Number("garbled")), 39);
 });
 
 test("a batch of 0 claims nothing", async () => {
@@ -138,4 +143,55 @@ test("a failed claim fails the tick", async () => {
     finish: async () => {},
   };
   await assert.rejects(runDue({ queue, claude: recordedClient([]) }), /503/);
+});
+
+test("a run that comes back with stories tells its readers; an empty or failed one does not", async () => {
+  const empty: MessagesResponse = {
+    ...answer("Topic 2"),
+    content: [{ type: "text", text: "## Topic 2\n\nNo fresh news.\n" }],
+  };
+  const queue = stubQueue([run(1), run(2), run(3)]);
+  const claude = recordedClient([answer("Topic 1"), empty]);
+  const notified: string[] = [];
+
+  const summary = await runDue({
+    queue,
+    claude,
+    batchSize: 3,
+    notify: async (runId) => {
+      notified.push(runId);
+    },
+  });
+
+  assert.equal(summary.claimed, 3);
+  assert.deepEqual(notified, ["run-1"]);
+});
+
+test("a failed notification never fails or retries the run", async () => {
+  const queue = stubQueue([run(1)]);
+  const claude = recordedClient([answer("Topic 1")]);
+
+  const summary = await runDue({
+    queue,
+    claude,
+    notify: async () => {
+      throw new Error("push service down");
+    },
+  });
+
+  assert.deepEqual(summary, { claimed: 1, ready: 1, failed: 0, unrecorded: 0 });
+  assert.equal(queue.finished.length, 1);
+});
+
+test("a run the queue cannot record tells no one", async () => {
+  const queue = stubQueue([run(1)], { failFinish: "run-1" });
+  const notified: string[] = [];
+  await runDue({
+    queue,
+    claude: recordedClient([answer("Topic 1")]),
+    notify: async (id) => {
+      notified.push(id);
+    },
+  });
+  assert.deepEqual(notified, []);
 });

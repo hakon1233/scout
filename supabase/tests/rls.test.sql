@@ -99,10 +99,11 @@ select ok(
       and ((p.proname <> 'interest_by_slug'
             and has_function_privilege('anon', p.oid, 'execute'))
            or (p.proname not in ('allowance', 'is_time_zone', 'request_run',
-                                 'set_visibility', 'follow', 'interest_by_slug', 'host_copy')
+                                 'set_visibility', 'follow', 'interest_by_slug', 'host_copy',
+                                 'save_push_subscription')
                and has_function_privilege('authenticated', p.oid, 'execute')))),
   'anon may call only interest_by_slug; signed-in readers only allowance, is_time_zone, '
-  'request_run and the sharing calls');
+  'request_run, the sharing calls and save_push_subscription');
 
 -- ---------------------------------------------------------------------------
 -- Ben, who follows nothing yet

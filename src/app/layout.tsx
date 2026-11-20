@@ -62,6 +62,10 @@ export const metadata: Metadata = {
     description,
     images: ["og.png"],
   },
+  // Relative URLs inside resolve against the manifest, so it works under any
+  // base path. Installing it is what lets an iPhone get push notifications.
+  manifest: `${basePath}/manifest.webmanifest`,
+  appleWebApp: { capable: true, title: "Scout", statusBarStyle: "default" },
   icons: {
     icon: [
       { url: `${basePath}/icon-32.png`, sizes: "32x32", type: "image/png" },

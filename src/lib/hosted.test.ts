@@ -5,6 +5,7 @@ import {
   allowanceLine,
   createHostedData,
   HostedError,
+  type PushDevice,
   shareUrl,
 } from "./hosted";
 
@@ -44,13 +45,19 @@ function stubFetch(routes: Record<string, Answer | (() => Answer)>) {
   return { fetch, calls };
 }
 
-function data(fetch: typeof globalThis.fetch, signedIn = true) {
+function data(
+  fetch: typeof globalThis.fetch,
+  signedIn = true,
+  push?: PushDevice,
+) {
   return createHostedData({
     supabaseUrl: SUPABASE,
     anonKey: "anon-key",
     workerUrl: WORKER,
     session: async () => (signedIn ? SESSION : null),
     fetch,
+    push,
+    vapidKey: "vapid-public",
   });
 }
 
@@ -474,3 +481,107 @@ function run(
     finished_at: finishedAt,
   };
 }
+
+// A browser's push side, played in memory: permission, install state and the
+// one subscription a device holds.
+function stubDevice(over: Partial<PushDevice> = {}) {
+  const state = {
+    permission: "default" as NotificationPermission,
+    answer: "granted" as NotificationPermission,
+    sub: null as { endpoint: string; p256dh: string; auth: string } | null,
+    subscribedWith: "",
+  };
+  const device: PushDevice = {
+    supported: true,
+    needsInstall: false,
+    permission: () => state.permission,
+    requestPermission: async () => (state.permission = state.answer),
+    subscription: async () => state.sub,
+    subscribe: async (key) => {
+      state.subscribedWith = key;
+      return (state.sub = {
+        endpoint: "https://push.example.test/anna-phone",
+        p256dh: "p256-anna",
+        auth: "auth-anna",
+      });
+    },
+    unsubscribe: async () => {
+      const endpoint = state.sub?.endpoint ?? null;
+      state.sub = null;
+      return endpoint;
+    },
+    ...over,
+  };
+  return { device, state };
+}
+
+test("turning notifications on asks permission, subscribes and saves the device", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rpc/save_push_subscription": { body: null },
+  });
+  const { device, state } = stubDevice();
+  const d = data(fetch, true, device);
+
+  assert.equal(await d.pushStatus(), "off");
+  assert.equal(await d.pushEnable(), "on");
+  assert.equal(state.subscribedWith, "vapid-public");
+  assert.deepEqual(calls[0].body, {
+    p_endpoint: "https://push.example.test/anna-phone",
+    p_p256dh: "p256-anna",
+    p_auth: "auth-anna",
+  });
+  assert.equal(await d.pushStatus(), "on");
+});
+
+test("turning notifications off unsubscribes and deletes the saved device", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/push_subscriptions": { body: null },
+  });
+  const { device, state } = stubDevice();
+  state.permission = "granted";
+  state.sub = {
+    endpoint: "https://push.example.test/a?b",
+    p256dh: "p",
+    auth: "a",
+  };
+
+  assert.equal(await data(fetch, true, device).pushDisable(), "off");
+  assert.equal(state.sub, null);
+  assert.equal(calls[0].method, "DELETE");
+  assert.ok(
+    calls[0].url.endsWith(
+      "/rest/v1/push_subscriptions?endpoint=eq." +
+        encodeURIComponent("https://push.example.test/a?b"),
+    ),
+  );
+});
+
+test("a reader who says no to notifications is told it is blocked, and nothing is saved", async () => {
+  const { fetch, calls } = stubFetch({});
+  const { device, state } = stubDevice();
+  state.answer = "denied";
+  const d = data(fetch, true, device);
+
+  assert.equal(await d.pushEnable(), "denied");
+  assert.equal(await d.pushStatus(), "denied");
+  assert.equal(state.sub, null);
+  assert.equal(calls.length, 0);
+});
+
+test("an iPhone not on the Home Screen needs Scout installed first; a browser without push has none", async () => {
+  const { fetch } = stubFetch({});
+  const iphone = stubDevice({ supported: false, needsInstall: true }).device;
+  assert.equal(await data(fetch, true, iphone).pushStatus(), "needs-install");
+  const old = stubDevice({ supported: false }).device;
+  assert.equal(await data(fetch, true, old).pushStatus(), "unsupported");
+  assert.equal(await data(fetch, true).pushStatus(), "unsupported");
+});
+
+test("a device the server would not save is unsubscribed again", async () => {
+  const { fetch } = stubFetch({
+    "/rpc/save_push_subscription": { status: 500, body: { message: "x" } },
+  });
+  const { device, state } = stubDevice();
+  await assert.rejects(data(fetch, true, device).pushEnable(), HostedError);
+  assert.equal(state.sub, null);
+});

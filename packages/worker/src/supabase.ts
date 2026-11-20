@@ -1,6 +1,7 @@
 // The Supabase side of the run queue, over PostgREST with plain fetch (no
 // supabase-js: less to bundle and less CPU per tick). Host-neutral.
 
+import type { PushStore, PushTarget } from "./push.ts";
 import type { ClaimedRun, RunOutcome, RunQueue } from "./run-due.ts";
 
 type Fetch = typeof fetch;
@@ -48,6 +49,45 @@ export function supabaseQueue(opts: {
         },
         auth,
       );
+    },
+  };
+}
+
+// The service-role push store: push_targets, and deleting gone devices
+// (supabase/migrations/*_push.sql).
+export function supabasePushStore(opts: {
+  url: string;
+  serviceKey: string;
+  fetch?: Fetch;
+}): PushStore {
+  const doFetch = opts.fetch ?? ((...a) => globalThis.fetch(...a));
+  const rpc = rpcCaller(opts.url, doFetch);
+  const auth = { apikey: opts.serviceKey, bearer: opts.serviceKey };
+  return {
+    async targets(runId) {
+      return (
+        ((await rpc("push_targets", { p_run: runId }, auth)) as
+          | PushTarget[]
+          | null) ?? []
+      );
+    },
+    async drop(endpoints) {
+      // PostgREST's in-list, each value double-quoted (endpoints hold commas).
+      const list = endpoints
+        .map((e) => `"${e.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`)
+        .join(",");
+      const res = await doFetch(
+        `${opts.url}/rest/v1/push_subscriptions?endpoint=${encodeURIComponent(`in.(${list})`)}`,
+        {
+          method: "DELETE",
+          headers: {
+            apikey: opts.serviceKey,
+            authorization: `Bearer ${opts.serviceKey}`,
+            prefer: "return=minimal",
+          },
+        },
+      );
+      if (!res.ok) throw new Error(`push_subscriptions delete: ${res.status}`);
     },
   };
 }
