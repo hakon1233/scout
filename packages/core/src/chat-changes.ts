@@ -19,7 +19,22 @@ export type ProposedChange = {
   interestId?: unknown;
   topic?: unknown;
   doc?: unknown;
+  // On a create: how often the reader wants a brief.
+  cadence?: unknown;
 };
+
+export type ChatCadence = "daily" | "weekly";
+
+// The cadence the reader named in their own words, or null when they named
+// none (or both). Read in code, not left to the model: a reader who says
+// "weekly" must never get a daily topic.
+export function cadenceInWords(message: string): ChatCadence | null {
+  const text = message.toLowerCase();
+  const weekly = /\bweekly\b|\b(?:every|once a|each|per) week\b/.test(text);
+  const daily = /\bdaily\b|\b(?:every|once a|each|per) day\b/.test(text);
+  if (weekly === daily) return null;
+  return weekly ? "weekly" : "daily";
+}
 
 // An interest with its current intent doc, as the model and the planner see it.
 export type InterestSnapshot = { id: string; topic: string; doc: string };
@@ -58,6 +73,8 @@ export function planChatChanges(
   opts: ChatChangeLimits & {
     newId: () => string;
     publicInterests?: Interest[];
+    // The reader's message: a cadence it names wins over the model's.
+    message?: string;
   },
 ): ChatChangePlan {
   const interests = current.map((i) => ({ ...i }));
@@ -72,6 +89,7 @@ export function planChatChanges(
     typeof raw === "string" ? raw.trim().slice(0, opts.maxTopicLen) : "";
   const docFits = (doc: string) =>
     opts.maxDocChars === undefined || doc.length <= opts.maxDocChars;
+  const said = cadenceInWords(opts.message ?? "");
 
   for (const ch of proposed) {
     const id = typeof ch.interestId === "string" ? ch.interestId : "";
@@ -83,11 +101,15 @@ export function planChatChanges(
       if (!docFits(doc ?? "")) continue;
       const created = { id: opts.newId(), topic, doc: doc ?? "" };
       interests.push(created);
+      const cadence =
+        said ??
+        (ch.cadence === "daily" || ch.cadence === "weekly" ? ch.cadence : null);
       plan.applied.push({
         interestId: created.id,
         op: "create",
         topic,
         doc: created.doc,
+        ...(cadence ? { cadence } : {}),
       });
     } else if (ch.op === "update") {
       if (!held) continue;

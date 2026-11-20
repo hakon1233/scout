@@ -82,6 +82,7 @@ const CHAT_OUTPUT_SCHEMA = {
           interestId: { type: "string" },
           topic: { type: "string" },
           doc: { type: "string" },
+          cadence: { type: "string", enum: ["daily", "weekly"] },
         },
       },
     },
@@ -140,6 +141,7 @@ export function createChat(deps: {
                   text: buildChatPrompt(message, interests, transcript, {
                     ...limits,
                     publicInterests,
+                    cadences: true,
                   }),
                 },
               ],
@@ -155,6 +157,7 @@ export function createChat(deps: {
         maxTopicLen: MAX_TOPIC_CHARS,
         newId,
         publicInterests,
+        message,
       });
       const { pendingDeletes, pendingRewrites, pendingFollows } = plan;
       result = {

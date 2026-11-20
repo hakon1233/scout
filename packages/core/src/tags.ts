@@ -35,6 +35,16 @@ export const SEED_TAGS = [
   "travel",
   "local",
   "research",
+  // Specific tags the Scout team's catalog uses (supabase/seeds/team-topics.sql),
+  // so the publish check can pick them over a broad one.
+  "smart-home",
+  "open-source",
+  "self-hosting",
+  "dev-tools",
+  "hardware",
+  "outdoors",
+  "events",
+  "regulation",
 ] as const;
 
 export const MAX_TAGS = 5;

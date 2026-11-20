@@ -25,7 +25,7 @@ function answer(json: unknown, stop = "end_turn"): MessagesResponse {
 
 const input: PicksInput = {
   profile: { location: "Bergen", likedTags: ["outdoors"] },
-  reading: [{ title: "Ski touring", tags: ["outdoors"] }],
+  reading: [{ title: "Ski touring", tags: ["outdoors"], how: "follow" }],
   marks: [],
   candidates: [
     { id: "i-fjord", title: "Fjord kayaking", tags: ["outdoors"], about: "" },
@@ -78,6 +78,41 @@ test("picks are stored under candidate ids, with their cost", async () => {
   const prompt = JSON.stringify(claude.requests[0].messages);
   assert.match(prompt, /Fjord kayaking/);
   assert.doesNotMatch(prompt, /i-fjord/);
+});
+
+test("a reason that claims a follow or an interest the reader doesn't have is dropped", async () => {
+  const claude = recordedClient([
+    answer({
+      picks: [
+        { topic: "c1", reason: "You follow Home Assistant changelogs." },
+        {
+          topic: "c2",
+          reason: "Fits your dev-tools and self-hosting interests.",
+        },
+        { topic: "c3", reason: "Close to your Home Assistant topic." },
+        { topic: "c4", reason: "Fits your dev-tools interest." },
+      ],
+    }),
+  ]);
+  const { store, finished } = memoryStore([
+    job("ola", {
+      profile: { likedTags: ["dev-tools"] },
+      reading: [
+        { title: "Home Assistant Zigbee", tags: ["smart-home"], how: "own" },
+      ],
+      candidates: ["a", "b", "c", "d"].map((id) => ({
+        id: `i-${id}`,
+        title: `Topic ${id}`,
+        tags: ["self-hosting", "maker"],
+        about: "",
+      })),
+    }),
+  ]);
+  await createPicks({ claude, store }).refresh(3);
+  assert.deepEqual(
+    finished[0].picks?.map((p) => p.interestId),
+    ["i-c", "i-d"],
+  );
 });
 
 test("a reader with no candidates is stored empty without a call", async () => {

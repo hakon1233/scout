@@ -96,6 +96,10 @@ export function buildPublishPrompt(input: PublishInput): string {
       MAX_TAGS +
       " tags that a reader would browse by. Use tags",
     "from this list first: " + SEED_TAGS.join(", ") + ".",
+    "Pick the most specific tags that fit: a topic on Home Assistant gets smart-home,",
+    "open-source and self-hosting, not just tech. Add a broad tag (tech, science,",
+    "business, world, culture) only next to a specific one. Use local only for a topic",
+    "about one place, and name the place too when the list has it (norway).",
     "Add at most one other tag, only when none of the list fits: lower case letters,",
     "digits and dashes, 2 to 24 long. Set reason to an empty string.",
     "On refuse, set tags to [] and reason to one short sentence for the reader,",

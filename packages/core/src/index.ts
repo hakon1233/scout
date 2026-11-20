@@ -80,8 +80,10 @@ export {
 export { canonicalUrl, parseBrief } from "./brief-document.ts";
 export { createWeeklyBriefFromHistory } from "./weekly.ts";
 export {
+  cadenceInWords,
   planChatChanges,
   replayChanges,
+  type ChatCadence,
   type ChatChangeLimits,
   type ChatChangePlan,
   type InterestSnapshot,

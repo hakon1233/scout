@@ -189,3 +189,21 @@ test("canonicalUrl drops the hash, query and trailing slash", () => {
   );
   assert.equal(canonicalUrl("not a url"), "not a url");
 });
+
+test("a citation written on the bullet line stays out of the summary", () => {
+  const { entries } = parseBrief(
+    brief(
+      "## Home Assistant",
+      "- `2026-11-19` — About 80 ZHA devices stopped working. [github.com — ZHA: 80 devices stopped](https://github.com/ha/core/issues/1)",
+      "- `2026-11-18` — The [EU](https://europa.eu/) passed the act.",
+    ),
+  );
+  const stories = entries.flatMap((e) => (e.kind === "story" ? [e] : []));
+  assert.equal(stories[0].summary, "About 80 ZHA devices stopped working.");
+  assert.deepEqual(
+    stories[0].links.map((l) => l.label),
+    ["github.com — ZHA: 80 devices stopped"],
+  );
+  // A link inside the sentence is not a citation: its words stay.
+  assert.equal(stories[1].summary, "The EU passed the act.");
+});

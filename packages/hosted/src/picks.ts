@@ -76,7 +76,7 @@ export function createPicks(deps: { claude: ClaudeClient; store: PicksStore }) {
             .join("")
         : "";
     return {
-      picks: parsePicks(text, input.candidates),
+      picks: parsePicks(text, input.candidates, input),
       costUsd: responseCostUsd(response.usage),
     };
   }

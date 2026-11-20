@@ -1,0 +1,11 @@
+{
+  "input": {
+    "title": "Home Assistant Zigbee breaking changes",
+    "doc": "Home Assistant releases and integration changes that break ZHA or Zigbee2MQTT setups, with what to do before upgrading.",
+    "displayName": null
+  },
+  "expect": "approve",
+  "wantTags": ["smart-home", "open-source", "self-hosting"],
+  "output": "{\"verdict\":\"approve\",\"reason\":\"\",\"tags\":[\"tech\",\"local\"]}",
+  "expectFail": ["specific-tags"]
+}

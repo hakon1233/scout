@@ -9,6 +9,7 @@ import path from "node:path";
 import { applyChatChanges } from "../src/chat-changes.js";
 import {
   MAX_TAGS,
+  cadenceInWords,
   normalizeTags,
   normalizeTopic,
   parseBrief,
@@ -32,6 +33,10 @@ function check(name: string, pass: boolean, detail?: string): Check {
 // the intent doc's own "No change…" text.
 const EMPTY_LINE_RE = /^\s*_?\s*No (?:change|news)\b/im;
 const NO_CHANGE_SINCE_RE = /No change since (\d{4}-\d{2}-\d{2})/i;
+// The research agent writes as a news service, never about itself.
+const FIRST_PERSON_RE = /\b(?:I|I'm|I've|I'd|[Ww]e|[Mm]y|[Oo]ur)\b/g;
+// A "[domain — Title](url)" citation.
+const CITATION_ON_LINE_RE = /\[[^\]]* — [^\]]*\]\(/;
 
 // One research session's output for one topic. `lastStory` is the date of the
 // topic's last posted story; `past` the titles and URLs already posted.
@@ -63,6 +68,17 @@ export function checkResearchOutput(
   const todayMs = Date.parse(opts.today);
   const oldest = new Date(todayMs - 30 * DAY_MS).toISOString().slice(0, 10);
   const words = raw.split(/\s+/).filter(Boolean).length;
+  const prose = stories.map((s) => `${s.summary}\n${s.body ?? ""}`).join("\n");
+  const firstPerson = prose.match(FIRST_PERSON_RE) ?? [];
+  const titles = stories.flatMap((s) =>
+    s.links.filter((l) => l.label.includes(" — ")).map((l) => l.label),
+  );
+  const generic = titles.filter(
+    (l) => (l.split(" — ")[1] ?? "").trim().split(/\s+/).length < 3,
+  );
+  const citedOnBullet = stories.filter((s) =>
+    CITATION_ON_LINE_RE.test(s.raw.split("\n")[0]),
+  );
 
   return [
     check(
@@ -138,6 +154,21 @@ export function checkResearchOutput(
       "source-images-https",
       stories.every((s) => s.image === null || s.image.startsWith("https://")),
     ),
+    check(
+      "third-person",
+      firstPerson.length === 0,
+      `first person: ${firstPerson.join(", ")}`,
+    ),
+    check(
+      "specific-headline",
+      generic.length === 0,
+      `generic titles: ${generic.join("; ")}`,
+    ),
+    check(
+      "citation-own-line",
+      citedOnBullet.length === 0,
+      `${citedOnBullet.length} stories cite on the bullet line`,
+    ),
     check("length", words <= 700, `${words} words`),
   ];
 }
@@ -156,6 +187,7 @@ function rawPage(raw: string): unknown {
 export async function checkChatOutput(
   raw: string,
   opts: {
+    message?: string;
     interests: Interest[];
     expect: {
       applied: string[];
@@ -183,6 +215,16 @@ export async function checkChatOutput(
       page: output.page,
     };
     const askedPage = rawPage(raw);
+    // A create's reply confirms what was set up: the topic, and the cadence
+    // when the reader named one.
+    const reply = output.reply.toLowerCase();
+    const created = result.applied.filter((c) => c.op === "create");
+    const said = cadenceInWords(opts.message ?? "");
+    const confirms = created.every(
+      (c) =>
+        reply.includes((c.topic ?? "").toLowerCase()) &&
+        (!said || new RegExp(`\\b${said}\\b`).test(reply)),
+    );
     return [
       check("json-object", true),
       check("reply", output.reply.trim().length > 0),
@@ -211,6 +253,11 @@ export async function checkChatOutput(
         "the reply must offer a page, never write a URL",
       ),
       check(
+        "create-reply-confirms",
+        confirms,
+        `reply must name the new topic${said ? ` and say ${said}` : ""}`,
+      ),
+      check(
         "expected-effect",
         JSON.stringify(effect) ===
           JSON.stringify({
@@ -227,12 +274,29 @@ export async function checkChatOutput(
   }
 }
 
+// Tags too broad to browse by on their own (publish-check.ts asks for a
+// specific tag next to them).
+const BROAD_TAGS = new Set([
+  "tech",
+  "science",
+  "business",
+  "world",
+  "culture",
+  "local",
+  "research",
+]);
+
 // The publish check (core publish-check.ts): one JSON verdict. A good approve
 // has 1 to 5 valid tags, at most one outside the seed list; a refuse has no
 // tags and one short reason that repeats no full name from the topic.
 export function checkPublishOutput(
   output: string,
-  ctx: { input: PublishInput; expect: "approve" | "refuse" },
+  ctx: {
+    input: PublishInput;
+    expect: "approve" | "refuse";
+    // Specific tags that fit the topic; a good approve uses at least one.
+    wantTags?: string[];
+  },
 ): Check[] {
   type Raw = { verdict?: unknown; reason?: unknown; tags?: unknown };
   const raw = ((): Raw | null => {
@@ -267,6 +331,18 @@ export function checkPublishOutput(
         `tags ${JSON.stringify(tags)}; usable ${JSON.stringify(kept)}`,
       ),
     );
+    // Only a topic that should pass: a wrong approve fails on its verdict.
+    const specific = kept.filter((t) => !BROAD_TAGS.has(t));
+    if (ctx.expect === "approve") {
+      checks.push(
+        check(
+          "specific-tags",
+          specific.length > 0 &&
+            (!ctx.wantTags || ctx.wantTags.some((t) => kept.includes(t))),
+          `tags ${JSON.stringify(kept)}; want one of ${JSON.stringify(ctx.wantTags ?? [])}`,
+        ),
+      );
+    }
   }
   if (raw?.verdict === "refuse") {
     const reason = typeof raw.reason === "string" ? raw.reason.trim() : "";

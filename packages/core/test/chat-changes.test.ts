@@ -2,7 +2,11 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planChatChanges, type InterestSnapshot } from "../src/index.ts";
+import {
+  cadenceInWords,
+  planChatChanges,
+  type InterestSnapshot,
+} from "../src/index.ts";
 
 const AI: InterestSnapshot = { id: "int_ai", topic: "AI", doc: "# AI" };
 const limits = { maxInterests: 3, maxTopicLen: 20 };
@@ -128,4 +132,45 @@ test("unknown ops and junk fields are dropped", () => {
   );
   assert.deepEqual(plan.applied, []);
   assert.deepEqual(plan.interests, [AI]);
+});
+
+test("cadenceInWords reads daily or weekly from the reader's words", () => {
+  assert.equal(cadenceInWords("Home Assistant changes, weekly"), "weekly");
+  assert.equal(cadenceInWords("Weekly brief."), "weekly");
+  assert.equal(cadenceInWords("once a week please"), "weekly");
+  assert.equal(cadenceInWords("every day, short"), "daily");
+  assert.equal(cadenceInWords("a daily brief on AI"), "daily");
+  assert.equal(cadenceInWords("Rust releases"), null);
+  // Both named: the words don't settle it.
+  assert.equal(cadenceInWords("daily or weekly, you pick"), null);
+});
+
+test("a create takes the cadence the reader asked for over the model's", () => {
+  const plan = planChatChanges(
+    [],
+    [
+      { op: "create", topic: "Zigbee", doc: "# Zigbee", cadence: "daily" },
+      { op: "create", topic: "Odd", cadence: "hourly" },
+    ],
+    { ...limits, newId: ids(), message: "A private topic on Zigbee. Weekly." },
+  );
+  assert.deepEqual(
+    plan.applied.map((c) => [c.topic, c.cadence]),
+    [
+      ["Zigbee", "weekly"],
+      ["Odd", "weekly"],
+    ],
+  );
+  const unsaid = planChatChanges(
+    [],
+    [
+      { op: "create", topic: "Rust", cadence: "weekly" },
+      { op: "create", topic: "Odd", cadence: "hourly" },
+    ],
+    { ...limits, newId: ids(), message: "Rust releases" },
+  );
+  assert.deepEqual(
+    unsaid.applied.map((c) => c.cadence),
+    ["weekly", undefined],
+  );
 });

@@ -68,8 +68,8 @@ select results_eq(
   array['Fjord kayaking', 'AI chips', 'Kayak racing'],
   'candidates: public, listed, not owned or followed; tag overlap first');
 select ok((select c -> 0 -> 'input' -> 'reading' from claimed)
-          @> '[{"title": "Pia''s own"}, {"title": "Ski touring"}]',
-  'the input names what the reader already has');
+          @> '[{"title": "Pia''s own", "how": "own"}, {"title": "Ski touring", "how": "follow"}]',
+  'the input names what the reader already has, and which they own or follow');
 
 select is(jsonb_array_length(public.claim_picks(5, now())), 0, 'claimed readers are not claimed twice');
 update public.profiles set role = 'Doctor' where id = 'aaaaaaaa-0000-0000-0000-0000000000e1';

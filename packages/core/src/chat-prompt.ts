@@ -17,7 +17,8 @@ const CHAT_CONTEXT_TURN_LIMIT = 20;
 // The full prompt for one chat turn. `publicInterests` (hosted chat only) are
 // curated interests that may match the message; with them the model may offer
 // a `follow` instead of creating a near copy. Without them the prompt is the
-// companion's.
+// companion's. `cadences` (hosted chat only): a topic gets a daily or weekly
+// brief, so a create carries the cadence the reader asked for.
 export function buildChatPrompt(
   message: string,
   snapshots: InterestSnapshot[],
@@ -26,6 +27,7 @@ export function buildChatPrompt(
     maxInterests: number;
     maxDocChars?: number;
     publicInterests?: Interest[];
+    cadences?: boolean;
   },
 ): string {
   const { maxInterests } = opts;
@@ -131,7 +133,9 @@ export function buildChatPrompt(
     "    // Create a new interest (do NOT supply an id — the system mints it):",
   );
   lines.push(
-    '    { "op": "create", "topic": "<topic>", "doc": "<full markdown>" },',
+    opts.cadences
+      ? '    { "op": "create", "topic": "<topic>", "doc": "<full markdown>", "cadence": "daily" | "weekly" },'
+      : '    { "op": "create", "topic": "<topic>", "doc": "<full markdown>" },',
   );
   lines.push(
     "    // Completely rewrite an interest's doc from scratch (full replacement):",
@@ -159,6 +163,41 @@ export function buildChatPrompt(
     '- For "update"/"rewrite"/"delete", `interestId` MUST be one of the ids listed above.',
   );
   lines.push('- For "create", OMIT `interestId`; never invent one.');
+  lines.push(
+    '- When the request is too vague to know what to track ("news", "something',
+  );
+  lines.push(
+    '    interesting"), ask one short question with `changes: []` instead of creating.',
+  );
+  if (opts.cadences) {
+    lines.push(
+      '- On a `create`, set `cadence` to what the user asked for: "weekly", "every',
+    );
+    lines.push(
+      '    week", "once a week" mean weekly; "daily", "every day" mean daily. When they',
+    );
+    lines.push(
+      "    named none, omit `cadence` (the topic takes the next free slot). Never make a",
+    );
+    lines.push("    topic daily when the user said weekly.");
+    lines.push(
+      "- A new topic is private: only the user sees it until they share it. A create's",
+    );
+    lines.push(
+      "    `reply` confirms what you set up: the topic in quotes, its cadence (Daily or",
+    );
+    lines.push(
+      "    Weekly; or the next free slot when they named none) and that it is private,",
+    );
+    lines.push(
+      '    then invites changes. E.g. "Created \\"Zigbee\\" — Weekly, private. Tell me',
+    );
+    lines.push('    what to change."');
+  } else {
+    lines.push(
+      "- A create's `reply` names the new topic in quotes and what it will track.",
+    );
+  }
   lines.push(
     "- `doc` must be the COMPLETE new document, never a diff or fragment.",
   );

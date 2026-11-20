@@ -81,6 +81,7 @@ async function researchCases(): Promise<CaseResult[]> {
 }
 
 type ChatCase = {
+  message?: string;
   interests: Interest[];
   output: string;
   expect: {
@@ -112,6 +113,7 @@ async function chatCases(): Promise<CaseResult[]> {
 type PublishCase = {
   input: PublishInput;
   expect: "approve" | "refuse";
+  wantTags?: string[];
   output: string;
   expectFail: string[];
 };

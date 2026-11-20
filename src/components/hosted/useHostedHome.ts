@@ -95,10 +95,12 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
       const hadNone = home.interests.length === 0;
       const turn = await data.chat(message);
       setTurns((t) => [...t, turn]);
-      const created = (turn.changes ?? [])
-        .filter((c) => c.op === "create")
-        .map((c) => c.interestId);
-      if (created.length > 0) await scheduleNew(data, created, hadNone);
+      const creates = (turn.changes ?? []).filter((c) => c.op === "create");
+      const asked = Object.fromEntries(
+        creates.flatMap((c) => (c.cadence ? [[c.interestId, c.cadence]] : [])),
+      );
+      const created = creates.map((c) => c.interestId);
+      if (created.length > 0) await scheduleNew(data, created, hadNone, asked);
       await reload();
     },
     [data, home, reload],
@@ -136,12 +138,15 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
   };
 }
 
-// A new topic takes the first free slot (daily, then weekly) or stays paused.
-// The reader's very first one also runs now, so a brief shows soon.
+// A new topic takes the cadence the reader asked for in the chat (`asked`)
+// when that slot is free, else stays paused: never the other cadence. One
+// with none asked takes the first free slot (daily, then weekly) or stays
+// paused. The reader's very first one also runs now, so a brief shows soon.
 export async function scheduleNew(
   data: HostedData,
   ids: string[],
   first: boolean,
+  asked: Partial<Record<string, "daily" | "weekly">> = {},
 ) {
   let home: HostedHome;
   try {
@@ -151,8 +156,13 @@ export async function scheduleNew(
   }
   const free = { ...home.allowance };
   for (const id of ids) {
-    const slot = freeSlot(free);
-    if (!slot) break;
+    const want = asked[id];
+    const slot = want
+      ? free[want].used < free[want].limit
+        ? want
+        : null
+      : freeSlot(free);
+    if (!slot) continue;
     try {
       await data.setCadence(id, slot);
       free[slot] = { ...free[slot], used: free[slot].used + 1 };

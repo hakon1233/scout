@@ -124,6 +124,19 @@ IN-DEPTH BODY (one per item, shown when the reader opens the story):
   small table, **bold**, or \`code\` when that reads better than prose. Never put
   links or images inside the blockquote.
 
+VOICE AND HEADLINES:
+- Write as a news service, in the third person. Never write "I", "we", "my" or
+  "our", and never report on your own research ("I could not verify…", "I did
+  not find…"). When a detail is unconfirmed, say so plainly about the detail:
+  "The release date is not confirmed."
+- The bullet's summary says what happened in your own words. Do not repeat the
+  source's title in it, and never put the citation link on the bullet line: the
+  citation goes on its own line below.
+- The citation's Title is the item's own headline and says what happened
+  ("Oslo opens 40 new kindergarten places"). Never a section, listing or site
+  name ("Events", "Arrangementer", "News", "Home"); when the page's own title
+  is that generic, write a short, specific headline from its content.
+
 RULES, LAWS AND REGULATIONS:
 - When the intent doc asks for a rule's status or effective date, each story
   about a rule states its status — proposed, laid (before parliament) or in

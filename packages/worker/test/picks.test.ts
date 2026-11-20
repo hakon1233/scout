@@ -9,7 +9,7 @@ import { picksBatch } from "../src/run-due.ts";
 import { supabasePicksStore } from "../src/supabase.ts";
 
 const input = {
-  profile: {},
+  profile: { likedTags: ["outdoors"] },
   reading: [],
   marks: [],
   candidates: [
