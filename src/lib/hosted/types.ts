@@ -131,6 +131,9 @@ export interface HostedData {
   // topicPush lists the topic ids with it on.
   topicPush(): Promise<string[]>;
   setTopicPush(interestId: string, on: boolean): Promise<void>;
+  // "Lots of pushes, mute some?": this week's pushes and up to 3 bell-on
+  // topics to mute, least read first. Null under 10 pushes a week.
+  muteSuggestions(): Promise<MuteSuggestions | null>;
   // Deletes the account: topics first (followers are told), then the user.
   deleteAccount(): Promise<void>;
   // "Notify me when a brief is ready" on this device.
@@ -165,6 +168,12 @@ export interface HostedData {
   // "Not for me": the topic is never picked for this reader again.
   dismissPick(interestId: string): Promise<void>;
 }
+
+/** The SQL's my_mute_suggestions. */
+export type MuteSuggestions = {
+  pushes: number;
+  topics: { id: string; title: string; pushes: number }[];
+};
 
 /** A topic picked for the reader (the SQL's my_picks). */
 export type PickCard = {

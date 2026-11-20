@@ -27,6 +27,8 @@ export type OutboxPush = {
         popular: { title: string; slug: string }[];
         // Up to 3 of the reader's picks (absent on rows queued before picks).
         picks?: { title: string; slug: string }[];
+        // Topics to mute when the reader got lots of pushes (mute_suggestions).
+        mute?: string[];
       };
     }
 );
@@ -49,34 +51,47 @@ export function briefReadyPayload(topic: string) {
 
 /**
  * The Monday digest: new stories in topics with push off, then the reader's
- * picks, or popular topics when they have none.
+ * picks, or popular topics when they have none, then an offer to mute the
+ * topics that pushed most.
  */
 export function weeklyPayload(p: {
   count: number;
   topics: string[];
   popular: { title: string }[];
   picks?: { title: string }[];
+  mute?: { title: string }[];
 }) {
   const picks = p.picks ?? [];
+  const mute = p.mute ?? [];
   const suggest = picks.length
     ? `Picked for you: ${picks.map((t) => t.title).join(", ")}.`
     : p.popular.length
       ? `Popular now: ${p.popular.map((t) => t.title).join(", ")}.`
       : "";
+  const offer = mute.length
+    ? `Lots of pushes? Mute ${mute.map((t) => t.title).join(" or ")} in Scout.`
+    : "";
+  const tail = [suggest, offer].filter(Boolean).join(" ");
   if (p.count === 0) {
-    return { title: "Picked for you this week", body: suggest };
+    return {
+      title: suggest ? "Picked for you this week" : "Lots of pushes this week",
+      body: tail,
+    };
   }
   const more =
     p.count > p.topics.length ? ` and ${p.count - p.topics.length} more` : "";
   return {
     title: "New this week in your topics",
-    body: `New stories on ${p.topics.join(", ")}${more}.${suggest ? ` ${suggest}` : ""}`,
+    body: `New stories on ${p.topics.join(", ")}${more}.${tail ? ` ${tail}` : ""}`,
   };
 }
 
 function payloadFor(item: OutboxPush) {
   return item.kind === "weekly"
-    ? weeklyPayload(item.payload)
+    ? weeklyPayload({
+        ...item.payload,
+        mute: item.payload.mute?.map((title) => ({ title })),
+      })
     : briefReadyPayload(item.payload.topic);
 }
 

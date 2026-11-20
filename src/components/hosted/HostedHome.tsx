@@ -24,9 +24,11 @@ import {
 } from "@/lib/hosted";
 import { BusinessStep, businessStepSkipped } from "./BusinessStep";
 import { HostedChat } from "./HostedChat";
+import { useMuteNotice } from "./MutePushes";
 import { scheduleNew, useHostedHome } from "./useHostedHome";
 
-// The signed-in hosted feed: notice cards and up to three picks, then the
+// The signed-in hosted feed: notice cards (including "lots of pushes, mute
+// some?") and up to three picks, then the
 // latest brief with a topic filter. Topics, sharing and schedules live on /app/topics. A reader with no
 // topics lands straight in the setup chat.
 export function HostedHome() {
@@ -152,6 +154,12 @@ function Feed({
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const picks = usePicks(data, signedOut);
+  const mute = useMuteNotice(
+    data,
+    dismissed,
+    (id) => setDismissed(dismissLocally(id)),
+    signedOut,
+  );
   // Reading events for picks; only this signed-in hosted feed records them.
   React.useEffect(
     () => startUsage(data, home.interests),
@@ -269,6 +277,8 @@ function Feed({
       onDismiss: () => setDismissed(dismissLocally(notice.id)),
     });
   }
+
+  if (mute) items.push(mute);
 
   const brief = home.brief;
   const topics = home.interests.filter((i) =>
