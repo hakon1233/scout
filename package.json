@@ -7,6 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "dev": "next dev",
     "demo": "SCOUT_E2E_PORT=${SCOUT_DEMO_PORT:-47899} node e2e/start-companion.mjs",
     "build": "NODE_ENV=production next build",
@@ -15,7 +16,7 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && for c in packages/*/tsconfig.json; do tsc --noEmit -p \"$c\" || exit 1; done",
     "check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test && pnpm test:sql && pnpm build",
     "test": "node --test test/*.test.mjs && pnpm --filter @scout/core test && pnpm --filter @scout/agent test && pnpm --filter @scout/research test && pnpm --filter @scout/hosted test && pnpm --filter @scout/worker test && pnpm run test:web",
     "test:web": "tsx --test 'src/**/*.test.ts'",
@@ -37,7 +38,7 @@
   "dependencies": {
     "@scout/core": "workspace:*",
     "@supabase/supabase-js": "^2.119.1",
-    "next": "16.3.8",
+    "next": "16.4.5",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0",
@@ -52,7 +53,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.5",
     "prettier": "^3.3.3",
     "tailwindcss": "^4",
     "tsx": "^4.19.0",

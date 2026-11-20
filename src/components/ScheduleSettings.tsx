@@ -127,7 +127,7 @@ export function ScheduleSettings() {
     // Initial fetch on mount; `load` flips to a loading state then resolves
     // async. Same canonical sync pattern as the app page's hydration effects.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    void load();
   }, [load]);
 
   // Commit a patch, then render exactly what the companion echoes back —
@@ -222,7 +222,7 @@ export function ScheduleSettings() {
             label="Enable the daily scheduled brief"
             checked={schedule.enabled}
             busy={saving}
-            onChange={(next) => commit({ enabled: next })}
+            onChange={(next) => void commit({ enabled: next })}
           />
         </div>
 
@@ -246,7 +246,7 @@ export function ScheduleSettings() {
             disabled={!schedule.enabled || saving}
             onChange={(e) => {
               const v = e.target.value; // native "HH:MM"
-              if (v) commit({ time_of_day: v });
+              if (v) void commit({ time_of_day: v });
             }}
             className={
               "rounded-md border border-border-strong bg-surface px-3 py-2 text-body-sm text-primary shadow-sm outline-none transition " +
@@ -267,7 +267,7 @@ export function ScheduleSettings() {
         <Banner tone="danger">
           <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>{error}</span>
-            <Button variant="secondary" size="sm" onClick={() => load()}>
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
               Retry
             </Button>
           </span>

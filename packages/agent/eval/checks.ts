@@ -239,7 +239,7 @@ export function checkPublishOutput(
     try {
       const parsed: unknown = JSON.parse(output);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Raw)
+        ? parsed
         : null;
     } catch {
       return null;

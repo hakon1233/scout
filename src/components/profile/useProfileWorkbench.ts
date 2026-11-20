@@ -122,7 +122,7 @@ export function useProfileWorkbench() {
     (scope) => {
       if (!hydrated) return;
       if (mockSeed !== null) return;
-      (async () => {
+      void (async () => {
         const tok = await bootstrapCompanionToken();
         if (scope.cancelled) return;
         setToken(tok);
@@ -247,7 +247,7 @@ export function useProfileWorkbench() {
       );
       abortedRef.current = false;
       const controller = startAbortable();
-      (async () => {
+      void (async () => {
         try {
           const turn = await confirmDeleteInterest(ids, token, {
             signal: controller.signal,
@@ -296,7 +296,7 @@ export function useProfileWorkbench() {
       const prevBody = docBodiesRef.current[pr.interestId] ?? null;
       abortedRef.current = false;
       const controller = startAbortable();
-      (async () => {
+      void (async () => {
         try {
           const turn = await confirmRewriteInterest(pr.interestId, token, {
             signal: controller.signal,
@@ -376,7 +376,7 @@ export function useProfileWorkbench() {
       stopRequestedRef.current = false;
       const controller = startAbortable();
 
-      (async () => {
+      void (async () => {
         try {
           const turn = await runChatTurn(wire, token, {
             signal: controller.signal,

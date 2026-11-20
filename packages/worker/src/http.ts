@@ -337,7 +337,7 @@ function parseConfirm(body: unknown): ChatConfirm | null {
     return Array.isArray(ids) &&
       ids.length > 0 &&
       ids.every((id) => typeof id === "string")
-      ? { kind: "delete", interestIds: ids as string[] }
+      ? { kind: "delete", interestIds: ids }
       : null;
   }
   if (

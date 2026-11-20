@@ -80,6 +80,9 @@ function childEnv(): NodeJS.ProcessEnv {
         ENV_NAMES.has(name) || ENV_PREFIXES.some((p) => name.startsWith(p)),
     ),
   );
+  // Needed under the root tsconfig, where Next's types make NODE_ENV required;
+  // lint sees only this package's tsconfig and calls it unnecessary.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   return kept as NodeJS.ProcessEnv;
 }
 
@@ -205,8 +208,8 @@ export function runClaude(
     let stderr = "";
     const outDecoder = new StringDecoder("utf8");
     const errDecoder = new StringDecoder("utf8");
-    child.stdout!.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
-    child.stderr!.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
+    child.stdout.on("data", (b: Buffer) => (stdout += outDecoder.write(b)));
+    child.stderr.on("data", (b: Buffer) => (stderr += errDecoder.write(b)));
 
     child.on("error", (e) =>
       settle(() =>
@@ -239,10 +242,10 @@ export function runClaude(
     // If the CLI exits before reading the whole prompt, the write fails with
     // EPIPE. Unhandled, that would crash the server; the close/error handlers
     // above already report the real cause.
-    child.stdin!.on("error", (e: Error) =>
+    child.stdin.on("error", (e: Error) =>
       console.error(`[claude-runner] stdin write failed:`, e.message),
     );
-    child.stdin!.write(prompt);
-    child.stdin!.end();
+    child.stdin.write(prompt);
+    child.stdin.end();
   });
 }

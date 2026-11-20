@@ -26,7 +26,6 @@ import {
   newPairingToken,
   saveState,
   loadState,
-  type State,
 } from "../src/state.js";
 import {
   writeInterestDoc,
@@ -218,7 +217,7 @@ test("interestDocMeta reflects real filesystem state (hasDoc + updatedAt)", asyn
     assert.equal(after.hasDoc, true);
     assert.ok(after.updatedAt, "updatedAt present once the doc exists");
     // updatedAt is a valid ISO string (the doc's mtime).
-    assert.ok(!Number.isNaN(Date.parse(after.updatedAt!)));
+    assert.ok(!Number.isNaN(Date.parse(after.updatedAt)));
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
@@ -240,7 +239,7 @@ test("GET /v0/interests serves {id, topic, hasDoc, docUpdatedAt, doc} on real do
   const withDoc = { id: "int_withdoc", topic: "ai safety" };
   const noDoc = { id: "int_nodoc", topic: "markets" };
   await saveState(
-    { pairing_token: token, interests: [withDoc, noDoc] } as State,
+    { pairing_token: token, interests: [withDoc, noDoc] },
     stateFile,
   );
   // Drop a doc for the first interest in a hermetic doc dir and inject that same

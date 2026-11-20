@@ -118,7 +118,7 @@ export default function SignInPage() {
                 className="w-full"
                 loading={busy === "google"}
                 disabled={busy !== null && busy !== "google"}
-                onClick={continueWithGoogle}
+                onClick={() => void continueWithGoogle()}
               >
                 Continue with Google
               </Button>
@@ -138,7 +138,7 @@ export default function SignInPage() {
             </div>
             <form
               className="flex flex-col gap-3"
-              onSubmit={sendLink}
+              onSubmit={(e) => void sendLink(e)}
               noValidate
             >
               <label htmlFor="email" className="text-body-sm font-medium">
@@ -217,7 +217,7 @@ export default function SignInPage() {
               <Button
                 variant="ghost"
                 loading={busy === "signOut"}
-                onClick={signOut}
+                onClick={() => void signOut()}
               >
                 Sign out
               </Button>

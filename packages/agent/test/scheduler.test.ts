@@ -206,7 +206,7 @@ test("a scheduled fire produces a brief and records success + next_run_at", asyn
     assert.equal(state.schedule?.last_run_status, "success");
     assert.ok(state.schedule?.last_run_at, "last_run_at recorded");
     // next_run_at must be re-armed for tomorrow (07:00 already passed at fire).
-    const next = new Date(state.schedule!.next_run_at!);
+    const next = new Date(state.schedule.next_run_at!);
     assert.equal(next.getDate(), 2, "next fire rolled to tomorrow");
     assert.equal(next.getHours(), 7);
   } finally {
@@ -316,7 +316,7 @@ test("start materializes the default enabled schedule when no schedule is persis
     assert.equal(state.schedule?.enabled, true);
     assert.equal(state.schedule?.time_of_day, defaultSchedule().time_of_day);
     assert.ok(state.schedule?.next_run_at, "default schedule should be armed");
-    const next = new Date(state.schedule!.next_run_at!);
+    const next = new Date(state.schedule.next_run_at);
     assert.equal(next.getDate(), 1);
     assert.equal(next.getHours(), 7);
   } finally {
@@ -360,7 +360,7 @@ test("GET /v0/schedule returns the Settings-UI contract incl. reboot_durable:fal
     // program arguments to be present, so a half-written file no longer
     // reports reboot_durable:true.
     await fs.writeFile(
-      process.env.SCOUT_LAUNCH_AGENT_PLIST!,
+      process.env.SCOUT_LAUNCH_AGENT_PLIST,
       `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
   <dict>

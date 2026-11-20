@@ -82,18 +82,19 @@ function useCoarsePointer(): boolean {
 
 function CopyMessage({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      /* clipboard blocked */
+    }
+  }
   return (
     <button
       type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1400);
-        } catch {
-          /* clipboard blocked */
-        }
-      }}
+      onClick={() => void copy()}
       className="rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] text-muted transition-colors hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
     >
       {copied ? "Copied" : "Copy"}

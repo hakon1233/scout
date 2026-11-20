@@ -548,7 +548,7 @@ export function createHostedData(deps: {
         ...follows
           .map((f) => f.interests)
           .filter((i): i is InterestRow => i !== null)
-          .map((i) => ({ ...i, cadence: "off" as Cadence, following: true })),
+          .map((i) => ({ ...i, cadence: "off" as const, following: true })),
       ];
       const runs =
         rows.length === 0

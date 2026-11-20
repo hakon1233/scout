@@ -10,7 +10,7 @@ export function PairedEntryRedirect() {
   useEffect(() => {
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       const token = await bootstrapCompanionToken();
       if (!token) return;
       const ready = await pingCompanion();

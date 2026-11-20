@@ -18,7 +18,7 @@ function answer(json: unknown, stop = "end_turn"): MessagesResponse {
     content: [{ type: "text", text: JSON.stringify(json) }],
     stop_reason: stop,
     usage: { input_tokens: 1000, output_tokens: 50 },
-  } as MessagesResponse;
+  };
 }
 
 function memoryStore(topic: Partial<PublishStart> = {}) {

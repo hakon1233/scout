@@ -201,16 +201,13 @@ function Shared() {
 
 function FollowButton({ onFollow }: { onFollow: () => Promise<void> }) {
   const [busy, setBusy] = React.useState(false);
+  async function follow() {
+    setBusy(true);
+    await onFollow();
+    setBusy(false);
+  }
   return (
-    <Button
-      size="sm"
-      loading={busy}
-      onClick={async () => {
-        setBusy(true);
-        await onFollow();
-        setBusy(false);
-      }}
-    >
+    <Button size="sm" loading={busy} onClick={() => void follow()}>
       Follow
     </Button>
   );

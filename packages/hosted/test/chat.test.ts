@@ -117,11 +117,10 @@ function setup(
 }
 
 test("a how-to answer keeps its allow-listed page and changes nothing", async () => {
-  const answer = (text: string): MessagesResponse =>
-    ({
-      ...recorded("create"),
-      content: [{ type: "text", text, citations: null }],
-    }) as MessagesResponse;
+  const answer = (text: string): MessagesResponse => ({
+    ...recorded("create"),
+    content: [{ type: "text", text, citations: null }],
+  });
   const { chat, requests, state } = setup([
     answer(
       '{"reply":"Set it under Time zone in Settings.","changes":[],"page":"/app/settings/"}',
