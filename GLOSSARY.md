@@ -11,6 +11,11 @@ reader's own machine through their Claude Code CLI; the website only shows the r
 Something the reader wants news about, with a stable id and a short **topic** (its headline).
 On screen it is called a **topic** ("Topics", "New topic", "Manage topics"); the word
 "interest" stays in code, the HTTP contract and the database only.
+Naming rule: code and database names stay "interest" (tables, columns, core types, the
+contract, `interestId`). On-screen text, and the names of UI components and routes, may
+say "topic" (`HostedTopics`, `TopicCard`, `/app/topics/`). The public catalog's SQL
+functions that already say topic (`browse_topics`, `set_topic_tags`, `report_topic`)
+keep their names; new database names say interest.
 _Avoid_: subscription, feed item; "interest" in any on-screen text
 
 **Topic**:
