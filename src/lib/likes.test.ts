@@ -221,7 +221,7 @@ test("signed in, likes load from the database and each toggle is sent there", as
   }
 });
 
-test("device likes are never uploaded, and a reader's likes leave with them", async () => {
+test("likes made signed out move into the account that signs in, and only that one", async () => {
   const { backing, restore } = installStorage({ failWrites: false });
   const local = "https://example.com/liked-signed-out";
   const annas = "https://example.com/annas";
@@ -229,11 +229,13 @@ test("device likes are never uploaded, and a reader's likes leave with them", as
     await setLikesUser(null);
     toggleLike(story(local));
 
-    // Anna signs in: her likes come from the database, not the device's.
+    // Anna signs in: the device's like is sent to her account and leaves
+    // the device.
     const anna = memorySync();
     await setLikesUser("user-anna", anna.sync);
-    assert.equal(isLiked(likeKey(local)), false);
-    assert.deepEqual(anna.sent, []);
+    assert.equal(isLiked(likeKey(local)), true);
+    assert.deepEqual(anna.sent, [`add ${likeKey(local)}`]);
+    assert.equal(backing.has(LIKES_KEY), false);
     toggleLike(story(annas));
 
     // Switching to Ben drops Anna's local copy; Ben sees none of hers.
@@ -241,13 +243,32 @@ test("device likes are never uploaded, and a reader's likes leave with them", as
     await setLikesUser("user-ben", ben.sync);
     assert.equal(backing.has(`${LIKES_KEY}:user-anna`), false);
     assert.equal(isLiked(likeKey(annas)), false);
+    assert.equal(isLiked(likeKey(local)), false);
     assert.deepEqual(ben.sent, []);
 
-    // Signed out again: Ben's copy is gone and the device's likes are back.
+    // Signed out again: Ben's copy is gone and the device holds nothing.
     await setLikesUser(null);
     assert.equal(backing.has(`${LIKES_KEY}:user-ben`), false);
-    assert.equal(isLiked(likeKey(local)), true);
+    assert.equal(isLiked(likeKey(local)), false);
   } finally {
+    restore();
+  }
+});
+
+test("a device like already in the account is not sent again", async () => {
+  const { restore } = installStorage({ failWrites: false });
+  const both = "https://example.com/liked-twice";
+  try {
+    await setLikesUser(null);
+    toggleLike(story(both));
+    const db = memorySync([
+      { ...story(both), key: likeKey(both), likedAt: "2026-11-20T10:00:00Z" },
+    ]);
+    await setLikesUser("user-anna", db.sync);
+    assert.equal(isLiked(likeKey(both)), true);
+    assert.deepEqual(db.sent, []);
+  } finally {
+    await setLikesUser(null);
     restore();
   }
 });

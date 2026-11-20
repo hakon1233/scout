@@ -133,8 +133,8 @@ export function HostedProfile({ data }: { data: HostedData }) {
   return (
     <div className="flex flex-col gap-8" data-main>
       <p className="-mt-2 text-body-sm text-secondary text-pretty">
-        Optional and private. Scout uses it only to pick topics for you. Nobody
-        else sees it.
+        Optional. Scout uses it only to pick topics for you. Only your display
+        name is shown, on topics you make public; the rest stays private.
       </p>
 
       <SettingsGroup title="About you">

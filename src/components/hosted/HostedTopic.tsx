@@ -169,6 +169,7 @@ function TopicPage({
             on={push.isOn(i.id)}
             onChange={(on) => push.set(i.id, on)}
             deviceOn={push.deviceOn}
+            blocked={push.blocked}
           />
         }
       >

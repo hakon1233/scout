@@ -1,19 +1,20 @@
 "use client";
 
+import { useHostedData } from "@/hooks/useHostedData";
+import { isHostedBuild } from "@/lib/auth";
 import { HostedProfile } from "@/components/hosted/HostedProfile";
 import { AppShell, PageHeader } from "@/components/shell/AppShell";
 import { SettingsGroup, SettingsLinkRow } from "@/components/ui";
-import { hostedData } from "@/lib/hosted";
 
 // Profile: the reader's private details for picks (hosted only), and their
 // liked and saved stories, which work in both builds.
 export default function ProfilePage() {
-  const data = hostedData();
+  const data = useHostedData();
   return (
     <AppShell>
       <PageHeader title="Profile" back={{ href: "/app/", label: "Brief" }} />
-      {data ? (
-        <HostedProfile data={data} />
+      {isHostedBuild() ? (
+        data && <HostedProfile data={data} />
       ) : (
         <p className="-mt-2 text-body-sm text-secondary text-pretty" data-main>
           This copy of Scout runs on your own computer, so it keeps no profile.

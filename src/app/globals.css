@@ -107,7 +107,7 @@
   --warning-bg: #f6ecd6;
   --warning-fg: #7a5a1e;
   --warning-border: #ddc89a;
-  --focus-ring: var(--accent-signal);
+  --focus-ring: var(--accent-deep);
   /* "On" for switches and plan meters: a real good outcome, not the accent. */
   --good: #2f6b4a;
 
@@ -175,7 +175,7 @@
   --warning-bg: #2a2516;
   --warning-fg: #d8bd86;
   --warning-border: #4d4324;
-  --focus-ring: var(--accent-signal);
+  --focus-ring: var(--accent-deep);
   --good: #4f9a71;
 
   --glass: rgb(34 38 48 / 0.42);

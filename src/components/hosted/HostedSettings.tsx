@@ -52,11 +52,15 @@ export function HostedSettings() {
             title="Notifications"
             footer={
               push.error ??
-              "Each topic is off until you turn on its bell. Bells work once this device is on."
+              "Each topic is off until you turn on its bell. Turning one on also turns on this device."
             }
           >
             <div className="px-4 py-3">
-              <PushSwitch data={data} onChange={push.deviceChanged} />
+              <PushSwitch
+                data={data}
+                device={push.device}
+                onChange={push.deviceChanged}
+              />
             </div>
             {home?.interests.map((t) => (
               <SettingsRow key={t.id} label={t.topic}>
@@ -65,6 +69,7 @@ export function HostedSettings() {
                   on={push.isOn(t.id)}
                   onChange={(on) => push.set(t.id, on)}
                   deviceOn={push.deviceOn}
+                  blocked={push.blocked}
                 />
               </SettingsRow>
             ))}

@@ -231,8 +231,9 @@ companion never imports it.
   interest list, and the "your run failed" banner.
 - `lib/storage.ts`, `lib/safe-storage.ts`, `lib/likes.ts`: browser storage. Every write
   goes through `safe-storage`. Likes are keyed per reader: `setLikesUser(id, sync)` on
-  each sign-in loads them from `story_marks` (`likesSync(hostedData)`); device likes
-  made signed out are never uploaded, and sign-out drops the reader's local copy.
+  each sign-in loads them from `story_marks` (`likesSync(hostedData)`); likes made
+  signed out move into the account at the next sign-in and leave the device, and
+  sign-out drops the reader's local copy.
   `startHostedLikes()` (called from the shell's `TopPills` on every /app screen) wires
   this to `onAuthChange` through `followLikes`.
 - `lib/auth.ts`: hosted sign-in (Google or an email link) and the only place the

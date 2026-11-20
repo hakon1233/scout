@@ -46,7 +46,7 @@ export function Sheet({
         if (e.target === e.currentTarget) onClose();
       }}
       // backdrop: the theme's scrim token; Tailwind has no utility for it.
-      className="glass glass-strong m-0 mt-auto w-full max-w-none rounded-t-card p-0 text-primary backdrop:bg-[var(--scrim)] sm:m-auto sm:max-w-md sm:rounded-card"
+      className="glass glass-strong fixed m-0 mt-auto w-full max-w-none rounded-t-card p-0 text-primary backdrop:bg-[var(--scrim)] sm:m-auto sm:max-w-md sm:rounded-card"
     >
       {open && (
         <div className="flex flex-col gap-4 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
