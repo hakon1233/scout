@@ -45,7 +45,7 @@ select matches(public.chat_block_reason('bbbbbbbb-0000-0000-0000-000000000002'),
   'chat messages', 'daily turn limit reached: chat is blocked');
 select is(public.chat_block_reason('aaaaaaaa-0000-0000-0000-000000000001'), null,
   'another reader''s turns do not count');
-delete from public.chat_turns;
+delete from public.chat_turns where user_id = 'bbbbbbbb-0000-0000-0000-000000000002';
 
 -- ---------------------------------------------------------------------------
 -- commit_chat_turn

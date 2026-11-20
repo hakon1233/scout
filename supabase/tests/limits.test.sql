@@ -13,6 +13,8 @@ select no_plan();
 
 -- The schema's default ceiling: the hosted project's may be lower than this file spends.
 update public.settings set daily_ceiling_usd = 10;
+-- The hosted project's own topics would be claimed too; pause them (rolled back).
+update public.interests set paused = true;
 
 -- ---------------------------------------------------------------------------
 -- Setup (as postgres)

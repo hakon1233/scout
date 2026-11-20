@@ -7,6 +7,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 
+-- The hosted project has its own readers' events; drop them here (rolled back)
+-- so only this file's events count.
+delete from public.usage_events;
+
 insert into auth.users (id, email, aud, role) values
   ('aaaaaaaa-0000-0000-0000-0000000000e1', 'una@example.test', 'authenticated', 'authenticated'),
   ('bbbbbbbb-0000-0000-0000-0000000000e2', 'ivo@example.test', 'authenticated', 'authenticated');

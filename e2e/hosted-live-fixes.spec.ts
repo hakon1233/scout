@@ -85,7 +85,9 @@ test("an open story is in the URL: reload keeps it, Back closes it", async ({
   await page.goto(`${ORIGIN}/app/`);
   await page.getByRole("button", { name: STORY }).click({ timeout: 60_000 });
   const back = page.getByRole("button", { name: "← Back to feed" });
-  const detail = page.locator("article", { has: back });
+  // The story's own article: the brief's article around it also holds Back,
+  // and its header (with its own "Written by AI") lingers for a frame.
+  const detail = back.locator("xpath=ancestor::article[1]");
   await expect(page).toHaveURL(/[?&]story=/);
   await expect(detail.getByText("Written by AI")).toBeVisible();
 

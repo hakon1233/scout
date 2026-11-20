@@ -39,7 +39,8 @@ create temp table chk on commit drop as
 select is((select r ->> 'title' from chk), 'Fjord kayaking', 'the check reads the title');
 select is((select r ->> 'doc' from chk), 'Trips and gear.', 'and the intent doc');
 select is((select r ->> 'displayName' from chk), 'Pia P', 'and the display name');
-select is((select count(*)::int from public.publish_checks), 1, 'the check is recorded');
+select is((select count(*)::int from public.publish_checks
+           where interest_id = '00000000-0000-0000-0000-0000000000b1'), 1, 'the check is recorded');
 
 -- ---------------------------------------------------------------------------
 -- publish_finish

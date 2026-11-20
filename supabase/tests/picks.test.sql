@@ -12,6 +12,12 @@ select no_plan();
 -- The hosted project has its own catalog; hide it here (rolled back) so only this
 -- file's topics count.
 update public.interests set hidden_at = now() where visibility = 'public' and hidden_at is null;
+-- Its readers' activity makes them active readers; drop it too.
+delete from public.usage_events;
+delete from public.story_marks;
+delete from public.follows;
+delete from public.reader_picks;
+delete from public.pick_runs;
 
 -- Pia reads; Tor hosts public topics; Una is another reader.
 insert into auth.users (id, email, aud, role) values
