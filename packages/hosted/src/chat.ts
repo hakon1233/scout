@@ -27,8 +27,10 @@ import {
 } from "@scout/core";
 import {
   responseCostUsd,
+  tokenCount,
   type ClaudeClient,
   type MessagesResponse,
+  type TokenCount,
 } from "@scout/research";
 
 export type ChatStore = {
@@ -56,10 +58,16 @@ export type ChatStore = {
     limit: number,
   ): Promise<Interest[]>;
   // In one transaction: apply `turn.changes` (a create carries its new id),
-  // add the `follows`, and append `turn` as the reader's latest chat turn.
+  // add the `follows`, and append `turn` as the reader's latest chat turn
+  // with what its model call cost and used.
   commit(
     userId: string,
-    commit: { turn: ChatTurn; follows: string[]; costUsd: number },
+    commit: {
+      turn: ChatTurn;
+      follows: string[];
+      costUsd: number;
+      tokens: TokenCount;
+    },
   ): Promise<void>;
   // In one transaction: store `feedback` from the card in turn `cardTurnId`
   // unless a feedback limit is reached, and append `turn` as a free turn (it
@@ -150,6 +158,7 @@ export function createChat(deps: {
       message,
     };
     let costUsd = 0;
+    let tokens = NO_TOKENS;
     let result: { turn: ChatTurn; follows: string[] };
     try {
       const publicInterests = await store.findPublicInterests(
@@ -189,6 +198,7 @@ export function createChat(deps: {
         AbortSignal.timeout(TURN_TIMEOUT_MS),
       );
       costUsd = chatCostUsd(response);
+      tokens = tokenCount(response.usage);
       const output = parseChatOutput(responseText(response));
       const plan = planChatChanges(interests, output.changes, {
         ...limits,
@@ -249,7 +259,7 @@ export function createChat(deps: {
         turn: { ...base, status: "failed", error_msg: failureMessage(err) },
       };
     }
-    await store.commit(userId, { ...result, costUsd });
+    await store.commit(userId, { ...result, costUsd, tokens });
     return result.turn;
   }
 
@@ -291,7 +301,12 @@ export function createChat(deps: {
       reply: outcome.reply,
       changes: outcome.changes,
     };
-    await store.commit(userId, { turn, follows: outcome.follows, costUsd: 0 });
+    await store.commit(userId, {
+      turn,
+      follows: outcome.follows,
+      costUsd: 0,
+      tokens: NO_TOKENS,
+    });
     return turn;
   }
 
@@ -391,6 +406,8 @@ function responseText(response: MessagesResponse): string {
     )
     .join("");
 }
+
+const NO_TOKENS: TokenCount = { inputTokens: 0, outputTokens: 0 };
 
 // One turn's cost, from research's shared Haiku price table.
 export function chatCostUsd(response: MessagesResponse): number {

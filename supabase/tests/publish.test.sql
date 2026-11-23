@@ -53,8 +53,11 @@ select throws_ok(
 
 select is(
   public.publish_finish('aaaaaaaa-0000-0000-0000-0000000000f1', (select (r ->> 'checkId')::bigint from chk),
-                        true, array['Outdoors', 'travel', 'outdoors'], null),
+                        true, array['Outdoors', 'travel', 'outdoors'], null, 0.0009, 1000, 50),
   'b1b1b1b1b1b1b1b1b1b1b1b1', 'an approve returns the share slug');
+select is((select cost_usd::float8 || ' ' || input_tokens || ' ' || output_tokens from public.publish_checks
+           where id = (select (r ->> 'checkId')::bigint from chk)),
+  '0.0009 1000 50', 'the check records its cost and tokens');
 select is((select visibility from public.interests where id = '00000000-0000-0000-0000-0000000000b1'),
   'public', 'and makes the topic public');
 select is((select tags from public.interests where id = '00000000-0000-0000-0000-0000000000b1'),

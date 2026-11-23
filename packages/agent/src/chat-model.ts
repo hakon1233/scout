@@ -55,7 +55,7 @@ export async function chatComplete(
   const prompt = buildChatPrompt(message, snapshots, transcript, {
     maxInterests: MAX_INTERESTS,
   });
-  const raw = await runClaude(prompt, {
+  const { text } = await runClaude(prompt, {
     tools: "none",
     label: "claude chat turn",
     claudeBin: opts.claudeBin,
@@ -63,5 +63,5 @@ export async function chatComplete(
     timeoutMs: opts.timeoutMs,
     signal: opts.signal,
   });
-  return parseChatOutput(raw);
+  return parseChatOutput(text);
 }

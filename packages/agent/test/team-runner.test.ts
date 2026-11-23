@@ -120,7 +120,8 @@ function worker(supabase: typeof globalThis.fetch) {
 }
 
 // A `claude` stand-in that writes a dated story under the prompt's topic.
-function stubClaude(reply: { fail?: boolean } = {}) {
+// With `json`, it answers as `claude --output-format json` does.
+function stubClaude(reply: { fail?: boolean; json?: boolean } = {}) {
   const spawns: Array<{ args: readonly string[]; prompt: string }> = [];
   const spawnFn = ((_bin: string, args: readonly string[]) => {
     const child = new EventEmitter() as EventEmitter & {
@@ -148,12 +149,41 @@ function stubClaude(reply: { fail?: boolean } = {}) {
           child.emit("close", 1);
           return;
         }
+        const text =
+          `I have enough.\n\n## ${topic}\n` +
+          "- `2026-11-19` — **A vendor retired a model.** It goes on 1 December.\n" +
+          "  [example.com — Retirement notice](https://example.com/notice)\n";
         child.stdout.emit(
           "data",
           Buffer.from(
-            `I have enough.\n\n## ${topic}\n` +
-              "- `2026-11-19` — **A vendor retired a model.** It goes on 1 December.\n" +
-              "  [example.com — Retirement notice](https://example.com/notice)\n",
+            reply.json
+              ? JSON.stringify({
+                  type: "result",
+                  subtype: "success",
+                  is_error: false,
+                  num_turns: 5,
+                  result: text,
+                  stop_reason: "end_turn",
+                  total_cost_usd: 0.031,
+                  usage: {
+                    input_tokens: 800,
+                    output_tokens: 700,
+                    cache_read_input_tokens: 20_000,
+                    cache_creation_input_tokens: 2_000,
+                    server_tool_use: { web_search_requests: 3 },
+                  },
+                  modelUsage: {
+                    "claude-haiku-5-5": {
+                      inputTokens: 800,
+                      outputTokens: 700,
+                      cacheReadInputTokens: 20_000,
+                      cacheCreationInputTokens: 2_000,
+                      webSearchRequests: 3,
+                      costUSD: 0.031,
+                    },
+                  },
+                })
+              : text,
           ),
         );
         child.emit("close", 0);
@@ -165,7 +195,12 @@ function stubClaude(reply: { fail?: boolean } = {}) {
 }
 
 function setup(
-  opts: { runnerOn?: boolean; fail?: boolean; facts?: boolean } = {},
+  opts: {
+    runnerOn?: boolean;
+    fail?: boolean;
+    facts?: boolean;
+    json?: boolean;
+  } = {},
 ) {
   const sb = fakeSupabase(opts);
   const claude = stubClaude(opts);
@@ -204,6 +239,32 @@ test("a due Scout team topic is researched locally and published like any run", 
   // The paused topic never ran.
   assert.equal(s.claude.spawns.length, 1);
   assert.ok(!s.sb.calls.includes("team_start_run"));
+});
+
+test("a team run sends what its claude session used with the result", async () => {
+  const s = setup({ runnerOn: true, json: true });
+  const code = await teamRunMain(
+    [],
+    { SCOUT_TEAM_RUNNER: "on" },
+    CONFIG,
+    s.deps,
+  );
+
+  assert.equal(code, 0);
+  const [done] = s.sb.finished;
+  assert.equal((done.p_coverage as { status: string }).status, "covered");
+  assert.deepEqual(done.p_usage, {
+    model: "claude-haiku-5-5",
+    stopReason: "end_turn",
+    turns: 5,
+    inputTokens: 800,
+    outputTokens: 700,
+    cacheReadTokens: 20_000,
+    cacheWriteTokens: 2_000,
+    webSearches: 3,
+    webFetches: null,
+    costUsd: 0.031,
+  });
 });
 
 test("a team session is capped: the search budget in the prompt and --max-turns", async () => {

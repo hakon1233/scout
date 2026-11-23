@@ -1,7 +1,9 @@
 // The one place the companion starts a headless `claude` child.
 //
-// The prompt goes over stdin and stdout comes back as text. We never read or
-// forward the user's Claude credentials: the CLI authenticates itself.
+// The prompt goes over stdin. stdout is the CLI's json result
+// (`--output-format json`): the answer's text plus what the session used. We
+// never read or forward the user's Claude credentials: the CLI authenticates
+// itself.
 //
 // Security: research feeds the model untrusted web pages, so a page can try
 // prompt injection. Each run therefore gets an explicit, minimal tool set via
@@ -15,6 +17,7 @@
 import { spawn } from "node:child_process";
 import os from "node:os";
 import { StringDecoder } from "node:string_decoder";
+import type { CliUsage } from "#core";
 
 // "web-research": WebSearch + WebFetch only. "none": no tools at all.
 type ClaudeTools = "web-research" | "none";
@@ -112,20 +115,119 @@ function abortError(): Error {
   return err;
 }
 
-// Resolves with the child's raw stdout on exit 0. Rejects on a non-zero exit
-// (`claude exited <code>: <detail>`), a spawn failure, the timeout
-// (`<label> timed out after <ms>ms`) or an abort (name `AbortError`).
+// A session's answer and, when the CLI printed its json result, its usage.
+export type ClaudeOutput = { text: string; usage: CliUsage | null };
+
+// A count from the json: a finite number of at least zero, else 0.
+const count = (v: unknown): number =>
+  typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
+const record = (v: unknown): Record<string, unknown> | null =>
+  v && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+
+// Reads `claude --print --output-format json`: one result object. Anything
+// else (plain text from an older CLI or a stub, a cut-off object) comes back
+// as the text, unchanged, with no usage. `failed` marks a result the CLI
+// flagged as an error; `detail` is its own words for it.
+export function parseCliOutput(
+  stdout: string,
+): ClaudeOutput & { failed: boolean; detail: string } {
+  const raw = { text: stdout, usage: null, failed: false, detail: "" };
+  let json: Record<string, unknown> | null;
+  try {
+    json = record(JSON.parse(stdout));
+  } catch {
+    return raw;
+  }
+  if (!json || json.type !== "result") return raw;
+
+  const text = typeof json.result === "string" ? json.result : "";
+  const total = record(json.usage) ?? {};
+  const tools = record(total.server_tool_use) ?? {};
+  const models = Object.entries(record(json.modelUsage) ?? {}).flatMap(
+    ([name, u]) => (record(u) ? [{ name, u: record(u)! }] : []),
+  );
+  // Every model the session used (the CLI's own side calls too), else the
+  // result's totals.
+  const sum = (modelKey: string, totalKey: string) =>
+    models.length
+      ? models.reduce((n, m) => n + count(m.u[modelKey]), 0)
+      : count(total[totalKey]);
+  const main = models.reduce<{ name: string; out: number } | null>(
+    (best, m) =>
+      !best || count(m.u.outputTokens) > best.out
+        ? { name: m.name, out: count(m.u.outputTokens) }
+        : best,
+    null,
+  );
+  const fetches = tools.web_fetch_requests;
+  const usage: CliUsage = {
+    model: main?.name ?? null,
+    stopReason: typeof json.stop_reason === "string" ? json.stop_reason : null,
+    turns: count(json.num_turns),
+    inputTokens: sum("inputTokens", "input_tokens"),
+    outputTokens: sum("outputTokens", "output_tokens"),
+    cacheReadTokens: sum("cacheReadInputTokens", "cache_read_input_tokens"),
+    cacheWriteTokens: sum(
+      "cacheCreationInputTokens",
+      "cache_creation_input_tokens",
+    ),
+    webSearches: models.length
+      ? sum("webSearchRequests", "")
+      : count(tools.web_search_requests),
+    webFetches: typeof fetches === "number" ? count(fetches) : null,
+    costUsd: count(json.total_cost_usd),
+  };
+  const errors = Array.isArray(json.errors)
+    ? json.errors.filter((e): e is string => typeof e === "string" && !!e)
+    : [];
+  const detail =
+    text.trim() ||
+    errors.join("; ") ||
+    (typeof json.subtype === "string" ? json.subtype : "");
+  return { text, usage, failed: json.is_error === true, detail };
+}
+
+// Two runs' usage added up; null when neither reported any. The model and
+// stop reason are the latest session's.
+export function addCliUsage(
+  a: CliUsage | null,
+  b: CliUsage | null,
+): CliUsage | null {
+  if (!a || !b) return a ?? b;
+  return {
+    model: b.model ?? a.model,
+    stopReason: b.stopReason ?? a.stopReason,
+    turns: a.turns + b.turns,
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+    webSearches: a.webSearches + b.webSearches,
+    webFetches:
+      a.webFetches === null && b.webFetches === null
+        ? null
+        : (a.webFetches ?? 0) + (b.webFetches ?? 0),
+    costUsd: a.costUsd + b.costUsd,
+  };
+}
+
+// Resolves with the session's text and usage on exit 0. Rejects on a non-zero exit
+// or a result the CLI flagged as an error (`claude exited <code>: <detail>`),
+// a spawn failure, the timeout (`<label> timed out after <ms>ms`) or an abort
+// (name `AbortError`).
 export function runClaude(
   prompt: string,
   opts: ClaudeRunOptions,
-): Promise<string> {
+): Promise<ClaudeOutput> {
   const claudeBin = opts.claudeBin ?? process.env.SCOUT_CLAUDE_BIN ?? "claude";
   const spawnImpl = opts.spawnFn ?? spawn;
   const limitMs = timeoutMs(opts.timeoutMs);
   const label = opts.label ?? "claude run";
   const { signal } = opts;
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<ClaudeOutput>((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
 
     const child = spawnImpl(
@@ -133,7 +235,7 @@ export function runClaude(
       [
         "--print",
         "--output-format",
-        "text",
+        "json",
         ...TOOL_ARGS[opts.tools],
         ...(opts.tools === "web-research"
           ? ["--max-turns", String(opts.maxTurns ?? MAX_RESEARCH_TURNS)]
@@ -225,17 +327,23 @@ export function runClaude(
         stdout += outDecoder.end();
         stderr += errDecoder.end();
         if (signal?.aborted) return reject(abortError());
-        if (code !== 0) {
+        const out = parseCliOutput(stdout);
+        if (code !== 0 || out.failed) {
           // The CLI reports some failures (e.g. a usage cap) on stdout with an
-          // empty stderr, so fall back to stdout to keep the cause visible.
-          const detail = (stderr.trim() || stdout.trim()).slice(0, 400);
+          // empty stderr, so fall back to stdout to keep the cause visible:
+          // the json result's own words, never the json itself.
+          const detail = (
+            stderr.trim() ||
+            out.detail.trim() ||
+            stdout.trim()
+          ).slice(0, 400);
           // A CLI older than the flags above refuses them before doing anything.
           const hint = /unknown option/.test(detail)
             ? " — update Claude Code (`claude update`) and try again"
             : "";
           return reject(new Error(`claude exited ${code}: ${detail}${hint}`));
         }
-        resolve(stdout);
+        resolve({ text: out.text, usage: out.usage });
       }),
     );
 

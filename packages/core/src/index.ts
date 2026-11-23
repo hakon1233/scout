@@ -8,6 +8,7 @@ export type {
   ChatChange,
   ChatConfirm,
   ChatTurn,
+  CliUsage,
   Interest,
   PendingDelete,
   PendingCreate,

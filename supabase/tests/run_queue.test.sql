@@ -146,7 +146,9 @@ select is(public.spend_today('2026-11-20 12:04+00') -current_setting('scout.spen
 select ok(public.finish_run(
   (select id from public.runs where interest_id = '00000000-0000-0000-0000-0000000000b2'),
   null, '{"topic":"Ben weekly","status":"missing"}', 1, 0.01, 'Claude API 529', '2026-11-20 12:03+00',
-  true, 1000, 100, 50, 10),
+  true, 1000, 100, 50, 10, p_web_fetches => 2, p_model => 'claude-haiku-5-5',
+  p_stop_reason => 'pause_turn', p_requests => 3, p_max_prompt_tokens => 104000,
+  p_long_context => true),
   'finish_run records a failed attempt');
 select is((select status from public.runs where interest_id = '00000000-0000-0000-0000-0000000000b2'),
   'queued', 'a first failure is queued again');
@@ -155,7 +157,9 @@ insert into tick select * from public.claim_runs(10, '2026-11-20 12:04+00');
 select results_eq('select topic from tick', array['Ben weekly'], 'the retry is claimed');
 select ok(public.finish_run(
   (select id from public.runs where interest_id = '00000000-0000-0000-0000-0000000000b2'),
-  null, null, 1, 0.01, 'Claude API 529', '2026-11-20 12:05+00', true, 2000, 200, 0, 20),
+  null, null, 1, 0.01, 'Claude API 529', '2026-11-20 12:05+00', true, 2000, 200, 0, 20,
+  p_web_fetches => 1, p_model => 'claude-haiku-5-5-20261101', p_stop_reason => null,
+  p_requests => 1, p_max_prompt_tokens => 9000, p_long_context => false),
   'second failure');
 select is(
   (select status || ' ' || attempts || ' ' || cost_usd from public.runs
@@ -166,6 +170,18 @@ select is(
    from public.runs
    where interest_id = '00000000-0000-0000-0000-0000000000b2' and scheduled_for > '2026-11-20'),
   '3000 300 50 30', 'the token usage of both attempts adds up');
+select is(
+  (select concat_ws(' ', web_fetches, model, stop_reason, requests, max_prompt_tokens, long_context)
+   from public.runs
+   where interest_id = '00000000-0000-0000-0000-0000000000b2' and scheduled_for > '2026-11-20'),
+  '3 claude-haiku-5-5-20261101 pause_turn 4 104000 t',
+  'fetches and requests add up, the largest prompt and the long-prompt flag stick, the last model and stop reason win');
+select is(
+  (select concat_ws(' ', coalesce(web_fetches::text, 'none'), coalesce(model, 'none'),
+                    coalesce(requests::text, 'none'), coalesce(long_context::text, 'none'))
+   from public.runs
+   where interest_id = '00000000-0000-0000-0000-0000000000a3' and section_md is not null),
+  'none none none none', 'a run finished without them keeps them unknown');
 select is(
   (select input_tokens from public.runs
    where interest_id = '00000000-0000-0000-0000-0000000000a3' and section_md is not null),
@@ -218,7 +234,7 @@ select is((select status from public.runs where interest_id = '00000000-0000-000
 select ok(not has_function_privilege('authenticated', 'public.claim_runs(integer, timestamptz)', 'execute'),
   'readers cannot claim runs');
 select ok(not has_function_privilege('authenticated',
-  'public.finish_run(uuid, text, jsonb, integer, numeric, text, timestamptz, boolean, bigint, bigint, bigint, bigint)', 'execute'),
+  'public.finish_run(uuid, text, jsonb, integer, numeric, text, timestamptz, boolean, bigint, bigint, bigint, bigint, integer, text, text, integer, bigint, boolean, numeric)', 'execute'),
   'readers cannot finish runs');
 select ok(not has_function_privilege('anon', 'public.request_run(uuid)', 'execute'),
   'signed-out visitors cannot request runs');

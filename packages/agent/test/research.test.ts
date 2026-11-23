@@ -38,9 +38,10 @@ test("a session that closes in time is NOT affected by the timeout", async () =>
     return child;
   }) as unknown as typeof spawn;
 
-  const md = await researchAndSynthesize(
+  const { text, usage } = await researchAndSynthesize(
     { topic: "ai", doc: "track ai" },
     { spawnFn, timeoutMs: 5000 },
   );
-  assert.match(md, /## ai/);
+  assert.match(text, /## ai/);
+  assert.equal(usage, null, "plain text output carries no usage");
 });

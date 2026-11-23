@@ -119,6 +119,8 @@ test("publish verifies the reader, checks the topic and makes it public", async 
   assert.equal(args.p_approved, true);
   assert.deepEqual(args.p_tags, ["travel", "kayaking"]);
   assert.ok((args.p_cost_usd as number) > 0);
+  assert.equal(args.p_input_tokens, 900);
+  assert.equal(args.p_output_tokens, 40);
 });
 
 test("a refused topic stays private and the reader gets the reason", async () => {

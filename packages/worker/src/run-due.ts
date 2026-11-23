@@ -25,6 +25,16 @@ export type RunOutcome = {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  webFetches: number;
+  // The model that answered and the last response's stop reason (null: no
+  // response came back).
+  model: string;
+  stopReason: string | null;
+  // Claude requests made, the largest single prompt in tokens, and whether
+  // any request crossed the 100K long-prompt line.
+  requests: number;
+  maxPromptTokens: number;
+  longContext: boolean;
   error?: string;
   // A failed attempt only: false when another attempt cannot help (a 4xx,
   // a rate or spend limit, a timeout), so the run fails at once.
@@ -131,6 +141,12 @@ export async function runDue(deps: RunDueDeps): Promise<TickSummary> {
         outputTokens: result.usage.outputTokens,
         cacheReadTokens: result.usage.cacheReadTokens,
         cacheWriteTokens: result.usage.cacheWriteTokens,
+        webFetches: result.usage.webFetches,
+        model: result.usage.model,
+        stopReason: result.usage.stopReason,
+        requests: result.usage.requests,
+        maxPromptTokens: result.usage.maxPromptTokens,
+        longContext: result.usage.longContext,
         ...(result.error ? { error: result.error } : {}),
         ...(result.sectionMd === null
           ? { retry: result.retryable ?? true }

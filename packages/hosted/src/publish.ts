@@ -14,7 +14,12 @@ import {
   type PublishVerdict,
   HAIKU_MODEL,
 } from "@scout/core";
-import { responseCostUsd, type ClaudeClient } from "@scout/research";
+import {
+  responseCostUsd,
+  tokenCount,
+  type ClaudeClient,
+  type TokenCount,
+} from "@scout/research";
 
 export const PUBLISH_MODEL = HAIKU_MODEL;
 // Haiku 5.5 thinks by default (even at effort low), and its thinking counts
@@ -27,17 +32,20 @@ export type PublishStart = PublishInput & {
   maxDocChars: number;
 };
 
+const NO_TOKENS: TokenCount = { inputTokens: 0, outputTokens: 0 };
+
 export type PublishStore = {
   // Checks the limits and records a check; throws when a limit says no or the
   // topic is not the reader's (the host maps those errors).
   start(userId: string, interestId: string): Promise<PublishStart>;
-  // Records the verdict; on approve sets the tags and makes the topic public
-  // and returns its share slug.
+  // Records the verdict and what the call cost and used; on approve sets the
+  // tags and makes the topic public and returns its share slug.
   finish(
     userId: string,
     checkId: string,
     verdict: PublishVerdict,
     costUsd: number,
+    tokens: TokenCount,
   ): Promise<string | null>;
 };
 
@@ -48,7 +56,10 @@ export class PublishCheckFailed extends Error {
 
 // A reply cut off at max_tokens: the check did not run, but the call cost.
 class CutOffReply extends Error {
-  constructor(readonly costUsd: number) {
+  constructor(
+    readonly costUsd: number,
+    readonly tokens: TokenCount,
+  ) {
     super("the reply was cut off at max_tokens");
   }
 }
@@ -78,8 +89,10 @@ export function createPublish(deps: {
       AbortSignal.timeout(CHECK_TIMEOUT_MS),
     );
     const costUsd = responseCostUsd(response.usage);
+    const tokens = tokenCount(response.usage);
     // A cut-off reply says nothing about the topic: a failed check, not a refusal.
-    if (response.stop_reason === "max_tokens") throw new CutOffReply(costUsd);
+    if (response.stop_reason === "max_tokens")
+      throw new CutOffReply(costUsd, tokens);
     const text =
       response.stop_reason !== "refusal"
         ? response.content
@@ -91,6 +104,7 @@ export function createPublish(deps: {
     return {
       verdict: parsePublishCheck(text),
       costUsd,
+      tokens,
     };
   }
 
@@ -108,11 +122,12 @@ export function createPublish(deps: {
       const plain = publishPrecheck(input, start.maxDocChars);
       let verdict: PublishVerdict;
       let costUsd = 0;
+      let tokens = NO_TOKENS;
       if (plain) {
         verdict = { approved: false, reason: plain };
       } else {
         try {
-          ({ verdict, costUsd } = await check(input));
+          ({ verdict, costUsd, tokens } = await check(input));
         } catch (err) {
           console.error(
             "[publish] check failed:",
@@ -123,11 +138,18 @@ export function createPublish(deps: {
             start.checkId,
             { approved: false, reason: "check failed" },
             err instanceof CutOffReply ? err.costUsd : 0,
+            err instanceof CutOffReply ? err.tokens : NO_TOKENS,
           );
           throw new PublishCheckFailed("the publish check could not run");
         }
       }
-      const slug = await store.finish(userId, start.checkId, verdict, costUsd);
+      const slug = await store.finish(
+        userId,
+        start.checkId,
+        verdict,
+        costUsd,
+        tokens,
+      );
       if (!verdict.approved)
         return { status: "refused", reason: verdict.reason };
       if (!slug) throw new Error("publish: approved without a slug");

@@ -13,6 +13,7 @@ import {
   claimedRunFromRow,
   TEAM_PATHS,
   type ClaimedRunRow,
+  type CliUsage,
   type TeamRunResult,
   type TeamTopic,
   type TopicCoverage,
@@ -111,6 +112,9 @@ export async function handleTeamRequest(
           p_section_md: result.sectionMd,
           p_coverage: result.coverage,
           p_error: result.error ?? null,
+          // Sent only when present, so a Worker ahead of the migration that
+          // adds it still records the run.
+          ...(result.usage ? { p_usage: result.usage } : {}),
         });
         // finish_run queues the readers' pushes (outbox), as for any run.
         return json(200, { ok: true });
@@ -166,11 +170,35 @@ function parseResult(b: Record<string, unknown>): TeamRunResult | null {
     STATUSES.has(c.status) &&
     (b.error === undefined || typeof b.error === "string");
   if (!ok) return null;
+  const usage = parseUsage(b.usage);
   return {
     runId: b.runId as string,
     sectionMd: b.sectionMd as string | null,
     coverage: { topic: c.topic, status: c.status } as TopicCoverage,
     ...(typeof b.error === "string" ? { error: b.error.slice(0, 400) } : {}),
+    ...(usage ? { usage } : {}),
+  };
+}
+
+// The session's usage, rebuilt from known fields only. Bad numbers count as
+// 0; a usage that is not an object is dropped (the run is still recorded).
+function parseUsage(u: unknown): CliUsage | undefined {
+  if (typeof u !== "object" || u === null || Array.isArray(u)) return undefined;
+  const r = u as Record<string, unknown>;
+  const count = (v: unknown) =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0;
+  const text = (v: unknown) => (typeof v === "string" ? v.slice(0, 100) : null);
+  return {
+    model: text(r.model),
+    stopReason: text(r.stopReason),
+    turns: count(r.turns),
+    inputTokens: count(r.inputTokens),
+    outputTokens: count(r.outputTokens),
+    cacheReadTokens: count(r.cacheReadTokens),
+    cacheWriteTokens: count(r.cacheWriteTokens),
+    webSearches: count(r.webSearches),
+    webFetches: typeof r.webFetches === "number" ? count(r.webFetches) : null,
+    costUsd: count(r.costUsd),
   };
 }
 

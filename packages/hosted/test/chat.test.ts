@@ -65,6 +65,7 @@ function memoryStore(
     transcript: [] as ChatTurn[],
     follows: [] as string[],
     costUsd: 0,
+    tokens: { inputTokens: 0, outputTokens: 0 },
     feedback: [] as { cardTurnId: string; feedback: PendingFeedback }[],
   };
   const store: ChatStore = {
@@ -85,7 +86,7 @@ function memoryStore(
     async findPublicInterests(_userId, message) {
       return /policy|regulation/i.test(message) ? [AI_POLICY] : [];
     },
-    async commit(_userId, { turn, follows, costUsd }) {
+    async commit(_userId, { turn, follows, costUsd, tokens }) {
       for (const c of turn.changes ?? []) {
         const at = state.interests.findIndex((i) => i.id === c.interestId);
         if (c.op === "create") {
@@ -107,6 +108,8 @@ function memoryStore(
       state.follows.push(...follows);
       state.transcript.push(turn);
       state.costUsd += costUsd;
+      state.tokens.inputTokens += tokens.inputTokens;
+      state.tokens.outputTokens += tokens.outputTokens;
     },
   };
   return { store, state };
@@ -197,6 +200,7 @@ test("a create waits for the confirm, which saves it with its minted id", async 
   );
   // 2150 input and 310 output tokens at Haiku 5.5 prices.
   assert.ok(Math.abs(state.costUsd - 0.00037) < 1e-9);
+  assert.deepEqual(state.tokens, { inputTokens: 2150, outputTokens: 310 });
 
   const [request] = requests;
   assert.equal(request.model, CHAT_MODEL);

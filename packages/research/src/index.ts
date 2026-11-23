@@ -16,4 +16,10 @@ export {
   type MessagesResponse,
   type Usage,
 } from "./claude-client.ts";
-export { HAIKU_PRICES, responseCostUsd } from "./pricing.ts";
+export {
+  HAIKU_PRICES,
+  promptTokens,
+  responseCostUsd,
+  tokenCount,
+  type TokenCount,
+} from "./pricing.ts";

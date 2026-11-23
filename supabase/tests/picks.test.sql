@@ -99,10 +99,13 @@ select is(public.finish_picks('aaaaaaaa-0000-0000-0000-0000000000e1',
     {"interest_id":"not-a-uuid","reason":"Bad."},
     {"interest_id":"00000000-0000-0000-0000-0000000000f3","reason":"Kayaks, faster."},
     {"interest_id":"00000000-0000-0000-0000-0000000000f2","reason":"Popular."}]'::jsonb,
-  0.0007, null, public.picks_version()), 3, 'owned, link-only, repeated and unknown picks are dropped');
+  0.0007, null, public.picks_version(), 4000, 300), 3, 'owned, link-only, repeated and unknown picks are dropped');
 select is((select cost_usd from public.pick_runs
            where id = (select (c -> 0 ->> 'run_id')::bigint from claimed)), 0.0007,
   'the cost is recorded');
+select is((select input_tokens || ' ' || output_tokens from public.pick_runs
+           where id = (select (c -> 0 ->> 'run_id')::bigint from claimed)), '4000 300',
+  'and the tokens the call used');
 select is((select version from public.reader_picks
            where user_id = 'aaaaaaaa-0000-0000-0000-0000000000e1'), public.picks_version(),
   'picks carry the version that made them');

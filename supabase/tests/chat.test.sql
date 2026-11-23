@@ -8,7 +8,7 @@ select no_plan();
 
 -- The hosted project holds real spend today, so spend is measured from a
 -- baseline taken before any fixture costs.
-select set_config('scout.spend_base', public.spend_today()::text, true);
+select set_config('scout.spend_base', public.spend_today('2026-11-20 10:05+00')::text, true);
 
 -- ---------------------------------------------------------------------------
 -- Setup (as postgres)
@@ -63,7 +63,7 @@ select lives_ok($$
       "pending":{"deletes":[{"interestId":"00000000-0000-0000-0000-0000000000a1","topic":"Anna renamed"}]},
       "error_msg":null}'::jsonb,
     array['00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000b1']::uuid[],
-    0.0123)
+    0.0123, 2150, 310)
 $$, 'commit_chat_turn applies a turn');
 
 select is((select topic || '|' || doc from public.interests where id = '00000000-0000-0000-0000-0000000000a2'
@@ -80,9 +80,12 @@ select results_eq(
 select is((select status || '|' || reply || '|' || cost_usd::text || '|' || (pending -> 'deletes' -> 0 ->> 'topic')
            from public.chat_turns where id = '11111111-0000-0000-0000-000000000001'),
   'ready|done|0.0123|Anna renamed', 'the turn is stored with its pending deletes and cost');
+select is((select input_tokens || ' ' || output_tokens from public.chat_turns
+           where id = '11111111-0000-0000-0000-000000000001'),
+  '2150 310', 'and the tokens its model call used');
 select is((select jsonb_array_length(changes) from public.chat_turns
            where id = '11111111-0000-0000-0000-000000000001'), 3, 'changes are stored');
-select is(public.spend_today() - current_setting('scout.spend_base')::numeric, 0.0123::numeric, 'the turn''s cost counts toward today''s spend');
+select is(public.spend_today('2026-11-20 10:05+00') - current_setting('scout.spend_base')::numeric, 0.0123::numeric, 'the turn''s cost counts toward today''s spend');
 
 select lives_ok($$
   select public.commit_chat_turn('aaaaaaaa-0000-0000-0000-000000000001',
@@ -98,6 +101,8 @@ select is((select deleted_at from public.interests where id = '00000000-0000-000
   null, 'delete: someone else''s interest is untouched');
 select is((select cost_usd from public.chat_turns where id = '11111111-0000-0000-0000-000000000002'),
   0::numeric, 'a missing cost is stored as zero');
+select is((select input_tokens from public.chat_turns where id = '11111111-0000-0000-0000-000000000002'),
+  null::bigint, 'missing tokens stay unknown');
 
 select throws_ok($$
   select public.commit_chat_turn('aaaaaaaa-0000-0000-0000-000000000001',
@@ -148,16 +153,16 @@ update public.plans set max_interests = 15 where id = 'free';
 -- crashes the backend when a role calls a function it lacks EXECUTE on).
 -- p_user is the Worker's verified reader id, so EXECUTE is the whole guard.
 select ok(not has_function_privilege('authenticated',
-  'public.commit_chat_turn(uuid, jsonb, uuid[], numeric)', 'execute'),
+  'public.commit_chat_turn(uuid, jsonb, uuid[], numeric, bigint, bigint)', 'execute'),
   'a reader cannot commit turns, for someone else or themselves');
 select ok(not has_function_privilege('anon',
-  'public.commit_chat_turn(uuid, jsonb, uuid[], numeric)', 'execute'),
+  'public.commit_chat_turn(uuid, jsonb, uuid[], numeric, bigint, bigint)', 'execute'),
   'anon cannot commit turns');
 select ok(not has_function_privilege('authenticated',
   'public.chat_block_reason(uuid)', 'execute'),
   'a reader cannot call chat_block_reason');
 select ok(has_function_privilege('service_role',
-  'public.commit_chat_turn(uuid, jsonb, uuid[], numeric)', 'execute')
+  'public.commit_chat_turn(uuid, jsonb, uuid[], numeric, bigint, bigint)', 'execute')
   and has_function_privilege('service_role', 'public.chat_block_reason(uuid)', 'execute'),
   'the service role can call both');
 

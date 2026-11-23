@@ -4,7 +4,7 @@
 // runner's routes, MODERATION_TOKEN for /team/hide.
 
 import type { ClaimedRun } from "./claimed-run.ts";
-import type { TopicCoverage } from "./contract.ts";
+import type { CliUsage, TopicCoverage } from "./contract.ts";
 
 export const TEAM_PATHS = {
   // {} -> { topics: TeamTopic[] }. Read only; works with the runner off.
@@ -38,4 +38,7 @@ export type TeamRunResult = {
   sectionMd: string | null;
   coverage: TopicCoverage;
   error?: string;
+  // What the claude session used (tokens, turns, the CLI's cost estimate).
+  // Absent when the session failed before it reported.
+  usage?: CliUsage;
 };

@@ -4,7 +4,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { PublishVerdict } from "@scout/core";
-import { recordedClient, type MessagesResponse } from "@scout/research";
+import {
+  recordedClient,
+  type MessagesResponse,
+  type TokenCount,
+} from "@scout/research";
 import {
   PUBLISH_MODEL,
   PublishCheckFailed,
@@ -22,7 +26,11 @@ function answer(json: unknown, stop = "end_turn"): MessagesResponse {
 }
 
 function memoryStore(topic: Partial<PublishStart> = {}) {
-  const finished: { verdict: PublishVerdict; costUsd: number }[] = [];
+  const finished: {
+    verdict: PublishVerdict;
+    costUsd: number;
+    tokens: TokenCount;
+  }[] = [];
   const store: PublishStore = {
     async start(userId, interestId) {
       if (userId !== "u1" || interestId !== "i1") throw new Error("not yours");
@@ -35,8 +43,8 @@ function memoryStore(topic: Partial<PublishStart> = {}) {
         ...topic,
       };
     },
-    async finish(_userId, _checkId, verdict, costUsd) {
-      finished.push({ verdict, costUsd });
+    async finish(_userId, _checkId, verdict, costUsd, tokens) {
+      finished.push({ verdict, costUsd, tokens });
       return verdict.approved ? "slug123" : null;
     },
   };
@@ -61,6 +69,7 @@ test("an approve makes the topic public with the model's tags", async () => {
   assert.equal(claude.requests[0].model, PUBLISH_MODEL);
   assert.equal(finished.length, 1);
   assert.ok(finished[0].costUsd > 0);
+  assert.deepEqual(finished[0].tokens, { inputTokens: 1000, outputTokens: 50 });
   const prompt = JSON.stringify(claude.requests[0].messages);
   assert.match(prompt, /Fjord kayaking/);
   assert.match(prompt, /Kari/);
@@ -114,6 +123,10 @@ test("a reply cut off at max_tokens is a failed check, with its cost", async () 
   assert.equal(finished.length, 1);
   assert.equal(finished[0].verdict.approved, false);
   assert.ok(finished[0].costUsd > 0);
+  assert.deepEqual(finished[0].tokens, {
+    inputTokens: 1500,
+    outputTokens: 4096,
+  });
 });
 
 test("the check leaves room for thinking before the answer", async () => {

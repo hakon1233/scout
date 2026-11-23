@@ -239,6 +239,90 @@ test("/team/runs records the run like any run (finish_run queues its pushes)", a
   });
 });
 
+test("/team/runs records what the claude session used", async () => {
+  const sb = stubSupabase({ team_finish_run: [200, true] });
+  const usage = {
+    model: "claude-haiku-5-5",
+    stopReason: "end_turn",
+    turns: 6,
+    inputTokens: 1_200,
+    outputTokens: 900,
+    cacheReadTokens: 40_000,
+    cacheWriteTokens: 3_000,
+    webSearches: 4,
+    webFetches: null,
+    costUsd: 0.0421,
+  };
+  await team(
+    "/team/runs",
+    {
+      runId: RUN,
+      sectionMd: "## T\n- `2026-11-19` — story",
+      coverage: { topic: "T", status: "covered" },
+      usage,
+    },
+    { fetch: sb.fetch },
+  );
+  assert.deepEqual(sb.calls[0].body, {
+    p_run: RUN,
+    p_section_md: "## T\n- `2026-11-19` — story",
+    p_coverage: { topic: "T", status: "covered" },
+    p_error: null,
+    p_usage: usage,
+  });
+});
+
+test("/team/runs keeps only the usage fields it knows and drops a garbled usage", async () => {
+  const sb = stubSupabase({ team_finish_run: [200, true] });
+  const run = (usage: unknown) =>
+    team(
+      "/team/runs",
+      {
+        runId: RUN,
+        sectionMd: null,
+        coverage: { topic: "T", status: "missing" },
+        usage,
+      },
+      { fetch: sb.fetch },
+    );
+  // Extra keys are dropped, odd strings capped, bad numbers become 0.
+  assert.equal(
+    (
+      await run({
+        model: "m".repeat(200),
+        stopReason: 5,
+        turns: -1,
+        inputTokens: 10,
+        outputTokens: "lots",
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        webSearches: 1,
+        webFetches: 2,
+        costUsd: 0.5,
+        secret: "x",
+      })
+    ).status,
+    200,
+  );
+  assert.deepEqual((sb.calls[0].body as Record<string, unknown>).p_usage, {
+    model: "m".repeat(100),
+    stopReason: null,
+    turns: 0,
+    inputTokens: 10,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    webSearches: 1,
+    webFetches: 2,
+    costUsd: 0.5,
+  });
+  // Not an object: the run is still recorded, without usage.
+  for (const bad of ["x", [1], 3]) {
+    assert.equal((await run(bad)).status, 200);
+    assert.ok(!("p_usage" in (sb.calls.at(-1)!.body as object)));
+  }
+});
+
 test("/team/runs records a failed run with its error", async () => {
   const failed = stubSupabase({ team_finish_run: [200, true] });
   await team(

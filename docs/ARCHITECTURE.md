@@ -87,6 +87,10 @@ The companion runs core's code from `dist/core`: its build compiles core there, 
 - `claude-runner.ts`: the only place a `claude` child process starts. It sets the tool
   list (web research or none), `--max-turns`, the timeout, the abort signal and the working directory,
   and starts the child without the reader's own Claude Code setup or full environment.
+  It asks for `--output-format json` and returns the result text with the session's
+  usage (core's `CliUsage`: model, stop reason, turns, tokens, searches, fetches, the
+  CLI's cost estimate); output that is not that json is used as plain text, usage null.
+  The runner sums usage over a run's sessions into the brief's `usage` in state.json.
 - `runner.ts`, `research.ts`: a run. The runner researches one interest at a time, each
   session with core's research prompt. It then assembles the sections with core's
   coverage rules and saves the brief.
@@ -153,7 +157,9 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   A scheduled interest that has never run is due at once (`due_interests`), so a new
   topic gets its first brief on the next tick as a scheduled run, never spending the
   reader's Run now.
-  `finish_run` records a result, its cost and its token usage; a failed first attempt is queued again
+  `finish_run` records a result, its cost and its usage (tokens, searches, fetches,
+  model, stop reason, requests, the largest prompt and whether one crossed the 100K
+  long-prompt line, `*_usage_logging.sql`); a failed first attempt is queued again
   unless the result says a retry can't help (`p_retry`). `claim_runs` also hands each
   run its brief settings, the last two ready sections, the cadence and the date of the
   last story: `run_facts` (`*_team_run_facts.sql`), which the team's claims use too.
@@ -169,7 +175,8 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   `chat_block_reason` (kill switch, daily chat turns), and run `packages/hosted`'s chat.
   `POST /publish {interest}` verifies the JWT and runs `packages/hosted`'s publish over
   `publish_start`/`publish_finish` (`*_publish.sql`); a limit is 429
-  `{error: "limit", message}`.
+  `{error: "limit", message}`. Chat turns, picks calls and publish checks record their
+  input and output tokens beside their cost.
 - `chat-store.ts`: the chat's store over PostgREST with the service key. A turn's
   changes, follows and its `chat_turns` row land in one `commit_chat_turn` call
   (`supabase/migrations/*_chat.sql`, which also adds `plans.max_interests`; the
@@ -208,7 +215,9 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   bearer tokens; a route whose token is unset answers 404. Bodies over 192 KB are
   refused (413). `TEAM_RUNNER_TOKEN`:
   `topics`, `claim`, `start`, `runs` for the Scout team runner (below). `runs` records a
-  result through `team_finish_run`, which queues the same pushes as a cron run.
+  result through `team_finish_run`, which queues the same pushes as a cron run, with the
+  claude session's usage; its CLI cost goes to `runs.cli_cost_usd`, never `cost_usd`,
+  so it stays out of the daily spend ceiling.
   `MODERATION_TOKEN`: `POST /team/hide {interestId, reason}` hides a public topic
   (`team_hide_interest`, logged in `moderation_log`). Hidden, never deleted.
 - `voice.ts`: `POST /voice` (audio body, the reader's JWT, at most 1.5 MB) turns a clip

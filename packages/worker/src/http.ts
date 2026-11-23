@@ -297,7 +297,7 @@ async function publishRoute(
         )) as Omit<PublishStart, "checkId"> & { checkId: number | string };
         return { ...s, checkId: String(s.checkId) };
       },
-      async finish(user, checkId, verdict: PublishVerdict, costUsd) {
+      async finish(user, checkId, verdict: PublishVerdict, costUsd, tokens) {
         return (await rpc(
           "publish_finish",
           {
@@ -307,6 +307,8 @@ async function publishRoute(
             p_tags: verdict.approved ? verdict.tags : [],
             p_reason: verdict.approved ? null : verdict.reason,
             p_cost_usd: costUsd,
+            p_input_tokens: tokens.inputTokens,
+            p_output_tokens: tokens.outputTokens,
           },
           service,
         )) as string | null;

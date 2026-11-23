@@ -127,6 +127,11 @@ test("usage sums every response and prices it from the table", async () => {
     cacheWriteTokens: 3_000,
     webSearches: 1,
     webFetches: 1,
+    model: "claude-haiku-5-5",
+    stopReason: "end_turn",
+    requests: 2,
+    maxPromptTokens: 12_000,
+    longContext: false,
   });
   // Input 14,200 × $0.10/M + cache write 3,000 × $0.125/M + cache read
   // 3,000 × $0.01/M + output 3,300 × $0.50/M + 1 search × $0.01.

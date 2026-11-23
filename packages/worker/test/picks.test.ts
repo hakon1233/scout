@@ -70,6 +70,8 @@ test("a tick claims at most its picks batch and records each reader's picks", as
       p_cost: "number",
       p_error: null,
       p_version: PICKS_VERSION,
+      p_input_tokens: 4000,
+      p_output_tokens: 300,
     },
   );
 });
