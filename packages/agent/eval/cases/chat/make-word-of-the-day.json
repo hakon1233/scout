@@ -1,0 +1,14 @@
+{
+  "message": "I'm learning Norwegian. Send me a Norwegian word of the day.",
+  "interests": [],
+  "output": "{\"reply\": \"Scout writes \\\"Norwegian word of the day\\\" for you each day: one word, its meaning and an example.\", \"changes\": [{\"op\": \"create\", \"topic\": \"Norwegian word of the day\", \"doc\": \"# Norwegian word of the day\\n\\nOne Norwegian word each day for an English speaker learning the language: the word, its meaning, how to say it and one example sentence. Everyday words, a new one each day.\", \"mode\": \"make\"}]}",
+  "expect": {
+    "applied": [
+      "create:Norwegian word of the day"
+    ],
+    "made": [
+      "Norwegian word of the day"
+    ]
+  },
+  "expectFail": []
+}

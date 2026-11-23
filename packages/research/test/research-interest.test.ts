@@ -428,3 +428,59 @@ test("a story citing a site's homepage is dropped (recorded Trondheim run)", asy
   assert.match(md, /^- `2026-11-18` — NTNU has switched off/m);
   assert.equal(result.coverage.status, "covered");
 });
+
+// Make mode: Scout writes the piece itself, with no web tools.
+const MAKE = {
+  topic: "Bedtime story",
+  doc: "A short bedtime story for a five-year-old who loves foxes.",
+  mode: "make" as const,
+  sent: ["The Owl Who Lost Her Hoot", "Moon Soup"],
+};
+const PIECE = (title: string) =>
+  `## Bedtime story\n\n- \`2026-11-20\` — ${title}\n  > Once upon a time a fox counted stars.\n  >\n  > And then she slept.\n`;
+
+test("a make run sends no web tools and lists what was already sent", async () => {
+  const claude = recordedClient([answer(PIECE("The Fox Who Counted Stars"))]);
+  const result = await researchInterest(MAKE, { claude, now: NOW });
+
+  assert.equal(claude.requests.length, 1);
+  const [request] = claude.requests;
+  assert.equal(request.model, "claude-haiku-5-5");
+  assert.equal(request.tools, undefined);
+  const prompt = String(request.messages[0].content[0].text);
+  assert.match(prompt, /<intent-doc>\nA short bedtime story/);
+  assert.match(prompt, /Already sent/);
+  assert.match(prompt, /- The Owl Who Lost Her Hoot\n- Moon Soup/);
+  assert.doesNotMatch(prompt, /web_search|web_fetch/);
+
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.coverage, {
+    topic: "Bedtime story",
+    status: "covered",
+  });
+  assert.match(result.sectionMd ?? "", /^## Bedtime story\n/);
+  assert.match(result.sectionMd ?? "", /The Fox Who Counted Stars/);
+  assert.equal(result.usage.webSearches, 0);
+  assert.equal(result.usage.webFetches, 0);
+});
+
+test("a make run that repeats an earlier piece is rejected", async () => {
+  // The same key, give or take case, emphasis and spacing.
+  const result = await researchInterest(MAKE, {
+    claude: recordedClient([answer(PIECE("the  *owl* who lost her hoot"))]),
+    now: NOW,
+  });
+  assert.equal(result.sectionMd, null);
+  assert.equal(result.coverage.status, "missing");
+  assert.match(result.error ?? "", /already sent/);
+  assert.equal(result.retryable, true);
+});
+
+test("a make run with no piece fails the topic", async () => {
+  const result = await researchInterest(MAKE, {
+    claude: recordedClient([answer("## Bedtime story\n\nNothing tonight.\n")]),
+    now: NOW,
+  });
+  assert.equal(result.sectionMd, null);
+  assert.equal(result.coverage.status, "missing");
+});

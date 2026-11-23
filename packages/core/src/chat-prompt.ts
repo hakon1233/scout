@@ -9,6 +9,7 @@ import {
   FEEDBACK_PROMPT_RULES,
   NO_FEEDBACK_PROMPT_RULE,
 } from "./feedback.ts";
+import { MAKE_PROMPT_OP, MAKE_PROMPT_RULES } from "./make-piece.ts";
 import { APP_PAGES, SCOUT_GUIDE, appPage } from "./scout-guide.ts";
 
 export type ChatModelOutput = {
@@ -38,6 +39,8 @@ export function buildChatPrompt(
     noDaily?: boolean;
     // Offer the feedback op (core's feedback.ts). Off: the prompt says reports can't be sent yet.
     feedback?: boolean;
+    // Offer make topics (core's make-piece.ts). Off: the prompt is unchanged.
+    make?: boolean;
   },
 ): string {
   const { maxInterests } = opts;
@@ -147,6 +150,7 @@ export function buildChatPrompt(
       ? '    { "op": "create", "topic": "<topic>", "doc": "<full markdown>", "cadence": "daily" | "weekly" },'
       : '    { "op": "create", "topic": "<topic>", "doc": "<full markdown>" },',
   );
+  if (opts.make) lines.push(MAKE_PROMPT_OP);
   lines.push(
     "    // Completely rewrite an interest's doc from scratch (full replacement):",
   );
@@ -346,6 +350,7 @@ export function buildChatPrompt(
   );
   lines.push(`    ${Object.keys(APP_PAGES).join(", ")}. Otherwise omit it.`);
   lines.push(opts.feedback ? FEEDBACK_PROMPT_RULES : NO_FEEDBACK_PROMPT_RULE);
+  if (opts.make) lines.push(MAKE_PROMPT_RULES);
   lines.push("- Do not use any tools. Output only the JSON object.");
   return lines.join("\n");
 }

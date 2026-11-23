@@ -259,6 +259,9 @@ export async function checkChatOutput(
       // The kind of a feedback card the turn drafts (hosted chat with
       // `feedback_on`). Absent: the feedback op is unknown here.
       feedback?: string;
+      // The topics the turn creates as make topics (Scout writes them; the
+      // hosted chat with `make_on`). Absent: every create is news.
+      made?: string[];
     };
   },
 ): Promise<Check[]> {
@@ -291,6 +294,11 @@ export async function checkChatOutput(
         reply.includes((c.topic ?? "").toLowerCase()) &&
         (!said || new RegExp(`\\b${said}\\b`).test(reply)),
     );
+    const made = output.changes
+      .filter((c) => c.op === "create" && c.mode === "make")
+      .map((c) => c.topic ?? "");
+    const madeSaysScoutWrites =
+      made.length === 0 || /\bscout writes\b/i.test(output.reply);
     const subjects = opts.subjects ?? [];
     const mixed = output.changes.filter(
       (c) =>
@@ -361,6 +369,16 @@ export async function checkChatOutput(
         mixed.length > 0
           ? `mixes subjects: ${mixed.map((c) => c.topic ?? c.interestId).join(", ")}`
           : "saves nothing but never offers to split",
+      ),
+      check(
+        "make-or-news",
+        JSON.stringify(made) === JSON.stringify(opts.expect.made ?? []),
+        `made: ${JSON.stringify(made)}`,
+      ),
+      check(
+        "make-reply-says-scout-writes",
+        madeSaysScoutWrites,
+        "a make topic's reply says plainly that Scout writes it",
       ),
       check(
         "expected-effect",

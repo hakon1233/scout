@@ -147,6 +147,8 @@ const RUN_ROW = {
   ],
   cadence: "daily",
   last_story_at: "2026-11-18T07:05:00+00:00",
+  mode: "news",
+  sent_keys: [],
 };
 const CLAIMED = {
   runId: RUN,
@@ -165,6 +167,8 @@ const CLAIMED = {
   ],
   cadence: "daily",
   lastStoryAt: "2026-11-18T07:05:00+00:00",
+  mode: "news",
+  sentKeys: [],
 };
 
 test("/team/claim claims the team's due runs, at most 3 at a time", async () => {

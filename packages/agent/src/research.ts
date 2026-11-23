@@ -7,6 +7,7 @@
 
 import type { spawn } from "node:child_process";
 import {
+  buildMakePrompt,
   buildResearchPrompt,
   CLI_RESEARCH_TOOLS,
   stripBriefPreamble,
@@ -55,6 +56,28 @@ export async function researchAndSynthesize(
     timeoutMs: opts.timeoutMs,
     maxTurns: opts.maxTurns,
   });
+  const text = stripBriefPreamble(out.text);
+  if (!text) throw new Error("claude returned empty output");
+  return { text, usage: out.usage };
+}
+
+// A make topic's piece (core's make-piece.ts): one session with no tools at
+// all, so it never searches. The Scout team runner's counterpart of the
+// hosted make run.
+export async function writeMakePiece(
+  interest: ResearchInterest,
+  opts: ResearchOptions = {},
+): Promise<{ text: string; usage: CliUsage | null }> {
+  const out = await runClaude(
+    buildMakePrompt(interest, opts.now ?? new Date()),
+    {
+      tools: "none",
+      label: `claude session for "${interest.topic}"`,
+      claudeBin: opts.claudeBin,
+      spawnFn: opts.spawnFn,
+      timeoutMs: opts.timeoutMs,
+    },
+  );
   const text = stripBriefPreamble(out.text);
   if (!text) throw new Error("claude returned empty output");
   return { text, usage: out.usage };

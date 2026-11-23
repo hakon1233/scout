@@ -20,7 +20,9 @@ const PAUSED = "5c0a7000-0000-4000-8000-000000000113";
 
 // The SQL side, as the team_* functions behave (supabase/tests/team_runner.test.sql
 // pins the real ones).
-function fakeSupabase(opts: { runnerOn?: boolean; facts?: boolean } = {}) {
+function fakeSupabase(
+  opts: { runnerOn?: boolean; facts?: boolean; make?: boolean } = {},
+) {
   const topics = [
     { id: DUE, topic: "LLM releases, prices and retirements", due: true },
     { id: PAUSED, topic: "Emulator releases", due: false }, // paused
@@ -59,6 +61,7 @@ function fakeSupabase(opts: { runnerOn?: boolean; facts?: boolean } = {}) {
           last_story_at: "2026-11-18T07:05:00+00:00",
         }
       : {}),
+    ...(opts.make ? { mode: "make", sent_keys: ["koselig"] } : {}),
   });
   const fetch = (async (url: string, init: RequestInit) => {
     const fn = url.replace(`${SUPABASE}/rest/v1/rpc/`, "");
@@ -142,17 +145,20 @@ function stubClaude(reply: { fail?: boolean; json?: boolean } = {}) {
     });
     child.stdin.on("finish", () => {
       spawns.push({ args, prompt });
-      const topic = /single topic: "([^"]+)"/.exec(prompt)?.[1] ?? "?";
+      const topic =
+        /(?:single topic|For the topic): "([^"]+)"/.exec(prompt)?.[1] ?? "?";
+      const make = prompt.includes("For the topic");
       setImmediate(() => {
         if (reply.fail) {
           child.stderr.emit("data", Buffer.from("You've hit your limit"));
           child.emit("close", 1);
           return;
         }
-        const text =
-          `I have enough.\n\n## ${topic}\n` +
-          "- `2026-11-19` — **A vendor retired a model.** It goes on 1 December.\n" +
-          "  [example.com — Retirement notice](https://example.com/notice)\n";
+        const text = make
+          ? `## ${topic}\n- \`2026-11-20\` — dugnad\n  > Work done together.\n`
+          : `I have enough.\n\n## ${topic}\n` +
+            "- `2026-11-19` — **A vendor retired a model.** It goes on 1 December.\n" +
+            "  [example.com — Retirement notice](https://example.com/notice)\n";
         child.stdout.emit(
           "data",
           Buffer.from(
@@ -200,6 +206,7 @@ function setup(
     fail?: boolean;
     facts?: boolean;
     json?: boolean;
+    make?: boolean;
   } = {},
 ) {
   const sb = fakeSupabase(opts);
@@ -298,6 +305,24 @@ test("a team run's prompt carries its brief settings, cadence and what was alrea
     assert.match(prompt, /marked evergreen/);
     assert.match(prompt, /0-2 story bullets/);
   }
+});
+
+test("a make topic is written with no web tools, its memory in the prompt", async () => {
+  const s = setup({ runnerOn: true, make: true });
+  assert.equal(
+    await teamRunMain([], { SCOUT_TEAM_RUNNER: "on" }, CONFIG, s.deps),
+    0,
+  );
+  const [{ args, prompt }] = s.claude.spawns;
+  assert.deepEqual(
+    args.slice(args.indexOf("--tools"), args.indexOf("--tools") + 2),
+    ["--tools", ""],
+  );
+  assert.ok(!args.includes("WebSearch,WebFetch"));
+  assert.match(prompt, /Already sent \(never repeat these\):\n- koselig/);
+  const [done] = s.sb.finished;
+  assert.equal((done.p_coverage as { status: string }).status, "covered");
+  assert.match(done.p_section_md as string, /— dugnad/);
 });
 
 test("the runner refuses to start without SCOUT_TEAM_RUNNER=on", async () => {

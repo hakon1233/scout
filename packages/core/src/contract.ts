@@ -120,7 +120,14 @@ export type ChatChange = {
   // On a create: the cadence the reader asked for, which the client sets
   // when a slot is free. Absent: the first free slot.
   cadence?: "daily" | "weekly";
+  // On a create: "make" when Scout writes the piece itself (a bedtime story,
+  // a word of the day). Absent: news. Hosted chat only, while `make_on` is on.
+  mode?: "make";
 };
+
+// How a topic's runs work: "news" researches the web, "make" has Scout write
+// one piece itself with no web tools (core's make-piece.ts).
+export type TopicMode = "news" | "make";
 
 // A delete a turn proposed but did not apply. It waits for
 // POST /v0/chat/confirm-delete; until then the interest stays.
@@ -153,6 +160,7 @@ export type PendingCreate = {
   topic: string;
   doc: string;
   cadence?: "daily" | "weekly";
+  mode?: "make";
 };
 
 // A note to the Scout team a hosted turn drafted but did not send. It waits for

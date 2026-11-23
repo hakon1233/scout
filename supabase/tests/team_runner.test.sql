@@ -48,7 +48,8 @@ create temp table team_tick (
   run_id uuid, topic text, doc text, searches_per_run integer,
   brief_length text, story_count smallint, stories_relevant_only boolean,
   evergreen boolean, search_locale text, brief_language text,
-  prior jsonb, cadence text, last_story_at timestamptz);
+  prior jsonb, cadence text, last_story_at timestamptz,
+  mode text, sent_keys text[]);
 create function pg_temp.facts() returns text language sql as $$
   select brief_length || ' ' || story_count || ' ' || evergreen || ' ' ||
          coalesce(search_locale, '-') || ' ' || cadence || ' ' ||

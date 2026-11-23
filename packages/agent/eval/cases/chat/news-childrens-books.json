@@ -1,0 +1,11 @@
+{
+  "message": "Keep me posted on news about children's books: new releases and awards.",
+  "interests": [],
+  "output": "{\"reply\": \"Added \\\"Children's book news\\\": new children's books, awards and author news.\", \"changes\": [{\"op\": \"create\", \"topic\": \"Children's book news\", \"doc\": \"# Children's book news\\n\\nNew picture books and children's books, awards and author news. Skip adult fiction.\"}]}",
+  "expect": {
+    "applied": [
+      "create:Children's book news"
+    ]
+  },
+  "expectFail": []
+}

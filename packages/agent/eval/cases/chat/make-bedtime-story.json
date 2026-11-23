@@ -1,0 +1,14 @@
+{
+  "message": "Could Scout give me a new bedtime story for my daughter every evening? She's five.",
+  "interests": [],
+  "output": "{\"reply\": \"Scout writes \\\"Bedtime story\\\" for you each day: a short, gentle story for a five-year-old.\", \"changes\": [{\"op\": \"create\", \"topic\": \"Bedtime story\", \"doc\": \"# Bedtime story\\n\\nA short bedtime story for a five-year-old, read aloud in about five minutes. Gentle, funny, ends calm. Animals and small adventures; a new story every night.\", \"mode\": \"make\"}]}",
+  "expect": {
+    "applied": [
+      "create:Bedtime story"
+    ],
+    "made": [
+      "Bedtime story"
+    ]
+  },
+  "expectFail": []
+}

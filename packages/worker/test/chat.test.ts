@@ -33,6 +33,7 @@ function stubSupabase(
     publicInterests?: { id: string; topic: string }[];
     deleteStatus?: number;
     feedbackOn?: boolean;
+    makeOn?: boolean;
     turns?: unknown[];
     feedbackBlocked?: string;
   } = {},
@@ -72,7 +73,12 @@ function stubSupabase(
       );
     if (path === "/rest/v1/chat_turns") return ok(over.turns ?? []);
     if (path === "/rest/v1/settings")
-      return ok([{ feedback_on: over.feedbackOn ?? false }]);
+      return ok([
+        {
+          feedback_on: over.feedbackOn ?? false,
+          make_on: over.makeOn ?? false,
+        },
+      ]);
     if (path === "/rest/v1/rpc/send_feedback")
       return ok(over.feedbackBlocked ?? null);
     if (path === "/rest/v1/follows") return ok([]);
@@ -168,6 +174,15 @@ test("a chat turn verifies the reader, runs the chat and stores the new topic fo
   const used = commit?.body as Record<string, unknown>;
   assert.equal(used.p_input_tokens, 2150);
   assert.equal(used.p_output_tokens, 310);
+});
+
+test("the chat offers make topics only while the make_on setting is on", async () => {
+  for (const makeOn of [false, true]) {
+    const db = stubSupabase({ makeOn });
+    const { claude, prompts } = stubClaude([recorded("create")]);
+    await post("/chat", { message: "Bedtime story" }, db.fetch, claude);
+    assert.equal(prompts[0].includes('\\"mode\\": \\"make\\"'), makeOn);
+  }
 });
 
 test("a chat turn is refused with the SQL's own words when the reader is out of turns", async () => {

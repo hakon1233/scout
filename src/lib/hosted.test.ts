@@ -829,6 +829,27 @@ test("brief settings are read with the interests and changed field by field", as
   assert.equal(calls.length, 0, "a bad value never reaches Supabase");
 });
 
+// A make topic: Scout writes it, and its page says so.
+test("a make topic is read with the interests and marked make", async () => {
+  const { fetch, calls } = stubFetch({
+    "/rest/v1/interests": {
+      body: [
+        { ...ownRow("i-story", "Bedtime story", "daily"), mode: "make" },
+        { ...ownRow("i-tax", "Norwegian tax rules", "weekly"), mode: "news" },
+      ],
+    },
+    "/rest/v1/follows": { body: [] },
+    "/rest/v1/rpc/allowance": { body: ALLOWANCE },
+    "/rest/v1/profiles": { body: [] },
+    "/rest/v1/notifications": { body: [] },
+    "/rest/v1/runs": { body: [] },
+  });
+  const home = await data(fetch).home();
+  assert.match(calls[0].url, /,mode,/);
+  assert.equal(home.interests[0].make, true);
+  assert.equal(home.interests[1].make, undefined);
+});
+
 test("publish goes to the Worker; a refusal is a result and a limit an error", async () => {
   let answer: Answer = {
     body: { status: "public", slug: "s1", tags: ["ai"] },

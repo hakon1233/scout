@@ -43,6 +43,8 @@ export type HostedInterest = {
   // label comes from `team`, never from the name.
   ownerName: string | null;
   team: boolean;
+  // A make topic: Scout writes each piece itself (no news search).
+  make?: boolean;
 };
 
 export type Allowance = {

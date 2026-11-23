@@ -154,6 +154,8 @@ test("the queue adapter calls claim_runs and finish_run with the service key", a
       ],
       cadence: "weekly",
       last_story_at: "2026-11-12T07:00:00+00:00",
+      mode: "make",
+      sent_keys: ["dugnad"],
     },
   ]);
   const queue = supabaseQueue({
@@ -177,6 +179,8 @@ test("the queue adapter calls claim_runs and finish_run with the service key", a
       prior: [{ date: "2026-11-19T07:00:00+00:00", markdown: "## AI policy" }],
       cadence: "weekly",
       lastStoryAt: "2026-11-12T07:00:00+00:00",
+      mode: "make",
+      sentKeys: ["dugnad"],
     },
   ]);
   assert.equal(claim.calls[0].url, `${SUPABASE}/rest/v1/rpc/claim_runs`);

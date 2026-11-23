@@ -21,6 +21,8 @@ export type ProposedChange = {
   doc?: unknown;
   // On a create: how often the reader wants a brief.
   cadence?: unknown;
+  // On a create: "make" for a topic Scout writes itself (make-piece.ts).
+  mode?: unknown;
   // On a feedback (core's feedback.ts).
   kind?: unknown;
   summary?: unknown;
@@ -79,6 +81,8 @@ export function planChatChanges(
     publicInterests?: Interest[];
     // The reader's message: a cadence it names wins over the model's.
     message?: string;
+    // settings.make_on: a create may be a make topic. Off: mode is dropped.
+    make?: boolean;
   },
 ): ChatChangePlan {
   const interests = current.map((i) => ({ ...i }));
@@ -130,6 +134,7 @@ export function planChatChanges(
         topic,
         doc: created.doc,
         ...(cadence ? { cadence } : {}),
+        ...(opts.make && ch.mode === "make" ? { mode: "make" as const } : {}),
       });
     } else if (ch.op === "update") {
       if (!held) continue;

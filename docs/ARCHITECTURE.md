@@ -119,6 +119,11 @@ it (`src/lib/boundaries.test.ts` checks this). Plain TypeScript with `fetch`.
   its coverage and the cost. Prompt, freshness and coverage come from core.
   Guardrails: tool versions with `max_uses`, web_fetch capped at 6K tokens, a per-run
   spend cap (`DEFAULT_MAX_COST_USD`), and `retryable: false` on a 4xx or a limit.
+  A make topic (`interest.mode === "make"`) uses core's `make-piece.ts` instead: one
+  call with no tools (no search fee), `buildMakePrompt` with the intent doc and the
+  "already sent" list, and `makeSectionFromAnswer`, which fails the run on no piece or
+  an exact repeat. The team runner does the same through the local `claude` with
+  `--tools ""`.
 - `claude-client.ts`: the `ClaudeClient` seam, with a `fetch` adapter and a recorded-
   response adapter for tests. `pricing.ts`: the price table. Every hosted function
   uses these two: no other package defines its own Claude client or prices.
@@ -139,6 +144,12 @@ price table also gives each turn's cost. Server only: the web app never imports 
   confirm goes to the store's `sendFeedback` (SQL `send_feedback`,
   `*_feedback.sql`: 5 a reader and 200 overall a day, a free turn that skips the chat
   limit). Only admins read the `feedback` table, in Supabase. Off: the prompt is unchanged.
+  With `settings.make_on`, the prompt also lets a create carry `"mode": "make"` for a
+  piece Scout writes itself (`make-piece.ts`); off, the field is not offered and is
+  dropped. Make mode (`*_make_mode.sql`): `interests.mode`, `interests.sent_keys` (a
+  trigger adds a ready make run's piece key, keeping 60); while `make_on` is off make
+  topics are never scheduled or claimed, a queued one fails, and the team runner skips
+  them. Make topics count against the same topic limits.
 - `publish.ts`: `createPublish({claude, store}).publish(userId, interestId)`. The
   store's `start` checks owner and limits and opens a check; the plain checks, then one
   Haiku 5.5 call; `finish` records the verdict and, on approve, sets the tags and makes

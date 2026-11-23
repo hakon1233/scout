@@ -5,8 +5,10 @@
 
 import {
   API_RESEARCH_TOOLS,
+  buildMakePrompt,
   buildResearchPrompt,
   HAIKU_MODEL,
+  makeSectionFromAnswer,
   sectionFromAnswer,
   type ResearchInterest,
   type TopicCoverage,
@@ -139,6 +141,8 @@ export async function researchInterest(
     retryable,
   });
 
+  // A make topic: Scout writes the piece itself, so no web tools.
+  const make = interest.mode === "make";
   // The prompt is the cache breakpoint, so each pause_turn continuation
   // reads it from the cache instead of paying for it again.
   const user = {
@@ -146,16 +150,23 @@ export async function researchInterest(
     content: [
       {
         type: "text",
-        text: buildResearchPrompt(interest, now, API_RESEARCH_TOOLS),
+        text: make
+          ? buildMakePrompt(interest, now)
+          : buildResearchPrompt(interest, now, API_RESEARCH_TOOLS),
         cache_control: { type: "ephemeral" },
       },
     ],
   };
-  const tools = webTools(
-    Math.min(deps.maxSearches ?? LEAN_RUN.maxSearches, LEAN_RUN.maxSearches),
-    Math.min(deps.maxFetches ?? LEAN_RUN.maxFetches, LEAN_RUN.maxFetches),
-    interest.settings?.searchLocale ?? null,
-  );
+  const tools = make
+    ? undefined
+    : webTools(
+        Math.min(
+          deps.maxSearches ?? LEAN_RUN.maxSearches,
+          LEAN_RUN.maxSearches,
+        ),
+        Math.min(deps.maxFetches ?? LEAN_RUN.maxFetches, LEAN_RUN.maxFetches),
+        interest.settings?.searchLocale ?? null,
+      );
 
   // Claude's turn so far, across continuations.
   const turn: ContentBlock[] = [];
@@ -166,7 +177,7 @@ export async function researchInterest(
       messages: turn.length
         ? [user, { role: "assistant", content: turn }]
         : [user],
-      tools,
+      ...(tools ? { tools } : {}),
     };
     let res: MessagesResponse;
     try {
@@ -216,6 +227,13 @@ export async function researchInterest(
       `web tools failed: ${toolErrors.join(", ")}`,
       !toolErrors.some((code) => LIMIT_TOOL_ERRORS.has(code)),
     );
+
+  if (make) {
+    // A repeat or a missing piece: another go may write a new one.
+    const piece = makeSectionFromAnswer(finalText(turn), interest);
+    if ("error" in piece) return missing(piece.error, true);
+    return { ...piece, usage };
+  }
 
   const section = sectionFromAnswer(finalText(turn), interest, now);
   if (!section) return missing("Claude returned no section", true);

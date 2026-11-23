@@ -49,6 +49,9 @@ export type ChatStore = {
     };
     // The `feedback_on` setting: the chat may draft notes to the Scout team.
     feedbackOn?: boolean;
+    // The `make_on` setting: the chat may create make topics (core's
+    // make-piece.ts).
+    makeOn?: boolean;
   }>;
   // Up to `limit` public interests, best matches for `message` first, leaving
   // out the reader's own and those they already follow.
@@ -90,8 +93,9 @@ const TURN_TIMEOUT_MS = 60_000;
 
 // The change set's shape, enforced by the API's structured output. It only
 // guarantees well-formed JSON: planChatChanges and feedbackOf still check
-// every field. The feedback op is in it only while feedback is on.
-function chatOutputSchema(feedback: boolean) {
+// every field. The feedback op is in it only while feedback is on, and a
+// create's mode only while make mode is on.
+function chatOutputSchema(feedback: boolean, make: boolean) {
   return {
     type: "object",
     additionalProperties: false,
@@ -120,6 +124,9 @@ function chatOutputSchema(feedback: boolean) {
             topic: { type: "string" },
             doc: { type: "string" },
             cadence: { type: "string", enum: ["daily", "weekly"] },
+            ...(make
+              ? { mode: { type: "string", enum: ["news", "make"] } }
+              : {}),
             ...(feedback ? FEEDBACK_SCHEMA_PROPERTIES : {}),
           },
         },
@@ -149,9 +156,10 @@ export function createChat(deps: {
     message: string,
     opts: { turnId?: string } = {},
   ): Promise<ChatTurn> {
-    const { interests, transcript, limits, feedbackOn } =
+    const { interests, transcript, limits, feedbackOn, makeOn } =
       await store.load(userId);
     const feedback = feedbackOn === true;
+    const make = makeOn === true;
     const base = {
       id: opts.turnId ?? newId(),
       created_at: now().toISOString(),
@@ -174,7 +182,7 @@ export function createChat(deps: {
             effort: "low",
             format: {
               type: "json_schema",
-              schema: chatOutputSchema(feedback),
+              schema: chatOutputSchema(feedback, make),
             },
           },
           messages: [
@@ -189,6 +197,7 @@ export function createChat(deps: {
                     cadences: true,
                     noDaily: limits.dailyInterests === 0,
                     feedback,
+                    make,
                   }),
                 },
               ],
@@ -206,6 +215,7 @@ export function createChat(deps: {
         newId,
         publicInterests,
         message,
+        make,
       });
       const { pendingDeletes, pendingRewrites, pendingFollows } = plan;
       const pendingFeedback = feedback ? feedbackOf(output.changes) : undefined;
@@ -224,6 +234,7 @@ export function createChat(deps: {
             topic: c.topic ?? "",
             doc: c.doc ?? "",
             ...(cadence ? { cadence } : {}),
+            ...(c.mode ? { mode: c.mode } : {}),
           },
         ];
       });

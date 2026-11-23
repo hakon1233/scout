@@ -208,6 +208,7 @@ function TopicPage({
         }
       >
         {owner} · {status}
+        {i.make && " · Scout writes this"}
       </PageHeader>
       {(push.error ?? email.error) && (
         <p role="alert" className="text-body-sm text-danger">

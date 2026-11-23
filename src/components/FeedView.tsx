@@ -218,7 +218,9 @@ function FeedCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
             {item.source}
             {item.publishedAt && <> · {formatDate(item.publishedAt)}</>}
           </span>
-          <LikeButton story={likeInputFor(item)} className="relative z-10" />
+          {item.url && (
+            <LikeButton story={likeInputFor(item)} className="relative z-10" />
+          )}
         </div>
       </div>
     </article>
@@ -244,10 +246,12 @@ function FeedDetail({
         >
           ← {backLabel}
         </button>
-        <span className="flex items-center gap-2">
-          <SaveButton story={likeInputFor(item)} />
-          <LikeButton story={likeInputFor(item)} />
-        </span>
+        {item.url && (
+          <span className="flex items-center gap-2">
+            <SaveButton story={likeInputFor(item)} />
+            <LikeButton story={likeInputFor(item)} />
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -284,20 +288,22 @@ function FeedDetail({
 
       {item.body && <FeedBody markdown={item.body} />}
 
-      <div className="flex flex-col gap-2 rounded-md border border-border-default bg-surface-muted p-4">
-        <p className="text-caption uppercase tracking-wide text-muted">
-          Source
-        </p>
-        <a
-          href={item.url}
-          target="_blank"
-          rel="nofollow ugc noopener"
-          className="inline-flex items-center gap-2 text-body-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
-        >
-          <SourceBadge host={hostname(item.url)} />
-          Read the full story at {hostname(item.url)} ↗
-        </a>
-      </div>
+      {item.url && (
+        <div className="flex flex-col gap-2 rounded-md border border-border-default bg-surface-muted p-4">
+          <p className="text-caption uppercase tracking-wide text-muted">
+            Source
+          </p>
+          <a
+            href={item.url}
+            target="_blank"
+            rel="nofollow ugc noopener"
+            className="inline-flex items-center gap-2 text-body-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
+          >
+            <SourceBadge host={hostname(item.url)} />
+            Read the full story at {hostname(item.url)} ↗
+          </a>
+        </div>
+      )}
     </article>
   );
 }
@@ -339,17 +345,18 @@ function buildFeed(articles: Article[]): FeedItem[] {
   const seen = new Set<string>();
   const items: FeedItem[] = [];
   for (const a of articles) {
-    const key = canonicalUrl(a.url);
+    // A piece Scout wrote (no url) is its own item: there is no link to dedupe on.
+    const key = a.url ? canonicalUrl(a.url) : `piece:${a.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
     items.push({
       id: a.id,
-      headline: deriveHeadline(a.title, a.url),
+      headline: a.url ? deriveHeadline(a.title, a.url) : a.title,
       blurb: a.text,
       body: a.body,
       imageUrl: a.imageUrl,
       url: a.url,
-      source: a.source ?? hostname(a.url),
+      source: a.source ?? (a.url ? hostname(a.url) : "Scout"),
       topic: a.interest,
       publishedAt: a.publishedAt,
     });

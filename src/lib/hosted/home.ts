@@ -174,7 +174,7 @@ export function homeData(
   };
 }
 
-const INTEREST_COLUMNS = `id,topic,cadence,visibility,share_slug,tags,${BRIEF_SETTINGS_COLUMNS}`;
+const INTEREST_COLUMNS = `id,topic,cadence,visibility,share_slug,tags,mode,${BRIEF_SETTINGS_COLUMNS}`;
 
 type InterestRow = Partial<BriefSettingsRow> & {
   id: string;
@@ -183,6 +183,7 @@ type InterestRow = Partial<BriefSettingsRow> & {
   visibility: Visibility;
   share_slug: string | null;
   tags?: string[] | null;
+  mode?: "news" | "make";
 };
 
 type NoticeRow = {
@@ -259,6 +260,7 @@ function assembleHome(
           : null,
       ownerName: null,
       team: false,
+      ...(row.mode === "make" ? { make: true } : {}),
     };
   });
 

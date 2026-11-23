@@ -19,6 +19,7 @@ export type {
   ScheduleView,
   TopicBasis,
   TopicCoverage,
+  TopicMode,
 } from "./contract.ts";
 export type {
   BriefLength,
@@ -58,6 +59,12 @@ export {
   type ResearchTools,
 } from "./research-prompt.ts";
 export { RELEVANCE_SKILLS } from "./relevance-skills.ts";
+export {
+  MAX_SENT_KEYS,
+  buildMakePrompt,
+  makeSectionFromAnswer,
+  pieceKey,
+} from "./make-piece.ts";
 export { APP_PAGES, SCOUT_GUIDE, appPage } from "./scout-guide.ts";
 export {
   assembleBrief,

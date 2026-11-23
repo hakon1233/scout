@@ -15,6 +15,7 @@
 import type { spawn } from "node:child_process";
 import {
   DEFAULT_BRIEF_SETTINGS,
+  makeSectionFromAnswer,
   researchInterestOf,
   sectionFromAnswer,
   TEAM_PATHS,
@@ -22,7 +23,7 @@ import {
   type TeamRunResult,
   type TeamTopic,
 } from "#core";
-import { researchAndSynthesize } from "./research.js";
+import { researchAndSynthesize, writeMakePiece } from "./research.js";
 
 export type TeamRunnerDeps = {
   // The Worker's base URL, e.g. https://scout-runs.<account>.workers.dev
@@ -65,6 +66,19 @@ export async function researchTeamRun(
     error: error.slice(0, 400),
   });
   try {
+    if (interest.mode === "make") {
+      // Scout writes the piece itself: no web tools, no search budget.
+      const out = await writeMakePiece(interest, {
+        claudeBin: deps.claudeBin,
+        spawnFn: deps.spawnFn,
+        timeoutMs: deps.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        now: deps.now?.(),
+      });
+      const usage = out.usage ?? undefined;
+      const piece = makeSectionFromAnswer(out.text, interest);
+      if ("error" in piece) return { ...missing(piece.error), usage };
+      return { runId: run.runId, ...piece, usage };
+    }
     const out = await researchAndSynthesize(interest, {
       claudeBin: deps.claudeBin,
       spawnFn: deps.spawnFn,
@@ -209,6 +223,9 @@ export async function dryRun(
         prior: [],
         cadence: null,
         lastStoryAt: null,
+        // team_topics carries no mode either: a dry run researches news.
+        mode: "news",
+        sentKeys: [],
       },
       deps,
     );

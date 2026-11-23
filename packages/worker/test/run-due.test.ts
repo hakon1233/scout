@@ -66,6 +66,8 @@ const run = (n: number): ClaimedRun => ({
   prior: [],
   cadence: "daily",
   lastStoryAt: null,
+  mode: "news",
+  sentKeys: [],
 });
 
 test("a tick researches each claimed run and records its section and cost", async () => {
@@ -86,6 +88,44 @@ test("a tick researches each claimed run and records its section and cost", asyn
   // The plan's searches_per_run caps the search tool.
   const search = claude.requests[0].tools?.find((t) => t.name === "web_search");
   assert.equal(search?.max_uses, 3);
+});
+
+test("a make run writes its piece with no web tools, its memory in the prompt", async () => {
+  const make: ClaimedRun = {
+    ...run(1),
+    topic: "Word of the day",
+    mode: "make",
+    sentKeys: ["koselig"],
+  };
+  const queue = stubQueue([make]);
+  const claude = recordedClient([
+    {
+      content: [
+        {
+          type: "text",
+          text: `## Word of the day\n\n- \`${today}\` — dugnad\n  > Work done together, unpaid, for the common good.\n`,
+        },
+      ],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 800, output_tokens: 200 },
+    },
+  ]);
+
+  const summary = await runDue({ queue, claude });
+
+  assert.deepEqual(summary, { claimed: 1, ready: 1, failed: 0, unrecorded: 0 });
+  assert.equal(claude.requests[0].tools, undefined);
+  assert.match(
+    String(claude.requests[0].messages[0].content[0].text),
+    /- koselig/,
+  );
+  const [[, outcome]] = queue.finished;
+  assert.deepEqual(outcome.coverage, {
+    topic: "Word of the day",
+    status: "covered",
+  });
+  assert.equal(outcome.searches, 0);
+  assert.ok(outcome.costUsd > 0 && outcome.costUsd < 0.01, "no search fee");
 });
 
 test("a run records the token usage of all its Claude calls, summed", async () => {

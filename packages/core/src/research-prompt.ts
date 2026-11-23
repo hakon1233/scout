@@ -27,6 +27,10 @@ export type ResearchInterest = {
   prior?: readonly PriorBrief[];
   cadence?: "daily" | "weekly" | null;
   lastPosted?: string | null;
+  // "make": Scout writes one piece itself, no web tools (make-piece.ts), and
+  // `sent` lists the keys of the pieces it already sent, oldest first.
+  mode?: "news" | "make";
+  sent?: readonly string[];
 };
 
 // The web tools a research session has, by the names its prompt uses: the
@@ -106,7 +110,7 @@ export function reportedStories(
 const SOURCES_FIRST_RE = /^\s*(?:#{1,6}\s*|\*\*)\s*sources,?\s+check\s+first/im;
 
 // Body paragraphs and the section's word cap per length setting.
-const LENGTH_RULES: Record<
+export const LENGTH_RULES: Record<
   BriefLength,
   { paragraphs: string; extra: string; words: number }
 > = {
@@ -121,7 +125,7 @@ const LENGTH_RULES: Record<
 
 // "nb-NO" → "Norwegian Bokmål (Norway)"; the tag itself when the runtime has
 // no names for it.
-function languageName(tag: string): string {
+export function languageName(tag: string): string {
   try {
     return new Intl.DisplayNames(["en"], { type: "language" }).of(tag) ?? tag;
   } catch {

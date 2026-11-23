@@ -369,6 +369,19 @@ export function parseArticlesFromMarkdown(markdown: string, briefId: string) {
       });
       continue;
     }
+    // A piece Scout wrote itself (a make topic) has no link: its title is the
+    // headline, the piece its body, and the empty url says "no source".
+    if (entry.links.length === 0 && entry.body && entry.summary) {
+      articles.push({
+        id: `${briefId}-${articles.length}`,
+        title: entry.summary.trim(),
+        url: "",
+        interest,
+        publishedAt: entry.date ?? undefined,
+        body: entry.body,
+      });
+      continue;
+    }
     for (const link of entry.links) {
       articles.push({
         id: `${briefId}-${articles.length}`,

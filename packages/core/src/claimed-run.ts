@@ -9,7 +9,7 @@ import {
   briefSettingsFromRow,
   type BriefSettingsRow,
 } from "./brief-settings.ts";
-import type { BriefSettings } from "./contract.ts";
+import type { BriefSettings, TopicMode } from "./contract.ts";
 import type { PriorBrief, ResearchInterest } from "./research-prompt.ts";
 
 // A run already marked running, with what its research needs.
@@ -24,6 +24,10 @@ export type ClaimedRun = {
   cadence: "daily" | "weekly" | null;
   // When the interest last had a story (ISO); null: never.
   lastStoryAt: string | null;
+  // "make": Scout writes the piece itself (make-piece.ts); sentKeys are the
+  // keys of the pieces it already sent, oldest first.
+  mode: TopicMode;
+  sentKeys: string[];
 };
 
 // One row as PostgREST returns it.
@@ -35,6 +39,8 @@ export type ClaimedRunRow = Partial<BriefSettingsRow> & {
   prior?: Array<{ date: string; section_md: string }> | null;
   cadence?: string | null;
   last_story_at?: string | null;
+  mode?: string | null;
+  sent_keys?: string[] | null;
 };
 
 export function claimedRunFromRow(r: ClaimedRunRow): ClaimedRun {
@@ -50,6 +56,8 @@ export function claimedRunFromRow(r: ClaimedRunRow): ClaimedRun {
     })),
     cadence: r.cadence === "daily" || r.cadence === "weekly" ? r.cadence : null,
     lastStoryAt: r.last_story_at ?? null,
+    mode: r.mode === "make" ? "make" : "news",
+    sentKeys: r.sent_keys ?? [],
   };
 }
 
@@ -62,5 +70,6 @@ export function researchInterestOf(run: ClaimedRun): ResearchInterest {
     prior: run.prior,
     cadence: run.cadence,
     lastPosted: run.lastStoryAt,
+    ...(run.mode === "make" ? { mode: "make", sent: run.sentKeys } : {}),
   };
 }

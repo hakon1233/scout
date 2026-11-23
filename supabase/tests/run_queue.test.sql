@@ -62,7 +62,7 @@ insert into public.runs (interest_id, status, scheduled_for, started_at, finishe
 create temp table tick (run_id uuid, topic text, doc text, searches_per_run integer,
   brief_length text, story_count smallint, stories_relevant_only boolean, evergreen boolean,
   search_locale text, brief_language text, prior jsonb, cadence text,
-  last_story_at timestamptz);
+  last_story_at timestamptz, mode text, sent_keys text[]);
 
 -- ---------------------------------------------------------------------------
 -- Due times

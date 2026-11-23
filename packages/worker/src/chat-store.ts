@@ -68,7 +68,10 @@ export function supabaseChatStore(opts: {
             daily_interests: number;
           };
         }>,
-        select<{ feedback_on: boolean }>("settings", "select=feedback_on"),
+        select<{ feedback_on: boolean; make_on: boolean }>(
+          "settings",
+          "select=feedback_on,make_on",
+        ),
       ]);
       return {
         interests,
@@ -79,6 +82,7 @@ export function supabaseChatStore(opts: {
           dailyInterests: allowance.limits.daily_interests,
         },
         feedbackOn: settings[0]?.feedback_on === true,
+        makeOn: settings[0]?.make_on === true,
       };
     },
 

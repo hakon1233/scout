@@ -183,3 +183,25 @@ test("a brief using every story feature parses to the recorded articles", () => 
     interests: ["AI agents", "Climate tech"],
   });
 });
+
+// A make topic's piece: Scout wrote it, so it has no link. It still shows in
+// the feed, with an empty url, its title as the headline and the piece as body.
+test("a piece Scout wrote, with no link, becomes one article", () => {
+  const md = [
+    "## Bedtime story",
+    "",
+    "- `2026-11-23` — The Fox Who Counted Stars",
+    "  > Once upon a time.",
+  ].join("\n");
+  const { articles } = parseArticlesFromMarkdown(md, "b2");
+  assert.deepEqual(JSON.parse(JSON.stringify(articles)), [
+    {
+      id: "b2-0",
+      title: "The Fox Who Counted Stars",
+      url: "",
+      interest: "Bedtime story",
+      publishedAt: "2026-11-23",
+      body: "Once upon a time.",
+    },
+  ]);
+});

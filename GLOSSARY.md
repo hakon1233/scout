@@ -63,6 +63,13 @@ _Avoid_: digest (except weekly), report, newsletter
 **Section**:
 The part of a brief under one topic's heading.
 
+**Make topic**:
+An interest whose `mode` is `make`: each run Scout writes one piece itself (a bedtime story,
+a word of the day) with no web search, instead of researching news. The piece is one story
+with no source link; its title is the key in the topic's "already sent" list
+(`interests.sent_keys`, the last 60), so a piece never repeats. Off unless `settings.make_on`.
+_Avoid_: creative topic, generated topic
+
 **Story**:
 One dated item in a section: a one-line summary, its source links, an optional source image
 and an in-depth body.

@@ -59,6 +59,7 @@ function memoryStore(
   interests: InterestSnapshot[] = [AI],
   dailyInterests = 1,
   feedback: { on: boolean; blocked?: string } = { on: false },
+  makeOn = false,
 ) {
   const state = {
     interests: interests.map((i) => ({ ...i })),
@@ -75,6 +76,7 @@ function memoryStore(
         transcript: [...state.transcript],
         limits: { maxInterests: 15, maxDocChars: 4000, dailyInterests },
         feedbackOn: feedback.on,
+        makeOn,
       };
     },
     async sendFeedback(_userId, { cardTurnId, feedback: sent, turn }) {
@@ -125,9 +127,15 @@ function setup(
   interests?: InterestSnapshot[],
   dailyInterests?: number,
   feedback?: { on: boolean; blocked?: string },
+  makeOn?: boolean,
 ) {
   const { claude, requests } = stubClaude(answers);
-  const { store, state } = memoryStore(interests, dailyInterests, feedback);
+  const { store, state } = memoryStore(
+    interests,
+    dailyInterests,
+    feedback,
+    makeOn,
+  );
   let n = 0;
   const chat = createChat({
     claude,
@@ -455,4 +463,40 @@ test("over a feedback limit the chat says so plainly and nothing is sent", async
   const said = await chat.confirm("u1", { kind: "feedback" });
   assert.equal(said?.reply, limit);
   assert.deepEqual(state.feedback, []);
+});
+
+const BEDTIME = JSON.stringify({
+  reply: 'Scout writes "Bedtime story" for you each day. Confirm below.',
+  changes: [
+    {
+      op: "create",
+      topic: "Bedtime story",
+      doc: "# Bedtime story\n\nA short story for a five-year-old who loves foxes.",
+      cadence: "daily",
+      mode: "make",
+    },
+  ],
+});
+
+test("with make mode off, the prompt and schema have no mode and a make create is news", async () => {
+  const { chat, requests } = setup([answer(BEDTIME)]);
+  const turn = await chat.turn("u1", "A bedtime story every night");
+  assert.doesNotMatch(promptOf(requests[0]), /"mode"/);
+  const schema = JSON.stringify(requests[0].output_config?.format?.schema);
+  assert.doesNotMatch(schema, /"mode"/);
+  assert.equal(turn.pending_creates?.[0].mode, undefined);
+});
+
+test("with make mode on, a make topic waits for the confirm, which saves its mode", async () => {
+  const { chat, requests } = setup([answer(BEDTIME)], [AI], 1, undefined, true);
+  const turn = await chat.turn("u1", "A bedtime story every night");
+  assert.match(promptOf(requests[0]), /"mode": "make"/);
+  const schema = JSON.stringify(requests[0].output_config?.format?.schema);
+  assert.match(schema, /"mode"/);
+  assert.equal(turn.pending_creates?.[0].mode, "make");
+  const confirmed = await chat.confirm("u1", {
+    kind: "create",
+    interestId: turn.pending_creates[0].interestId,
+  });
+  assert.equal(confirmed?.changes?.[0].mode, "make");
 });
