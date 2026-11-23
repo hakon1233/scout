@@ -2,16 +2,21 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ScoutWordmark } from "@/components/shell/AppShell";
 import { Banner, Button, buttonClasses } from "@/components/ui";
-import { hostedAuth, type AuthUser } from "@/lib/auth";
+import { hostedAuth, localSignInUrl, type AuthUser } from "@/lib/auth";
 
 // Hosted sign-in: Google, or an emailed link. Every sign-in comes back here
 // (src/lib/auth.ts), so this page also shows the signed-in state and a failed
 // link. A build without the hosted config says sign-in isn't available.
+// On the Mac's build (`localSignInUrl`) there are no choices: a signed-out
+// reader goes to the gateway's automatic sign-in, and a signed-in one to the
+// brief.
 
 type View =
   | { kind: "checking" }
+  | { kind: "localFailed" }
   | { kind: "unavailable" }
   | { kind: "signedOut" }
   | { kind: "sent"; email: string }
@@ -24,6 +29,7 @@ export default function SignInPage() {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"google" | "email" | "signOut" | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const auth = hostedAuth();
@@ -31,6 +37,22 @@ export default function SignInPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setView({ kind: "unavailable" });
       return;
+    }
+    const local = localSignInUrl();
+    if (local) {
+      auth
+        .currentUser()
+        .then((user) => {
+          if (user) router.replace("/app/");
+          else window.location.replace(local);
+        })
+        .catch((e: Error) => {
+          setLinkError(e.message);
+          setView({ kind: "localFailed" });
+        });
+      return auth.onAuthChange((user) => {
+        if (user) router.replace("/app/");
+      });
     }
     auth
       .currentUser()
@@ -45,7 +67,7 @@ export default function SignInPage() {
       setBusy(null);
       setView(user ? { kind: "signedIn", user } : { kind: "signedOut" });
     });
-  }, []);
+  }, [router]);
 
   async function continueWithGoogle() {
     const auth = hostedAuth();
@@ -105,6 +127,19 @@ export default function SignInPage() {
             <Link href="/app/" className={buttonClasses("secondary")}>
               Go to your brief
             </Link>
+          </>
+        )}
+
+        {view.kind === "localFailed" && (
+          <>
+            <h1 className="font-serif text-title-1">Sign in</h1>
+            {linkError && <Banner tone="danger">{linkError}</Banner>}
+            <a
+              href={localSignInUrl() ?? "/"}
+              className={buttonClasses("primary")}
+            >
+              Try again
+            </a>
           </>
         )}
 

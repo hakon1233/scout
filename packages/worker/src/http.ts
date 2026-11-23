@@ -17,11 +17,14 @@
 // `x-scout-relay-token: <TEAM_RUNNER_TOKEN>` beside the reader's JWT.
 // Bodies over 16 KB are refused (413) unread (a relay answer: 192 KB). The service-role routes verify
 // the JWT with Supabase Auth before reading the body.
-// The /team routes (team.ts) take their own tokens instead of a reader's JWT.
+// The /team routes (team.ts) take their own tokens instead of a reader's JWT,
+// and so does POST /team/local-session (local-session.ts), the Scout team
+// account's session for the Mac's gateway.
 // Host-neutral: Request and Response only.
 
 import {
   LOCAL_ACCOUNT_MESSAGE,
+  LOCAL_SESSION_PATH,
   MAX_CHAT_MESSAGE_CHARS,
   parseRelayAnswer,
   quotaMessage,
@@ -60,6 +63,7 @@ import {
 } from "./request.ts";
 import { requestRun, RpcError, rpcCaller } from "./supabase.ts";
 import { handleTeamRequest, isTeamPath, type TeamDeps } from "./team.ts";
+import { handleLocalSession } from "./local-session.ts";
 import { handleVoiceRequest, type VoiceAi } from "./voice.ts";
 import {
   handleUnsubscribe,
@@ -104,6 +108,7 @@ export async function handleRequest(
   deps: HttpDeps,
 ): Promise<Response> {
   const path = new URL(request.url).pathname;
+  if (path === LOCAL_SESSION_PATH) return handleLocalSession(request, deps);
   if (isTeamPath(path)) return handleTeamRequest(request, deps);
   if (path === "/voice") return handleVoiceRequest(request, deps);
   // A brief email's one-click unsubscribe link (email.ts): signed, no sign-in.

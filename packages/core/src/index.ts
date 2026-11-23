@@ -98,6 +98,12 @@ export {
   type RelayStep,
   type TeamPicksClaim,
 } from "./relay.ts";
+export {
+  LOCAL_ACCOUNT_NAME,
+  LOCAL_SESSION_PATH,
+  LOCAL_SIGNIN_PATH,
+  type LocalSession,
+} from "./local-session.ts";
 export { canonicalUrl, parseBrief } from "./brief-document.ts";
 export { createWeeklyBriefFromHistory } from "./weekly.ts";
 export {

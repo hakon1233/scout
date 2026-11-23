@@ -209,7 +209,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       const envFile = path.join(os.homedir(), ".config/scout-hosted/.env");
       if (existsSync(envFile)) process.loadEnvFile(envFile); // never overrides
       const { buildIdeas } = await import("./build-ideas.mjs");
-      await buildIdeas(process.env, { worker: LOCAL_ORIGIN });
+      await buildIdeas(process.env, {
+        worker: LOCAL_ORIGIN,
+        localSignin: true,
+      });
     }
     await install();
   } else {

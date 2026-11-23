@@ -6,11 +6,16 @@
 // URL at this origin, so the app's code is the hosted one, unchanged.
 //
 // Usage: tsx --conditions=source scripts/local-gateway.mts <site dir> [port]
-// Reads TEAM_RUNNER_TOKEN and SCOUT_WORKER_URL from ~/.config/scout-hosted/.env
-// (hosted-config.mts); never prints them. `pnpm local:serve` runs it as a
+// Reads TEAM_RUNNER_TOKEN, SCOUT_WORKER_URL and SCOUT_LOCAL_ALLOWED_LOGIN (the
+// tailnet owner's login, for the automatic sign-in, local-signin.ts) from
+// ~/.config/scout-hosted/.env (hosted-config.mts); never prints them. `pnpm local:serve` runs it as a
 // launchd job.
 
 import { createWorkerProxy } from "../packages/agent/src/local-relay.ts";
+import {
+  createLocalSignIn,
+  LOCAL_SIGNIN_PATH,
+} from "../packages/agent/src/local-signin.ts";
 import { readHostedConfig } from "./hosted-config.mts";
 import { LOCAL_PORT, startLocalServer } from "./local-server.mjs";
 
@@ -23,10 +28,19 @@ if (!token || !workerUrl)
   throw new Error(
     "Set TEAM_RUNNER_TOKEN and SCOUT_WORKER_URL in ~/.config/scout-hosted/.env.",
   );
+const allowedLogin =
+  process.env.SCOUT_LOCAL_ALLOWED_LOGIN ?? config.SCOUT_LOCAL_ALLOWED_LOGIN;
+if (!allowedLogin)
+  console.log(
+    "Automatic sign-in is off: set SCOUT_LOCAL_ALLOWED_LOGIN in ~/.config/scout-hosted/.env.",
+  );
 const port = portArg ? Number(portArg) : LOCAL_PORT;
 await startLocalServer({
   root,
   port,
   proxy: createWorkerProxy({ workerUrl, token }),
+  routes: {
+    [LOCAL_SIGNIN_PATH]: createLocalSignIn({ workerUrl, token, allowedLogin }),
+  },
 });
 console.log(`Scout on http://127.0.0.1:${port}/ (Worker calls relayed)`);
