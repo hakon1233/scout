@@ -61,6 +61,9 @@ export type HostedHome = {
   allowance: Allowance;
   // May make an interest public.
   isAdmin: boolean;
+  // A local account (profiles.runs_local): its own topics run on Håkon's Mac
+  // through the Scout team runner, not on the Worker.
+  runsLocal: boolean;
   // Unread notices about topics: a followed one its host unshared, deleted or
   // stopped (each may be hosted as the reader's own), or one Scout hid.
   notices: Notice[];

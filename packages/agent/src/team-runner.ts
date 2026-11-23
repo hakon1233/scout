@@ -1,5 +1,5 @@
-// The Scout team runner: the Scout team's public topics, researched on Håkon's
-// own machine with the local `claude` CLI (research.ts, claude-runner.ts) and
+// The Scout team runner: the Scout team's public topics and every topic of a
+// local account (profiles.runs_local), researched on Håkon's own machine with the local `claude` CLI (research.ts, claude-runner.ts) and
 // published through the Worker's /team routes (TEAM_PATHS), so readers get
 // the brief, its notices and its push exactly as from any run. The only
 // difference from the Worker's cron is who does the research.
@@ -37,12 +37,19 @@ export type TeamRunnerDeps = {
   timeoutMs?: number;
   now?: () => Date;
   print?: (line: string) => void;
+  // --loop: stops after the current run once aborted (SIGTERM).
+  signal?: AbortSignal;
+  // --loop: the wait between passes, and how to wait (tests pass a fake).
+  loopIntervalMs?: number;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 };
 
 const DEFAULT_TIMEOUT_MS = 8 * 60 * 1000;
 const DEFAULT_SEARCHES = 5;
 // A full run of the team's topics stops here, so a stuck queue can't loop.
 const DEFAULT_MAX_RUNS = 30;
+// --loop: one pass a minute, so a Run now starts within a minute.
+const DEFAULT_LOOP_INTERVAL_MS = 60 * 1000;
 
 // Each search and fetch takes a turn; two more to think and write.
 export function turnLimit(searches: number): number {
@@ -171,7 +178,7 @@ export async function runDueTeamTopics(
   maxRuns = DEFAULT_MAX_RUNS,
 ): Promise<Ran[]> {
   const ran: Ran[] = [];
-  while (ran.length < maxRuns) {
+  while (ran.length < maxRuns && !deps.signal?.aborted) {
     const { runs } = await post<{ runs: TeamRun[] }>(deps, TEAM_PATHS.claim, {
       limit: 1,
     });
@@ -179,6 +186,40 @@ export async function runDueTeamTopics(
     for (const run of runs) ran.push(await runAndPublish(run, deps));
   }
   return ran;
+}
+
+// Resolves after ms, or at once when the signal aborts.
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done);
+  });
+}
+
+// --loop: a pass over the due runs (runDueTeamTopics), a pause, again, until
+// the signal aborts. A failed pass (the Worker unreachable) is printed and the
+// next one tries again. The launchd service (team-runner-service.ts) runs this.
+export async function loopTeamTopics(deps: TeamRunnerDeps): Promise<void> {
+  const print = deps.print ?? console.log;
+  const sleep = deps.sleep ?? abortableSleep;
+  const interval = deps.loopIntervalMs ?? DEFAULT_LOOP_INTERVAL_MS;
+  print(`looking for due runs every ${Math.round(interval / 1000)} s…`);
+  while (!deps.signal?.aborted) {
+    try {
+      await runDueTeamTopics(deps);
+    } catch (err) {
+      print(err instanceof Error ? err.message : String(err));
+    }
+    if (deps.signal?.aborted) break;
+    await sleep(interval, deps.signal);
+  }
+  print("stopped.");
 }
 
 // A one-off run of one topic, paused or not. The topic stays as it was.
@@ -236,9 +277,14 @@ export async function dryRun(
   return results;
 }
 
-export const TEAM_RUN_USAGE = `pnpm team:run [--dry-run] [--only <topic or id>] [--list]
+export const TEAM_RUN_USAGE = `pnpm team:run [--dry-run] [--only <topic or id>] [--list] [--loop]
 
-  (none)        research and publish every due Scout team topic
+  (none)        research and publish every due Scout team topic and local
+                account topic
+  --loop        the same every minute until stopped (SIGTERM); what the
+                launchd service runs
+  install-service / uninstall-service
+                start (or remove) --loop as a launchd service on this Mac
   --only <t>    one-off run of one topic, even a paused one; it stays paused
   --dry-run     research and print, publish nothing (no SCOUT_TEAM_RUNNER needed)
   --list        list the Scout team's topics and which are due
@@ -258,7 +304,7 @@ export async function teamRunMain(
   const flag = (name: string) => argv.includes(name);
   const onlyAt = argv.indexOf("--only");
   const only = onlyAt >= 0 ? argv[onlyAt + 1] : undefined;
-  const known = new Set(["--dry-run", "--only", "--list", only]);
+  const known = new Set(["--dry-run", "--only", "--list", "--loop", only]);
   if (
     flag("--help") ||
     (onlyAt >= 0 && !only) ||
@@ -270,6 +316,11 @@ export async function teamRunMain(
 
   const dry = flag("--dry-run");
   const list = flag("--list");
+  const loop = flag("--loop");
+  if (loop && (dry || list || only)) {
+    print(TEAM_RUN_USAGE);
+    return 2;
+  }
   if (!dry && !list && env.SCOUT_TEAM_RUNNER !== "on") {
     print(
       "The Scout team runner is off. Switch it on with SCOUT_TEAM_RUNNER=on " +
@@ -295,6 +346,10 @@ export async function teamRunMain(
     }
     if (dry) {
       await dryRun(full, only);
+      return 0;
+    }
+    if (loop) {
+      await loopTeamTopics(full);
       return 0;
     }
     const ran = only

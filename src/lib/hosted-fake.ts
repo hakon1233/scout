@@ -49,6 +49,8 @@ const SIGNED_OUT = "scout.fake.signedOut";
 export const FRESH = "scout.fake.fresh";
 // Set to "1" to switch brief emails on (settings.email_on); off by default.
 export const EMAIL_ON = "scout.fake.emailOn";
+// Set to "1" to be a local account (profiles.runs_local): runs on the Mac.
+export const LOCAL = "scout.fake.local";
 
 function storage(): Storage | null {
   try {
@@ -333,6 +335,7 @@ export function createFakeHostedData(): HostedData {
   const pushOn = new Set<string>();
   const emailOn = new Set<string>();
   const emailSwitch = storage()?.getItem(EMAIL_ON) === "1";
+  const runsLocal = storage()?.getItem(LOCAL) === "1";
   let device: PushState = "off";
   let timeZone: string | null = "Europe/Oslo";
   const turns: ChatTurn[] = [];
@@ -387,6 +390,7 @@ export function createFakeHostedData(): HostedData {
           runsToday: { used: 1, limit: 3 },
         },
         isAdmin: false,
+        runsLocal,
         notices: [],
       };
     },
