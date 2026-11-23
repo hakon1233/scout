@@ -212,7 +212,7 @@ export default function Home() {
           <aside
             id="sample"
             aria-label="Sample brief preview"
-            className="overflow-hidden rounded-lg border border-border-default bg-paper-card shadow-[0_1px_0_var(--line),0_18px_40px_-22px_rgba(28,26,23,0.4)]"
+            className="overflow-hidden rounded-lg border border-border-default bg-surface shadow-[0_1px_0_var(--line),0_18px_40px_-22px_rgba(28,26,23,0.4)]"
           >
             <div className="border-b border-border-default px-[22px] pb-3.5 pt-[18px]">
               <div className="flex justify-between font-mono text-[11px] uppercase tracking-[0.1em] text-muted">
@@ -305,20 +305,23 @@ export default function Home() {
       </div>
 
       {/* Colophon */}
-      <footer className="mx-auto mt-8 flex w-full max-w-[1120px] flex-col gap-2 border-t border-border-default px-7 py-9 font-mono text-[13px] tracking-[0.04em] text-muted sm:flex-row sm:justify-between">
-        <span>Scout · Personalized news by agents</span>
-        {hosted ? (
-          <span className="flex gap-5">
-            <Link href="/app/privacy/" className={navLink}>
-              Privacy
-            </Link>
-            <Link href="/app/terms/" className={navLink}>
-              Terms
-            </Link>
-          </span>
-        ) : (
-          <span>Local-first · Open source · 2026</span>
-        )}
+      {/* The padding sits outside the rule so it spans the content width. */}
+      <footer className="mx-auto mt-8 w-full max-w-[1120px] px-7">
+        <div className="flex flex-col gap-2 border-t border-border-default py-9 font-mono text-[13px] tracking-[0.04em] text-muted sm:flex-row sm:justify-between">
+          <span>Scout · Personalized news by agents</span>
+          {hosted ? (
+            <span className="flex gap-5">
+              <Link href="/app/privacy/" className={navLink}>
+                Privacy
+              </Link>
+              <Link href="/app/terms/" className={navLink}>
+                Terms
+              </Link>
+            </span>
+          ) : (
+            <span>Local-first · Open source · 2026</span>
+          )}
+        </div>
       </footer>
     </main>
   );

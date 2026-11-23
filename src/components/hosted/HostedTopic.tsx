@@ -194,7 +194,9 @@ function TopicPage({
         title={i.topic}
         back={{ href: "/app/topics/", label: "Topics" }}
         action={
-          <span className="inline-flex">
+          // -mr-3 puts the bell's glyph, not its 44 px hit area, on the
+          // cards' right edge.
+          <span className="-mr-3 inline-flex">
             {email.enabled && (
               <EmailToggle
                 topic={i.topic}
@@ -232,7 +234,7 @@ function TopicPage({
         aria-labelledby="topic-latest"
         data-main
       >
-        <div className="flex items-center justify-between gap-3 px-1">
+        <div className="flex items-center justify-between gap-3 pl-1">
           <h2 id="topic-latest" className="text-body-sm text-muted">
             Latest
           </h2>
