@@ -35,6 +35,7 @@ export function BriefSettingsGroup({
   settings,
   save,
   extraRows,
+  stories: showStories = true,
 }: {
   /** The stored settings, or null while they load. */
   settings: BriefSettings | null;
@@ -42,6 +43,8 @@ export function BriefSettingsGroup({
   save: (change: Partial<BriefSettings>) => Promise<BriefSettings>;
   /** Rows that belong in the same group (the hosted run cadence). */
   extraRows?: React.ReactNode;
+  /** False for a topic Scout writes itself: one piece, no story count. */
+  stories?: boolean;
 }) {
   const [shown, setShown] = React.useState<BriefSettings | null>(settings);
   const [status, setStatus] = React.useState<Status>({ kind: "idle" });
@@ -97,25 +100,27 @@ export function BriefSettingsGroup({
           onChange={(length) => void apply({ length })}
         />
       </SettingsRow>
-      <SettingsRow label="Stories" hint={storiesHint}>
-        <select
-          aria-label="How many stories"
-          value={stories === undefined ? "" : String(stories)}
-          disabled={!shown}
-          onChange={(e) => {
-            const v = e.target.value;
-            void apply({ stories: v === RELEVANT ? RELEVANT : Number(v) });
-          }}
-          className="min-h-9 rounded-lg bg-surface-muted px-3 text-body-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-60 phone:min-h-11"
-        >
-          {stories === undefined && <option value="">…</option>}
-          {STORY_CHOICES.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-      </SettingsRow>
+      {showStories && (
+        <SettingsRow label="Stories" hint={storiesHint}>
+          <select
+            aria-label="How many stories"
+            value={stories === undefined ? "" : String(stories)}
+            disabled={!shown}
+            onChange={(e) => {
+              const v = e.target.value;
+              void apply({ stories: v === RELEVANT ? RELEVANT : Number(v) });
+            }}
+            className="min-h-9 rounded-lg bg-surface-muted px-3 text-body-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-60 phone:min-h-11"
+          >
+            {stories === undefined && <option value="">…</option>}
+            {STORY_CHOICES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </SettingsRow>
+      )}
     </SettingsGroup>
   );
 }

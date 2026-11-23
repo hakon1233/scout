@@ -71,6 +71,7 @@ export function HostedTopics() {
             send={send}
             confirm={confirm}
             transcribe={transcribe}
+            allowance={home.allowance}
             label="Message Scout"
             autoFocus
           />

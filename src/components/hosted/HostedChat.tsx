@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { ChatConfirm, ChatTurn } from "@scout/core";
+import type { ChatConfirm, ChatTurn, PendingCreate } from "@scout/core";
 import { ChatMarkdown } from "@/components/profile/ChatMarkdown";
 import {
   ChatRewriteProposal,
@@ -13,7 +13,8 @@ import {
 } from "@/components/profile/ChatDeleteConfirm";
 import { ChatPageLink } from "@/components/ChatPageLink";
 import { Button } from "@/components/ui";
-import { HostedError } from "@/lib/hosted";
+import { HostedError, type Allowance } from "@/lib/hosted";
+import { freeSlot } from "./useHostedHome";
 import { VoiceButton } from "./VoiceButton";
 
 // The hosted setup chat: the reader says what they want to follow, Scout
@@ -26,6 +27,7 @@ export function HostedChat({
   label,
   autoFocus = false,
   transcribe,
+  allowance,
 }: {
   turns: ChatTurn[];
   // Both resolve once the turn is stored; the parent appends it and reloads.
@@ -36,6 +38,8 @@ export function HostedChat({
   autoFocus?: boolean;
   // A recorded clip as text. Without it (local mode) there is no mic.
   transcribe?: (audio: Blob) => Promise<string>;
+  // The plan's slots, so a new topic's card names the one it will take.
+  allowance?: Allowance;
 }) {
   const [draft, setDraft] = React.useState("");
   const [sending, setSending] = React.useState<string | null>(null);
@@ -113,6 +117,7 @@ export function HostedChat({
                       turn={turn}
                       resolved={resolved}
                       settle={settle}
+                      allowance={allowance}
                     />
                   )}
                 </>
@@ -215,10 +220,12 @@ function Proposals({
   turn,
   resolved,
   settle,
+  allowance,
 }: {
   turn: ChatTurn;
   resolved: Record<string, "done" | "kept">;
   settle: (key: string, action: ChatConfirm | null) => Promise<void>;
+  allowance: Allowance | undefined;
 }) {
   const [busy, setBusy] = React.useState(false);
   const run = (key: string, action: ChatConfirm | null) => {
@@ -266,7 +273,7 @@ function Proposals({
             key={key}
             pr={c}
             prev={null}
-            create={{ schedule: createSchedule(c.cadence) }}
+            create={{ schedule: createSchedule(c, allowance) }}
             resolved={rewriteResolution(resolved[key])}
             disabled={busy}
             onApply={() =>
@@ -312,15 +319,22 @@ function Proposals({
   );
 }
 
-// How a proposed topic will run, as its card says it.
-function createSchedule(cadence: "daily" | "weekly" | undefined): string {
+// How a proposed topic will run, as its card says it. With no cadence asked
+// it takes the first free slot (scheduleNew), or stays paused.
+function createSchedule(
+  c: PendingCreate,
+  allowance: Allowance | undefined,
+): string {
+  const cadence = c.cadence ?? (allowance ? freeSlot(allowance) : undefined);
   const runs =
     cadence === "daily"
       ? "Daily"
       : cadence === "weekly"
         ? "Weekly"
-        : "Next free daily or weekly slot";
-  return `${runs} · Private`;
+        : cadence === null
+          ? "Paused"
+          : "Next free daily or weekly slot";
+  return `${runs} · Private${c.mode === "make" ? " · Scout writes this" : ""}`;
 }
 
 function deleteResolution(r: "done" | "kept" | undefined): DeleteResolution {

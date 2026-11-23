@@ -261,6 +261,7 @@ function TopicPage({
           <BriefSettingsGroup
             settings={i.settings}
             save={save}
+            stories={!i.make}
             extraRows={
               <SettingsRow label="Runs" hint={RUNS_HINT[cadence]}>
                 <Segmented

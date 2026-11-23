@@ -88,6 +88,7 @@ export function HostedHome() {
             send={send}
             confirm={confirm}
             transcribe={transcribe}
+            allowance={home.allowance}
             label="Your topic"
             autoFocus
           />

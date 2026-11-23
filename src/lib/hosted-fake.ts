@@ -125,6 +125,7 @@ const POWER = "Nordic power prices and the NO3 area";
 const LLAMA = "r/LocalLLaMA: new open models and benchmarks";
 const RUST = "Rust releases and the async working group";
 const NTNU = "NTNU and Trondheim events";
+const WORD = "Norwegian word of the day";
 
 function seedInterests(): HostedInterest[] {
   return [
@@ -391,6 +392,26 @@ export function createFakeHostedData(): HostedData {
     },
     transcript: async () => [...turns],
     async chat(message) {
+      // A word of the day proposes a topic Scout writes itself, with no
+      // cadence named, as the live chat does with `make_on` on.
+      if (/word of the day/i.test(message)) {
+        const turn: ChatTurn = {
+          ...reply(
+            message,
+            "Scout writes it itself each time, with no web search.",
+          ),
+          pending_creates: [
+            {
+              interestId: "word-of-the-day",
+              topic: WORD,
+              doc: `# ${WORD}\n\nOne Norwegian word, explained in English with an example sentence.`,
+              mode: "make",
+            },
+          ],
+        };
+        turns.push(turn);
+        return turn;
+      }
       // A bug report drafts a note to the Scout team, as the live chat does
       // with the `feedback_on` setting on.
       const turn = /\b(bug|broken|feedback)\b/i.test(message)
@@ -410,6 +431,27 @@ export function createFakeHostedData(): HostedData {
       return turn;
     },
     async confirm(action) {
+      if (action.kind === "create" && action.interestId === "word-of-the-day") {
+        const id = action.interestId;
+        interests = [
+          ...interests,
+          interest({
+            id,
+            topic: WORD,
+            cadence: "off",
+            updatedAt: null,
+            make: true,
+          }),
+        ];
+        const turn: ChatTurn = {
+          ...reply("", "Saved."),
+          changes: [
+            { op: "create", interestId: id, topic: WORD, mode: "make" },
+          ],
+        };
+        turns.push(turn);
+        return turn;
+      }
       if (action.kind !== "feedback") return reply("", "Done.");
       const turn = reply(
         "Send feedback: Feed is blank on a phone",

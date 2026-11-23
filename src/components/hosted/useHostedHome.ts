@@ -187,7 +187,7 @@ export async function scheduleNew(
   }
 }
 
-function freeSlot(a: Allowance): "daily" | "weekly" | null {
+export function freeSlot(a: Allowance): "daily" | "weekly" | null {
   if (a.daily.used < a.daily.limit) return "daily";
   if (a.weekly.used < a.weekly.limit) return "weekly";
   return null;
