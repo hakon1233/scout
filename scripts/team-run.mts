@@ -6,8 +6,13 @@
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { teamRunMain } from "../packages/agent/src/team-runner.ts";
+import {
+  installTeamRunnerService,
+  uninstallTeamRunnerService,
+} from "../packages/agent/src/team-runner-service.ts";
 
 const WANTED = new Set(["TEAM_RUNNER_TOKEN", "SCOUT_WORKER_URL"]);
 
@@ -27,8 +32,22 @@ function readConfig(): Record<string, string> {
   return config;
 }
 
-process.exitCode = await teamRunMain(
-  process.argv.slice(2),
-  process.env,
-  readConfig(),
-);
+const argv = process.argv.slice(2);
+const repoDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+if (argv[0] === "install-service" || argv[0] === "uninstall-service") {
+  console.log(
+    argv[0] === "install-service"
+      ? await installTeamRunnerService({ repoDir })
+      : await uninstallTeamRunnerService({}),
+  );
+} else {
+  // --loop stops after the current run on SIGTERM (launchd) or Ctrl-C.
+  const stop = new AbortController();
+  if (argv.includes("--loop"))
+    for (const sig of ["SIGTERM", "SIGINT"] as const)
+      process.once(sig, () => stop.abort());
+  process.exitCode = await teamRunMain(argv, process.env, readConfig(), {
+    signal: stop.signal,
+  });
+}

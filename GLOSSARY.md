@@ -45,6 +45,11 @@ _Avoid_: API key, session
 **Hosted UI**:
 The copy of the website on GitHub Pages; it reaches the reader's companion over loopback.
 
+**Local account**:
+A reader account whose runs are done by the Scout team runner on Håkon's Mac, on his
+Claude subscription, instead of by the API (`profiles.runs_local`, set by an admin).
+Its topics can still be shared and published. Shows a "Local" badge in the web app.
+
 ### Briefs
 
 **Run**:

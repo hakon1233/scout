@@ -263,6 +263,18 @@ companion never imports it.
 - Switching on: set the Worker secret `TEAM_RUNNER_TOKEN`, put it and the Worker URL
   in the env file (chmod 600), `update public.settings set team_runner_on = true`, then
   `SCOUT_TEAM_RUNNER=on pnpm team:run`.
+- Local accounts (`profiles.runs_local`, set by an admin in SQL; readers cannot write
+  it): every topic of theirs, private or shared, runs on the Mac instead of the API,
+  with no daily run or spend cap (`*_runs_local.sql`). One SQL check,
+  `runs_on_mac(owner, visibility)` (team account's public topics, or any topic of a
+  local account), decides it in `queue_due_runs`, `claim_queued` and the `team_*`
+  functions, so `claim_runs` never takes them. The web app shows a "Local" badge and
+  "Waiting for your Mac" for a queued run (`HostedHome.runsLocal`).
+- `--loop` keeps looking for due runs every 60 s; SIGTERM or Ctrl-C lets the run in
+  progress publish, then stops. `pnpm team:run install-service` installs it as a
+  launchd agent from this checkout (`team-runner-service.ts`, label
+  `ing.scout.team-runner`, log `~/Library/Logs/scout-team-runner.log`);
+  `uninstall-service` removes it.
 
 ### Web app (`src`)
 

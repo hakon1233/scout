@@ -445,3 +445,94 @@ test("missing config or a bad flag stops before anything runs", async () => {
   assert.equal(await teamRunMain(["--only"], {}, CONFIG, s.deps), 2);
   assert.deepEqual(s.sb.calls, []);
 });
+
+test("--loop runs a pass, waits a minute, runs again, and exits 0 once stopped", async () => {
+  const s = setup({ runnerOn: true });
+  const stop = new AbortController();
+  const waits: number[] = [];
+  const code = await teamRunMain(
+    ["--loop"],
+    { SCOUT_TEAM_RUNNER: "on" },
+    CONFIG,
+    {
+      ...s.deps,
+      signal: stop.signal,
+      sleep: async (ms) => {
+        waits.push(ms);
+        // A Run now arrives while the runner waits; SIGTERM after the next pass.
+        if (waits.length === 1) s.sb.topics[1].due = true;
+        else stop.abort();
+      },
+    },
+  );
+  assert.equal(code, 0);
+  assert.deepEqual(waits, [60_000, 60_000]);
+  assert.deepEqual(
+    s.sb.finished.map((f) => (f.p_coverage as { topic: string }).topic),
+    ["LLM releases, prices and retirements", "Emulator releases"],
+  );
+  assert.match(s.lines.join("\n"), /stopped\./);
+});
+
+test("--loop carries on after a failed pass", async () => {
+  const s = setup({ runnerOn: true });
+  const stop = new AbortController();
+  let calls = 0;
+  const flaky = (async (url: string, init: RequestInit) => {
+    if (++calls === 1) throw new Error("the Worker is unreachable");
+    return s.deps.fetch(url, init);
+  }) as unknown as typeof globalThis.fetch;
+  const code = await teamRunMain(
+    ["--loop"],
+    { SCOUT_TEAM_RUNNER: "on" },
+    CONFIG,
+    {
+      ...s.deps,
+      fetch: flaky,
+      signal: stop.signal,
+      sleep: async () => {
+        if (calls > 1) stop.abort();
+      },
+    },
+  );
+  assert.equal(code, 0);
+  assert.match(s.lines.join("\n"), /unreachable/);
+  assert.equal(s.sb.finished.length, 1);
+});
+
+test("SIGTERM during a run lets it publish and claims nothing more", async () => {
+  const s = setup({ runnerOn: true });
+  s.sb.topics[1].due = true;
+  const stop = new AbortController();
+  const code = await teamRunMain(
+    ["--loop"],
+    { SCOUT_TEAM_RUNNER: "on" },
+    CONFIG,
+    {
+      ...s.deps,
+      signal: stop.signal,
+      print: (l) => {
+        s.lines.push(l);
+        if (l.startsWith("researching")) stop.abort();
+      },
+      sleep: async () => assert.fail("no wait after a stop"),
+    },
+  );
+  assert.equal(code, 0);
+  assert.equal(s.sb.finished.length, 1);
+  assert.equal(s.sb.calls.filter((c) => c === "team_claim_runs").length, 1);
+});
+
+test("--loop refuses to mix with --dry-run, --list or --only", async () => {
+  const s = setup({ runnerOn: true });
+  for (const argv of [
+    ["--loop", "--dry-run"],
+    ["--loop", "--list"],
+    ["--loop", "--only", "Emulator releases"],
+  ])
+    assert.equal(
+      await teamRunMain(argv, { SCOUT_TEAM_RUNNER: "on" }, CONFIG, s.deps),
+      2,
+    );
+  assert.deepEqual(s.sb.calls, []);
+});

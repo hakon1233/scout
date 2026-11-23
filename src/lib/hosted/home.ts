@@ -81,9 +81,9 @@ export function homeData(
           method: "POST",
           body: { p_user: s.userId },
         }),
-        rest<{ is_admin: boolean; timezone_set: boolean }[]>(
-          `profiles?select=is_admin,timezone_set&id=eq.${user}`,
-        ),
+        rest<
+          { is_admin: boolean; timezone_set: boolean; runs_local?: boolean }[]
+        >(`profiles?select=is_admin,timezone_set,runs_local&id=eq.${user}`),
         rest<NoticeRow[]>(
           `notifications?select=id,kind,payload,created_at&user_id=eq.${user}&kind=in.(hidden,stopped,unshared,deleted)&read_at=is.null&order=created_at.desc`,
         ),
@@ -121,6 +121,7 @@ export function homeData(
           ...owners.get(i.id),
         })),
         isAdmin: profile[0]?.is_admin === true,
+        runsLocal: profile[0]?.runs_local === true,
         notices: notices.map((n) => ({
           id: n.id,
           kind: n.kind,
@@ -224,7 +225,7 @@ function assembleHome(
   rows: (InterestRow & { following: boolean })[],
   runs: RunRow[],
   a: AllowanceRow,
-): Omit<HostedHome, "isAdmin" | "notices"> {
+): Omit<HostedHome, "isAdmin" | "runsLocal" | "notices"> {
   const sections: { topic: string; section: string }[] = [];
   const coverage: TopicCoverage[] = [];
   let newest: RunRow | null = null;

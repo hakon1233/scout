@@ -24,6 +24,7 @@ import {
 import { hostedMenu } from "./HostedHome";
 import { PRIVACY } from "./HostedTopics";
 import { SharingSection } from "./SharingSection";
+import { LocalBadge, WAITING_FOR_MAC } from "./LocalBadge";
 import { useHostedHome } from "./useHostedHome";
 import { useTabTitle } from "@/hooks/useTabTitle";
 
@@ -165,9 +166,13 @@ function TopicPage({
     }
   }
 
+  // A local account's own topic runs on the Mac (team runner).
+  const local = home.runsLocal && !i.following;
   const status =
     i.run === "queued"
-      ? "Waiting to start…"
+      ? local
+        ? WAITING_FOR_MAC
+        : "Waiting to start…"
       : i.run === "running"
         ? "Writing the brief…"
         : i.failed
@@ -209,6 +214,12 @@ function TopicPage({
       >
         {owner} · {status}
         {i.make && " · Scout writes this"}
+        {local && (
+          <>
+            {" "}
+            <LocalBadge />
+          </>
+        )}
       </PageHeader>
       {(push.error ?? email.error) && (
         <p role="alert" className="text-body-sm text-danger">

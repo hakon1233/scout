@@ -24,6 +24,7 @@ import {
 } from "@/lib/hosted";
 import { BusinessStep, businessStepSkipped } from "./BusinessStep";
 import { HostedChat } from "./HostedChat";
+import { LocalBadge, WAITING_FOR_MAC } from "./LocalBadge";
 import { useMuteNotice } from "./MutePushes";
 import { scheduleNew, useHostedHome } from "./useHostedHome";
 
@@ -309,6 +310,7 @@ function Feed({
           <BriefLayout
             brief={shown}
             name=""
+            badge={home.runsLocal ? <LocalBadge /> : undefined}
             filter={
               topics.length > 1 ? (
                 <TopicFilter
@@ -322,11 +324,16 @@ function Feed({
         </div>
       ) : (
         <section className="flex flex-col gap-2" data-main>
-          <h1 className="font-serif text-title-1">Your brief</h1>
+          <h1 className="font-serif text-title-1">
+            Your brief {home.runsLocal && <LocalBadge />}
+          </h1>
           <p className="text-body text-secondary" aria-live="polite">
-            {home.interests.some((i) => i.run !== null)
-              ? "Writing your first brief. It usually takes a few minutes, and this page updates when it's ready."
-              : "Your first brief shows here after the next run. Run a topic from Topics to get it sooner."}
+            {home.runsLocal &&
+            home.interests.some((i) => i.run === "queued" && !i.following)
+              ? `${WAITING_FOR_MAC}. Your first brief shows here once your Mac has written it.`
+              : home.interests.some((i) => i.run !== null)
+                ? "Writing your first brief. It usually takes a few minutes, and this page updates when it's ready."
+                : "Your first brief shows here after the next run. Run a topic from Topics to get it sooner."}
           </p>
         </section>
       )}

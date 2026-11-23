@@ -18,6 +18,8 @@ type Props = {
   onDetailOpenChange?: (open: boolean) => void;
   // The topic filter beside the heading (TopicFilter), when the page has one.
   filter?: React.ReactNode;
+  // A pill after "Written by AI" (the hosted app's "Local").
+  badge?: React.ReactNode;
 };
 
 export function BriefLayout({
@@ -26,6 +28,7 @@ export function BriefLayout({
   heading,
   onDetailOpenChange,
   filter,
+  badge,
 }: Props) {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const handleDetailOpenChange = React.useCallback(
@@ -63,6 +66,7 @@ export function BriefLayout({
             <span className="rounded-pill border border-border-default px-2 py-0.5 text-caption text-secondary">
               Written by AI
             </span>
+            {badge}
           </p>
           <div className="flex items-center justify-between gap-3">
             <h1 className="min-w-0 text-title-1 text-primary [text-wrap:balance]">

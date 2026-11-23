@@ -102,7 +102,9 @@ test("home lists the interests with their run state and builds one brief from th
       ],
     },
     "/rest/v1/rpc/allowance": { body: ALLOWANCE },
-    "/rest/v1/profiles": { body: [{ is_admin: true, timezone_set: true }] },
+    "/rest/v1/profiles": {
+      body: [{ is_admin: true, timezone_set: true, runs_local: true }],
+    },
     "/rest/v1/notifications": {
       body: [
         {
@@ -152,6 +154,7 @@ test("home lists the interests with their run state and builds one brief from th
     ],
   );
   assert.equal(home.isAdmin, true);
+  assert.equal(home.runsLocal, true);
   assert.deepEqual(home.notices, [
     {
       id: "n1",
@@ -215,6 +218,7 @@ test("a first-time reader has no interests, no brief and asks for no runs", asyn
   const home = await data(fetch).home();
   assert.deepEqual(home.interests, []);
   assert.equal(home.isAdmin, false);
+  assert.equal(home.runsLocal, false);
   assert.deepEqual(home.notices, []);
   assert.equal(home.brief, null);
   assert.ok(!calls.some((c) => c.url.includes("/runs")));
