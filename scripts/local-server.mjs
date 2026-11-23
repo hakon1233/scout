@@ -90,12 +90,16 @@ function decode(pathname) {
 /**
  * Starts serving `root`; resolves to the listening http.Server. `proxy(req,
  * res)`, when given, answers every request that is not GET or HEAD.
+ * `routes[pathname]`, when given, answers that path whatever the method (the
+ * gateway's automatic sign-in).
+ * @typedef {(req: import("node:http").IncomingMessage,
+ *   res: import("node:http").ServerResponse) => unknown} Handler
  * @param {{
  *   root: string,
  *   port?: number,
  *   host?: string,
- *   proxy?: (req: import("node:http").IncomingMessage,
- *     res: import("node:http").ServerResponse) => unknown,
+ *   proxy?: Handler,
+ *   routes?: Record<string, Handler>,
  * }} opts
  */
 export async function startLocalServer({
@@ -103,6 +107,7 @@ export async function startLocalServer({
   port = LOCAL_PORT,
   host = "127.0.0.1",
   proxy = undefined,
+  routes = {},
 }) {
   const siteRoot = path.resolve(root);
   const rules = parseHeaders(
@@ -128,6 +133,8 @@ export async function startLocalServer({
       res.writeHead(status, { ...headersFor(rules, url.pathname), ...headers });
       res.end(req.method === "HEAD" ? undefined : body);
     };
+    if (Object.hasOwn(routes, url.pathname))
+      return routes[url.pathname](req, res);
     if (req.method !== "GET" && req.method !== "HEAD") {
       if (proxy) return proxy(req, res);
       return send(405, { allow: "GET, HEAD" }, "method not allowed");

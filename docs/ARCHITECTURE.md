@@ -371,6 +371,43 @@ gateway, so every model step runs on the Mac's `claude` (the founder's subscript
   `https://openhakons-mac-mini.taildc1287.ts.net:47900/app/signin/` in the Supabase
   Auth redirect URLs.
 
+### Signing in on the Mac (`packages/agent/src/local-signin.ts`, `packages/worker/src/local-session.ts`)
+
+On the Mac's Scout the founder is signed in to the Scout team account without an
+email or a password. It is a local account (`profiles.runs_local`) named "Scout team"
+in Supabase Auth (`user_metadata.display_name`), with the placeholder address
+`scout-team@local.scout.invalid` (`.invalid` is reserved: no mail can reach it).
+
+- The Mac's build (`buildIdeas(env, {localSignin: true})`, so
+  `NEXT_PUBLIC_SCOUT_LOCAL_SIGNIN=1`) has no sign-in choices: the sign-in page sends a
+  signed-out reader to `GET /local-signin` on the gateway, and a signed-in one to the
+  brief. Signing out leads back to it, so on this origin it signs straight in again.
+- The gateway answers `/local-signin` itself (`startLocalServer`'s `routes`) only for
+  the tailnet owner: `Tailscale-User-Login` must equal `SCOUT_LOCAL_ALLOWED_LOGIN`
+  (case-insensitive). No login set, no header or another login: 403, and the Worker is
+  not asked. `tailscale serve` fills that header from the requester's identity and
+  strips any copy a client sent; tagged devices and Funnel traffic get none
+  (<https://tailscale.com/kb/1312/serve>, "Identity headers"). The gateway binds
+  127.0.0.1 only, so from another machine the one way in is `tailscale serve`. A
+  process on the Mac itself could set the header, but it could also read the env file.
+- Then it calls the Worker's `POST /team/local-session` (bearer `TEAM_RUNNER_TOKEN`;
+  wrong token 401; token or service key unset 404; no CORS) and redirects to
+  `/app/signin/#access_token=…&refresh_token=…&expires_in=…&token_type=bearer`, the
+  implicit flow's fragment, so `auth.ts` stays the only owner of the session.
+- The Worker, with the service key that never leaves it: creates the user once
+  (`/auth/v1/admin/users`, `email_confirm`; later calls get 422 `email_exists`), mints a
+  magic link's token hash with `/auth/v1/admin/generate_link` (returned, never mailed),
+  spends it at `/auth/v1/verify` for a fresh session, and sets `runs_local = true` on
+  every call. Supabase Auth checks only the address's format there; its deliverability
+  checks run only when it sends mail.
+- `profiles.display_name` stays empty: the reserved-name check
+  (`is_reserved_name`, `*_profile.sql`) refuses "Scout team" on a profile.
+- The account on the test site needs nothing: it has no way to sign in there, and a
+  local account's `/chat` and `/publish` get 409 anyway.
+- Turning it on: the Worker deployed with this route; `SCOUT_LOCAL_ALLOWED_LOGIN=<your
+Tailscale login>` in `~/.config/scout-hosted/.env` (read by `hosted-config.mts`,
+  never printed); `pnpm local:serve`. The first sign-in creates the account.
+
 ### Web app (`src`)
 
 - `app/`: pages. `app/app/page.tsx` is the feed, `app/app/connect` is onboarding and

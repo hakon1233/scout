@@ -10,8 +10,11 @@
 // route. The implicit flow puts the tokens in the URL fragment, which never
 // reaches a server, and lets an email link opened on another device still sign
 // that device in (the PKCE flow would need the browser that asked for the link).
+// The Mac's gateway hands the Scout team account its session the same way
+// (`localSignInUrl`).
 
 import { createClient } from "@supabase/supabase-js";
+import { LOCAL_SIGNIN_PATH } from "@scout/core";
 import { createFakeAuthClient, FAKE_CONFIG, fakeHostedOn } from "./hosted-fake";
 
 export type AuthUser = { id: string; email: string | null };
@@ -166,6 +169,15 @@ export function hostedConfig(): { url: string; anonKey: string } | null {
  *  of a local companion. */
 export function isHostedBuild(): boolean {
   return hostedConfig() !== null;
+}
+
+/** On the Mac's build (`pnpm local:serve`): the gateway's automatic sign-in,
+ *  where the sign-in page sends a signed-out reader instead of showing the
+ *  choices. The gateway redirects back here with the session in the URL
+ *  fragment, the way an email link does. Null on every other build. */
+export function localSignInUrl(): string | null {
+  if (process.env.NEXT_PUBLIC_SCOUT_LOCAL_SIGNIN !== "1") return null;
+  return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${LOCAL_SIGNIN_PATH}`;
 }
 
 let hosted: Auth | null | undefined;

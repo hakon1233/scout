@@ -7,7 +7,12 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const WANTED = new Set(["TEAM_RUNNER_TOKEN", "SCOUT_WORKER_URL"]);
+const WANTED = new Set([
+  "TEAM_RUNNER_TOKEN",
+  "SCOUT_WORKER_URL",
+  // The tailnet owner's login, for the gateway's automatic sign-in.
+  "SCOUT_LOCAL_ALLOWED_LOGIN",
+]);
 
 export function readHostedConfig(
   file = join(homedir(), ".config/scout-hosted/.env"),

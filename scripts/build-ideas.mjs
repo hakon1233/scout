@@ -58,10 +58,12 @@ async function workersDevUrl(env) {
  * sets the app's Worker URL; the Mac's build sets its own origin, where the
  * gateway (scripts/local-gateway.mts) relays to the Worker. Unset, the
  * deployed Worker's workers.dev URL, which needs the Cloudflare tokens.
+ * `localSignin` (the Mac's build) makes the sign-in page go straight to the
+ * gateway's automatic sign-in (packages/agent/src/local-signin.ts).
  */
 export async function buildIdeas(
   env = process.env,
-  { worker: workerUrl } = {},
+  { worker: workerUrl, localSignin = false } = {},
 ) {
   requireEnv(env, { cloudflare: !workerUrl });
 
@@ -82,6 +84,7 @@ export async function buildIdeas(
     NEXT_PUBLIC_SUPABASE_ANON_KEY: anon,
     NEXT_PUBLIC_SCOUT_WORKER_URL: worker,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: VAPID_PUBLIC_KEY,
+    NEXT_PUBLIC_SCOUT_LOCAL_SIGNIN: localSignin ? "1" : "",
   });
 
   // The Content-Security-Policy (public/_headers) names this build's inline
