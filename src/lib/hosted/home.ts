@@ -175,12 +175,13 @@ export function homeData(
   };
 }
 
-const INTEREST_COLUMNS = `id,topic,cadence,visibility,share_slug,tags,mode,${BRIEF_SETTINGS_COLUMNS}`;
+const INTEREST_COLUMNS = `id,topic,cadence,last_cadence,visibility,share_slug,tags,mode,${BRIEF_SETTINGS_COLUMNS}`;
 
 type InterestRow = Partial<BriefSettingsRow> & {
   id: string;
   topic: string;
   cadence: Cadence;
+  last_cadence?: "daily" | "weekly" | null;
   visibility: Visibility;
   share_slug: string | null;
   tags?: string[] | null;
@@ -248,6 +249,7 @@ function assembleHome(
       id: row.id,
       topic: row.topic,
       cadence: row.cadence,
+      lastCadence: row.last_cadence ?? null,
       settings: briefSettingsFromRow(row),
       following: row.following,
       visibility: row.visibility,

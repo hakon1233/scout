@@ -187,6 +187,26 @@ export async function scheduleNew(
   }
 }
 
+/**
+ * Resume (Settings): the cadence a paused topic gets back. Its last cadence
+ * when that slot is free, else the other free one (nothing remembered: weekly
+ * first). With neither free it stays paused and the reader is told why; the
+ * slot named is the remembered one when the plan has it, else weekly.
+ */
+export function resumeSlot(
+  a: Allowance,
+  last: "daily" | "weekly" | null | undefined,
+): { cadence: "daily" | "weekly" } | { message: string } {
+  const first = last ?? "weekly";
+  const other = first === "daily" ? "weekly" : "daily";
+  for (const c of [first, other] as const)
+    if (a[c].used < a[c].limit) return { cadence: c };
+  const kind = first === "daily" && a.daily.limit > 0 ? "daily" : "weekly";
+  return {
+    message: `No free ${kind} slot. Pause another topic ${a.plan === "free" ? "or upgrade" : "first"}.`,
+  };
+}
+
 export function freeSlot(a: Allowance): "daily" | "weekly" | null {
   if (a.daily.used < a.daily.limit) return "daily";
   if (a.weekly.used < a.weekly.limit) return "weekly";

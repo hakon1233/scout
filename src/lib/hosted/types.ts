@@ -21,6 +21,9 @@ export type HostedInterest = {
   id: string;
   topic: string;
   cadence: Cadence;
+  // While paused (cadence off): the cadence it had, which Resume gives back
+  // when that slot is free (resumeSlot). Null when it never ran on a schedule.
+  lastCadence?: "daily" | "weekly" | null;
   // How its brief section is written (length, story count, locale...).
   settings: BriefSettings;
   // Someone else's shared or public interest the reader follows: no schedule

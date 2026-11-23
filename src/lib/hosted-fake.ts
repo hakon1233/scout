@@ -11,6 +11,7 @@ import {
   canonicalUrl,
   DEFAULT_BRIEF_SETTINGS,
   parseBriefSettings,
+  quotaMessage,
   type BriefSettings,
   type ChatTurn,
 } from "@scout/core";
@@ -27,6 +28,8 @@ import type {
   StoryMark,
   TopicCard,
 } from "./hosted";
+// The types module imports only types, so this runtime import makes no cycle.
+import { HostedError } from "./hosted/types";
 import type { Article, Brief } from "./types";
 
 /** True only in a dev or test server started with the fake flag. */
@@ -377,6 +380,8 @@ export function createFakeHostedData(): HostedData {
   };
   const count = (c: Cadence) =>
     interests.filter((i) => !i.following && i.cadence === c).length;
+  // The Free plan's slots; paused topics don't count.
+  const LIMITS = { daily: 0, weekly: 3 };
 
   return {
     async home(): Promise<HostedHome> {
@@ -385,8 +390,8 @@ export function createFakeHostedData(): HostedData {
         brief: fresh ? null : brief,
         allowance: {
           plan: "free",
-          daily: { used: count("daily"), limit: 0 },
-          weekly: { used: count("weekly"), limit: 3 },
+          daily: { used: count("daily"), limit: LIMITS.daily },
+          weekly: { used: count("weekly"), limit: LIMITS.weekly },
           runsToday: { used: 1, limit: 3 },
         },
         isAdmin: false,
@@ -474,7 +479,29 @@ export function createFakeHostedData(): HostedData {
       return id;
     },
     async setCadence(id, cadence) {
-      patch(id, { cadence });
+      const before = find(id).cadence;
+      // Like the quota trigger: a cap is checked only when the topic starts
+      // to count toward it.
+      if (
+        cadence !== "off" &&
+        cadence !== before &&
+        count(cadence) >= LIMITS[cadence]
+      )
+        throw new HostedError(
+          "limit",
+          quotaMessage({
+            code: "P0001",
+            hint: `${cadence}_interests`,
+            message: `quota: ${count(cadence)} of ${LIMITS[cadence]} ${cadence} interests used`,
+          }) ?? "Your plan has no room for that.",
+        );
+      // Like remember_cadence: a paused topic keeps the cadence it had.
+      patch(id, {
+        cadence,
+        ...(cadence === "off" && before !== "off"
+          ? { lastCadence: before }
+          : {}),
+      });
       // Like due_interests: a scheduled topic that never ran gets its first brief.
       const i = find(id);
       if (cadence !== "off" && !i.updatedAt && !i.run) {
