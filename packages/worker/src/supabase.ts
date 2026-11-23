@@ -46,6 +46,12 @@ export function supabaseQueue(opts: {
           p_output_tokens: outcome.outputTokens,
           p_cache_read_tokens: outcome.cacheReadTokens,
           p_cache_write_tokens: outcome.cacheWriteTokens,
+          p_web_fetches: outcome.webFetches,
+          p_model: outcome.model,
+          p_stop_reason: outcome.stopReason,
+          p_requests: outcome.requests,
+          p_max_prompt_tokens: outcome.maxPromptTokens,
+          p_long_context: outcome.longContext,
         },
         auth,
       );
@@ -117,7 +123,7 @@ export function supabasePicksStore(opts: {
         input: r.input,
       }));
     },
-    async finish(job, picks, costUsd, error) {
+    async finish(job, picks, costUsd, error, tokens) {
       await rpc(
         "finish_picks",
         {
@@ -131,6 +137,8 @@ export function supabasePicksStore(opts: {
           p_cost: costUsd,
           p_error: error,
           p_version: PICKS_VERSION,
+          p_input_tokens: tokens.inputTokens,
+          p_output_tokens: tokens.outputTokens,
         },
         auth,
       );

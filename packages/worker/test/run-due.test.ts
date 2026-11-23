@@ -125,6 +125,68 @@ test("a run records the token usage of all its Claude calls, summed", async () =
   );
 });
 
+test("a run records its fetches, model, stop reason, requests and largest prompt", async () => {
+  const queue = stubQueue([run(1)]);
+  const paused: MessagesResponse = {
+    model: "claude-haiku-5-5-20261101",
+    content: [{ type: "text", text: "Searching…" }],
+    stop_reason: "pause_turn",
+    usage: {
+      input_tokens: 2_000,
+      output_tokens: 200,
+      cache_read_input_tokens: 40_000,
+      cache_creation_input_tokens: 1_000,
+      server_tool_use: { web_search_requests: 1, web_fetch_requests: 2 },
+    },
+  };
+  const done: MessagesResponse = {
+    ...answer("Topic 1"),
+    model: "claude-haiku-5-5-20261101",
+    usage: {
+      input_tokens: 9_000,
+      output_tokens: 800,
+      cache_read_input_tokens: 95_000,
+      server_tool_use: { web_search_requests: 1, web_fetch_requests: 1 },
+    },
+  };
+  const claude = recordedClient([paused, done]);
+
+  await runDue({ queue, claude });
+
+  const [[, outcome]] = queue.finished;
+  assert.equal(outcome.searches, 2);
+  assert.equal(outcome.webFetches, 3);
+  assert.equal(outcome.model, "claude-haiku-5-5-20261101");
+  assert.equal(outcome.stopReason, "end_turn");
+  assert.equal(outcome.requests, 2);
+  // The second request's prompt: 9,000 + 95,000 cache reads.
+  assert.equal(outcome.maxPromptTokens, 104_000);
+  assert.equal(outcome.longContext, true, "one request crossed 100K");
+});
+
+test("a run under the long-prompt line is not long-context, and a failed one has no stop reason", async () => {
+  const ok = stubQueue([run(1)]);
+  await runDue({ queue: ok, claude: recordedClient([answer("Topic 1")]) });
+  const [[, short]] = ok.finished;
+  assert.equal(short.maxPromptTokens, 10_000);
+  assert.equal(short.longContext, false);
+  assert.equal(short.webFetches, 0);
+  assert.equal(short.requests, 1);
+  assert.equal(
+    short.model,
+    "claude-haiku-5-5",
+    "the model asked for, when the response names none",
+  );
+
+  const broken = stubQueue([run(2)]);
+  await runDue({ queue: broken, claude: recordedClient([]) });
+  const [[, failed]] = broken.finished;
+  assert.equal(failed.stopReason, null);
+  assert.equal(failed.requests, 0);
+  assert.equal(failed.maxPromptTokens, 0);
+  assert.equal(failed.longContext, false);
+});
+
 test("a failed research is recorded as a failed attempt with its cost", async () => {
   const queue = stubQueue([run(1)]);
   const claude = recordedClient([]); // the first call throws

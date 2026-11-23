@@ -10,6 +10,7 @@ import {
   buildResearchPrompt,
   CLI_RESEARCH_TOOLS,
   stripBriefPreamble,
+  type CliUsage,
   type ResearchInterest,
 } from "#core";
 import { runClaude } from "./claude-runner.js";
@@ -24,21 +25,29 @@ export type ResearchOptions = {
   // budget the prompt states, and the CLI's `--max-turns` as the hard stop.
   maxSearches?: number;
   maxTurns?: number;
+  // The prompt's "today" (a test seam); defaults to the clock.
+  now?: Date;
 };
 
 // Research a SINGLE interest in its own headless `claude` session with only
 // WebSearch and WebFetch. Each interest gets its own session so the doc that
 // scopes WHAT to look for reaches the model. Returns the session's
-// preamble-stripped markdown; the runner extracts the topic's section and
-// assembles the full brief across interests.
+// preamble-stripped markdown and what the session used (null when the CLI
+// reported nothing); the runner extracts the topic's section and assembles
+// the full brief across interests.
 export async function researchAndSynthesize(
   interest: ResearchInterest,
   opts: ResearchOptions = {},
-): Promise<string> {
-  const prompt = buildResearchPrompt(interest, new Date(), CLI_RESEARCH_TOOLS, {
-    maxSearches: opts.maxSearches,
-  });
-  const raw = await runClaude(prompt, {
+): Promise<{ text: string; usage: CliUsage | null }> {
+  const prompt = buildResearchPrompt(
+    interest,
+    opts.now ?? new Date(),
+    CLI_RESEARCH_TOOLS,
+    {
+      maxSearches: opts.maxSearches,
+    },
+  );
+  const out = await runClaude(prompt, {
     tools: "web-research",
     label: `claude session for "${interest.topic}"`,
     claudeBin: opts.claudeBin,
@@ -46,7 +55,7 @@ export async function researchAndSynthesize(
     timeoutMs: opts.timeoutMs,
     maxTurns: opts.maxTurns,
   });
-  const text = stripBriefPreamble(raw);
+  const text = stripBriefPreamble(out.text);
   if (!text) throw new Error("claude returned empty output");
-  return text;
+  return { text, usage: out.usage };
 }

@@ -107,7 +107,7 @@ export function supabaseChatStore(opts: {
       );
     },
 
-    async commit(userId, { turn, follows, costUsd }) {
+    async commit(userId, { turn, follows, costUsd, tokens }) {
       await rpc(
         "commit_chat_turn",
         {
@@ -115,6 +115,8 @@ export function supabaseChatStore(opts: {
           p_turn: chatTurnToRow(turn),
           p_follows: follows,
           p_cost_usd: costUsd,
+          p_input_tokens: tokens.inputTokens,
+          p_output_tokens: tokens.outputTokens,
         },
         auth,
       );

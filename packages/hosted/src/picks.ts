@@ -12,7 +12,12 @@ import {
   type PicksInput,
   HAIKU_MODEL,
 } from "@scout/core";
-import { responseCostUsd, type ClaudeClient } from "@scout/research";
+import {
+  responseCostUsd,
+  tokenCount,
+  type ClaudeClient,
+  type TokenCount,
+} from "@scout/research";
 
 export const PICKS_MODEL = HAIKU_MODEL;
 // Haiku 5.5 thinks by default (even at effort low), and its thinking counts
@@ -29,16 +34,20 @@ export type PicksJob = {
   input: PicksInput;
 };
 
+const NO_TOKENS: TokenCount = { inputTokens: 0, outputTokens: 0 };
+
 export type PicksStore = {
   // Claims up to `limit` readers due a refresh. Readers over their spend cap,
   // or all of them while global spending is closed, are never returned.
   claim(limit: number): Promise<PicksJob[]>;
-  // Records the call. picks null keeps the cached picks (the call failed).
+  // Records the call and the tokens it used. picks null keeps the cached
+  // picks (the call failed).
   finish(
     job: PicksJob,
     picks: Pick[] | null,
     costUsd: number,
     error: string | null,
+    tokens: TokenCount,
   ): Promise<void>;
 };
 
@@ -71,11 +80,13 @@ export function createPicks(deps: { claude: ClaudeClient; store: PicksStore }) {
       AbortSignal.timeout(PICKS_TIMEOUT_MS),
     );
     const costUsd = responseCostUsd(response.usage);
+    const tokens = tokenCount(response.usage);
     // A cut-off reply says nothing about the reader: a failed call, not "none fit".
     if (response.stop_reason === "max_tokens") {
       return {
         picks: null,
         costUsd,
+        tokens,
         error: "the reply was cut off at max_tokens",
       };
     }
@@ -90,6 +101,7 @@ export function createPicks(deps: { claude: ClaudeClient; store: PicksStore }) {
     return {
       picks: parsePicks(text, input.candidates, input),
       costUsd,
+      tokens,
       error: null,
     };
   }
@@ -97,23 +109,24 @@ export function createPicks(deps: { claude: ClaudeClient; store: PicksStore }) {
   async function one(job: PicksJob, result: PicksResult) {
     // No candidates: nothing to ask, and nothing to pay for.
     if (job.input.candidates.length === 0) {
-      await store.finish(job, [], 0, null);
+      await store.finish(job, [], 0, null, NO_TOKENS);
       result.stored++;
       return;
     }
     let picks: Pick[] | null;
     let costUsd: number;
+    let tokens: TokenCount;
     let error: string | null;
     try {
-      ({ picks, costUsd, error } = await pick(job.input));
+      ({ picks, costUsd, tokens, error } = await pick(job.input));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[picks] call failed:", message);
-      await store.finish(job, null, 0, message.slice(0, 500));
+      await store.finish(job, null, 0, message.slice(0, 500), NO_TOKENS);
       result.failed++;
       return;
     }
-    await store.finish(job, picks, costUsd, error);
+    await store.finish(job, picks, costUsd, error, tokens);
     result.costUsd += costUsd;
     if (picks) {
       result.stored++;

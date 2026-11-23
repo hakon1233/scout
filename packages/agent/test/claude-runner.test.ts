@@ -8,7 +8,7 @@ import { EventEmitter } from "node:events";
 import os from "node:os";
 import { Writable } from "node:stream";
 import type { spawn } from "node:child_process";
-import { runClaude } from "../src/claude-runner.js";
+import { parseCliOutput, runClaude } from "../src/claude-runner.js";
 
 type Call = {
   bin: string;
@@ -78,7 +78,7 @@ test("a web-research run can use WebSearch and WebFetch and nothing else", async
   assert.deepEqual(args, [
     "--print",
     "--output-format",
-    "text",
+    "json",
     "--tools",
     "WebSearch,WebFetch",
     "--allowed-tools",
@@ -114,7 +114,7 @@ test("a no-tools run gets an empty tool set", async () => {
   assert.deepEqual(args, [
     "--print",
     "--output-format",
-    "text",
+    "json",
     "--tools",
     "",
     "--strict-mcp-config",
@@ -162,14 +162,165 @@ test("the child runs in the temp dir, never the companion's working directory", 
   assert.equal(stub.calls[0].options.cwd, os.tmpdir());
 });
 
-test("the prompt goes over stdin and stdout comes back as-is", async () => {
-  const stub = stubSpawn({ stdout: "  raw output \n" });
+// What `claude --print --output-format json` prints: one result object.
+const CLI_RESULT = {
+  type: "result",
+  subtype: "success",
+  is_error: false,
+  num_turns: 7,
+  result: "## ai\n- a story",
+  stop_reason: "end_turn",
+  total_cost_usd: 0.0812,
+  usage: {
+    input_tokens: 120,
+    output_tokens: 900,
+    cache_read_input_tokens: 30_000,
+    cache_creation_input_tokens: 4_000,
+    server_tool_use: { web_search_requests: 3, web_fetch_requests: 0 },
+  },
+  modelUsage: {
+    "claude-sonnet-5-5": {
+      inputTokens: 120,
+      outputTokens: 900,
+      cacheReadInputTokens: 30_000,
+      cacheCreationInputTokens: 4_000,
+      webSearchRequests: 3,
+      costUSD: 0.08,
+    },
+    "claude-haiku-5-5": {
+      inputTokens: 2_000,
+      outputTokens: 100,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      webSearchRequests: 0,
+      costUSD: 0.0012,
+    },
+  },
+  session_id: "s",
+};
+
+test("the prompt goes over stdin and the json result's text and usage come back", async () => {
+  const stub = stubSpawn({ stdout: JSON.stringify(CLI_RESULT) + "\n" });
   const out = await runClaude("the prompt", {
     tools: "none",
     spawnFn: stub.spawnFn,
   });
   assert.equal(stub.prompts[0], "the prompt");
-  assert.equal(out, "  raw output \n");
+  assert.equal(out.text, "## ai\n- a story");
+  assert.deepEqual(out.usage, {
+    model: "claude-sonnet-5-5",
+    stopReason: "end_turn",
+    turns: 7,
+    // Every model the session used, summed (the CLI's side calls included).
+    inputTokens: 2_120,
+    outputTokens: 1_000,
+    cacheReadTokens: 30_000,
+    cacheWriteTokens: 4_000,
+    webSearches: 3,
+    webFetches: 0,
+    costUsd: 0.0812,
+  });
+});
+
+test("output that is not the json result comes back as-is with no usage", async () => {
+  for (const stdout of [
+    "  raw output \n",
+    '{"result": "trunc',
+    "[1,2]",
+    "{}",
+  ]) {
+    const stub = stubSpawn({ stdout });
+    const out = await runClaude("p", { tools: "none", spawnFn: stub.spawnFn });
+    assert.equal(out.text, stdout);
+    assert.equal(out.usage, null);
+  }
+});
+
+test("a result without model usage falls back to its usage totals", () => {
+  const bare: Record<string, unknown> = { ...CLI_RESULT };
+  delete bare.modelUsage;
+  const out = parseCliOutput(JSON.stringify(bare));
+  assert.deepEqual(out.usage, {
+    model: null,
+    stopReason: "end_turn",
+    turns: 7,
+    inputTokens: 120,
+    outputTokens: 900,
+    cacheReadTokens: 30_000,
+    cacheWriteTokens: 4_000,
+    webSearches: 3,
+    webFetches: 0,
+    costUsd: 0.0812,
+  });
+});
+
+test("garbled numbers in the json result count as zero, never NaN", () => {
+  const out = parseCliOutput(
+    JSON.stringify({
+      type: "result",
+      result: "x",
+      num_turns: "seven",
+      total_cost_usd: null,
+      usage: { input_tokens: -5, output_tokens: "9" },
+    }),
+  );
+  assert.equal(out.text, "x");
+  assert.deepEqual(out.usage, {
+    model: null,
+    stopReason: null,
+    turns: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    webSearches: 0,
+    webFetches: null,
+    costUsd: 0,
+  });
+});
+
+test("a failed json result rejects with the CLI's own words, not the json", async () => {
+  const limit = stubSpawn({
+    stdout: JSON.stringify({
+      ...CLI_RESULT,
+      is_error: true,
+      result: "Claude AI usage limit reached|1764000000",
+    }),
+    exitCode: 1,
+  });
+  await assert.rejects(
+    runClaude("p", { tools: "none", spawnFn: limit.spawnFn }),
+    { message: "claude exited 1: Claude AI usage limit reached|1764000000" },
+  );
+
+  const maxTurns = stubSpawn({
+    stdout: JSON.stringify({
+      type: "result",
+      subtype: "error_max_turns",
+      is_error: true,
+      num_turns: 26,
+      errors: [],
+      usage: { input_tokens: 429, output_tokens: 1 },
+    }),
+    exitCode: 1,
+  });
+  await assert.rejects(
+    runClaude("p", { tools: "web-research", spawnFn: maxTurns.spawnFn }),
+    { message: "claude exited 1: error_max_turns" },
+  );
+
+  // is_error on exit 0 is still a failed session.
+  const flagged = stubSpawn({
+    stdout: JSON.stringify({
+      ...CLI_RESULT,
+      is_error: true,
+      result: "API Error: 500",
+    }),
+  });
+  await assert.rejects(
+    runClaude("p", { tools: "none", spawnFn: flagged.spawnFn }),
+    { message: "claude exited 0: API Error: 500" },
+  );
 });
 
 test("the binary comes from claudeBin, then SCOUT_CLAUDE_BIN, then `claude`", async () => {

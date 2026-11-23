@@ -7,7 +7,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Pick, PicksInput } from "@scout/core";
-import { recordedClient, type MessagesResponse } from "@scout/research";
+import {
+  recordedClient,
+  type MessagesResponse,
+  type TokenCount,
+} from "@scout/research";
 import {
   PICKS_MODEL,
   createPicks,
@@ -39,6 +43,7 @@ function memoryStore(jobs: PicksJob[]) {
     picks: Pick[] | null;
     costUsd: number;
     error: string | null;
+    tokens: TokenCount;
   }[] = [];
   const limits: number[] = [];
   const store: PicksStore = {
@@ -46,8 +51,8 @@ function memoryStore(jobs: PicksJob[]) {
       limits.push(limit);
       return jobs.splice(0, limit);
     },
-    async finish(job, picks, costUsd, error) {
-      finished.push({ userId: job.userId, picks, costUsd, error });
+    async finish(job, picks, costUsd, error, tokens) {
+      finished.push({ userId: job.userId, picks, costUsd, error, tokens });
     },
   };
   return { store, finished, limits };
@@ -75,6 +80,10 @@ test("picks are stored under candidate ids, with their cost", async () => {
     { interestId: "i-fjord", reason: "You follow ski touring." },
   ]);
   assert.ok(finished[0].costUsd > 0 && finished[0].costUsd < 0.002);
+  assert.deepEqual(finished[0].tokens, {
+    inputTokens: 4000,
+    outputTokens: 300,
+  });
   const prompt = JSON.stringify(claude.requests[0].messages);
   assert.match(prompt, /Fjord kayaking/);
   assert.doesNotMatch(prompt, /i-fjord/);
@@ -121,7 +130,13 @@ test("a reader with no candidates is stored empty without a call", async () => {
   const result = await createPicks({ claude, store }).refresh(3);
   assert.equal(claude.requests.length, 0);
   assert.deepEqual(finished, [
-    { userId: "pia", picks: [], costUsd: 0, error: null },
+    {
+      userId: "pia",
+      picks: [],
+      costUsd: 0,
+      error: null,
+      tokens: { inputTokens: 0, outputTokens: 0 },
+    },
   ]);
   assert.equal(result.costUsd, 0);
 });
@@ -149,6 +164,7 @@ test("a failed call keeps the cached picks; a refusal stores none", async () => 
   assert.deepEqual(refused.picks, []);
   assert.equal(failed.picks, null);
   assert.equal(failed.costUsd, 0);
+  assert.deepEqual(failed.tokens, { inputTokens: 0, outputTokens: 0 });
   assert.ok(failed.error);
 });
 
@@ -168,6 +184,10 @@ test("a reply cut off at max_tokens keeps the cached picks, with its cost and an
   assert.equal(finished[0].picks, null);
   assert.match(finished[0].error ?? "", /max_tokens/);
   assert.ok(finished[0].costUsd > 0);
+  assert.deepEqual(finished[0].tokens, {
+    inputTokens: 4500,
+    outputTokens: 4096,
+  });
 });
 
 test("the call leaves room for thinking before the answer", async () => {

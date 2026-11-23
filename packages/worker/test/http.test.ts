@@ -197,6 +197,12 @@ test("the queue adapter calls claim_runs and finish_run with the service key", a
     outputTokens: 300,
     cacheReadTokens: 50,
     cacheWriteTokens: 10,
+    webFetches: 2,
+    model: "claude-haiku-5-5",
+    stopReason: "pause_turn",
+    requests: 4,
+    maxPromptTokens: 60_000,
+    longContext: false,
     error: "timed out after 300 s",
     retry: false,
   });
@@ -212,6 +218,12 @@ test("the queue adapter calls claim_runs and finish_run with the service key", a
     p_output_tokens: 300,
     p_cache_read_tokens: 50,
     p_cache_write_tokens: 10,
+    p_web_fetches: 2,
+    p_model: "claude-haiku-5-5",
+    p_stop_reason: "pause_turn",
+    p_requests: 4,
+    p_max_prompt_tokens: 60_000,
+    p_long_context: false,
   });
 
   const down = stubFetch(500, { message: "boom" });

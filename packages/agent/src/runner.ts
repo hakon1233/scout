@@ -19,7 +19,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { USAGE_LIMIT_RE } from "./claude-runner.js";
+import { USAGE_LIMIT_RE, addCliUsage } from "./claude-runner.js";
 import {
   BRIEF_HISTORY_CAP,
   interestTopics,
@@ -38,6 +38,7 @@ import {
   briefSettingsOrDefault,
   normalizeTopic,
   type Brief,
+  type CliUsage,
   type Interest,
 } from "#core";
 import { ensureInterestDoc } from "./docs.js";
@@ -362,6 +363,9 @@ async function runSynthesis(
     deps.interestsDir ?? path.join(path.dirname(deps.stateFile), "interests");
   const isEphemeral = Boolean(deps.ephemeralDir);
   let brief: Brief;
+  // Tokens, turns and cost summed over every session that reported them, saved
+  // on the brief whether it lands ready or failed.
+  let usage: CliUsage | null = null;
   try {
     // Run each interest in its OWN headless `claude` session, carrying that
     // interest's intent doc. Sequential, not concurrent: the synth child runs
@@ -415,7 +419,7 @@ async function runSynthesis(
           interestsDir,
         );
         basisByTopic.set(interest.topic, doc);
-        const sessionMd = await researchAndSynthesize(
+        const out = await researchAndSynthesize(
           {
             topic: interest.topic,
             doc,
@@ -426,7 +430,8 @@ async function runSynthesis(
           },
           { claudeBin: deps.claudeBin, spawnFn: deps.spawnFn },
         );
-        const section = extractTopicSection(sessionMd, interest.topic);
+        usage = addCliUsage(usage, out.usage);
+        const section = extractTopicSection(out.text, interest.topic);
         if (section) anyOk = true;
         sections.push({ topic: interest.topic, section });
       } catch (err) {
@@ -512,6 +517,7 @@ async function runSynthesis(
       summary_md: summary,
       topics: computeCoverage(interestTopics(plan.coverageInterests), summary),
       bases,
+      usage: usage ?? undefined,
     };
   } catch (err) {
     brief = {
@@ -523,6 +529,7 @@ async function runSynthesis(
       // A non-Error throw (e.g. a rejected non-Error value) stringifies to a
       // useless "[object Object]" in the UI's last-run note; prefer .message.
       error_msg: err instanceof Error ? err.message : String(err),
+      usage: usage ?? undefined,
     };
   }
 

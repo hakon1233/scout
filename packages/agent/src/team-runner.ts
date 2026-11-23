@@ -65,20 +65,22 @@ export async function researchTeamRun(
     error: error.slice(0, 400),
   });
   try {
-    const answer = await researchAndSynthesize(interest, {
+    const out = await researchAndSynthesize(interest, {
       claudeBin: deps.claudeBin,
       spawnFn: deps.spawnFn,
       timeoutMs: deps.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       maxSearches: searches,
       maxTurns: turnLimit(searches),
+      now: deps.now?.(),
     });
+    const usage = out.usage ?? undefined;
     const section = sectionFromAnswer(
-      answer,
+      out.text,
       interest,
       deps.now?.() ?? new Date(),
     );
-    if (!section) return missing("Claude returned no section");
-    return { runId: run.runId, ...section };
+    if (!section) return { ...missing("Claude returned no section"), usage };
+    return { runId: run.runId, ...section, usage };
   } catch (err) {
     return missing(err instanceof Error ? err.message : String(err));
   }

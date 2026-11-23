@@ -7,9 +7,10 @@
 // it is a real on-disk executable because we run the *packed artifact*, not
 // src/, so spawnFn injection isn't available.
 //
-// Contract (mirrors what research.ts expects of the real CLI):
+// Contract (mirrors what claude-runner.ts expects of the real CLI):
 //   - reads the synthesis prompt on stdin (we drain + ignore it),
-//   - writes a GFM brief to stdout,
+//   - writes `--output-format json`'s result object to stdout: the GFM brief
+//     (or the chat JSON) in `result`, plus usage, turns and cost,
 //   - exits 0.
 //
 // The canned brief INTENTIONALLY leads with a conversational preamble line
@@ -50,6 +51,37 @@ const SOURCE_IMAGE = `http://127.0.0.1:${PORT}/icon-192.png`;
 // and deterministic. Keyed off the user's own words so a spec drives each op by
 // phrasing alone, mirroring how the real model picks the op (see chat.ts Rules).
 const CHAT_MARKER = "Scout's interest assistant";
+
+// The real CLI's `--output-format json` envelope around the model's text, with
+// small fixed usage numbers.
+function cliResult(text) {
+  return JSON.stringify({
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    num_turns: 3,
+    result: text,
+    stop_reason: "end_turn",
+    total_cost_usd: 0.0123,
+    usage: {
+      input_tokens: 1200,
+      output_tokens: 600,
+      cache_read_input_tokens: 8000,
+      cache_creation_input_tokens: 1500,
+      server_tool_use: { web_search_requests: 2, web_fetch_requests: 1 },
+    },
+    modelUsage: {
+      "claude-stub": {
+        inputTokens: 1200,
+        outputTokens: 600,
+        cacheReadInputTokens: 8000,
+        cacheCreationInputTokens: 1500,
+        webSearchRequests: 2,
+        costUSD: 0.0123,
+      },
+    },
+  });
+}
 
 // Stop/abort e2e hook. When the user's chat message carries this
 // sentinel, the chat branch HOLDS its response for SCOUT_STUB_STALL_MS instead
@@ -232,7 +264,7 @@ function emitChat(prompt) {
   }
 
   const writeOut = () => {
-    process.stdout.write(JSON.stringify(out));
+    process.stdout.write(cliResult(JSON.stringify(out)));
     process.exit(0);
   };
   // Hold the answer so a Stop can land mid-flight. The pending timer
@@ -304,7 +336,7 @@ function emit() {
     "  [news.example.org — Markets recap](https://news.example.org/markets)",
     "",
   ].join("\n");
-  process.stdout.write(brief + topicSection(stdin));
+  process.stdout.write(cliResult(brief + topicSection(stdin)));
   process.exit(0);
 }
 

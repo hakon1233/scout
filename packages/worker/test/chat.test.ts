@@ -164,6 +164,10 @@ test("a chat turn verifies the reader, runs the chat and stores the new topic fo
   assert.equal(args.p_turn.message, "Rust releases");
   assert.deepEqual(args.p_turn.changes, []);
   assert.equal(args.p_turn.pending.creates[0].topic, "Rust releases");
+  // What the turn's model call used, from the recorded reply.
+  const used = commit?.body as Record<string, unknown>;
+  assert.equal(used.p_input_tokens, 2150);
+  assert.equal(used.p_output_tokens, 310);
 });
 
 test("a chat turn is refused with the SQL's own words when the reader is out of turns", async () => {

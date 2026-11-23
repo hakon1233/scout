@@ -33,6 +33,8 @@ export type Usage = {
 };
 
 export type MessagesResponse = {
+  // The model that answered (a dated id, e.g. claude-haiku-5-5-20261101).
+  model?: string;
   content: ContentBlock[];
   stop_reason: string | null;
   usage: Usage;

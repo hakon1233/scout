@@ -17,14 +17,30 @@ export const HAIKU_PRICES = {
   // Web fetch has no per-call fee: fetched pages are billed as input tokens.
 } as const;
 
+// One response's whole prompt: fresh input plus cache reads and writes.
+export function promptTokens(usage: Usage): number {
+  return (
+    usage.input_tokens +
+    (usage.cache_read_input_tokens ?? 0) +
+    (usage.cache_creation_input_tokens ?? 0)
+  );
+}
+
+// The input and output tokens of one call, for the ledgers that keep them
+// next to its cost (chat turns, picks, publish checks).
+export type TokenCount = { inputTokens: number; outputTokens: number };
+
+export function tokenCount(usage: Usage): TokenCount {
+  return { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens };
+}
+
 // The cost of one response. `usage` sums every server-side sampling step in
 // that response, so the long-prompt test runs on the sum: an over-estimate
 // when single steps stayed under 100K but their sum didn't.
 export function responseCostUsd(usage: Usage, p = HAIKU_PRICES): number {
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheWrite = usage.cache_creation_input_tokens ?? 0;
-  const prompt = usage.input_tokens + cacheRead + cacheWrite;
-  const long = prompt > p.longPromptAboveTokens;
+  const long = promptTokens(usage) > p.longPromptAboveTokens;
   const inRate = (long ? p.longInputPerMTok : p.inputPerMTok) / 1e6;
   const outRate = (long ? p.longOutputPerMTok : p.outputPerMTok) / 1e6;
   const searches = usage.server_tool_use?.web_search_requests ?? 0;

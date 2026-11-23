@@ -63,7 +63,8 @@ test("summarizeSessionFailures distils per-session errors into an honest reason"
 const INTERESTS: Interest[] = [{ id: "int_x", topic: "ai" }];
 
 // A fast per-interest stub: emits the requested topic's section, then closes 0.
-function makeFastSpawn() {
+// With `json`, it answers as `claude --output-format json` does.
+function makeFastSpawn(opts: { json?: boolean } = {}) {
   const spawnFn = ((_bin: string, _args: readonly string[], _opts: unknown) => {
     const child = new EventEmitter() as EventEmitter & {
       stdin: Writable;
@@ -84,10 +85,31 @@ function makeFastSpawn() {
     child.stdin.on("finish", () =>
       setImmediate(() => {
         const topic = /single topic: "([^"]+)"/.exec(stdin)?.[1] ?? "ai";
+        const text = `## ${topic}\n- a thing.\n  [src](https://example.com/a)\n`;
         child.stdout.emit(
           "data",
           Buffer.from(
-            `## ${topic}\n- a thing.\n  [src](https://example.com/a)\n`,
+            opts.json
+              ? JSON.stringify({
+                  type: "result",
+                  subtype: "success",
+                  is_error: false,
+                  num_turns: 4,
+                  result: text,
+                  stop_reason: "end_turn",
+                  total_cost_usd: 0.02,
+                  usage: {
+                    input_tokens: 100,
+                    output_tokens: 50,
+                    cache_read_input_tokens: 1_000,
+                    cache_creation_input_tokens: 200,
+                    server_tool_use: {
+                      web_search_requests: 2,
+                      web_fetch_requests: 1,
+                    },
+                  },
+                })
+              : text,
           ),
         );
         child.emit("close", 0);
@@ -139,6 +161,42 @@ test("a STALE persisted pending is reclaimed by a new run", async () => {
   const persisted = await loadState(stateFile);
   assert.equal(persisted.last_brief?.status, "ready");
   assert.match(persisted.last_brief?.summary_md ?? "", /## ai/);
+});
+
+test("a brief saves what its claude sessions used, summed over topics", async () => {
+  const stateFile = await tmpStateFile();
+  const interests: Interest[] = [
+    { id: "int_a", topic: "ai" },
+    { id: "int_b", topic: "climate" },
+  ];
+  const { spawnFn } = makeFastSpawn({ json: true });
+  const landed = await runToCompletion(interests, stateFile, spawnFn);
+
+  assert.equal(landed.status, "ready");
+  const expected = {
+    model: null,
+    stopReason: "end_turn",
+    turns: 8,
+    inputTokens: 200,
+    outputTokens: 100,
+    cacheReadTokens: 2_000,
+    cacheWriteTokens: 400,
+    webSearches: 4,
+    webFetches: 2,
+    costUsd: 0.04,
+  };
+  assert.deepEqual(landed.usage, expected);
+  const persisted = await loadState(stateFile);
+  assert.deepEqual(persisted.last_brief?.usage, expected);
+  assert.deepEqual(persisted.briefs?.[0]?.usage, expected);
+});
+
+test("a brief from plain-text sessions has no usage", async () => {
+  const stateFile = await tmpStateFile();
+  const { spawnFn } = makeFastSpawn();
+  const landed = await runToCompletion(INTERESTS, stateFile, spawnFn);
+  assert.equal(landed.status, "ready");
+  assert.equal(landed.usage, undefined);
 });
 
 test("the brief snapshots each topic's intent doc into `bases`", async () => {

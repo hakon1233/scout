@@ -130,11 +130,21 @@ insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
 values ('7ea70000-0000-4000-8000-000000000001', 'https://fcm.googleapis.com/fcm/send/team-test', 'k', 'a');
 
 select ok(public.team_finish_run((select run_id from tick),
-  '## Team daily', '{"topic":"Team daily","status":"covered"}', null, '2026-11-21 12:05+00'),
+  '## Team daily', '{"topic":"Team daily","status":"covered"}', null, '2026-11-21 12:05+00',
+  '{"model":"claude-haiku-5-5","stopReason":"end_turn","turns":6,"inputTokens":1200,
+    "outputTokens":900,"cacheReadTokens":40000,"cacheWriteTokens":3000,"webSearches":4,
+    "webFetches":null,"costUsd":0.0421}'),
   'team_finish_run records the section');
 select is(
   (select status || ' ' || cost_usd || ' ' || searches from public.runs where id = (select run_id from tick)),
-  'ready 0.0000 0', 'a team run is ready like any run and costs no API dollars');
+  'ready 0.0000 4', 'a team run is ready like any run and costs no API dollars');
+select is(
+  (select concat_ws(' ', model, stop_reason, requests, input_tokens, output_tokens,
+                    cache_read_tokens, cache_write_tokens, coalesce(web_fetches::text, 'none'),
+                    cli_cost_usd)
+   from public.runs where id = (select run_id from tick)),
+  'claude-haiku-5-5 end_turn 6 1200 900 40000 3000 none 0.0421',
+  'and what its claude session used, the CLI''s cost apart from API spend');
 select is((select count(*)::int from public.outbox where payload ->> 'run_id' = (select run_id::text from tick)), 1,
   'and its readers'' pushes are queued like any run''s');
 delete from tick;
@@ -221,7 +231,7 @@ select ok(not has_function_privilege('authenticated', 'public.team_hide_interest
 select ok(not has_function_privilege('anon', 'public.team_topics(timestamptz)', 'execute'),
   'visitors cannot list team topics');
 select ok(has_function_privilege('service_role',
-  'public.team_finish_run(uuid, text, jsonb, text, timestamptz)', 'execute'),
+  'public.team_finish_run(uuid, text, jsonb, text, timestamptz, jsonb)', 'execute'),
   'the Worker finishes team runs');
 select ok(not has_function_privilege('authenticated', 'public.run_facts(uuid)', 'execute')
        and not has_function_privilege('anon', 'public.run_facts(uuid)', 'execute'),

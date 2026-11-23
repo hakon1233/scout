@@ -17,7 +17,7 @@ import type {
   MessagesRequest,
   MessagesResponse,
 } from "./claude-client.ts";
-import { responseCostUsd } from "./pricing.ts";
+import { HAIKU_PRICES, promptTokens, responseCostUsd } from "./pricing.ts";
 
 export const RESEARCH_MODEL = HAIKU_MODEL;
 
@@ -65,6 +65,17 @@ export type ResearchUsage = {
   webSearches: number;
   webFetches: number;
   costUsd: number;
+  // The model that answered: the response's own id, else the one asked for.
+  model: string;
+  // The last response's stop reason; null when no response came back.
+  stopReason: string | null;
+  // Messages API requests that came back (1 + pause_turn continuations).
+  requests: number;
+  // The largest single request's prompt (input plus cache reads and writes),
+  // and whether any request crossed the long-prompt line where Haiku's
+  // 5x rates start.
+  maxPromptTokens: number;
+  longContext: boolean;
 };
 
 export type ResearchResult = {
@@ -220,6 +231,11 @@ function emptyUsage(): ResearchUsage {
     webSearches: 0,
     webFetches: 0,
     costUsd: 0,
+    model: RESEARCH_MODEL,
+    stopReason: null,
+    requests: 0,
+    maxPromptTokens: 0,
+    longContext: false,
   };
 }
 
@@ -232,6 +248,12 @@ function addUsage(total: ResearchUsage, res: MessagesResponse): void {
   total.webSearches += u.server_tool_use?.web_search_requests ?? 0;
   total.webFetches += u.server_tool_use?.web_fetch_requests ?? 0;
   total.costUsd += responseCostUsd(u);
+  if (res.model) total.model = res.model;
+  total.stopReason = res.stop_reason;
+  total.requests += 1;
+  const prompt = promptTokens(u);
+  total.maxPromptTokens = Math.max(total.maxPromptTokens, prompt);
+  if (prompt > HAIKU_PRICES.longPromptAboveTokens) total.longContext = true;
 }
 
 // The answer is the text after Claude's last tool result: earlier text is its

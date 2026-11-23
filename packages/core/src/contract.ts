@@ -70,6 +70,24 @@ export type TopicBasis = {
   doc: string;
 };
 
+// What `claude` CLI sessions reported using (`--output-format json`),
+// summed over a run's sessions. Subscription sessions spend no API dollars:
+// costUsd is the CLI's own estimate at API prices. webFetches is null when the
+// CLI did not report it (its WebFetch runs locally, not as a server tool).
+export type CliUsage = {
+  // The model that wrote the answer (the one with the most output tokens).
+  model: string | null;
+  stopReason: string | null;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  webSearches: number;
+  webFetches: number | null;
+  costUsd: number;
+};
+
 export type Brief = {
   id: string;
   generated_at: string;
@@ -85,6 +103,9 @@ export type Brief = {
   topics?: TopicCoverage[];
   // Absent on old briefs and on pending or failed ones.
   bases?: TopicBasis[];
+  // What the run's sessions used, summed. Absent on old briefs and when no
+  // session reported usage.
+  usage?: CliUsage;
 };
 
 // One change a chat turn applied. `interestId` is the concrete id the change
