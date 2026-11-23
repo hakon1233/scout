@@ -11,6 +11,7 @@
 import { createPicks } from "@scout/hosted";
 import { anthropicClient } from "@scout/research";
 import { handleRequest } from "./http.ts";
+import { siteUrlFrom } from "./request.ts";
 import type { VoiceAi } from "./voice.ts";
 import { sendOutbox } from "./push.ts";
 import { resendSender, sendEmails, supabaseEmailStore } from "./email.ts";
@@ -113,7 +114,7 @@ const worker = {
     await sendEmails({
       store: supabaseEmailStore(supabase),
       sender: emailSender,
-      siteUrl: env.ALLOWED_ORIGIN.split(",")[0].trim(),
+      siteUrl: siteUrlFrom(env.ALLOWED_ORIGIN),
       workerUrl: env.WORKER_URL ?? "",
       signingKey: env.SUPABASE_SERVICE_ROLE_KEY,
       budget: emailBudget,

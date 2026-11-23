@@ -28,8 +28,10 @@ crons = ["* * * * *", "17 3 * * *"]
 
 [vars]
 SUPABASE_URL = "https://qctcuajvefuicasakgkq.supabase.co"
-# The web app's origins, comma-separated.
-ALLOWED_ORIGIN = "https://scout-ideas.pages.dev"
+# The web app's origins, comma-separated. The first is the site's URL in brief
+# emails; the second is the founder's local Scout on the Mac (tailnet only,
+# docs/ARCHITECTURE.md, "Local Scout on the Mac").
+ALLOWED_ORIGIN = "https://scout-ideas.pages.dev,https://openhakons-mac-mini.taildc1287.ts.net:47900"
 RUN_BATCH = "2"
 # Web Push: the public half of the VAPID pair (the web app's
 # NEXT_PUBLIC_VAPID_PUBLIC_KEY) and the contact push services see.

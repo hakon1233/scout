@@ -25,7 +25,10 @@ code, tests and comments.
 - `pnpm deploy:ideas`: build the hosted web app (served from the root) and deploy it to
   the Cloudflare Pages test site <https://scout-ideas.pages.dev>. Needs
   `SUPABASE_ACCESS_TOKEN`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the
-  environment. The GitHub Pages site is untouched.
+  environment. The GitHub Pages site is untouched. `pnpm build:ideas` is the build alone.
+- `pnpm local:serve`: build the same app and (re)start the LaunchAgent serving it on
+  127.0.0.1:47900, the founder's local Scout on the Mac (docs/ARCHITECTURE.md, "Local
+  Scout on the Mac"). Never in tests.
 - `pnpm team:run`: the Scout team runner, which researches the catalog's public topics
   with the local `claude` and publishes through the Worker. Off unless
   `SCOUT_TEAM_RUNNER=on`; `--dry-run` publishes nothing, `--only <topic>` runs one

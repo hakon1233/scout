@@ -264,6 +264,28 @@ companion never imports it.
   in the env file (chmod 600), `update public.settings set team_runner_on = true`, then
   `SCOUT_TEAM_RUNNER=on pnpm team:run`.
 
+### Local Scout on the Mac (`scripts/local-serve.mjs`, `pnpm local:serve`)
+
+The hosted web app, the same build as the test site (`pnpm build:ideas`), served from
+the Mac Mini at <https://openhakons-mac-mini.taildc1287.ts.net:47900>, tailnet only, for
+the founder's local account. It talks to the same Supabase project and Worker.
+
+- `scripts/local-server.mjs` serves the build on 127.0.0.1:47900 (not 47821, the
+  companion; not 47899, the demo) the way Pages does, with the build's `_headers`
+  (the filled-in CSP) on every response. No dependencies.
+- `pnpm local:serve` builds, copies the site and the server to
+  `~/Library/Application Support/Scout Local/` (so `pnpm build`, which also writes
+  `out/`, never changes what is served) and (re)starts the LaunchAgent
+  `ing.scout.local-web` (log `~/Library/Logs/scout-local-web.log`).
+  `pnpm local:serve install` skips the build; `pnpm local:serve uninstall` stops it.
+  The build's tokens come from the shell or `~/.config/scout-hosted/.env`.
+- The Worker allows the origin: it is the second entry of `ALLOWED_ORIGIN`
+  (`wrangler.toml`); the first stays the email site URL.
+- Turning it on, once: `npx wrangler deploy` the Worker with the new `ALLOWED_ORIGIN`;
+  add `https://openhakons-mac-mini.taildc1287.ts.net:47900/app/signin/` to the Supabase
+  Auth redirect URLs; `pnpm local:serve`; then
+  `tailscale serve --bg --https=47900 http://127.0.0.1:47900`.
+
 ### Web app (`src`)
 
 - `app/`: pages. `app/app/page.tsx` is the feed, `app/app/connect` is onboarding and

@@ -32,7 +32,9 @@
     "test:sql": "node scripts/test-sql.mjs",
     "db:push:hosted": "node scripts/supabase-hosted.mjs push",
     "test:rls:hosted": "node scripts/supabase-hosted.mjs test",
+    "build:ideas": "node scripts/build-ideas.mjs",
     "deploy:ideas": "node scripts/deploy-ideas.mjs",
+    "local:serve": "node scripts/local-serve.mjs",
     "team:run": "tsx --conditions=source scripts/team-run.mts"
   },
   "dependencies": {

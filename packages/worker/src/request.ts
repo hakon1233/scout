@@ -10,6 +10,11 @@ export type Json = (status: number, body: unknown) => Response;
 // A JSON body larger than this is refused (413) unread.
 export const MAX_JSON_BODY_BYTES = 16 * 1024;
 
+// The site's URL for brief emails: the first of ALLOWED_ORIGIN's origins.
+export function siteUrlFrom(allowedOrigin: string): string {
+  return allowedOrigin.split(",")[0].trim();
+}
+
 // CORS headers when the request's Origin is one of `allowedOrigin`
 // (comma-separated); none for any other origin.
 export function corsHeaders(

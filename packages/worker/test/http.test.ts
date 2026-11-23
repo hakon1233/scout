@@ -3,7 +3,10 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { handleRequest } from "../src/http.ts";
+import { siteUrlFrom } from "../src/request.ts";
 import { supabaseQueue } from "../src/supabase.ts";
 
 const SUPABASE = "https://ref.supabase.test";
@@ -134,6 +137,29 @@ test("CORS allows each origin in a comma-separated list, and only those", async 
   }
   const other = await preflight("https://evil.example.test");
   assert.equal(other.headers.get("access-control-allow-origin"), null);
+});
+
+test("wrangler.toml's origins: the test site first (the email site URL), then the local Scout on the Mac", async () => {
+  const toml = readFileSync(
+    fileURLToPath(new URL("../wrangler.toml", import.meta.url)),
+    "utf8",
+  );
+  const allowedOrigin = toml.match(/^ALLOWED_ORIGIN = "([^"]*)"$/m)?.[1];
+  assert.ok(allowedOrigin);
+  assert.equal(siteUrlFrom(allowedOrigin), "https://scout-ideas.pages.dev");
+  for (const origin of [
+    "https://scout-ideas.pages.dev",
+    "https://openhakons-mac-mini.taildc1287.ts.net:47900",
+  ]) {
+    const res = await handleRequest(
+      new Request("https://runs.example.test/runs", {
+        method: "OPTIONS",
+        headers: { origin },
+      }),
+      { supabaseUrl: SUPABASE, anonKey: "anon-key", allowedOrigin },
+    );
+    assert.equal(res.headers.get("access-control-allow-origin"), origin);
+  }
 });
 
 test("the queue adapter calls claim_runs and finish_run with the service key", async () => {
