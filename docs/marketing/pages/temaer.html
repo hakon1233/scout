@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="nb">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scout for hver dag</title>
+    <meta
+      name="description"
+      content="Scout kan følge mer enn nyheter: dagens bibelord, været før helgeturen, frost i hagen og fridagene i året. Kort og datert, hver dag eller hver uke."
+    />
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Scout brand tokens (same as bedrift.html and utleier.html) */
+      :root {
+        --paper: #f6f2ea;
+        --paper-2: #efe9dd;
+        --card: #fffdf8;
+        --ink: #1c1a17;
+        --ink-2: #46413a;
+        --ink-strong: #000;
+        --line: #d8d0c1;
+        --signal: #9a3b2e;
+        --deep: #1f3a4d;
+        --deep-2: #284a61;
+        --on-deep: #f6f2ea;
+        --on-deep-2: #c9d3d9;
+        --shadow: rgba(28, 26, 23, 0.45);
+
+        --serif: "Fraunces", Georgia, serif;
+        --sans: "Inter", system-ui, -apple-system, sans-serif;
+
+        --t-display: clamp(2.5rem, 6.4vw, 5.5rem);
+        --t-h2: clamp(2rem, 4vw, 3.25rem);
+        --t-h3: 1.625rem;
+        --t-body: 1.125rem;
+        --t-small: 1rem;
+
+        --gutter: clamp(16px, 4vw, 48px);
+        --max: 1240px;
+        --section: clamp(96px, 12vw, 200px);
+
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+        --t-press: 140ms;
+        --t-hover: 180ms;
+      }
+      /* Dark: the app's own dark ground (src/app/globals.css, :root.dark) */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --paper: #12141a;
+          --paper-2: #1c1f27;
+          --card: #252a34;
+          --ink: #ede8df;
+          --ink-2: #c6bfb3;
+          --ink-strong: #fff;
+          --line: #2d3340;
+          --signal: #e48a73;
+          --deep: #0d1c27;
+          --deep-2: #17303f;
+          --on-deep: #ede8df;
+          --on-deep-2: #b8c4cc;
+          --shadow: rgba(0, 0, 0, 0.7);
+        }
+      }
+      :root[data-theme="dark"] {
+        --paper: #12141a;
+        --paper-2: #1c1f27;
+        --card: #252a34;
+        --ink: #ede8df;
+        --ink-2: #c6bfb3;
+        --ink-strong: #fff;
+        --line: #2d3340;
+        --signal: #e48a73;
+        --deep: #0d1c27;
+        --deep-2: #17303f;
+        --on-deep: #ede8df;
+        --on-deep-2: #b8c4cc;
+        --shadow: rgba(0, 0, 0, 0.7);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        background: var(--paper);
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font: 400 var(--t-body)/1.55 var(--sans);
+        overflow-x: clip;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--serif);
+        font-weight: 600;
+        margin: 0;
+      }
+      h1 {
+        font-size: var(--t-display);
+        line-height: 0.98;
+        letter-spacing: -0.035em;
+      }
+      h2 {
+        font-size: var(--t-h2);
+        line-height: 1.04;
+        letter-spacing: -0.025em;
+      }
+      h3 {
+        font-size: var(--t-h3);
+        line-height: 1.15;
+        letter-spacing: -0.015em;
+      }
+      p {
+        margin: 0;
+      }
+      a {
+        color: inherit;
+      }
+      :focus-visible {
+        outline: 2px solid var(--signal);
+        outline-offset: 3px;
+      }
+
+      .wrap {
+        max-width: var(--max);
+        margin: 0 auto;
+        padding: 0 var(--gutter);
+      }
+
+      .button {
+        display: inline-block;
+        background: var(--ink);
+        color: var(--paper);
+        font: 500 var(--t-small)/1 var(--sans);
+        padding: 18px 26px;
+        border-radius: 6px;
+        text-decoration: none;
+        transition:
+          background-color var(--t-hover) ease,
+          transform var(--t-press) var(--ease-out);
+      }
+      .button:active {
+        transform: scale(0.97);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .button:hover {
+          background: var(--ink-strong);
+        }
+      }
+
+      /* Bar */
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding-top: 22px;
+        padding-bottom: 22px;
+      }
+      .mark {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font: 600 1.75rem/1 var(--serif);
+        letter-spacing: -0.02em;
+        text-decoration: none;
+      }
+      .compass {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border: 2px solid var(--ink);
+        border-radius: 50%;
+      }
+      .compass::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border: 2px solid var(--ink);
+        border-radius: 50%;
+      }
+      .compass::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 12px;
+        width: 2px;
+        height: 10px;
+        background: var(--signal);
+        transform: rotate(35deg);
+      }
+      .bar nav {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+        font-size: var(--t-small);
+      }
+      .bar nav a:not(.button) {
+        text-decoration: none;
+        color: var(--ink-2);
+        transition: color var(--t-hover) ease;
+      }
+      .bar nav a:not(.button):hover {
+        color: var(--ink);
+      }
+      .bar .button {
+        padding: 13px 18px;
+      }
+      @media (max-width: 900px) {
+        .bar nav a:not(.button) {
+          display: none;
+        }
+      }
+      @media (max-width: 480px) {
+        .bar .button {
+          display: none;
+        }
+      }
+
+      /* Hero */
+      .hero {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: clamp(40px, 6vw, 96px);
+        align-items: start;
+        padding-top: clamp(32px, 6vw, 88px);
+      }
+      .hero-text {
+        position: sticky;
+        top: 40px;
+      }
+      .hero h1 {
+        max-width: 8.5em;
+      }
+      .lede {
+        margin-top: 28px;
+        max-width: 32em;
+        font-size: 1.25rem;
+        line-height: 1.5;
+      }
+      .hero .button {
+        margin-top: 36px;
+      }
+      .note {
+        margin-top: 18px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      @media (max-width: 900px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+        .hero-text {
+          position: static;
+        }
+      }
+
+      /* The week: one slip per topic, on the day it arrives */
+      .week-title {
+        font: 600 var(--t-h3)/1.15 var(--serif);
+        letter-spacing: -0.015em;
+      }
+      .example-label {
+        margin-top: 8px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      .days {
+        list-style: none;
+        margin: 28px 0 0;
+        padding: 0;
+        display: grid;
+        gap: 20px;
+      }
+      .day {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+      .day-name {
+        padding-top: 26px;
+        font-weight: 600;
+        line-height: 1.25;
+        font-variant-numeric: tabular-nums;
+      }
+      .day-name span {
+        display: block;
+        font-weight: 400;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      .slips {
+        display: grid;
+        gap: 12px;
+      }
+      .slip {
+        background: var(--card);
+        border-radius: 8px;
+        padding: 22px 24px 24px;
+        box-shadow:
+          0 1px 0 var(--line),
+          0 24px 48px -28px var(--shadow);
+      }
+      .topic {
+        font-size: var(--t-small);
+        font-weight: 600;
+        color: var(--signal);
+      }
+      .slip .big {
+        display: block;
+        margin-top: 4px;
+        font: 600 var(--t-h3)/1.15 var(--serif);
+        letter-spacing: -0.015em;
+        font-variant-numeric: tabular-nums;
+      }
+      .slip p {
+        margin-top: 6px;
+        font-size: var(--t-small);
+        line-height: 1.5;
+      }
+      .source {
+        margin-top: 8px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      .slip .source {
+        color: var(--ink-2);
+      }
+      @media (max-width: 480px) {
+        .day {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+        .day-name {
+          padding-top: 0;
+        }
+        .day-name span {
+          display: inline;
+          margin-left: 6px;
+        }
+        .slip {
+          padding: 20px 20px 22px;
+        }
+        .story h3 {
+          font-size: 1.375rem;
+        }
+      }
+
+      /* Signature moment: the week's slips land on their days, in order */
+      @media (prefers-reduced-motion: no-preference) {
+        .days .slip {
+          animation: land 700ms var(--ease-out) both;
+        }
+        .days .day:nth-child(1) .slip:nth-child(1) {
+          animation-delay: 250ms;
+        }
+        .days .day:nth-child(1) .slip:nth-child(2) {
+          animation-delay: 520ms;
+        }
+        .days .day:nth-child(2) .slip {
+          animation-delay: 790ms;
+        }
+      }
+      @keyframes land {
+        from {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+      }
+
+      /* The verse */
+      .verse {
+        padding-top: var(--section);
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 48px 96px;
+        align-items: start;
+      }
+      .verse h2 {
+        max-width: 9em;
+      }
+      .verse .body {
+        margin-top: 24px;
+        max-width: 30em;
+      }
+      .rules {
+        display: grid;
+        gap: 40px;
+      }
+      .rules h3 {
+        font-size: 1.375rem;
+      }
+      .rules ul {
+        list-style: none;
+        margin: 16px 0 0;
+        padding: 0;
+        display: grid;
+        gap: 0;
+      }
+      .rules li {
+        padding: 14px 0;
+      }
+      .rules li + li {
+        box-shadow: 0 -4px 0 var(--paper-2);
+      }
+      .rules .never li {
+        color: var(--ink-2);
+      }
+      @media (max-width: 900px) {
+        .verse {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Ready today */
+      .ready {
+        padding-top: var(--section);
+      }
+      .section-head {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px 64px;
+        align-items: end;
+      }
+      .section-head p {
+        max-width: 30em;
+      }
+      .watch-list {
+        list-style: none;
+        margin: 72px 0 0;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+      }
+      .watch {
+        display: grid;
+        grid-template-columns: 0.9fr 1.3fr 0.9fr;
+        gap: 12px 48px;
+        padding: 32px 0;
+        align-items: baseline;
+      }
+      .watch + .watch {
+        box-shadow: 0 -6px 0 var(--paper-2);
+      }
+      .watch q {
+        font-family: var(--serif);
+        font-size: 1.375rem;
+        line-height: 1.35;
+        quotes: "«" "»";
+      }
+      .watch .source {
+        margin: 0;
+      }
+      .watch .source b {
+        display: block;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      @media (max-width: 900px) {
+        .section-head {
+          grid-template-columns: 1fr;
+        }
+        .watch {
+          grid-template-columns: 1fr;
+          padding: 28px 0;
+        }
+        .watch-list {
+          margin-top: 40px;
+        }
+      }
+
+      /* Coming: the evening, when Scout writes */
+      .coming {
+        margin-top: var(--section);
+        background: var(--deep);
+        color: var(--on-deep);
+      }
+      .coming .wrap {
+        padding-top: clamp(80px, 9vw, 144px);
+        padding-bottom: clamp(80px, 9vw, 144px);
+      }
+      .coming h2 {
+        max-width: 10em;
+      }
+      .coming .lede {
+        color: var(--on-deep);
+      }
+      .coming-grid {
+        margin-top: 72px;
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 48px 96px;
+        align-items: start;
+      }
+      .story {
+        background: var(--deep-2);
+        border-radius: 8px;
+        padding: clamp(24px, 4vw, 48px);
+      }
+      .story .label {
+        font-size: var(--t-small);
+        color: var(--on-deep-2);
+      }
+      .story h3 {
+        margin-top: 12px;
+        max-width: 18em;
+      }
+      .story .text {
+        margin-top: 24px;
+        display: grid;
+        gap: 16px;
+        font-family: var(--serif);
+        font-weight: 500;
+        font-size: 1.25rem;
+        line-height: 1.5;
+        max-width: 34em;
+      }
+      .story .gap-mark {
+        color: var(--on-deep-2);
+      }
+      .story .for {
+        margin-top: 28px;
+        font-size: var(--t-small);
+        color: var(--on-deep-2);
+      }
+      .soon {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+      }
+      .soon li {
+        padding: 18px 0;
+      }
+      .soon li + li {
+        box-shadow: 0 -4px 0 var(--deep-2);
+      }
+      .soon b {
+        display: block;
+        font-weight: 600;
+      }
+      .soon span {
+        display: block;
+        margin-top: 2px;
+        font-size: var(--t-small);
+        color: var(--on-deep-2);
+      }
+      .soon i {
+        font-style: italic;
+        color: var(--on-deep);
+      }
+      @media (max-width: 900px) {
+        .coming-grid {
+          grid-template-columns: 1fr;
+          margin-top: 48px;
+        }
+      }
+
+      /* Start */
+      .start {
+        padding-top: var(--section);
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 48px 96px;
+        align-items: start;
+      }
+      .start .question {
+        font: 600 var(--t-display)/0.98 var(--serif);
+        letter-spacing: -0.035em;
+        margin-top: 20px;
+        color: var(--signal);
+      }
+      .steps {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: s;
+        display: grid;
+        gap: 32px;
+      }
+      .steps li {
+        counter-increment: s;
+        display: grid;
+        grid-template-columns: 48px 1fr;
+        gap: 16px;
+      }
+      .steps li::before {
+        content: counter(s);
+        font: 600 var(--t-h3)/1.1 var(--serif);
+        color: var(--signal);
+      }
+      .steps b {
+        display: block;
+        font-weight: 600;
+      }
+      .start .button {
+        margin-top: 40px;
+      }
+      @media (max-width: 900px) {
+        .start {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Close */
+      footer {
+        margin-top: calc(var(--section) * 1.4);
+        padding-bottom: 48px;
+      }
+      .bigname {
+        display: flex;
+        align-items: center;
+        gap: 0.18em;
+        font: 600 clamp(5rem, 18vw, 15rem)/0.85 var(--serif);
+        letter-spacing: -0.05em;
+      }
+      .bigname .compass {
+        width: 0.5em;
+        height: 0.5em;
+        border-width: 0.05em;
+      }
+      .bigname .compass::before {
+        width: 0.13em;
+        height: 0.13em;
+        border-width: 0.04em;
+      }
+      .bigname .compass::after {
+        top: 0.05em;
+        left: calc(50% - 0.02em);
+        width: 0.04em;
+        height: 0.18em;
+      }
+      .foot {
+        margin-top: 40px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px 64px;
+        font-size: var(--t-small);
+        color: var(--ink-2);
+      }
+      @media (max-width: 760px) {
+        .foot {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="wrap bar">
+      <a class="mark" href="#"
+        ><span class="compass" aria-hidden="true"></span>Scout</a
+      >
+      <nav aria-label="Hovedmeny">
+        <a href="#bibelord">Dagens bibelord</a>
+        <a href="#klar">Klar i dag</a>
+        <a href="#kommer">Kommer</a>
+        <a class="button" href="#">Prøv Scout</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="wrap hero" aria-labelledby="tittel">
+        <div class="hero-text">
+          <h1 id="tittel">Én liten ting, på fast dag.</h1>
+          <p class="lede">
+            Scout kan følge mer enn nyheter. Velg dagens bibelord, været før
+            helgeturen eller frosten i hagen, så kommer det i briefen din hver
+            dag eller hver uke. Kort, datert og med kilde.
+          </p>
+          <a class="button" href="#">Prøv Scout</a>
+          <p class="note">
+            Du velger temaene selv, og kan skrive egne med vanlige ord.
+          </p>
+        </div>
+
+        <div class="week">
+          <p class="week-title">Uka di, fra 23. november</p>
+          <p class="example-label">
+            Eksempel. Bibelordet og frosten er hentet 23. november 2026.
+            Helgeturen er tenkt.
+          </p>
+          <ol class="days">
+            <li class="day">
+              <p class="day-name">Mandag<span>23. nov</span></p>
+              <div class="slips">
+                <article class="slip" aria-label="Dagens bibelord">
+                  <span class="topic">Dagens bibelord</span>
+                  <span class="big">Job 28,20–28</span>
+                  <p>
+                    Et visdomsdikt i Jobs bok, blant de poetiske bøkene i Det
+                    gamle testamentet.
+                  </p>
+                  <p>
+                    <a href="https://bibel.no/dagens-bibelord"
+                      >Les dagens bibelord på bibel.no</a
+                    >
+                  </p>
+                  <p class="source">Kilde: Bibelselskapet, bibel.no</p>
+                </article>
+                <article class="slip" aria-label="Frost i Trøndelag">
+                  <span class="topic">Frost i Trøndelag</span>
+                  <span class="big">Kuldegrader hver natt</span>
+                  <p>
+                    Kaldest 25.–27. november, ned mot −9 °C. Første plussgrader
+                    søndag 29. november.
+                  </p>
+                  <p class="source">Kilde: yr.no, Trondheim</p>
+                </article>
+              </div>
+            </li>
+            <li class="day">
+              <p class="day-name">Fredag<span>27. nov</span></p>
+              <div class="slips">
+                <article class="slip" aria-label="Helgetur">
+                  <span class="topic">Helgetur</span>
+                  <span class="big">Lørdag er turdagen</span>
+                  <p>
+                    Opphold og lite vind lørdag, skyet søndag. Det er kaldt: ta
+                    med et ekstra lag.
+                  </p>
+                  <p class="source">Kilde: yr.no, Trondheim</p>
+                </article>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section
+        class="wrap verse"
+        id="bibelord"
+        aria-labelledby="bibelord-tittel"
+      >
+        <div>
+          <h2 id="bibelord-tittel">Kirken velger. Scout lenker.</h2>
+          <p class="body">
+            Dagens bibelord velges av Bibelselskapet og følger kirkeåret. Scout
+            henter referansen derfra, sier hvor teksten står og lenker dit du
+            kan lese den. Scout velger ikke vers selv, skriver ikke av teksten
+            og tolker den ikke.
+          </p>
+          <p class="body">
+            Er dagens bibelord ikke ute ennå, står det det. Scout gjetter ikke
+            og gjentar ikke gårsdagens.
+          </p>
+        </div>
+        <div class="rules">
+          <div>
+            <h3>Dette står i briefen</h3>
+            <ul>
+              <li>Referansen, slik bibel.no oppgir den</li>
+              <li>Hvilken bok og del av Bibelen teksten står i</li>
+              <li>Tiden i kirkeåret, når kilden sier det</li>
+              <li>Én nøktern linje om hva slags tekst det er</li>
+              <li>Lenke til bibel.no</li>
+            </ul>
+          </div>
+          <div class="never">
+            <h3>Dette står aldri der</h3>
+            <ul>
+              <li>Selve bibelteksten</li>
+              <li>Vers som Scout har valgt</li>
+              <li>Tolkning, andakt eller råd</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap ready" id="klar" aria-labelledby="klar-tittel">
+        <div class="section-head">
+          <h2 id="klar-tittel">Fire temaer du kan følge i dag</h2>
+          <p>
+            Disse leser Scout fra kilder som oppdateres hver dag eller uke, og
+            de virker slik Scout er nå. Skriv dem slik, eller med dine egne ord.
+          </p>
+        </div>
+        <ul class="watch-list">
+          <li class="watch">
+            <h3>Dagens bibelord</h3>
+            <q>Dagens bibelord fra Bibelselskapet, med referanse og lenke.</q>
+            <p class="source"><b>Hver dag</b>bibel.no og kirken.no</p>
+          </li>
+          <li class="watch">
+            <h3>Helgetur med værmelding</h3>
+            <q
+              >Hvilken dag i helga er best for tur rundt Trondheim, og hva bør
+              vi ta med?</q
+            >
+            <p class="source"><b>Hver fredag</b>yr.no</p>
+          </li>
+          <li class="watch">
+            <h3>Fridager og inneklemte dager</h3>
+            <q
+              >Når kommer de neste inneklemte dagene, og hvilke feriedager gir
+              lengst fri?</q
+            >
+            <p class="source">
+              <b>Hver uke</b>Helligdagene i Norge og skoleruta i kommunen
+            </p>
+          </li>
+          <li class="watch">
+            <h3>Frostvarsel for hagen</h3>
+            <q
+              >Si fra når det blir kaldere enn −5 °C i Trondheim de neste sju
+              dagene.</q
+            >
+            <p class="source">
+              <b>Hver uke</b>yr.no. Hvilke hagejobber frosten krever, kommer
+              senere.
+            </p>
+          </li>
+        </ul>
+      </section>
+
+      <section class="coming" id="kommer" aria-labelledby="kommer-tittel">
+        <div class="wrap">
+          <h2 id="kommer-tittel">Snart kan Scout skrive selv</h2>
+          <p class="lede">
+            Noen temaer har ingen kilde å lese. En godnatthistorie, et ord, en
+            plan for uka: der må Scout skrive. Det kan ikke Scout ennå. Slik er
+            det tenkt.
+          </p>
+
+          <div class="coming-grid">
+            <article class="story" aria-labelledby="historie-tittel">
+              <p class="label">Godnatthistorie. Eksempel, skrevet for hånd.</p>
+              <h3 id="historie-tittel">
+                Pelle og den lille dinosauren som ikke fant sengen sin
+              </h3>
+              <div class="text">
+                <p>
+                  Det var en gang, i skogen bak huset, en liten dinosaur som het
+                  Tuss. Tuss var ikke større enn en katt. Da kvelden kom, ville
+                  alle dyrene i skogen sove. Men Tuss fant ikke sengen sin.
+                </p>
+                <p>
+                  «Jeg skal hjelpe deg,» sa Pelle, kaninen. «Vi går sakte,
+                  sakte.» Og så gikk de, steg for steg, og Pelle sa: «Sakte,
+                  sakte, sakte.»
+                </p>
+                <p class="gap-mark" aria-hidden="true">…</p>
+                <p>
+                  Skogen ble stille. Pelle gikk hjem, sakte, sakte, og krøp ned
+                  under dynen sin. Og nå sover alle, du også.
+                </p>
+              </div>
+              <p class="for">
+                Skrevet for Mina, 5, som liker dinosaurer, tallet 7 og
+                kosekaninen Pelle. En ny historie hver kveld, med rolig slutt.
+              </p>
+            </article>
+
+            <div>
+              <h3>Flere ideer som kommer</h3>
+              <ul class="soon">
+                <li>
+                  <b>Dagens ord</b
+                  ><span
+                    >Ett norsk ord om dagen for deg som lærer språket, på ditt
+                    nivå. Som <i>et peiskos</i>: en god stund foran
+                    peisen.</span
+                  >
+                </li>
+                <li>
+                  <b>Dagens dikt</b
+                  ><span
+                    >Noen linjer av Ibsen, Bjørnson eller Wergeland, med verk,
+                    år og kilde.</span
+                  >
+                </li>
+                <li>
+                  <b>Adventskalender for familien</b
+                  ><span>En liten luke hver dag fram til julaften.</span>
+                </li>
+                <li>
+                  <b>Ukas middager</b
+                  ><span>En plan for uka, etter hva som er i sesong.</span>
+                </li>
+                <li>
+                  <b>30 dager til første 5 km</b
+                  ><span>Dag 1 av 30, så dag 2. En økt om gangen.</span>
+                </li>
+                <li>
+                  <b>Et spørsmål til oss to</b
+                  ><span>Ett spørsmål om dagen å snakke om ved middagen.</span>
+                </li>
+                <li>
+                  <b>Hagejobbene etter frosten</b
+                  ><span>Hva du bør gjøre i hagen når yr melder kulde.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap start" id="start" aria-labelledby="start-tittel">
+        <div>
+          <h2 id="start-tittel">Det starter med ett spørsmål</h2>
+          <p class="question" aria-hidden="true">Hva vil du ha hver uke?</p>
+        </div>
+        <div>
+          <ol class="steps">
+            <li>
+              <span
+                ><b>Si hva du vil ha, og hvor ofte.</b>Hver dag, eller én dag i
+                uka.</span
+              >
+            </li>
+            <li>
+              <span
+                ><b>Se over temaet.</b>Scout skriver ned hva den skal se etter.
+                Endre det med vanlige ord.</span
+              >
+            </li>
+            <li>
+              <span
+                ><b>Les den første briefen.</b>Så kommer den på dagen du
+                valgte.</span
+              >
+            </li>
+          </ol>
+          <a class="button" href="#">Prøv Scout</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wrap">
+      <p class="bigname">
+        <span class="compass" aria-hidden="true"></span>Scout
+      </p>
+      <div class="foot">
+        <p>
+          Dagens bibelord velges av Bibelselskapet. Scout lenker til bibel.no og
+          skriver ikke av bibelteksten. Været kommer fra yr.no.
+        </p>
+        <p>
+          Bibelordet og frosten i eksemplene er hentet 23. november 2026.
+          Helgeturen og godnatthistorien er skrevet for å vise formatet.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
