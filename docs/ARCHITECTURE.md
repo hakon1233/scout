@@ -396,7 +396,13 @@ gateway, so every model step runs on the Mac's `claude` (the founder's subscript
   reader's cached picks), over Supabase REST (as the reader,
   under RLS) and the Worker. `shared` and `browse` also work signed out, with the anon key. Limits come
   back as `HostedError` with a plain sentence (core's `quotaMessage`, shared with the
-  Worker). `components/hosted/` renders it; in a hosted build `app/app/page.tsx` shows
+  Worker). Pausing a topic is its cadence `off` (not `interests.paused`, the
+  host's or team's switch): the daily and weekly caps count only topics that are not
+  off, so a pause frees its slot at once. Settings' Topics group pauses and resumes;
+  Resume (`resumeSlot`) gives back the topic's `last_cadence` when that slot is free,
+  else the other free one (weekly first when nothing is remembered), else it stays
+  paused and says "No free weekly slot. Pause another topic or upgrade." (or daily).
+  `components/hosted/` renders it; in a hosted build `app/app/page.tsx` shows
   `HostedHome` instead of the companion feed. `app/i` is a share link's page
   (`/i/?s=<slug>`, read on the client because the site is a static export): the
   interest's latest brief for anyone, and Follow for a signed-in reader.

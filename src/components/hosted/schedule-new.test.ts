@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { HostedData } from "@/lib/hosted";
-import { scheduleCreated, scheduleNew } from "./useHostedHome";
+import { resumeSlot, scheduleCreated, scheduleNew } from "./useHostedHome";
 
 // Just what scheduleNew touches: the allowance, setCadence and runNow.
 function stubData(daily: [number, number], weekly: [number, number]) {
@@ -65,4 +65,54 @@ test("a confirmed new topic from the chat gets the cadence its card showed", asy
     ],
   });
   assert.deepEqual(set, [["zigbee", "weekly"]]);
+});
+
+// resumeSlot: the cadence a paused topic gets back on Resume.
+
+const allow = (
+  daily: [number, number],
+  weekly: [number, number],
+  plan = "plus",
+) => ({
+  plan,
+  daily: { used: daily[0], limit: daily[1] },
+  weekly: { used: weekly[0], limit: weekly[1] },
+  runsToday: { used: 0, limit: 3 },
+});
+
+test("Resume gives a paused topic its last cadence when that slot is free", () => {
+  assert.deepEqual(resumeSlot(allow([0, 1], [0, 6]), "daily"), {
+    cadence: "daily",
+  });
+  assert.deepEqual(resumeSlot(allow([0, 1], [0, 6]), "weekly"), {
+    cadence: "weekly",
+  });
+});
+
+test("Resume takes the other free slot when its last one is full", () => {
+  assert.deepEqual(resumeSlot(allow([1, 1], [2, 6]), "daily"), {
+    cadence: "weekly",
+  });
+  assert.deepEqual(resumeSlot(allow([0, 1], [6, 6]), "weekly"), {
+    cadence: "daily",
+  });
+});
+
+test("Resume with nothing remembered tries weekly first", () => {
+  assert.deepEqual(resumeSlot(allow([0, 1], [0, 6]), null), {
+    cadence: "weekly",
+  });
+});
+
+test("Resume with no free slot says so plainly and sets nothing", () => {
+  assert.deepEqual(resumeSlot(allow([0, 0], [3, 3], "free"), "weekly"), {
+    message: "No free weekly slot. Pause another topic or upgrade.",
+  });
+  // Free has no daily slot, so a topic that was daily is told about weekly.
+  assert.deepEqual(resumeSlot(allow([0, 0], [3, 3], "free"), "daily"), {
+    message: "No free weekly slot. Pause another topic or upgrade.",
+  });
+  assert.deepEqual(resumeSlot(allow([1, 1], [6, 6]), "daily"), {
+    message: "No free daily slot. Pause another topic first.",
+  });
 });
