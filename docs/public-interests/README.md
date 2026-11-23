@@ -4,21 +4,22 @@ Research on which public interests Scout should run, and how to write each one s
 runs give good briefs. Start with Trondheim and Norway, then the Nordics, then the
 biggest niches elsewhere. The first-users plan is in `../MARKETING.md`.
 
-| File                                   | What it holds                                             |
-| -------------------------------------- | --------------------------------------------------------- |
-| [trondheim.md](trondheim.md)           | Trondheim sub-niches                                      |
-| [norway.md](norway.md)                 | Norway-wide sub-niches                                    |
-| [nordics.md](nordics.md)               | Sweden, Denmark, Finland, Iceland                         |
-| [world.md](world.md)                   | Big niches in other countries                             |
-| [intent-docs/](intent-docs/)           | Ready-to-use intent docs for the best picks, and tests    |
-| [sources.md](sources.md)               | Readable stand-ins for sites that block Scout             |
-| [conditions.md](conditions.md)         | Place-and-weather niches: aurora, ski, ice, surf          |
-| [saved-searches.md](saved-searches.md) | Niches people now keep a saved search for                 |
-| [business.md](business.md)             | Supply chain, leads and market news for businesses        |
-| [business-more.md](business-more.md)   | Other business watches and a starter pack per trade       |
-| [use-cases.md](use-cases.md)           | Every group that wants something watched, and watch types |
-| [gaps.md](gaps.md)                     | What the first sweeps missed                              |
-| [source-first.md](source-first.md)     | Use cases found by going through public registers         |
+| File                                   | What it holds                                                                       |
+| -------------------------------------- | ----------------------------------------------------------------------------------- |
+| [trondheim.md](trondheim.md)           | Trondheim sub-niches                                                                |
+| [norway.md](norway.md)                 | Norway-wide sub-niches                                                              |
+| [nordics.md](nordics.md)               | Sweden, Denmark, Finland, Iceland                                                   |
+| [world.md](world.md)                   | Big niches in other countries                                                       |
+| [intent-docs/](intent-docs/)           | Ready-to-use intent docs for the best picks, and tests                              |
+| [sources.md](sources.md)               | Readable stand-ins for sites that block Scout                                       |
+| [conditions.md](conditions.md)         | Place-and-weather niches: aurora, ski, ice, surf                                    |
+| [saved-searches.md](saved-searches.md) | Niches people now keep a saved search for                                           |
+| [business.md](business.md)             | Supply chain, leads and market news for businesses                                  |
+| [business-more.md](business-more.md)   | Other business watches and a starter pack per trade                                 |
+| [use-cases.md](use-cases.md)           | Every group that wants something watched, and watch types                           |
+| [gaps.md](gaps.md)                     | What the first sweeps missed                                                        |
+| [source-first.md](source-first.md)     | Use cases found by going through public registers                                   |
+| [beyond-news.md](beyond-news.md)       | Topics that are not news: verse, story, word, plan; starters, licences, run changes |
 
 ## Tested intent docs (20 Nov 2026)
 
@@ -45,7 +46,16 @@ Each was run twice by hand with web search and fetch (no API), scored, fixed and
 | [New rules for a Trondheim restaurant](intent-docs/business-new-rules-restaurant-trondheim.md)                  | 6/6         | Weekly           |
 | [New competitors and closures, Trondheim restaurants](intent-docs/business-competitors-restaurant-trondheim.md) | 6/6         | Weekly           |
 
+| [Dagens bibelord, Norway](intent-docs/dagens-bibelord-norway.md) | 6/6 | Daily |
+| [Frost and garden jobs, Trøndelag](intent-docs/frost-garden-trondelag.md) | 4/6 (23 Nov) | Weekly in season |
+
 \* Doc changed after the run; not re-tested.
+
+Not news, needs a run-system change, one sample written by hand (23 Nov 2026; see
+[beyond-news.md](beyond-news.md)):
+[bedtime story](intent-docs/bedtime-story-for-my-kids.md),
+[poem or quote of the day](intent-docs/dikt-og-sitat-av-dagen.md),
+[Norwegian word of the day](intent-docs/norsk-ord-for-dagen.md).
 
 ## Rules for running them (Håkon, 20 Nov 2026)
 
