@@ -1,5 +1,6 @@
 // The local Scout server (scripts/local-server.mjs) against a throwaway site
 // on an ephemeral loopback port, and the launchd plist local-serve.mjs writes.
+// The gateway's relay is tested in packages/agent/test/local-relay.test.ts.
 // Never launchctl, never port 47821 or 47900.
 
 import test from "node:test";
@@ -38,7 +39,7 @@ async function withServer(fn) {
   const server = await startLocalServer({ root: site(), port: 0 });
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
-    await fn((p) => fetch(base + p, { redirect: "manual" }));
+    await fn((p, init) => fetch(base + p, { redirect: "manual", ...init }));
   } finally {
     server.close();
   }
@@ -88,16 +89,52 @@ test("never serves _headers or anything outside the site", async () => {
   });
 });
 
-test("the plist runs the copied server on 47900 and keeps it alive", () => {
+test("the plist runs the gateway from the checkout on 47900 and keeps it alive", () => {
   const paths = localPaths("/Users/someone");
-  const xml = buildLocalWebPlist({ nodePath: "/opt/node", paths });
+  const xml = buildLocalWebPlist({
+    nodePath: "/opt/node",
+    paths,
+    repoDir: "/src/scout",
+    home: "/Users/someone",
+    pathEnv: "/opt:/usr/local/claude/bin:/usr/bin",
+  });
   assert.match(xml, /<string>ing\.scout\.local-web<\/string>/);
   assert.match(
     xml,
-    /<string>\/opt\/node<\/string>\s*<string>\/Users\/someone\/Library\/Application Support\/Scout Local\/local-server\.mjs<\/string>\s*<string>\/Users\/someone\/Library\/Application Support\/Scout Local\/site<\/string>\s*<string>47900<\/string>/,
+    /<string>\/opt\/node<\/string>\s*<string>\/src\/scout\/node_modules\/tsx\/dist\/cli\.mjs<\/string>\s*<string>--conditions=source<\/string>\s*<string>\/src\/scout\/scripts\/local-gateway\.mts<\/string>\s*<string>\/Users\/someone\/Library\/Application Support\/Scout Local\/site<\/string>\s*<string>47900<\/string>/,
   );
+  // launchd must find `claude`; the plist holds no secret.
+  assert.match(
+    xml,
+    /<key>PATH<\/key>\s*<string>\/opt:\/usr\/local\/claude\/bin/,
+  );
+  assert.doesNotMatch(xml, /TOKEN/);
   assert.match(xml, /<key>KeepAlive<\/key>\s*<true\/>/);
   assert.doesNotMatch(xml, /47821|47899/);
+});
+
+test("other methods go to the proxy when there is one, else 405", async () => {
+  await withServer(async (get) => {
+    const res = await get("/chat", { method: "POST", body: "{}" });
+    assert.equal(res.status, 405);
+  });
+  const server = await startLocalServer({
+    root: site(),
+    port: 0,
+    proxy: (req, res) => {
+      res.writeHead(201, { "x-proxied": req.method + " " + req.url });
+      res.end();
+    },
+  });
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const res = await fetch(base + "/chat?x=1", { method: "POST", body: "{}" });
+    assert.equal(res.status, 201);
+    assert.equal(res.headers.get("x-proxied"), "POST /chat?x=1");
+    assert.equal((await fetch(base + "/app/")).status, 200);
+  } finally {
+    server.close();
+  }
 });
 
 test("install refuses an out/ without a built app before touching anything", async () => {

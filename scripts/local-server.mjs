@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // A tiny static file server for the hosted web app's build (out/), for the
 // founder's local Scout on the Mac: 127.0.0.1:47900 behind `tailscale serve`
-// (docs/ARCHITECTURE.md, "Local Scout on the Mac").
+// (docs/ARCHITECTURE.md, "Local Scout on the Mac"). The gateway
+// (scripts/local-gateway.mts) runs it with a `proxy` that takes every request
+// other than GET and HEAD: the app's Worker calls, all POSTs, go to the Worker.
 //
 // It serves like Cloudflare Pages does for this site: directory routes
 // resolve to their index.html, an extensionless route without a slash
@@ -10,10 +12,9 @@
 // from the build's _headers file (the Content-Security-Policy that
 // scripts/csp-headers.mjs filled in). The rules mirror
 // packages/agent/src/static.ts; this copy is plain JavaScript with no imports
-// outside node: so `pnpm local:serve` can copy it next to the site and the
-// launchd job never depends on a checkout.
+// outside node:.
 //
-// Usage: node local-server.mjs <site dir> [port]
+// Usage: node local-server.mjs <site dir> [port]  (static only, no proxy)
 
 import { promises as fs } from "node:fs";
 import { createServer } from "node:http";
@@ -86,11 +87,22 @@ function decode(pathname) {
   }
 }
 
-/** Starts serving `root`; resolves to the listening http.Server. */
+/**
+ * Starts serving `root`; resolves to the listening http.Server. `proxy(req,
+ * res)`, when given, answers every request that is not GET or HEAD.
+ * @param {{
+ *   root: string,
+ *   port?: number,
+ *   host?: string,
+ *   proxy?: (req: import("node:http").IncomingMessage,
+ *     res: import("node:http").ServerResponse) => unknown,
+ * }} opts
+ */
 export async function startLocalServer({
   root,
   port = LOCAL_PORT,
   host = "127.0.0.1",
+  proxy = undefined,
 }) {
   const siteRoot = path.resolve(root);
   const rules = parseHeaders(
@@ -117,6 +129,7 @@ export async function startLocalServer({
       res.end(req.method === "HEAD" ? undefined : body);
     };
     if (req.method !== "GET" && req.method !== "HEAD") {
+      if (proxy) return proxy(req, res);
       return send(405, { allow: "GET, HEAD" }, "method not allowed");
     }
     const p = decode(url.pathname);

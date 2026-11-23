@@ -1,21 +1,26 @@
 #!/usr/bin/env node
 // The founder's local Scout on the Mac (docs/ARCHITECTURE.md, "Local Scout on
-// the Mac"): the hosted web app served from 127.0.0.1:47900 by a launchd job,
+// the Mac"): the hosted web app and its Worker relay, served from
+// 127.0.0.1:47900 by the gateway (scripts/local-gateway.mts) as a launchd job,
 // reached over the tailnet through `tailscale serve`.
 //
 //   pnpm local:serve            build (scripts/build-ideas.mjs), copy, (re)start
 //   pnpm local:serve install    copy the current out/ and (re)start, no build
 //   pnpm local:serve uninstall  stop the job and remove its plist
 //
-// The site and its server (scripts/local-server.mjs) are copied to
-// ~/Library/Application Support/Scout Local/, so the job never depends on a
-// checkout and `pnpm build` (which also writes out/) never changes what it
-// serves. The job is a per-user LaunchAgent modelled on
-// packages/agent/src/service.ts: RunAtLoad + KeepAlive, logs in
-// ~/Library/Logs/scout-local-web.log.
+// The build points the app's Worker URL at LOCAL_ORIGIN, the gateway, which
+// relays to the Worker. The site is copied to
+// ~/Library/Application Support/Scout Local/, so `pnpm build` (which also
+// writes out/) never changes what is served. The gateway runs from this
+// checkout with its tsx, as the team runner's service does
+// (packages/agent/src/team-runner-service.ts), because the relay starts
+// `claude` through packages/agent/src/claude-runner.ts. The job is a per-user
+// LaunchAgent: RunAtLoad + KeepAlive, logs in ~/Library/Logs/scout-local-web.log.
+// The plist holds no secret: the gateway reads TEAM_RUNNER_TOKEN and
+// SCOUT_WORKER_URL from ~/.config/scout-hosted/.env each time it starts.
 //
-// The build needs SUPABASE_ACCESS_TOKEN, CLOUDFLARE_API_TOKEN and
-// CLOUDFLARE_ACCOUNT_ID; unset ones are read from ~/.config/scout-hosted/.env.
+// The build needs SUPABASE_ACCESS_TOKEN; unset, it is read from
+// ~/.config/scout-hosted/.env.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, promises as fs } from "node:fs";
@@ -25,6 +30,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { LOCAL_PORT } from "./local-server.mjs";
 
 export const LABEL = "ing.scout.local-web";
+// The Mac's address on the tailnet (`tailscale serve` in front of LOCAL_PORT).
+export const LOCAL_ORIGIN =
+  "https://openhakons-mac-mini.taildc1287.ts.net:47900";
 const SCRIPTS = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.dirname(SCRIPTS);
 
@@ -33,7 +41,6 @@ export function localPaths(home = os.homedir()) {
   return {
     dir,
     site: path.join(dir, "site"),
-    server: path.join(dir, "local-server.mjs"),
     plist: path.join(home, "Library", "LaunchAgents", `${LABEL}.plist`),
     log: path.join(home, "Library", "Logs", "scout-local-web.log"),
   };
@@ -43,9 +50,26 @@ function xmlEscape(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** The LaunchAgent plist that runs the server on `port`. Pure. */
-export function buildLocalWebPlist({ nodePath, paths, port = LOCAL_PORT }) {
-  const args = [nodePath, paths.server, paths.site, String(port)]
+/**
+ * The LaunchAgent plist that runs the gateway from `repoDir` on `port`. Pure.
+ * `pathEnv` must reach `claude`: launchd does not read the login shell's PATH.
+ */
+export function buildLocalWebPlist({
+  nodePath,
+  paths,
+  repoDir,
+  home,
+  pathEnv,
+  port = LOCAL_PORT,
+}) {
+  const args = [
+    nodePath,
+    path.join(repoDir, "node_modules", "tsx", "dist", "cli.mjs"),
+    "--conditions=source",
+    path.join(repoDir, "scripts", "local-gateway.mts"),
+    paths.site,
+    String(port),
+  ]
     .map((a) => `      <string>${xmlEscape(a)}</string>`)
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -63,7 +87,14 @@ ${args}
     <key>KeepAlive</key>
     <true/>
     <key>WorkingDirectory</key>
-    <string>${xmlEscape(paths.dir)}</string>
+    <string>${xmlEscape(repoDir)}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>HOME</key>
+      <string>${xmlEscape(home)}</string>
+      <key>PATH</key>
+      <string>${xmlEscape(pathEnv)}</string>
+    </dict>
     <key>StandardOutPath</key>
     <string>${xmlEscape(paths.log)}</string>
     <key>StandardErrorPath</key>
@@ -98,7 +129,30 @@ function launchctl(args, { tolerate = false } = {}) {
 
 const domain = () => `gui/${process.getuid?.() ?? 0}`;
 
-/** Copies out/ and the server into place, writes the plist, (re)starts the job. */
+// node's and claude's folders, then the usual ones.
+function launchdPath(nodePath) {
+  let claude = process.env.SCOUT_CLAUDE_BIN ?? "";
+  if (!claude) {
+    try {
+      claude = execFileSync("/usr/bin/which", ["claude"]).toString().trim();
+    } catch {
+      claude = "";
+    }
+  }
+  const dirs = [
+    path.dirname(nodePath),
+    claude && path.dirname(claude),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+  ].filter(Boolean);
+  return [...new Set(dirs)].join(":");
+}
+
+/** Copies out/ into place, writes the plist, (re)starts the gateway's job. */
 export async function install({ outDir = path.join(REPO, "out") } = {}) {
   if (process.platform !== "darwin") throw new Error("macOS only (launchd)");
   if (!existsSync(path.join(outDir, "app", "index.html"))) {
@@ -118,11 +172,19 @@ export async function install({ outDir = path.join(REPO, "out") } = {}) {
   if (existsSync(paths.site)) await fs.rename(paths.site, old);
   await fs.rename(next, paths.site);
   await fs.rm(old, { recursive: true, force: true });
-  await fs.copyFile(path.join(SCRIPTS, "local-server.mjs"), paths.server);
+  // The server copy an older install left; the gateway runs from the checkout.
+  await fs.rm(path.join(paths.dir, "local-server.mjs"), { force: true });
 
+  const nodePath = stableNodePath();
   await fs.writeFile(
     paths.plist,
-    buildLocalWebPlist({ nodePath: stableNodePath(), paths }),
+    buildLocalWebPlist({
+      nodePath,
+      paths,
+      repoDir: REPO,
+      home: os.homedir(),
+      pathEnv: launchdPath(nodePath),
+    }),
   );
   launchctl(["bootout", `${domain()}/${LABEL}`], { tolerate: true });
   launchctl(["bootstrap", domain(), paths.plist]);
@@ -147,7 +209,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       const envFile = path.join(os.homedir(), ".config/scout-hosted/.env");
       if (existsSync(envFile)) process.loadEnvFile(envFile); // never overrides
       const { buildIdeas } = await import("./build-ideas.mjs");
-      await buildIdeas();
+      await buildIdeas(process.env, { worker: LOCAL_ORIGIN });
     }
     await install();
   } else {

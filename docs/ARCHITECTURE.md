@@ -274,7 +274,9 @@ companion never imports it.
   local account), decides it in `queue_due_runs`, `claim_queued` and the `team_*`
   functions, so `claim_runs` never takes them. The web app shows a "Local" badge and
   "Waiting for your Mac" for a queued run (`HostedHome.runsLocal`).
-- `--loop` keeps looking for due runs every 60 s; SIGTERM or Ctrl-C lets the run in
+- `--loop` keeps looking for due runs every 60 s, and answers local readers' picks
+  (`answerDuePicks`: `/team/picks/claim`, `claude` as the gateway runs it,
+  `/team/picks/finish`; a failed one is printed and its claim lapses); SIGTERM or Ctrl-C lets the run in
   progress publish, then stops. `pnpm team:run install-service` installs it as a
   launchd agent from this checkout (`team-runner-service.ts`, label
   `ing.scout.team-runner`, log `~/Library/Logs/scout-team-runner.log`);
@@ -313,27 +315,52 @@ prompt | answer` and `x-scout-relay-token: <TEAM_RUNNER_TOKEN>`. Wrong token: 40
 - SQL: `*_local_relay.sql` (`claim_due_picks`, `team_claim_picks`, `team_pick_job`,
   `publish_relay_start`), tested in `supabase/tests/local_relay.test.sql`.
 
-### Local Scout on the Mac (`scripts/local-serve.mjs`, `pnpm local:serve`)
+### Local Scout on the Mac (`scripts/local-serve.mjs`, `scripts/local-gateway.mts`, `pnpm local:serve`)
 
-The hosted web app, the same build as the test site (`pnpm build:ideas`), served from
-the Mac Mini at <https://openhakons-mac-mini.taildc1287.ts.net:47900>, tailnet only, for
-the founder's local account. It talks to the same Supabase project and Worker.
+The hosted web app, the same code as the test site, served from the Mac Mini at
+<https://openhakons-mac-mini.taildc1287.ts.net:47900>, tailnet only, for the founder's
+local account. It talks to the same Supabase project, and to the Worker through the
+gateway, so every model step runs on the Mac's `claude` (the founder's subscription).
 
-- `scripts/local-server.mjs` serves the build on 127.0.0.1:47900 (not 47821, the
-  companion; not 47899, the demo) the way Pages does, with the build's `_headers`
-  (the filled-in CSP) on every response. No dependencies.
-- `pnpm local:serve` builds, copies the site and the server to
-  `~/Library/Application Support/Scout Local/` (so `pnpm build`, which also writes
+- The gateway (`scripts/local-gateway.mts`) is one origin on 127.0.0.1:47900 (not
+  47821, the companion; not 47899, the demo). GET and HEAD are the built site,
+  served by `scripts/local-server.mjs` the way Pages does, with the build's `_headers`
+  (the filled-in CSP). Every other request goes to the Worker server to server
+  (`createWorkerProxy`, `packages/agent/src/local-relay.ts`).
+- The Mac's build (`buildIdeas(env, {worker: LOCAL_ORIGIN})`) sets the app's Worker URL
+  to the gateway's own origin, so the app's code is unchanged.
+- `POST /chat` and `POST /publish` go through the relay ("Local account relay"): the
+  prompt step with the reader's JWT and `TEAM_RUNNER_TOKEN`; if the answer carries
+  `x-scout-relay: prompt`, its `request` runs through `claude-runner.ts` (no tools,
+  `--model haiku`, `--json-schema` from the request, 90 s, one turn at a time), then
+  the answer step; the browser gets the Worker's final answer unchanged. Without that
+  header the first answer passes through. If `claude` fails, times out or hits its
+  usage limit: 503 `{error}`, a plain sentence the app shows. Relay headers a browser
+  sends are dropped.
+- The gateway reads `TEAM_RUNNER_TOKEN` and `SCOUT_WORKER_URL` from
+  `~/.config/scout-hosted/.env` (`scripts/hosted-config.mts`), never into
+  `process.env`, never logged.
+- `pnpm local:serve` builds, copies the site to
+  `~/Library/Application Support/Scout Local/site` (so `pnpm build`, which also writes
   `out/`, never changes what is served) and (re)starts the LaunchAgent
-  `ing.scout.local-web` (log `~/Library/Logs/scout-local-web.log`).
-  `pnpm local:serve install` skips the build; `pnpm local:serve uninstall` stops it.
-  The build's tokens come from the shell or `~/.config/scout-hosted/.env`.
+  `ing.scout.local-web` (log `~/Library/Logs/scout-local-web.log`). The job runs the
+  gateway from this checkout with its `tsx`, like the team runner's service, with a
+  PATH that reaches `claude`. `pnpm local:serve install` skips the build;
+  `pnpm local:serve uninstall` stops it. The build needs `SUPABASE_ACCESS_TOKEN` from
+  the shell or the env file.
+- Picks for local readers come from `pnpm team:run --loop` (`answerDuePicks`), not the
+  gateway.
 - The Worker allows the origin: it is the second entry of `ALLOWED_ORIGIN`
   (`wrangler.toml`); the first stays the email site URL.
-- Turning it on, once: `npx wrangler deploy` the Worker with the new `ALLOWED_ORIGIN`;
-  add `https://openhakons-mac-mini.taildc1287.ts.net:47900/app/signin/` to the Supabase
-  Auth redirect URLs; `pnpm local:serve`; then
-  `tailscale serve --bg --https=47900 http://127.0.0.1:47900`.
+- Turning it on, once: the Worker deployed with the relay and that `ALLOWED_ORIGIN`;
+  the Worker secret `TEAM_RUNNER_TOKEN`; `TEAM_RUNNER_TOKEN` and `SCOUT_WORKER_URL` in
+  the env file (chmod 600); the migrations through `*_local_relay.sql`
+  (`pnpm db:push:hosted`); `update public.settings set team_runner_on = true` and
+  `update public.profiles set runs_local = true where id = '<founder>'`;
+  `pnpm team:run install-service`; `pnpm local:serve`;
+  `tailscale serve --bg --https=47900 http://127.0.0.1:47900`; and
+  `https://openhakons-mac-mini.taildc1287.ts.net:47900/app/signin/` in the Supabase
+  Auth redirect URLs.
 
 ### Web app (`src`)
 

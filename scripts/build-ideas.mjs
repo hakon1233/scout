@@ -19,11 +19,10 @@ const WORKER_NAME = "scout-runs"; // packages/worker/wrangler.toml
 const VAPID_PUBLIC_KEY =
   "BI6UnDSibkd7O63kgma8diRbDNqciOAYM00hAVYqp-nsn-TAP1AsHpGyEmG3Psj6u1ALdIQKAJZzbZYBLnAMyhE";
 
-export function requireEnv(env = process.env) {
+export function requireEnv(env = process.env, { cloudflare = true } = {}) {
   for (const k of [
     "SUPABASE_ACCESS_TOKEN",
-    "CLOUDFLARE_API_TOKEN",
-    "CLOUDFLARE_ACCOUNT_ID",
+    ...(cloudflare ? ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"] : []),
   ]) {
     if (!env[k]) throw new Error(`set ${k}`);
   }
@@ -45,9 +44,26 @@ export function run(cmd, args, extraEnv = {}) {
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
-/** Builds the hosted web app into out/, with out/_headers filled in. */
-export async function buildIdeas(env = process.env) {
-  requireEnv(env);
+async function workersDevUrl(env) {
+  const sub = await getJson(
+    `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/workers/subdomain`,
+    env.CLOUDFLARE_API_TOKEN,
+  );
+  const subdomain = sub.result?.subdomain;
+  return subdomain ? `https://${WORKER_NAME}.${subdomain}.workers.dev` : "";
+}
+
+/**
+ * Builds the hosted web app into out/, with out/_headers filled in. `worker`
+ * sets the app's Worker URL; the Mac's build sets its own origin, where the
+ * gateway (scripts/local-gateway.mts) relays to the Worker. Unset, the
+ * deployed Worker's workers.dev URL, which needs the Cloudflare tokens.
+ */
+export async function buildIdeas(
+  env = process.env,
+  { worker: workerUrl } = {},
+) {
+  requireEnv(env, { cloudflare: !workerUrl });
 
   const keys = await getJson(
     `https://api.supabase.com/v1/projects/${REF}/api-keys`,
@@ -56,14 +72,7 @@ export async function buildIdeas(env = process.env) {
   const anon = keys.find((k) => k.name === "anon")?.api_key;
   if (!anon) throw new Error("no anon key on the project");
 
-  const sub = await getJson(
-    `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/workers/subdomain`,
-    env.CLOUDFLARE_API_TOKEN,
-  );
-  const subdomain = sub.result?.subdomain;
-  const worker = subdomain
-    ? `https://${WORKER_NAME}.${subdomain}.workers.dev`
-    : "";
+  const worker = workerUrl ?? (await workersDevUrl(env));
 
   run("pnpm", ["build"], {
     SCOUT_BASE_PATH: "",

@@ -19,10 +19,12 @@ import {
   researchInterestOf,
   sectionFromAnswer,
   TEAM_PATHS,
+  type TeamPicksClaim,
   type TeamRun,
   type TeamRunResult,
   type TeamTopic,
 } from "#core";
+import { answerRelayPrompt } from "./local-relay.js";
 import { researchAndSynthesize, writeMakePiece } from "./research.js";
 
 export type TeamRunnerDeps = {
@@ -188,6 +190,38 @@ export async function runDueTeamTopics(
   return ran;
 }
 
+// Local accounts' picks (docs/ARCHITECTURE.md, "Local account relay"): claims
+// the readers due new picks, answers each with the local `claude` and hands the
+// answer back. One that fails is printed and left; its claim lapses in an hour.
+export async function answerDuePicks(deps: TeamRunnerDeps): Promise<number> {
+  const print = deps.print ?? console.log;
+  const { prompts } = await post<TeamPicksClaim>(deps, TEAM_PATHS.picksClaim, {
+    limit: 5,
+  });
+  let stored = 0;
+  for (const prompt of prompts) {
+    if (deps.signal?.aborted) break;
+    try {
+      const answer = await answerRelayPrompt(prompt, {
+        claudeBin: deps.claudeBin,
+        spawnFn: deps.spawnFn,
+      });
+      const res = await post<{ stored: boolean }>(
+        deps,
+        TEAM_PATHS.picksFinish,
+        answer,
+      );
+      if (res.stored) stored++;
+    } catch (err) {
+      print(
+        `picks ${prompt.turnId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+  if (prompts.length) print(`picks: ${stored} of ${prompts.length} stored`);
+  return stored;
+}
+
 // Resolves after ms, or at once when the signal aborts.
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -202,19 +236,22 @@ function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-// --loop: a pass over the due runs (runDueTeamTopics), a pause, again, until
-// the signal aborts. A failed pass (the Worker unreachable) is printed and the
-// next one tries again. The launchd service (team-runner-service.ts) runs this.
+// --loop: a pass over the due runs (runDueTeamTopics) and the local
+// accounts' picks (answerDuePicks), a pause, again, until the signal aborts. A
+// failed step (the Worker unreachable) is printed and the next pass tries again. The launchd service (team-runner-service.ts) runs this.
 export async function loopTeamTopics(deps: TeamRunnerDeps): Promise<void> {
   const print = deps.print ?? console.log;
   const sleep = deps.sleep ?? abortableSleep;
   const interval = deps.loopIntervalMs ?? DEFAULT_LOOP_INTERVAL_MS;
   print(`looking for due runs every ${Math.round(interval / 1000)} s…`);
   while (!deps.signal?.aborted) {
-    try {
-      await runDueTeamTopics(deps);
-    } catch (err) {
-      print(err instanceof Error ? err.message : String(err));
+    for (const step of [runDueTeamTopics, answerDuePicks]) {
+      if (deps.signal?.aborted) break;
+      try {
+        await step(deps);
+      } catch (err) {
+        print(err instanceof Error ? err.message : String(err));
+      }
     }
     if (deps.signal?.aborted) break;
     await sleep(interval, deps.signal);
@@ -281,8 +318,8 @@ export const TEAM_RUN_USAGE = `pnpm team:run [--dry-run] [--only <topic or id>] 
 
   (none)        research and publish every due Scout team topic and local
                 account topic
-  --loop        the same every minute until stopped (SIGTERM); what the
-                launchd service runs
+  --loop        the same every minute until stopped (SIGTERM), and local
+                accounts' picks; what the launchd service runs
   install-service / uninstall-service
                 start (or remove) --loop as a launchd service on this Mac
   --only <t>    one-off run of one topic, even a paused one; it stays paused

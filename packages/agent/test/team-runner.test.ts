@@ -103,6 +103,8 @@ function fakeSupabase(
       case "team_finish_run":
         finished.push(args);
         return ok(true);
+      case "team_claim_picks":
+        return ok([]);
     }
     return new Response("{}", { status: 404 });
   }) as unknown as typeof globalThis.fetch;
@@ -491,7 +493,7 @@ test("--loop carries on after a failed pass", async () => {
       fetch: flaky,
       signal: stop.signal,
       sleep: async () => {
-        if (calls > 1) stop.abort();
+        if (s.sb.finished.length) stop.abort();
       },
     },
   );
@@ -535,4 +537,95 @@ test("--loop refuses to mix with --dry-run, --list or --only", async () => {
       2,
     );
   assert.deepEqual(s.sb.calls, []);
+});
+
+// The Worker's picks routes as a stub: two local readers due picks.
+function picksWorker() {
+  const finished: unknown[] = [];
+  const auth: string[] = [];
+  const request = {
+    model: "claude-haiku-5-5",
+    max_tokens: 800,
+    messages: [{ role: "user", content: [{ type: "text", text: "Pick." }] }],
+    output_config: {
+      format: { type: "json_schema", schema: { type: "object" } },
+    },
+  };
+  const fetch = (async (url: string, init: RequestInit) => {
+    auth.push((init.headers as Record<string, string>).authorization);
+    const path = url.replace(WORKER, "");
+    const ok = (body: unknown) => new Response(JSON.stringify(body));
+    if (path === "/team/claim") return ok({ runs: [] });
+    if (path === "/team/picks/claim")
+      return ok({
+        prompts: [
+          { turnId: "picks-1", request },
+          { turnId: "picks-2", request },
+        ],
+      });
+    if (path === "/team/picks/finish") {
+      finished.push(JSON.parse(init.body as string));
+      return ok({ stored: true });
+    }
+    return new Response("{}", { status: 404 });
+  }) as unknown as typeof globalThis.fetch;
+  return { fetch, finished, auth };
+}
+
+test("--loop answers local readers' picks with the local claude", async () => {
+  const w = picksWorker();
+  const claude = stubClaude({ json: true });
+  const lines: string[] = [];
+  const stop = new AbortController();
+  const code = await teamRunMain(
+    ["--loop"],
+    { SCOUT_TEAM_RUNNER: "on" },
+    CONFIG,
+    {
+      fetch: w.fetch,
+      spawnFn: claude.spawnFn,
+      print: (l) => void lines.push(l),
+      signal: stop.signal,
+      sleep: async () => stop.abort(),
+    },
+  );
+  assert.equal(code, 0);
+  assert.deepEqual(
+    w.finished.map((f) => (f as { turnId: string }).turnId),
+    ["picks-1", "picks-2"],
+  );
+  const [first] = w.finished as Array<{
+    text: string;
+    usage: Record<string, number>;
+  }>;
+  assert.match(first.text, /^I have enough/);
+  assert.equal(first.usage.outputTokens, 700);
+  const args = claude.spawns[0].args;
+  assert.equal(args[args.indexOf("--model") + 1], "haiku");
+  assert.ok(args.includes("--json-schema"));
+  assert.ok(w.auth.every((a) => a === `Bearer ${TOKEN}`));
+  assert.match(lines.join("\n"), /picks: 2 of 2 stored/);
+  assert.doesNotMatch(lines.join("\n"), new RegExp(TOKEN));
+});
+
+test("a pick claude can't answer is printed and left; the loop goes on", async () => {
+  const w = picksWorker();
+  const lines: string[] = [];
+  const stop = new AbortController();
+  const code = await teamRunMain(
+    ["--loop"],
+    { SCOUT_TEAM_RUNNER: "on" },
+    CONFIG,
+    {
+      fetch: w.fetch,
+      spawnFn: stubClaude({ fail: true }).spawnFn,
+      print: (l) => void lines.push(l),
+      signal: stop.signal,
+      sleep: async () => stop.abort(),
+    },
+  );
+  assert.equal(code, 0);
+  assert.equal(w.finished.length, 0);
+  assert.match(lines.join("\n"), /picks picks-1: claude exited 1/);
+  assert.match(lines.join("\n"), /picks: 0 of 2 stored/);
 });

@@ -36,6 +36,11 @@ export type ClaudeRunOptions = {
   // Caps a web-research session's agentic turns (`--max-turns`): each search
   // or fetch takes one. Unset, MAX_RESEARCH_TURNS.
   maxTurns?: number;
+  // `--model`, over SCOUT_CLAUDE_MODEL. Unset, that or the CLI's default.
+  model?: string;
+  // `--json-schema`: the answer must be JSON that follows it. The text is then
+  // the CLI's validated `structured_output`, as JSON.
+  jsonSchema?: Record<string, unknown>;
 };
 
 // A research run that keeps searching ends instead of looping. A real run
@@ -142,7 +147,13 @@ export function parseCliOutput(
   }
   if (!json || json.type !== "result") return raw;
 
-  const text = typeof json.result === "string" ? json.result : "";
+  // With `--json-schema`, the validated answer is `structured_output`.
+  const text =
+    json.structured_output !== undefined && json.structured_output !== null
+      ? JSON.stringify(json.structured_output)
+      : typeof json.result === "string"
+        ? json.result
+        : "";
   const total = record(json.usage) ?? {};
   const tools = record(total.server_tool_use) ?? {};
   const models = Object.entries(record(json.modelUsage) ?? {}).flatMap(
@@ -226,6 +237,7 @@ export function runClaude(
   const limitMs = timeoutMs(opts.timeoutMs);
   const label = opts.label ?? "claude run";
   const { signal } = opts;
+  const model = opts.model || process.env.SCOUT_CLAUDE_MODEL;
 
   return new Promise<ClaudeOutput>((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
@@ -246,8 +258,9 @@ export function runClaude(
         "",
         // The child no longer reads the reader's settings, so a model choice
         // has to come from here. Unset, the CLI's default model is used.
-        ...(process.env.SCOUT_CLAUDE_MODEL
-          ? ["--model", process.env.SCOUT_CLAUDE_MODEL]
+        ...(model ? ["--model", model] : []),
+        ...(opts.jsonSchema
+          ? ["--json-schema", JSON.stringify(opts.jsonSchema)]
           : []),
       ],
       { stdio: ["pipe", "pipe", "pipe"], cwd: os.tmpdir(), env: childEnv() },

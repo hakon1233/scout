@@ -254,6 +254,17 @@ test("a result without model usage falls back to its usage totals", () => {
   });
 });
 
+test("with --json-schema, the text is the CLI's structured_output as JSON", () => {
+  const out = parseCliOutput(
+    JSON.stringify({
+      ...CLI_RESULT,
+      result: '{"reply": "loose"}',
+      structured_output: { reply: "validated" },
+    }),
+  );
+  assert.equal(out.text, '{"reply":"validated"}');
+});
+
 test("garbled numbers in the json result count as zero, never NaN", () => {
   const out = parseCliOutput(
     JSON.stringify({

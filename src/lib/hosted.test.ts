@@ -357,6 +357,17 @@ test("chat and confirm go to the Worker and return its turn", async () => {
   });
 });
 
+test("a chat the Mac's claude could not answer shows the gateway's 503 sentence", async () => {
+  const said = "Claude on your Mac took too long to answer. Try again.";
+  const { fetch } = stubFetch({
+    "/chat": { status: 503, body: { error: said } },
+  });
+  await assert.rejects(data(fetch).chat("Rust releases"), {
+    name: "HostedError",
+    message: said,
+  });
+});
+
 test("a voice clip goes to the Worker as audio; a limit says to type instead", async () => {
   const sent: {
     url: string;

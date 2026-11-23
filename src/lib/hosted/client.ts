@@ -121,6 +121,8 @@ export function hostedClient(deps: HostedDeps) {
     // The publish route's other refusals are written for the reader.
     if (path === PUBLISH_PATH && said && status !== 502)
       throw new HostedError("failed", said);
+    // The Mac's gateway when its `claude` could not answer (local accounts).
+    if (status === 503 && said) throw new HostedError("failed", said);
     if (status === 409)
       throw new HostedError(
         "failed",

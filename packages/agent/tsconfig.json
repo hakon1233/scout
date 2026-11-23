@@ -13,5 +13,5 @@
     "lib": ["ES2022", "DOM"]
   },
   "include": ["src/**/*"],
-  "exclude": ["src/team-runner.ts"]
+  "exclude": ["src/team-runner.ts", "src/local-relay.ts"]
 }
