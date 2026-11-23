@@ -505,7 +505,37 @@ export function createFakeHostedData(): HostedData {
       patch(id, { visibility, shareSlug: slug });
       return slug;
     },
-    shared: async () => null,
+    // A share link resolves to one of the reader's topics (its latest brief)
+    // or a catalog topic (no brief yet); anything else is gone.
+    async shared(slug) {
+      const own = interests.find((i) => i.shareSlug === slug);
+      if (own)
+        return {
+          id: own.id,
+          topic: own.topic,
+          visibility: own.visibility,
+          owned: !own.following,
+          following: own.following,
+          team: false,
+          brief: {
+            ...brief,
+            interests: [own.topic],
+            articles: brief.articles.filter((a) => a.interest === own.topic),
+          },
+        };
+      const card = catalog.find((c) => c.slug === slug);
+      return card
+        ? {
+            id: card.id,
+            topic: card.title,
+            visibility: "public",
+            owned: false,
+            following: false,
+            team: card.team,
+            brief: null,
+          }
+        : null;
+    },
     async follow() {
       throw new Error("Following isn't available in this preview.");
     },

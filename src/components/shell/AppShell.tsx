@@ -11,6 +11,8 @@ import { planFor } from "@/lib/plans";
 // The app's frame on every /app/* screen: a floating glass logo pill at the
 // top left (home) and a round glass menu button at the top right, over a plain
 // page. No full-width bar and no bottom tabs. The page column is 680px wide.
+// From 1024 px the pills sit on the column's edges with the main destinations
+// (Brief, Topics, Browse, Settings) beside the menu button.
 
 /** Where "New topic" goes: the setup chat. */
 export function newTopicHref(): string {
@@ -35,24 +37,16 @@ export type ShellMenu = {
 export function AppShell({
   children,
   menu,
-  width = "column",
+  top,
 }: {
   children: React.ReactNode;
   menu?: ShellMenu;
-  /** "column" is the 680px reading column; "full" leaves layout to the page. */
-  width?: "column" | "full";
+  /** The top bar's pills in place of the app's (a signed-out visitor's). */
+  top?: React.ReactNode;
 }) {
-  if (width === "full") {
-    return (
-      <>
-        <TopPills menu={menu} />
-        {children}
-      </>
-    );
-  }
   return (
     <>
-      <TopPills menu={menu} />
+      {top ? <TopBar>{top}</TopBar> : <TopPills menu={menu} />}
       <main className="min-h-screen bg-page px-4 pb-16 pt-[72px] text-primary sm:px-6 sm:pt-[88px]">
         <div className="mx-auto flex w-full max-w-[680px] flex-col gap-6">
           {children}
@@ -92,7 +86,7 @@ export function PageHeader({
         </Link>
       )}
       <div className="flex items-center justify-between gap-3">
-        <h1 className="min-w-0 font-serif text-title-1 text-primary [text-wrap:balance]">
+        <h1 className="min-w-0 font-serif text-title-1 text-primary text-pretty">
           {title}
         </h1>
         {action}
@@ -112,14 +106,58 @@ export function TopPills({ menu }: { menu?: ShellMenu }) {
     if (isHostedBuild()) startHostedLikes();
   }, []);
   return (
-    <>
-      <div className="fixed left-3 top-3 z-40 sm:left-5 sm:top-4">
-        <ScoutWordmark />
-      </div>
-      <div className="fixed right-3 top-3 z-40 sm:right-5 sm:top-4">
+    <TopBar>
+      <ScoutWordmark />
+      <span className="flex items-center gap-2">
+        <MainNav />
         <AppMenu menu={menu} />
-      </div>
-    </>
+      </span>
+    </TopBar>
+  );
+}
+
+/**
+ * The floating bar the pills sit in: the window's corners on a phone and a
+ * tablet, the reading column's edges from 1024 px. Clicks pass through the
+ * gap between the pills.
+ */
+export function TopBar({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-3 top-3 z-40 flex items-center justify-between gap-3 *:pointer-events-auto sm:inset-x-5 sm:top-4 lg:inset-x-0 lg:mx-auto lg:max-w-[680px]">
+      {children}
+    </div>
+  );
+}
+
+// The main destinations, always visible on a computer. A phone reaches them
+// through the menu.
+const DESTINATIONS = [
+  { href: "/app/", label: "Brief" },
+  { href: "/app/topics/", label: "Topics" },
+  { href: "/app/browse/", label: "Browse" },
+  { href: "/app/settings/", label: "Settings" },
+];
+
+function MainNav() {
+  const pathname = usePathname() ?? "";
+  const here = (href: string) =>
+    pathname.replace(/\/$/, "") === href.replace(/\/$/, "");
+  return (
+    <nav
+      aria-label="Main"
+      className="glass hidden h-11 items-center gap-0.5 rounded-[22px] p-1 lg:flex"
+    >
+      {DESTINATIONS.map((d) => (
+        <Link
+          key={d.href}
+          href={d.href}
+          aria-current={here(d.href) ? "page" : undefined}
+          className={`inline-flex h-9 items-center rounded-[18px] px-3.5 text-body-sm transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring ${here(d.href) ? "bg-surface-muted/70 font-medium text-primary" : "text-secondary"}`}
+        >
+          {d.label}
+        </Link>
+      ))}
+    </nav>
   );
 }
 
@@ -181,7 +219,7 @@ function AppMenu({ menu }: { menu?: ShellMenu }) {
     pathname.replace(/\/$/, "") === href.replace(/\/$/, "");
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} className="relative">
       <button
         ref={buttonRef}
         type="button"
@@ -198,7 +236,7 @@ function AppMenu({ menu }: { menu?: ShellMenu }) {
         <nav
           id="app-menu"
           aria-label="Menu"
-          className="glass glass-strong fixed right-3 top-16 flex w-[min(320px,calc(100%-20px))] flex-col gap-0.5 rounded-[22px] p-2 sm:right-5 sm:top-[72px]"
+          className="glass glass-strong fixed right-3 top-16 flex w-[min(320px,calc(100%-20px))] flex-col gap-0.5 rounded-[22px] p-2 sm:right-5 sm:top-[72px] lg:absolute lg:right-0 lg:top-14 lg:w-80"
         >
           <Link
             href="/app/profile/"
@@ -221,7 +259,8 @@ function AppMenu({ menu }: { menu?: ShellMenu }) {
               href={l.href}
               onClick={close}
               aria-current={here(l.href) ? "page" : undefined}
-              className={`${ROW} ${here(l.href) ? "bg-surface-muted/70" : ""}`}
+              // From 1024 px these sit in the main nav instead.
+              className={`${ROW} lg:hidden ${here(l.href) ? "bg-surface-muted/70" : ""}`}
             >
               <span className="flex-1">{l.label}</span>
               {l.count !== undefined && (

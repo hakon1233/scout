@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 import { useHostedData } from "@/hooks/useHostedData";
-import { ScoutWordmark } from "@/components/shell/AppShell";
+import { useSignedIn } from "@/hooks/useSignedIn";
+import { AppShell, ScoutWordmark } from "@/components/shell/AppShell";
 import { AppSkeleton } from "@/components/AppSkeleton";
 import { BriefLayout } from "@/components/BriefLayout";
 import { PushBell } from "@/components/PushBell";
@@ -20,19 +21,25 @@ import { startUsage } from "@/lib/usage";
 // A share link's page: `/i/?s=<slug>`. Anyone can read the interest's latest
 // brief, signed in or out; a signed-in reader can follow it. The site is a
 // static export, so the slug is read from the URL here on the client.
+// It wears the app's frame: a reader gets the app's own bar, a visitor the
+// logo and a theme switch.
 export default function SharedPage() {
+  const signedIn = useSignedIn();
   return (
-    <main className="min-h-screen bg-page px-4 py-8 text-primary sm:px-6 sm:py-12">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
-        <nav className="flex items-center justify-between gap-3">
-          <ScoutWordmark />
-          <ThemeToggle />
-        </nav>
-        <React.Suspense fallback={<AppSkeleton />}>
-          <Shared />
-        </React.Suspense>
-      </div>
-    </main>
+    <AppShell
+      top={
+        signedIn ? undefined : (
+          <>
+            <ScoutWordmark />
+            {signedIn === false && <ThemeToggle />}
+          </>
+        )
+      }
+    >
+      <React.Suspense fallback={<AppSkeleton />}>
+        <Shared />
+      </React.Suspense>
+    </AppShell>
   );
 }
 

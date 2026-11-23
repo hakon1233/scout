@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { ChatChange, PendingRewrite } from "@scout/core";
+import { buttonClasses } from "@/components/ui";
 import { lineDiff, type DiffLine } from "@/lib/chat-diff";
 
 // One inline action card under a Scout turn. It is the visible proof a turn
@@ -47,7 +48,7 @@ function diffFor(change: ChatChange, prev: string | null): DiffLine[] {
 function DiffLines({ diff }: { diff: DiffLine[] }) {
   if (diff.length === 0) return null;
   return (
-    <div className="max-h-56 overflow-auto py-1.5 font-mono text-[11px] leading-[1.5]">
+    <div className="max-h-56 overflow-auto py-1.5 font-mono text-caption tracking-normal">
       {diff.map((ln, i) => (
         <div
           key={i}
@@ -103,7 +104,7 @@ export function ChatActionCard({
       : "bg-signal text-[color:var(--accent-fg)]";
 
   return (
-    <div className="my-3 overflow-hidden rounded-md border border-border-strong bg-surface">
+    <div className="my-3 overflow-hidden rounded-md bg-surface-muted">
       <div className="flex items-center gap-2 border-b border-border-default px-2.5 py-2">
         <span
           aria-hidden="true"
@@ -111,12 +112,10 @@ export function ChatActionCard({
         >
           {glyph}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.05em] text-secondary">
+        <span className="text-caption font-medium text-secondary">
           {verb} · {topic}
         </span>
-        <span className="ml-auto rounded-pill border border-success-border bg-success-bg px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.05em] text-success">
-          Applied
-        </span>
+        <span className="ml-auto text-caption text-success">Applied</span>
       </div>
 
       <DiffLines diff={diff} />
@@ -129,11 +128,11 @@ export function ChatActionCard({
             setRequested(true);
             onUndo(change, prev);
           }}
-          className="rounded-sm border border-border-default bg-surface px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.05em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-50"
+          className={buttonClasses("secondary", "sm")}
         >
           {requested ? "Undo sent" : "Undo"}
         </button>
-        <span className="font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
+        <span className="text-caption text-muted">
           {requested ? "Asked Scout to reverse this" : "Steers your next run"}
         </span>
       </div>
@@ -200,16 +199,11 @@ export function ChatRewriteProposal({
     if (resolved) returnFocusRef.current?.focus();
   }, [resolved]);
 
-  // The ::after stretches the hit area to 44 px tall on a phone; the
-  // card's padding holds it, so the look is unchanged.
-  const buttonClass =
-    "rounded-sm border border-border-default bg-surface px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.05em] text-secondary transition-colors hover:border-border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-50 relative after:absolute after:-inset-x-1 after:-inset-y-[9px] after:content-['']";
-
   return (
     <div
       role={resolved ? undefined : "alertdialog"}
       aria-labelledby={labelId}
-      className="my-3 overflow-hidden rounded-md border border-border-strong bg-surface"
+      className="my-3 overflow-hidden rounded-md bg-surface-muted"
     >
       <div className="flex items-center gap-2 border-b border-border-default px-2.5 py-2">
         <span
@@ -218,10 +212,7 @@ export function ChatRewriteProposal({
         >
           {feedback ? "→" : create ? "+" : "~"}
         </span>
-        <span
-          id={labelId}
-          className="font-mono text-[10px] uppercase tracking-[0.05em] text-secondary"
-        >
+        <span id={labelId} className="text-caption font-medium text-secondary">
           {feedback
             ? "Send feedback"
             : create
@@ -230,17 +221,13 @@ export function ChatRewriteProposal({
           · {pr.topic}
         </span>
         {resolved === "applied" ? (
-          <span className="ml-auto rounded-pill border border-success-border bg-success-bg px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.05em] text-success">
+          <span className="ml-auto text-caption text-success">
             {feedback ? "Sent" : create ? "Saved" : "Applied"}
           </span>
         ) : resolved === "discarded" ? (
-          <span className="ml-auto rounded-pill border border-border-default bg-surface-muted px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
-            Discarded
-          </span>
+          <span className="ml-auto text-caption text-muted">Discarded</span>
         ) : (
-          <span className="ml-auto rounded-pill border border-border-default bg-surface-muted px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
-            Pending
-          </span>
+          <span className="ml-auto text-caption text-muted">Pending</span>
         )}
       </div>
 
@@ -265,7 +252,7 @@ export function ChatRewriteProposal({
 
       <div className="flex items-center gap-2 border-t border-border-default px-2.5 py-2">
         {resolved ? (
-          <span className="font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
+          <span className="text-caption text-muted">
             {feedback
               ? resolved === "applied"
                 ? "Sent to the Scout team"
@@ -284,7 +271,7 @@ export function ChatRewriteProposal({
               type="button"
               disabled={disabled}
               onClick={onApply}
-              className={buttonClass}
+              className={buttonClasses("primary", "sm")}
             >
               {create || feedback ? "Confirm" : "Apply"}
             </button>
@@ -293,11 +280,11 @@ export function ChatRewriteProposal({
               type="button"
               disabled={disabled}
               onClick={onDiscard}
-              className={buttonClass}
+              className={buttonClasses("secondary", "sm")}
             >
               Discard
             </button>
-            <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
+            <span className="ml-auto text-caption text-muted">
               Nothing happens until you choose
             </span>
           </>
