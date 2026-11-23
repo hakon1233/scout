@@ -1,7 +1,8 @@
 // The seam between Scout's server code (researchInterest, the hosted chat, the
-// run queue's Worker) and the Claude Messages API. Two adapters:
-// anthropicClient (plain fetch, for the hosted functions) and recordedClient
-// (replays recorded responses, for tests). Host-neutral: fetch and AbortSignal
+// run queue's Worker) and the Claude Messages API. Adapters: anthropicClient
+// (plain fetch, for the hosted functions), recordedClient (replays recorded
+// responses, for tests), and captureRequest and replayClient (the local
+// account relay: the Mac's `claude` answers instead of the API). Host-neutral: fetch and AbortSignal
 // only, no Node, Deno or Supabase APIs.
 
 // Only the parts of the Messages API this package reads or sends. Content
@@ -110,6 +111,58 @@ export function recordedClient(
       const next = queue.shift();
       if (!next) throw new Error("recordedClient: no recorded response left");
       return structuredClone(next);
+    },
+  };
+}
+
+// The local account relay (core's relay.ts): a local account's model calls are
+// answered by the Mac's `claude`, never the API, in two steps around the same
+// unchanged hosted function.
+//
+// Step one: runs `run` with a client that stops at the model call. It never
+// answers (so nothing after the call runs: no parse, no commit) and hands back
+// the request it was given. `done` when `run` finished without a model call.
+// `run`'s own rejection before the call is rethrown.
+export async function captureRequest<T>(
+  run: (claude: ClaudeClient) => Promise<T>,
+): Promise<{ captured: MessagesRequest } | { done: T }> {
+  let capture!: (request: MessagesRequest) => void;
+  const captured = new Promise<MessagesRequest>((resolve) => {
+    capture = resolve;
+  });
+  const client: ClaudeClient = {
+    createMessage(request) {
+      capture(structuredClone(request));
+      // Never settles: the hosted function stops here.
+      return new Promise<MessagesResponse>(() => undefined);
+    },
+  };
+  return Promise.race([
+    captured.then((request) => ({ captured: request })),
+    run(client).then((done) => ({ done })),
+  ]);
+}
+
+// Step two: a client whose one call returns `text` as the model's answer, with
+// the tokens the Mac's session used. A second call throws.
+export function replayClient(answer: {
+  text: string;
+  usage: Usage;
+  stopReason?: string;
+  model?: string;
+}): ClaudeClient {
+  let used = false;
+  return {
+    async createMessage(_request, signal) {
+      signal.throwIfAborted();
+      if (used) throw new Error("replayClient: the answer was already used");
+      used = true;
+      return {
+        ...(answer.model ? { model: answer.model } : {}),
+        content: [{ type: "text", text: answer.text }],
+        stop_reason: answer.stopReason ?? "end_turn",
+        usage: { ...answer.usage },
+      };
     },
   };
 }

@@ -10,30 +10,51 @@
 //   POST /account/delete         delete the reader's account: their topics
 //                                first (followers are told), then the auth
 //                                user, whose rows cascade; 200 {deleted: true}.
-// Bodies over 16 KB are refused (413) unread. The service-role routes verify
+// A local account (profiles.runs_local) makes no Claude API calls: its /chat
+// message and /publish answer 409 with LOCAL_ACCOUNT_MESSAGE, unless sent
+// through the relay (the Mac's gateway; core's relay.ts, docs/ARCHITECTURE.md
+// "Local account relay"): `x-scout-relay: prompt | answer` and
+// `x-scout-relay-token: <TEAM_RUNNER_TOKEN>` beside the reader's JWT.
+// Bodies over 16 KB are refused (413) unread (a relay answer: 192 KB). The service-role routes verify
 // the JWT with Supabase Auth before reading the body.
 // The /team routes (team.ts) take their own tokens instead of a reader's JWT.
 // Host-neutral: Request and Response only.
 
 import {
+  LOCAL_ACCOUNT_MESSAGE,
   MAX_CHAT_MESSAGE_CHARS,
+  parseRelayAnswer,
   quotaMessage,
   type PublishVerdict,
+  type RelayAnswer,
+  type RelayStep,
 } from "@scout/core";
 import {
   PublishCheckFailed,
   createChat,
   createPublish,
   type ChatConfirm,
+  type ChatStore,
   type PublishStart,
+  type PublishStore,
 } from "@scout/hosted";
-import type { ClaudeClient } from "@scout/research";
-import { supabaseChatStore } from "./chat-store.ts";
+import { captureRequest, type ClaudeClient } from "@scout/research";
+import { pendingChatMessage, supabaseChatStore } from "./chat-store.ts";
+import {
+  MAX_RELAY_BODY_BYTES,
+  MAX_RELAY_TEXT_CHARS,
+  readerRunsLocal,
+  relayClaude,
+  relayPromptResponse,
+  relayStepOf,
+  relayTokenOf,
+} from "./relay.ts";
 import {
   bearerToken,
   corsHeaders,
   jsonResponder,
   readJsonBody,
+  sameSecret,
   signedInUser,
   type Json,
 } from "./request.ts";
@@ -74,6 +95,9 @@ const SERVICE_ROUTES = new Set([
   "/publish",
   "/account/delete",
 ]);
+// The routes that call Claude for a reader: a local account's go through the
+// relay only.
+const MODEL_ROUTES = new Set(["/chat", "/publish"]);
 
 export async function handleRequest(
   request: Request,
@@ -106,6 +130,17 @@ export async function handleRequest(
   const jwt = bearerToken(request);
   if (!jwt) return json(401, { error: "sign in first" });
 
+  // The relay: the Mac's gateway, holding TEAM_RUNNER_TOKEN.
+  const step = relayStepOf(request);
+  if (step === "bad" || (step && !MODEL_ROUTES.has(path)))
+    return json(400, { error: "that relay request isn't one Scout reads" });
+  if (step) {
+    if (!deps.teamToken) return json(404, { error: "not found" });
+    const given = relayTokenOf(request);
+    if (!given || !(await sameSecret(given, deps.teamToken)))
+      return json(401, { error: "wrong relay token" });
+  }
+
   let userId: string | null = null;
   if (SERVICE_ROUTES.has(path)) {
     if (!deps.serviceKey || !deps.claude)
@@ -115,7 +150,30 @@ export async function handleRequest(
     userId = user;
   }
 
-  const read = await readJsonBody(request);
+  if (MODEL_ROUTES.has(path)) {
+    let local: boolean;
+    try {
+      local = await readerRunsLocal({
+        url: deps.supabaseUrl,
+        serviceKey: deps.serviceKey as string,
+        userId: userId as string,
+        fetch: deps.fetch,
+      });
+    } catch (err) {
+      console.error("[relay] runs_local lookup failed:", err);
+      return json(502, {
+        error: "Scout couldn't check your account. Try again.",
+      });
+    }
+    if (local && !step) return json(409, { error: LOCAL_ACCOUNT_MESSAGE });
+    if (!local && step)
+      return json(403, { error: "the relay is only for local accounts" });
+  }
+
+  const read = await readJsonBody(
+    request,
+    step === "answer" ? MAX_RELAY_BODY_BYTES : undefined,
+  );
   if (!read) return json(413, { error: "that request is too large" });
   const { body } = read;
 
@@ -123,8 +181,8 @@ export async function handleRequest(
   if (path === "/account/delete")
     return deleteAccount(userId as string, deps, json);
   if (path === "/publish")
-    return publishRoute(body, userId as string, deps, json);
-  return chatRoute(path, body, userId as string, deps, json);
+    return publishRoute(body, userId as string, deps, json, step);
+  return chatRoute(path, body, userId as string, deps, json, step);
 }
 
 async function deleteAccount(
@@ -201,12 +259,19 @@ async function chatRoute(
   userId: string,
   deps: HttpDeps,
   json: Json,
+  step: RelayStep | null,
 ): Promise<Response> {
   const serviceKey = deps.serviceKey as string;
-  const claude = deps.claude as ClaudeClient;
 
-  let input: { message: string } | { confirm: ChatConfirm } | null;
-  if (path === "/chat") {
+  let input:
+    | { message: string }
+    | { confirm: ChatConfirm }
+    | { answer: RelayAnswer }
+    | null;
+  if (step === "answer") {
+    const answer = parseRelayAnswer(body, MAX_RELAY_TEXT_CHARS);
+    input = answer && UUID.test(answer.turnId) ? { answer } : null;
+  } else if (path === "/chat") {
     const message = (body as { message?: unknown } | undefined)?.message;
     input =
       typeof message === "string" &&
@@ -223,6 +288,31 @@ async function chatRoute(
   try {
     const service = { apikey: serviceKey, bearer: serviceKey };
     const rpc = rpcCaller(deps.supabaseUrl, deps.fetch);
+    const supabase = { url: deps.supabaseUrl, serviceKey, fetch: deps.fetch };
+    const store = supabaseChatStore(supabase);
+    // A relayed turn's call ran on the Mac: its tokens are kept, its cost is 0.
+    const relayStore: ChatStore = {
+      ...store,
+      commit: (user, commit) => store.commit(user, { ...commit, costUsd: 0 }),
+    };
+
+    if ("answer" in input) {
+      // The turn the prompt step reserved, still waiting: its message is the
+      // one the prompt was built from.
+      const { answer } = input;
+      const message = await pendingChatMessage(supabase, userId, answer.turnId);
+      if (message === null)
+        return json(409, { error: "That turn is not waiting for an answer." });
+      const chat = createChat({
+        claude: relayClaude(answer),
+        store: relayStore,
+      });
+      return json(
+        200,
+        await chat.turn(userId, message, { turnId: answer.turnId }),
+      );
+    }
+
     // A message reserves its turn (a pending row, under the reader's lock)
     // before Claude is called, so parallel requests cannot pass the limit.
     let turnId: string | undefined;
@@ -244,14 +334,19 @@ async function chatRoute(
       if (blocked) return json(429, { error: blocked });
     }
 
-    const chat = createChat({
-      claude,
-      store: supabaseChatStore({
-        url: deps.supabaseUrl,
-        serviceKey,
-        fetch: deps.fetch,
-      }),
-    });
+    if ("message" in input && step === "prompt") {
+      const { message } = input;
+      const out = await captureRequest((claude) =>
+        createChat({ claude, store: relayStore }).turn(userId, message, {
+          turnId,
+        }),
+      );
+      return "captured" in out
+        ? relayPromptResponse(json, turnId as string, out.captured)
+        : json(200, out.done);
+    }
+
+    const chat = createChat({ claude: deps.claude as ClaudeClient, store });
     if ("message" in input)
       return json(200, await chat.turn(userId, input.message, { turnId }));
     const turn = await chat.confirm(userId, input.confirm);
@@ -270,55 +365,100 @@ async function chatRoute(
   }
 }
 
+// A relayed answer names a check that is not open (finished, too old, or
+// another reader's).
+class CheckNotWaiting extends Error {}
+
 // The publish check: publish_start checks ownership and the limits and opens a
 // check row; one Haiku call; publish_finish records the verdict and, on
-// approve, sets the tags and makes the topic public.
+// approve, sets the tags and makes the topic public. Through the relay, the
+// prompt step stops at the call and the answer step reopens the same check
+// (publish_relay_start) with the Mac's answer, recorded at no cost.
 async function publishRoute(
   body: unknown,
   userId: string,
   deps: HttpDeps,
   json: Json,
+  step: RelayStep | null,
 ): Promise<Response> {
-  const interest = (body as { interest?: unknown } | undefined)?.interest;
-  if (typeof interest !== "string" || !UUID.test(interest))
-    return json(400, { error: "interest must be a topic's id" });
+  let interest = "";
+  let answer: RelayAnswer | null = null;
+  if (step === "answer") {
+    answer = parseRelayAnswer(body, MAX_RELAY_TEXT_CHARS);
+    if (!answer || !/^\d{1,18}$/.test(answer.turnId))
+      return json(400, { error: "that answer isn't one Scout reads" });
+  } else {
+    const given = (body as { interest?: unknown } | undefined)?.interest;
+    if (typeof given !== "string" || !UUID.test(given))
+      return json(400, { error: "interest must be a topic's id" });
+    interest = given;
+  }
 
   const serviceKey = deps.serviceKey as string;
   const service = { apikey: serviceKey, bearer: serviceKey };
   const rpc = rpcCaller(deps.supabaseUrl, deps.fetch);
-  const publish = createPublish({
-    claude: deps.claude as ClaudeClient,
-    store: {
-      async start(user, interestId) {
-        const s = (await rpc(
+  let openedCheck: string | undefined;
+  const store: PublishStore = {
+    async start(user, interestId) {
+      let s: Omit<PublishStart, "checkId"> & { checkId: number | string };
+      if (answer) {
+        try {
+          s = (await rpc(
+            "publish_relay_start",
+            { p_user: user, p_check: Number(answer.turnId) },
+            service,
+          )) as typeof s;
+        } catch (err) {
+          if (err instanceof RpcError && err.code === "P0002")
+            throw new CheckNotWaiting();
+          throw err;
+        }
+      } else {
+        s = (await rpc(
           "publish_start",
           { p_user: user, p_interest: interestId },
           service,
-        )) as Omit<PublishStart, "checkId"> & { checkId: number | string };
-        return { ...s, checkId: String(s.checkId) };
-      },
-      async finish(user, checkId, verdict: PublishVerdict, costUsd, tokens) {
-        return (await rpc(
-          "publish_finish",
-          {
-            p_user: user,
-            p_check: Number(checkId),
-            p_approved: verdict.approved,
-            p_tags: verdict.approved ? verdict.tags : [],
-            p_reason: verdict.approved ? null : verdict.reason,
-            p_cost_usd: costUsd,
-            p_input_tokens: tokens.inputTokens,
-            p_output_tokens: tokens.outputTokens,
-          },
-          service,
-        )) as string | null;
-      },
+        )) as typeof s;
+      }
+      openedCheck = String(s.checkId);
+      return { ...s, checkId: openedCheck };
     },
-  });
+    async finish(user, checkId, verdict: PublishVerdict, costUsd, tokens) {
+      return (await rpc(
+        "publish_finish",
+        {
+          p_user: user,
+          p_check: Number(checkId),
+          p_approved: verdict.approved,
+          p_tags: verdict.approved ? verdict.tags : [],
+          p_reason: verdict.approved ? null : verdict.reason,
+          // A relayed check ran on the Mac: tokens kept, no cost.
+          p_cost_usd: step ? 0 : costUsd,
+          p_input_tokens: tokens.inputTokens,
+          p_output_tokens: tokens.outputTokens,
+        },
+        service,
+      )) as string | null;
+    },
+  };
 
   try {
-    return json(200, await publish.publish(userId, interest));
+    if (step === "prompt") {
+      const out = await captureRequest((claude) =>
+        createPublish({ claude, store }).publish(userId, interest),
+      );
+      return "captured" in out
+        ? relayPromptResponse(json, openedCheck as string, out.captured)
+        : json(200, out.done);
+    }
+    const claude = answer ? relayClaude(answer) : (deps.claude as ClaudeClient);
+    return json(
+      200,
+      await createPublish({ claude, store }).publish(userId, interest),
+    );
   } catch (err) {
+    if (err instanceof CheckNotWaiting)
+      return json(409, { error: "That check is not waiting for an answer." });
     if (err instanceof PublishCheckFailed)
       return json(503, {
         error: "Scout couldn't check this topic. Try again later.",

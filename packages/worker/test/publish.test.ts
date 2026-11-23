@@ -30,6 +30,7 @@ function stubSupabase(
     const fail = (body: unknown) =>
       new Response(JSON.stringify(body), { status: 400 });
     if (path === "/auth/v1/user") return ok({ id: USER });
+    if (path === "/rest/v1/profiles") return ok([{ runs_local: false }]);
     if (path === "/rest/v1/rpc/publish_start")
       return over.startError
         ? fail(over.startError)

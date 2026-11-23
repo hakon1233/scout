@@ -17,6 +17,10 @@ export const TEAM_PATHS = {
   finish: "/team/runs",
   // { interestId, reason } -> { hidden: boolean }. Hides a public topic.
   hide: "/team/hide",
+  // { limit } -> TeamPicksClaim (relay.ts). Local readers due new picks.
+  picksClaim: "/team/picks/claim",
+  // RelayAnswer (relay.ts) -> { stored: boolean }. Records one reader's picks.
+  picksFinish: "/team/picks/finish",
 } as const;
 
 export type TeamTopic = {

@@ -42,6 +42,21 @@ export function jsonResponder(headers: Record<string, string> = {}): Json {
     });
 }
 
+// Compares two secrets in time that does not depend on where they differ:
+// their SHA-256 digests, byte by byte, all the way through.
+export async function sameSecret(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [da, db] = await Promise.all(
+    [a, b].map(
+      async (s) =>
+        new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(s))),
+    ),
+  );
+  let diff = 0;
+  for (let i = 0; i < da.length; i++) diff |= da[i] ^ db[i];
+  return diff === 0;
+}
+
 // The token of `Authorization: Bearer <token>`, if there is one.
 export function bearerToken(request: Request): string | undefined {
   return /^Bearer (\S+)$/.exec(request.headers.get("authorization") ?? "")?.[1];

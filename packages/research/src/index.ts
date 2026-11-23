@@ -10,7 +10,9 @@ export {
 } from "./research-interest.ts";
 export {
   anthropicClient,
+  captureRequest,
   recordedClient,
+  replayClient,
   type ClaudeClient,
   type MessagesRequest,
   type MessagesResponse,

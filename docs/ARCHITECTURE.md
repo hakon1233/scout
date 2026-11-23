@@ -125,7 +125,9 @@ it (`src/lib/boundaries.test.ts` checks this). Plain TypeScript with `fetch`.
   an exact repeat. The team runner does the same through the local `claude` with
   `--tools ""`.
 - `claude-client.ts`: the `ClaudeClient` seam, with a `fetch` adapter and a recorded-
-  response adapter for tests. `pricing.ts`: the price table. Every hosted function
+  response adapter for tests, plus the relay's pair (below, "Local account relay"):
+  `captureRequest` runs a function until its model call and hands back the request,
+  and `replayClient` answers that one call with the Mac's text. `pricing.ts`: the price table. Every hosted function
   uses these two: no other package defines its own Claude client or prices.
 
 ### Hosted functions (`packages/hosted/src`)
@@ -219,7 +221,8 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   weekly push waits until their picks are made (at most 12 h) and then names them. A
   profile change asks for new picks, at most once a day. Picks made by an older
   `PICKS_VERSION` are stale and made again on the next tick (at most hourly). Readers
-  over their spend cap are skipped and get the push with their old picks.
+  over their spend cap are skipped and get the push with their old picks. Local
+  accounts are never claimed here; their picks go through `/team/picks/*` (below).
 - `index.ts`: the Worker's wiring (cron every minute, fetch). Secrets via `wrangler secret`;
   without `VAPID_PRIVATE_KEY` no pushes are sent.
 - `team.ts`: the `/team` routes (paths in core's `team.ts`), with no CORS and their own
@@ -229,6 +232,7 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
   result through `team_finish_run`, which queues the same pushes as a cron run, with the
   claude session's usage; its CLI cost goes to `runs.cli_cost_usd`, never `cost_usd`,
   so it stays out of the daily spend ceiling.
+  `picks/claim` and `picks/finish` make local accounts' picks through the relay (below).
   `MODERATION_TOKEN`: `POST /team/hide {interestId, reason}` hides a public topic
   (`team_hide_interest`, logged in `moderation_log`). Hidden, never deleted.
 - `voice.ts`: `POST /voice` (audio body, the reader's JWT, at most 1.5 MB) turns a clip
@@ -275,6 +279,39 @@ companion never imports it.
   launchd agent from this checkout (`team-runner-service.ts`, label
   `ing.scout.team-runner`, log `~/Library/Logs/scout-team-runner.log`);
   `uninstall-service` removes it.
+
+### Local account relay (`packages/core/src/relay.ts`, `packages/worker/src/relay.ts`)
+
+A local account makes no Claude API calls at all: its chat, publish check and picks
+run on the Mac's `claude`. The Worker keeps every check, limit and parser; only the
+model call moves. The hosted functions run unchanged: `captureRequest` stops one at its
+model call, and `replayClient` reruns it with the Mac's answer, so the same parsers
+decide what lands and fail closed.
+
+- Without the relay, a local account's `/chat` message and `/publish` get 409
+  `{error: LOCAL_ACCOUNT_MESSAGE}` (open Scout on the Mac). `/chat/confirm`, discard and
+  every other route work as before. The cron's `claim_picks` skips local accounts.
+- A relay call to `/chat` or `/publish` carries the reader's JWT, `x-scout-relay:
+prompt | answer` and `x-scout-relay-token: <TEAM_RUNNER_TOKEN>`. Wrong token: 401;
+  the token unset on the Worker: 404; a reader who is not local: 403.
+- `prompt` (the route's normal body): the Worker checks the limits, begins the turn
+  (`begin_chat_turn`, `publish_start`) and answers 200 `{turnId, request}` with the
+  response header `x-scout-relay: prompt`. `request` is the Messages API body to give
+  `claude`. With no such header, no model call was needed and the body is the route's
+  normal answer.
+- `answer` `{turnId, text, usage?, stopReason?}` (at most 192 KB): the Worker reruns
+  the turn with `text` as the model's answer and returns the route's normal answer.
+  Cost is recorded as 0; tokens are kept. A chat turn must still be pending and at most
+  10 minutes old, and a publish check open and at most 10 minutes old
+  (`publish_relay_start`). Otherwise the answer gets 409.
+- Picks (`TEAM_RUNNER_TOKEN` as bearer): `POST /team/picks/claim {limit?}` (at most 5)
+  claims due local readers (`team_claim_picks`, only while the team runner is on, no
+  spend gate) and returns `{prompts: [{turnId, request}]}`; `turnId` is the picks run.
+  `POST /team/picks/finish` with a `RelayAnswer` replays it and calls `finish_picks`
+  at cost 0, answering `{stored}`. A claim is open for an hour (`team_pick_job`; 404
+  after that).
+- SQL: `*_local_relay.sql` (`claim_due_picks`, `team_claim_picks`, `team_pick_job`,
+  `publish_relay_start`), tested in `supabase/tests/local_relay.test.sql`.
 
 ### Local Scout on the Mac (`scripts/local-serve.mjs`, `pnpm local:serve`)
 
