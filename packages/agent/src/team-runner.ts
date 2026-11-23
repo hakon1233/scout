@@ -6,8 +6,10 @@
 //
 // The runner holds one secret, TEAM_RUNNER_TOKEN, and no Supabase key. It runs
 // only with SCOUT_TEAM_RUNNER=on (--dry-run excepted) and only does anything
-// while settings.team_runner_on is set in the database. The Worker's cron never
-// runs these topics, on or off: they never spend API dollars.
+// while settings.team_runner_on is set in the database; the Scout team's
+// public topics only while settings.team_catalog_on is set too (the database
+// decides). The Worker's cron never runs these topics, on or off: they never
+// spend API dollars.
 //
 // Not part of the companion: the companion never imports this module.
 // scripts/team-run.mts is its command line (`pnpm team:run`).
@@ -394,13 +396,13 @@ export async function teamRunMain(
       : await runDueTeamTopics(full);
     if (!ran.length)
       print(
-        "Nothing was due. Is settings.team_runner_on set? Paused topics run only with --only.",
+        "Nothing was due. Is settings.team_runner_on set (and team_catalog_on, for Scout team topics)? Paused topics run only with --only.",
       );
     return ran.some((r) => r.status === "missing") ? 1 : 0;
   } catch (err) {
     if (err instanceof TeamRouteError && err.status === 409)
       print(
-        `${err.message}. The runner is on only while settings.team_runner_on is set and Scout is not paused.`,
+        `${err.message}. The runner is on only while settings.team_runner_on is set and Scout is not paused; Scout team topics also need settings.team_catalog_on.`,
       );
     else print(err instanceof Error ? err.message : String(err));
     return 1;

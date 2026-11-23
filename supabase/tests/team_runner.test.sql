@@ -84,10 +84,37 @@ where id in (select run_id from tick);
 delete from tick;
 
 -- ---------------------------------------------------------------------------
--- Runner on: one owner per run
+-- Runner on, catalog off (local accounts only): the catalog does not run at all
 -- ---------------------------------------------------------------------------
 
-update public.settings set team_runner_on = true;
+update public.settings set team_runner_on = true, team_catalog_on = false;
+
+-- A Run now of a catalog topic, waiting in the queue.
+insert into public.runs (interest_id, scheduled_for, requested_by, created_at) values
+  ('7ea70000-0000-4000-8000-0000000000f1', '2026-11-20 13:00+00',
+   '7ea70000-0000-4000-8000-000000000001', '2026-11-20 13:00+00');
+
+select is((select count(*)::int from public.team_topics('2026-11-20 13:00+00') where topic like 'Team %'), 0,
+  'catalog off: team_topics lists no catalog topic');
+select is((select count(*)::int from public.team_claim_runs(10, '2026-11-20 13:00+00') where topic like 'Team %'), 0,
+  'catalog off: the team runner claims no catalog topic');
+select is((select count(*)::int from public.runs
+           where interest_id = '7ea70000-0000-4000-8000-0000000000d1'), 0,
+  'catalog off: a due catalog topic is not queued');
+select is(
+  (select status || ' ' || error_msg from public.runs where interest_id = '7ea70000-0000-4000-8000-0000000000f1'),
+  'failed the Scout team catalog is off', 'catalog off: a queued catalog Run now fails, not stuck');
+select throws_ok($$select * from public.team_start_run('7ea70000-0000-4000-8000-0000000000d1', '2026-11-20 13:00+00')$$,
+  '55000', 'team_start_run: the Scout team catalog is off', 'catalog off: no one-off catalog run either');
+select is((select count(*)::int from public.claim_runs(50, '2026-11-20 13:00+00') where topic like 'Team %' and topic <> 'Team private'), 0,
+  'catalog off: the Worker still never takes a catalog topic');
+delete from public.runs where interest_id = '7ea70000-0000-4000-8000-0000000000f1';
+
+-- ---------------------------------------------------------------------------
+-- Runner and catalog on: one owner per run
+-- ---------------------------------------------------------------------------
+
+update public.settings set team_catalog_on = true;
 
 insert into tick select run_id, topic, doc, searches_per_run from public.claim_runs(50, '2026-11-21 12:00+00');
 select is(pg_temp.queued_topics(), array['Anna public', 'Team private'],

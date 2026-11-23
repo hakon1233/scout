@@ -408,6 +408,7 @@ test("with the database switch off, the runner says so and runs nothing", async 
     1,
   );
   assert.match(s.lines.join("\n"), /team_runner_on/);
+  assert.match(s.lines.join("\n"), /team_catalog_on/);
   assert.equal(s.claude.spawns.length, 0);
 
   assert.equal(

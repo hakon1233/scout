@@ -14,7 +14,8 @@ insert into auth.users (id, email, aud, role) values
 update public.profiles set plan = 'plus', runs_local = true
 where id = '10ca1000-0000-4000-8000-000000000001';
 update public.profiles set plan = 'plus' where id = 'aaaaaaaa-0000-0000-0000-000000000001';
-update public.settings set team_runner_on = true, paused = false;
+-- The catalog stays off: local accounts need only team_runner_on.
+update public.settings set team_runner_on = true, team_catalog_on = false, paused = false;
 update public.settings set daily_ceiling_usd = daily_ceiling_usd + 1000;
 
 insert into public.interests

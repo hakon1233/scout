@@ -257,6 +257,13 @@ companion never imports it.
 - The runner is off unless both switches are on: `SCOUT_TEAM_RUNNER=on` in the shell,
   and `settings.team_runner_on` in the database. While it is off, team topics do not
   run at all. Test with `--dry-run` or the spawn stub, never a real run.
+- The catalog has its own switch, `settings.team_catalog_on` (off by default,
+  `*_team_catalog_switch.sql`). With only `team_runner_on`, the runner does local
+  accounts alone: `mac_runs_now(owner, visibility)` keeps the team's public topics
+  out of `queue_due_runs`, `claim_queued`, `team_topics` and `team_start_run` (55000),
+  and `team_claim_runs` fails a queued catalog Run now ("the Scout team catalog is
+  off") instead of leaving it stuck. The database decides, so the launchd service and
+  any runner started by hand are local-only until the catalog is switched on.
 - A team run's prompt gets what a cron run's gets (brief settings, the last two
   sections, cadence, last story), since `team_claim_runs` and `team_start_run` return
   `claim_runs`'s row. `--dry-run` has none of these and researches with the defaults.
@@ -266,7 +273,8 @@ companion never imports it.
 - `--dry-run` researches and prints, publishing nothing; `--list` shows the topics.
 - Switching on: set the Worker secret `TEAM_RUNNER_TOKEN`, put it and the Worker URL
   in the env file (chmod 600), `update public.settings set team_runner_on = true`, then
-  `SCOUT_TEAM_RUNNER=on pnpm team:run`.
+  `SCOUT_TEAM_RUNNER=on pnpm team:run`. The catalog too:
+  `update public.settings set team_catalog_on = true`.
 - Local accounts (`profiles.runs_local`, set by an admin in SQL; readers cannot write
   it): every topic of theirs, private or shared, runs on the Mac instead of the API,
   with no daily run or spend cap (`*_runs_local.sql`). One SQL check,
@@ -354,8 +362,9 @@ gateway, so every model step runs on the Mac's `claude` (the founder's subscript
   (`wrangler.toml`); the first stays the email site URL.
 - Turning it on, once: the Worker deployed with the relay and that `ALLOWED_ORIGIN`;
   the Worker secret `TEAM_RUNNER_TOKEN`; `TEAM_RUNNER_TOKEN` and `SCOUT_WORKER_URL` in
-  the env file (chmod 600); the migrations through `*_local_relay.sql`
-  (`pnpm db:push:hosted`); `update public.settings set team_runner_on = true` and
+  the env file (chmod 600); the migrations through `*_team_catalog_switch.sql`
+  (`pnpm db:push:hosted`); `update public.settings set team_runner_on = true` (leave
+  `team_catalog_on` off: the catalog's topics stay off the Mac) and
   `update public.profiles set runs_local = true where id = '<founder>'`;
   `pnpm team:run install-service`; `pnpm local:serve`;
   `tailscale serve --bg --https=47900 http://127.0.0.1:47900`; and
