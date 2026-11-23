@@ -89,3 +89,76 @@ test("pausing in Settings frees a slot; resuming with none free says so", async 
     page.getByRole("button", { name: `Resume ${RUST}` }),
   ).toBeVisible();
 });
+
+// The same Pause / Resume on each own topic's card in Topics and on the
+// topic's own page; a followed topic has none.
+test("pausing from a topic card and a topic page; resuming with none free says so", async ({
+  page,
+}) => {
+  await page.route(/^https?:\/\/(?!127\.0\.0\.1|localhost)/, (r) => r.abort());
+  await page.goto(`${ORIGIN}/app/topics/`);
+  const card = (topic: string) =>
+    page
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("link", { name: topic, exact: true }) });
+  await expect(card(POWER)).toBeVisible({ timeout: 60_000 });
+  await expect(
+    page
+      .getByRole("region", { name: "Following" })
+      .getByRole("button", { name: /^(Pause|Resume) / }),
+  ).toHaveCount(0);
+
+  // A daily topic paused and resumed from its card comes back weekly (Free).
+  for (const topic of [POWER, LLAMA]) {
+    await press(page, "Pause", topic);
+    await expect(card(topic)).toContainText("Paused");
+    await press(page, "Resume", topic);
+    await expect(card(topic)).toContainText("Weekly");
+  }
+
+  // A new topic with every weekly slot taken stays paused; its card says why.
+  await page.getByRole("button", { name: "+ New" }).click();
+  const box = page.getByRole("textbox", { name: "Message Scout" });
+  await box.fill("a Norwegian word of the day, explained in English");
+  await box.press("Enter");
+  const confirmCard = page.getByRole("alertdialog", {
+    name: new RegExp(`New topic · ${WORD}`),
+  });
+  await expect(confirmCard.getByText(/^Paused · Private/)).toBeVisible({
+    timeout: 30_000,
+  });
+  await confirmCard.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await press(page, "Resume", WORD);
+  await expect(card(WORD).getByRole("alert")).toHaveText(
+    "No free weekly slot. Pause another topic or upgrade.",
+  );
+  await expect(card(WORD)).toContainText("Paused");
+
+  // The same message on the topic's own page.
+  await page.getByRole("link", { name: WORD, exact: true }).click();
+  await expect(page.getByRole("heading", { name: WORD })).toBeVisible();
+  await press(page, "Resume", WORD);
+  const latest = page.getByRole("region", { name: "Latest" });
+  await expect(latest.getByRole("alert")).toHaveText(
+    "No free weekly slot. Pause another topic or upgrade.",
+  );
+  await page.getByRole("link", { name: "‹ Topics" }).click();
+
+  // Pause another from its page, and the slot is there to take.
+  await page.getByRole("link", { name: RUST, exact: true }).click();
+  await press(page, "Pause", RUST);
+  await expect(
+    page.getByRole("button", { name: `Resume ${RUST}` }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "‹ Topics" }).click();
+  await expect(
+    page.getByRole("button", { name: `Resume ${RUST}` }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: WORD, exact: true }).click();
+  await press(page, "Resume", WORD);
+  await expect(
+    page.getByRole("button", { name: `Pause ${WORD}` }),
+  ).toBeVisible();
+  await expect(latest.getByRole("alert")).toHaveCount(0);
+});

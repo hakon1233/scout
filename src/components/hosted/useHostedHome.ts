@@ -7,6 +7,7 @@ import type { ChatConfirm, ChatTurn } from "@scout/core";
 import {
   HostedError,
   type Allowance,
+  type Cadence,
   type HostedData,
   type HostedHome,
 } from "@/lib/hosted";
@@ -126,12 +127,20 @@ export function useHostedHome({ chat = false }: { chat?: boolean } = {}) {
     [data],
   );
 
+  // Changes the shown home at once (an optimistic update); the next reload
+  // replaces it with the server's.
+  const patch = React.useCallback(
+    (fn: (h: HostedHome) => HostedHome) => setHome((h) => h && fn(h)),
+    [],
+  );
+
   return {
     data,
     home,
     turns,
     loadError,
     reload,
+    patch,
     signedOut,
     send,
     confirm,
@@ -188,7 +197,41 @@ export async function scheduleNew(
 }
 
 /**
- * Resume (Settings): the cadence a paused topic gets back. Its last cadence
+ * The home as it will be once one of the reader's own topics has `cadence`:
+ * the topic's cadence (and, when it pauses, the one it remembers) and the
+ * plan's slot counts. Shown at once while the write is on its way.
+ */
+export function withCadence(
+  home: HostedHome,
+  id: string,
+  cadence: Cadence,
+): HostedHome {
+  const i = home.interests.find((x) => x.id === id);
+  if (!i || i.following || i.cadence === cadence) return home;
+  const a = { ...home.allowance };
+  if (i.cadence !== "off")
+    a[i.cadence] = { ...a[i.cadence], used: a[i.cadence].used - 1 };
+  if (cadence !== "off")
+    a[cadence] = { ...a[cadence], used: a[cadence].used + 1 };
+  return {
+    ...home,
+    allowance: a,
+    interests: home.interests.map((x) =>
+      x.id !== id
+        ? x
+        : {
+            ...x,
+            cadence,
+            ...(cadence === "off" && x.cadence !== "off"
+              ? { lastCadence: x.cadence }
+              : {}),
+          },
+    ),
+  };
+}
+
+/**
+ * Resume (Pause button): the cadence a paused topic gets back. Its last cadence
  * when that slot is free, else the other free one (nothing remembered: weekly
  * first). With neither free it stays paused and the reader is told why; the
  * slot named is the remembered one when the plan has it, else weekly.

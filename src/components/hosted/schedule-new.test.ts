@@ -2,8 +2,13 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { HostedData } from "@/lib/hosted";
-import { resumeSlot, scheduleCreated, scheduleNew } from "./useHostedHome";
+import type { HostedData, HostedHome } from "@/lib/hosted";
+import {
+  resumeSlot,
+  scheduleCreated,
+  scheduleNew,
+  withCadence,
+} from "./useHostedHome";
 
 // Just what scheduleNew touches: the allowance, setCadence and runNow.
 function stubData(daily: [number, number], weekly: [number, number]) {
@@ -115,4 +120,38 @@ test("Resume with no free slot says so plainly and sets nothing", () => {
   assert.deepEqual(resumeSlot(allow([1, 1], [6, 6]), "daily"), {
     message: "No free daily slot. Pause another topic first.",
   });
+});
+
+// withCadence: what a Pause or Resume press shows before the server answers.
+
+const home = (
+  interests: { id: string; cadence: "daily" | "weekly" | "off" }[],
+) =>
+  ({
+    allowance: allow(
+      [interests.filter((i) => i.cadence === "daily").length, 1],
+      [interests.filter((i) => i.cadence === "weekly").length, 6],
+    ),
+    interests: interests.map((i) => ({ ...i, following: false })),
+  }) as unknown as HostedHome;
+
+test("Pause shows the topic paused at once, remembering its cadence, and frees its slot", () => {
+  const h = withCadence(
+    home([
+      { id: "a", cadence: "daily" },
+      { id: "b", cadence: "weekly" },
+    ]),
+    "a",
+    "off",
+  );
+  assert.equal(h.interests[0]?.cadence, "off");
+  assert.equal(h.interests[0]?.lastCadence, "daily");
+  assert.equal(h.allowance.daily.used, 0);
+  assert.equal(h.allowance.weekly.used, 1);
+});
+
+test("Resume shows the topic on its slot at once and counts it", () => {
+  const h = withCadence(home([{ id: "a", cadence: "off" }]), "a", "weekly");
+  assert.equal(h.interests[0]?.cadence, "weekly");
+  assert.equal(h.allowance.weekly.used, 1);
 });

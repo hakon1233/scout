@@ -16,12 +16,7 @@ import {
 import { useTopicEmail } from "@/hooks/useTopicEmail";
 import { useTopicPush } from "@/hooks/useTopicPush";
 import { hostedAuth } from "@/lib/auth";
-import {
-  HostedError,
-  type HostedData,
-  type HostedHome,
-  type HostedInterest,
-} from "@/lib/hosted";
+import type { HostedData, HostedHome } from "@/lib/hosted";
 import { planFor, planMeters } from "@/lib/plans";
 import {
   defaultTimeZone,
@@ -30,12 +25,13 @@ import {
 } from "@/lib/time-zone";
 import { hostedMenu } from "./HostedHome";
 import { PushSwitch } from "./PushSwitch";
-import { resumeSlot, useHostedHome } from "./useHostedHome";
+import { PauseButton, usePauseTopic } from "./PauseButton";
+import { useHostedHome } from "./useHostedHome";
 
 // Hosted Settings: one page of groups. Appearance, notifications (this device
 // and each topic), time zone, plan, account.
 export function HostedSettings() {
-  const { data, home, loadError, reload } = useHostedHome();
+  const { data, home, loadError, reload, patch, signedOut } = useHostedHome();
   const push = useTopicPush(data);
   const email = useTopicEmail(data);
 
@@ -98,7 +94,13 @@ export function HostedSettings() {
 
         {data && <TimeZoneGroup data={data} />}
         {data && home && (
-          <TopicsGroup data={data} home={home} reload={reload} />
+          <TopicsGroup
+            data={data}
+            home={home}
+            patch={patch}
+            reload={reload}
+            signedOut={signedOut}
+          />
         )}
         {home && <PlanGroup home={home} />}
         {data && <AccountGroup data={data} />}
@@ -164,82 +166,49 @@ function TimeZoneGroup({ data }: { data: HostedData }) {
 
 const CADENCE_LABEL = { daily: "Daily", weekly: "Weekly", off: "Paused" };
 
-// Pause and Resume for the reader's own topics. Pausing frees its slot at
-// once; Resume takes one back (resumeSlot) or says why it can't.
+// Pause and Resume for the reader's own topics (PauseButton).
 function TopicsGroup({
   data,
   home,
+  patch,
   reload,
+  signedOut,
 }: {
   data: HostedData;
   home: HostedHome;
+  patch: (fn: (h: HostedHome) => HostedHome) => void;
   reload: () => Promise<void>;
+  signedOut: (err: unknown) => boolean;
 }) {
-  const [busy, setBusy] = React.useState<string | null>(null);
-  const [notes, setNotes] = React.useState<Record<string, string>>({});
+  const pause = usePauseTopic({ data, home, patch, reload, signedOut });
   const own = home.interests.filter((i) => !i.following);
   if (own.length === 0) return null;
-
-  async function toggle(i: HostedInterest) {
-    setNotes(({ [i.id]: _, ...rest }) => rest);
-    let cadence: "daily" | "weekly" | "off" = "off";
-    if (i.cadence === "off") {
-      const slot = resumeSlot(home.allowance, i.lastCadence);
-      if ("message" in slot) {
-        setNotes((n) => ({ ...n, [i.id]: slot.message }));
-        return;
-      }
-      cadence = slot.cadence;
-    }
-    setBusy(i.id);
-    try {
-      await data.setCadence(i.id, cadence);
-      await reload();
-    } catch (err) {
-      setNotes((n) => ({
-        ...n,
-        [i.id]:
-          err instanceof HostedError
-            ? err.message
-            : "Couldn't save. Try again.",
-      }));
-    } finally {
-      setBusy(null);
-    }
-  }
 
   return (
     <SettingsGroup
       title="Topics"
       footer="A paused topic gets no briefs and frees its slot. Resume gives it back its daily or weekly slot when one is free."
     >
-      {own.map((i) => (
-        <SettingsRow
-          key={i.id}
-          label={i.topic}
-          hint={
-            notes[i.id] ? (
-              <span role="alert" className="text-danger">
-                {notes[i.id]}
-              </span>
-            ) : (
-              CADENCE_LABEL[i.cadence]
-            )
-          }
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            className="min-w-24"
-            aria-label={`${i.cadence === "off" ? "Resume" : "Pause"} ${i.topic}`}
-            loading={busy === i.id}
-            disabled={busy !== null}
-            onClick={() => void toggle(i)}
+      {own.map((i) => {
+        const note = pause.note(i.id);
+        return (
+          <SettingsRow
+            key={i.id}
+            label={i.topic}
+            hint={
+              note ? (
+                <span role="alert" className="text-danger">
+                  {note}
+                </span>
+              ) : (
+                CADENCE_LABEL[i.cadence]
+              )
+            }
           >
-            {i.cadence === "off" ? "Resume" : "Pause"}
-          </Button>
-        </SettingsRow>
-      ))}
+            <PauseButton interest={i} pause={pause} />
+          </SettingsRow>
+        );
+      })}
     </SettingsGroup>
   );
 }

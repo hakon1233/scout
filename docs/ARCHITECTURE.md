@@ -444,8 +444,10 @@ Tailscale login>` in `~/.config/scout-hosted/.env` (read by `hosted-config.mts`,
   back as `HostedError` with a plain sentence (core's `quotaMessage`, shared with the
   Worker). Pausing a topic is its cadence `off` (not `interests.paused`, the
   host's or team's switch): the daily and weekly caps count only topics that are not
-  off, so a pause frees its slot at once. Settings' Topics group pauses and resumes;
-  Resume (`resumeSlot`) gives back the topic's `last_cadence` when that slot is free,
+  off, so a pause frees its slot at once. One module, `PauseButton.tsx`, pauses and
+  resumes in Settings' Topics group, on each own topic's card in Topics and on the
+  topic's page; it shows the change at once (`withCadence`) and the reload after the
+  write puts the server's state back. Resume (`resumeSlot`) gives back the topic's `last_cadence` when that slot is free,
   else the other free one (weekly first when nothing is remembered), else it stays
   paused and says "No free weekly slot. Pause another topic or upgrade." (or daily).
   `components/hosted/` renders it; in a hosted build `app/app/page.tsx` shows

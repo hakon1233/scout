@@ -19,6 +19,7 @@ import {
 import { dailyOffered, planFor, planUsage } from "@/lib/plans";
 import { HostedChat } from "./HostedChat";
 import { hostedMenu } from "./HostedHome";
+import { PauseButton, usePauseTopic, type PauseTopic } from "./PauseButton";
 import { useHostedHome } from "./useHostedHome";
 
 const UNDO_MS = 15_000;
@@ -33,6 +34,7 @@ export function HostedTopics() {
     turns,
     loadError,
     reload,
+    patch,
     signedOut,
     send,
     confirm,
@@ -106,6 +108,7 @@ export function HostedTopics() {
           data={data}
           home={home}
           reload={reload}
+          patch={patch}
           onSignedOut={signedOut}
           push={push}
         />
@@ -120,15 +123,24 @@ function TopicLists({
   data,
   home,
   reload,
+  patch,
   onSignedOut,
   push,
 }: {
   data: HostedData;
   home: Home;
   reload: () => Promise<void>;
+  patch: (fn: (h: Home) => Home) => void;
   onSignedOut: (err: unknown) => boolean;
   push: Push;
 }) {
+  const pause = usePauseTopic({
+    data,
+    home,
+    patch,
+    reload,
+    signedOut: onSignedOut,
+  });
   const [notes, setNotes] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState<Record<string, boolean>>({});
   const [removed, setRemoved] = React.useState<HostedInterest | null>(null);
@@ -179,7 +191,8 @@ function TopicLists({
       key={i.id}
       interest={i}
       busy={busy[i.id] ?? false}
-      note={notes[i.id] ?? null}
+      note={notes[i.id] ?? pause.note(i.id)}
+      pause={pause}
       push={push}
       daily={dailyOffered(plan)}
       onCadence={(c) => void act(i.id, () => data.setCadence(i.id, c))}
@@ -288,6 +301,7 @@ function TopicRow({
   interest: i,
   busy,
   note,
+  pause,
   push,
   daily,
   onCadence,
@@ -297,6 +311,7 @@ function TopicRow({
   interest: HostedInterest;
   busy: boolean;
   note: string | null;
+  pause: PauseTopic;
   push: Push;
   /** False on Free: Daily shows as a Plus option the reader can't pick. */
   daily: boolean;
@@ -343,6 +358,7 @@ function TopicRow({
             {failed ? i.failed : meta.join(" · ")}
           </p>
         </div>
+        {!i.following && <PauseButton interest={i} pause={pause} inRow />}
         <PushBell
           topic={i.topic}
           on={push.isOn(i.id)}

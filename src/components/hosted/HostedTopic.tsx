@@ -23,6 +23,7 @@ import {
 } from "@/lib/hosted";
 import { hostedMenu } from "./HostedHome";
 import { PRIVACY } from "./HostedTopics";
+import { PauseButton, usePauseTopic } from "./PauseButton";
 import { SharingSection } from "./SharingSection";
 import { LocalBadge, WAITING_FOR_MAC } from "./LocalBadge";
 import { useHostedHome } from "./useHostedHome";
@@ -43,7 +44,7 @@ const RUNS_HINT: Record<Cadence, string> = {
 // One topic's own page (/app/topics/?id=…): its latest stories first, then
 // how its brief is written. The bell turns on push for just this topic.
 export function HostedTopic({ id }: { id: string }) {
-  const { data, home, loadError, reload, signedOut } = useHostedHome();
+  const { data, home, loadError, reload, patch, signedOut } = useHostedHome();
   const push = useTopicPush(data);
   const interest = home?.interests.find((i) => i.id === id) ?? null;
   useTabTitle(interest?.topic);
@@ -72,6 +73,7 @@ export function HostedTopic({ id }: { id: string }) {
           home={home}
           interest={interest}
           reload={reload}
+          patch={patch}
           signedOut={signedOut}
           push={push}
         />
@@ -85,6 +87,7 @@ function TopicPage({
   home,
   interest: i,
   reload,
+  patch,
   signedOut,
   push,
 }: {
@@ -92,10 +95,13 @@ function TopicPage({
   home: Home;
   interest: HostedInterest;
   reload: () => Promise<void>;
+  patch: (fn: (h: Home) => Home) => void;
   signedOut: (err: unknown) => boolean;
   push: ReturnType<typeof useTopicPush>;
 }) {
   const router = useRouter();
+  const pause = usePauseTopic({ data, home, patch, reload, signedOut });
+  const pauseNote = pause.note(i.id);
   const email = useTopicEmail(data);
   const [runsError, setRunsError] = React.useState<string | null>(null);
   const [running, setRunning] = React.useState(false);
@@ -239,21 +245,24 @@ function TopicPage({
             Latest
           </h2>
           {!i.following && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="min-w-28"
-              loading={i.run !== null || running}
-              disabled={running}
-              onClick={() => void runNow()}
-            >
-              {i.run ? "Running" : "Run now"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <PauseButton interest={i} pause={pause} />
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-w-28"
+                loading={i.run !== null || running}
+                disabled={running}
+                onClick={() => void runNow()}
+              >
+                {i.run ? "Running" : "Run now"}
+              </Button>
+            </div>
           )}
         </div>
-        {runError && (
+        {(pauseNote ?? runError) && (
           <p role="alert" className="px-1 text-body-sm text-danger">
-            {runError}
+            {pauseNote ?? runError}
           </p>
         )}
         {brief ? (
