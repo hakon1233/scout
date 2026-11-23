@@ -3,7 +3,9 @@
 // key; these routes call the team_* SQL functions with the service key, and
 // those touch only the Scout team's public topics (hide: any public topic).
 //
-//   TEAM_RUNNER_TOKEN  /team/topics, /team/claim, /team/start, /team/runs
+//   TEAM_RUNNER_TOKEN  /team/topics, /team/claim, /team/start, /team/runs,
+//                      /team/picks/claim, /team/picks/finish (local readers'
+//                      picks through the relay, core's relay.ts)
 //   MODERATION_TOKEN   /team/hide
 //
 // A route whose token is unset does not exist (404). No CORS: a browser page
@@ -13,13 +15,30 @@ import {
   claimedRunFromRow,
   TEAM_PATHS,
   type ClaimedRunRow,
+  parseRelayAnswer,
   type CliUsage,
+  type RelayPrompt,
+  type TeamPicksClaim,
   type TeamRunResult,
   type TeamTopic,
   type TopicCoverage,
 } from "@scout/core";
-import { bearerToken, jsonResponder, readJsonBody } from "./request.ts";
-import { RpcError, rpcCaller } from "./supabase.ts";
+import { createPicks, type PicksJob, type PicksStore } from "@scout/hosted";
+import { captureRequest } from "@scout/research";
+import { MAX_RELAY_TEXT_CHARS, relayClaude } from "./relay.ts";
+import {
+  bearerToken,
+  jsonResponder,
+  readJsonBody,
+  sameSecret,
+} from "./request.ts";
+import {
+  RpcError,
+  picksJobFromRow,
+  rpcCaller,
+  supabasePicksStore,
+  type PicksJobRow,
+} from "./supabase.ts";
 
 export type TeamDeps = {
   supabaseUrl: string;
@@ -34,6 +53,8 @@ const STATUSES = new Set(["covered", "empty", "missing"]);
 // The runner works one run at a time (the Worker's reaper fails a run that has
 // been running for 10 minutes); a few is the most it may hold.
 const MAX_CLAIM = 3;
+// Picks prompts are small; the gateway answers them one after another.
+const MAX_PICKS_CLAIM = 5;
 const MAX_REASON_CHARS = 500;
 const MAX_SECTION_CHARS = 40_000;
 // Room for the largest section (4 bytes a character at most) and the rest.
@@ -119,6 +140,40 @@ export async function handleTeamRequest(
         // finish_run queues the readers' pushes (outbox), as for any run.
         return json(200, { ok: true });
       }
+      case TEAM_PATHS.picksClaim: {
+        const limit = Number.isInteger(body.limit)
+          ? Math.max(0, Math.min(MAX_PICKS_CLAIM, body.limit as number))
+          : 1;
+        const rows = ((await call("team_claim_picks", { p_limit: limit })) ??
+          []) as PicksJobRow[];
+        const prompts: RelayPrompt[] = [];
+        for (const job of rows.map(picksJobFromRow)) {
+          // A reader with no candidates is finished here, with no model call.
+          const out = await captureRequest((claude) =>
+            createPicks({ claude, store: oneJobStore(job, deps) }).refresh(1),
+          );
+          if ("captured" in out)
+            prompts.push({ turnId: String(job.runId), request: out.captured });
+        }
+        const claimed: TeamPicksClaim = { prompts };
+        return json(200, claimed);
+      }
+      case TEAM_PATHS.picksFinish: {
+        const answer = parseRelayAnswer(body, MAX_RELAY_TEXT_CHARS);
+        if (!answer || !/^\d{1,18}$/.test(answer.turnId))
+          return json(400, { error: "that answer isn't one Scout reads" });
+        const job = picksJobFromRow(
+          (await call("team_pick_job", {
+            p_run: Number(answer.turnId),
+          })) as PicksJobRow,
+        );
+        // parsePicks decides what lands, as for an API answer.
+        const result = await createPicks({
+          claude: relayClaude(answer),
+          store: oneJobStore(job, deps),
+        }).refresh(1);
+        return json(200, { stored: result.stored === 1 });
+      }
       case TEAM_PATHS.hide: {
         const reason =
           typeof body.reason === "string" ? body.reason.trim() : "";
@@ -148,6 +203,21 @@ export async function handleTeamRequest(
     console.error(`[team] ${path} failed:`, err);
     return json(502, { error: "Supabase did not answer" });
   }
+}
+
+// The picks store for one claimed local reader: the claim is already made,
+// and the call is recorded at no cost (the Mac's `claude`, not the API).
+function oneJobStore(job: PicksJob, deps: TeamDeps): PicksStore {
+  const store = supabasePicksStore({
+    url: deps.supabaseUrl,
+    serviceKey: deps.serviceKey as string,
+    fetch: deps.fetch,
+  });
+  return {
+    claim: async () => [job],
+    finish: (j, picks, _costUsd, error, tokens) =>
+      store.finish(j, picks, 0, error, tokens),
+  };
 }
 
 type TopicRow = {
@@ -200,19 +270,4 @@ function parseUsage(u: unknown): CliUsage | undefined {
     webFetches: typeof r.webFetches === "number" ? count(r.webFetches) : null,
     costUsd: count(r.costUsd),
   };
-}
-
-// Compares two secrets in time that does not depend on where they differ:
-// their SHA-256 digests, byte by byte, all the way through.
-async function sameSecret(a: string, b: string): Promise<boolean> {
-  const enc = new TextEncoder();
-  const [da, db] = await Promise.all(
-    [a, b].map(
-      async (s) =>
-        new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(s))),
-    ),
-  );
-  let diff = 0;
-  for (let i = 0; i < da.length; i++) diff |= da[i] ^ db[i];
-  return diff === 0;
 }

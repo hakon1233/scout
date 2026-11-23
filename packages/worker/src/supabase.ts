@@ -98,6 +98,18 @@ export function supabasePushStore(opts: {
   };
 }
 
+// One claim row of claim_picks, team_claim_picks or team_pick_job.
+export type PicksJobRow = {
+  user_id: string;
+  run_id: number;
+  kind: PicksJob["kind"];
+  input: PicksInput;
+};
+
+export function picksJobFromRow(r: PicksJobRow): PicksJob {
+  return { userId: r.user_id, runId: r.run_id, kind: r.kind, input: r.input };
+}
+
 // The service-role picks store: claim_picks and finish_picks
 // (supabase/migrations/*_picks.sql).
 export function supabasePicksStore(opts: {
@@ -110,18 +122,8 @@ export function supabasePicksStore(opts: {
   return {
     async claim(limit) {
       const rows = ((await rpc("claim_picks", { p_limit: limit }, auth)) ??
-        []) as Array<{
-        user_id: string;
-        run_id: number;
-        kind: PicksJob["kind"];
-        input: PicksInput;
-      }>;
-      return rows.map((r) => ({
-        userId: r.user_id,
-        runId: r.run_id,
-        kind: r.kind,
-        input: r.input,
-      }));
+        []) as PicksJobRow[];
+      return rows.map(picksJobFromRow);
     },
     async finish(job, picks, costUsd, error, tokens) {
       await rpc(

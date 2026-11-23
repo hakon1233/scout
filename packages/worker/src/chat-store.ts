@@ -179,3 +179,40 @@ export async function verifiedUserId(opts: {
   const user = (await res.json()) as { id?: unknown };
   return typeof user.id === "string" ? user.id : null;
 }
+
+// A relayed chat turn's message (docs/ARCHITECTURE.md, "Local account relay"):
+// the reader's turn that begin_chat_turn reserved in the prompt step and that
+// is still pending, at most 10 minutes old. Null when there is none.
+export async function pendingChatMessage(
+  opts: { url: string; serviceKey: string; fetch?: Fetch },
+  userId: string,
+  turnId: string,
+): Promise<string | null> {
+  const since = new Date(Date.now() - 10 * 60_000).toISOString();
+  const query = [
+    "select=message",
+    `id=eq.${encodeURIComponent(turnId)}`,
+    `user_id=eq.${encodeURIComponent(userId)}`,
+    "status=eq.pending",
+    `created_at=gte.${encodeURIComponent(since)}`,
+  ].join("&");
+  const res = await (opts.fetch ?? globalThis.fetch)(
+    `${opts.url}/rest/v1/chat_turns?${query}`,
+    {
+      method: "GET",
+      headers: {
+        apikey: opts.serviceKey,
+        authorization: `Bearer ${opts.serviceKey}`,
+      },
+    },
+  );
+  const text = await res.text();
+  if (!res.ok)
+    throw new RpcError(
+      res.status,
+      undefined,
+      `chat_turns: ${text.slice(0, 300)}`,
+    );
+  const rows = JSON.parse(text) as Array<{ message?: unknown }>;
+  return typeof rows[0]?.message === "string" ? rows[0].message : null;
+}

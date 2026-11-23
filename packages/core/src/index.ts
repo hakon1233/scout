@@ -87,6 +87,17 @@ export {
   type TeamRunResult,
   type TeamTopic,
 } from "./team.ts";
+export {
+  LOCAL_ACCOUNT_MESSAGE,
+  RELAY_HEADER,
+  RELAY_TOKEN_HEADER,
+  parseRelayAnswer,
+  type RelayAnswer,
+  type RelayModelRequest,
+  type RelayPrompt,
+  type RelayStep,
+  type TeamPicksClaim,
+} from "./relay.ts";
 export { canonicalUrl, parseBrief } from "./brief-document.ts";
 export { createWeeklyBriefFromHistory } from "./weekly.ts";
 export {

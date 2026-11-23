@@ -54,6 +54,7 @@ function stubSupabase(
       return over.userOk === false
         ? new Response("{}", { status: 401 })
         : ok({ id: USER });
+    if (path === "/rest/v1/profiles") return ok([{ runs_local: false }]);
     if (path === "/rest/v1/rpc/chat_block_reason")
       return ok(over.blocked ?? null);
     if (path === "/rest/v1/rpc/begin_chat_turn")
