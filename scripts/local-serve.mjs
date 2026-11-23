@@ -187,7 +187,17 @@ export async function install({ outDir = path.join(REPO, "out") } = {}) {
     }),
   );
   launchctl(["bootout", `${domain()}/${LABEL}`], { tolerate: true });
-  launchctl(["bootstrap", domain(), paths.plist]);
+  // bootout returns before launchd has let go of the job; bootstrap then
+  // fails with error 5 for a moment, so retry for up to ~10 s.
+  for (let tries = 0; ; tries++) {
+    try {
+      launchctl(["bootstrap", domain(), paths.plist]);
+      break;
+    } catch (err) {
+      if (tries >= 20) throw err;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+    }
+  }
   launchctl(["kickstart", "-k", `${domain()}/${LABEL}`], { tolerate: true });
   console.log(`Serving on http://127.0.0.1:${LOCAL_PORT}/ (log ${paths.log})`);
 }
