@@ -42,6 +42,12 @@ as `@scout/core`, the companion as `#core`.
   topic's last story, the last two briefs' stories as already posted, the brief
   settings), and the clean-up of the model's lead-in. It names the session's web tools:
   `CLI_RESEARCH_TOOLS` (companion) or `API_RESEARCH_TOOLS`.
+  `runLimits(doc)` is the one place a run's web budget is set ("Sources first"): an
+  intent doc with a `Sources, check first` section gets 1 search and 4 fetches, one
+  without gets 2 and 2. The hosted run turns it into the tools' `max_uses`; the team
+  runner states it in the prompt and sets `--max-turns` from it. The companion stays
+  uncapped (the reader's own plan pays). No per-site rules in code: the doc decides,
+  and the chat prompt puts sites the reader names under that heading.
 - `brief-settings.ts`: per-interest brief settings (length, story count or "relevant",
   evergreen, search locale, brief language): defaults, the one check every writer uses
   (`parseBriefSettings`) and the mapping to the hosted `interests` columns.
@@ -117,7 +123,8 @@ it (`src/lib/boundaries.test.ts` checks this). Plain TypeScript with `fetch`.
 - `research-interest.ts`: `researchInterest(interest, {claude})`, one interest's research
   as one Claude API call on Haiku with web search and web fetch. It returns the section,
   its coverage and the cost. Prompt, freshness and coverage come from core.
-  Guardrails: tool versions with `max_uses`, web_fetch capped at 6K tokens, a per-run
+  Guardrails: tool versions with `max_uses` from core's `runLimits(doc)` (under the
+  plan's `searches_per_run`), web_fetch capped at 3K tokens, a per-run
   spend cap (`DEFAULT_MAX_COST_USD`), and `retryable: false` on a 4xx or a limit.
   A make topic (`interest.mode === "make"`) uses core's `make-piece.ts` instead: one
   call with no tools (no search fee), `buildMakePrompt` with the intent doc and the
@@ -246,7 +253,7 @@ Server-side only. One Cloudflare Worker (free plan) runs the hosted runs.
 
 The catalog account's public topics, researched on Håkon's Mac with the local `claude`
 CLI (`research.ts` through `claude-runner.ts`, capped by `--max-turns` and a search
-budget in the prompt) and published through the Worker's `/team` routes, so readers
+and fetch budget in the prompt, both from core's `runLimits(doc)`) and published through the Worker's `/team` routes, so readers
 get the same briefs, notices and pushes. The Mac holds `TEAM_RUNNER_TOKEN` and
 `SCOUT_WORKER_URL` in `~/.config/scout-hosted/.env`, never a Supabase key. The
 companion never imports it.

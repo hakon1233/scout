@@ -70,6 +70,9 @@ export function buildChatPrompt(
     "  topic. This doc is injected verbatim into the topic's research prompt, so",
   );
   lines.push("  refining it directly changes what the next brief researches.");
+  lines.push(
+    "  Sites or feeds the user names go in the doc under `## Sources, check first`, one per line.",
+  );
   lines.push("");
   lines.push(
     `Current interests (${snapshots.length} of a maximum of ${maxInterests}), as JSON:`,

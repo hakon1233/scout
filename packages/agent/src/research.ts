@@ -25,6 +25,7 @@ export type ResearchOptions = {
   // Caps for a budgeted session (the Scout team runner): the search and fetch
   // budget the prompt states, and the CLI's `--max-turns` as the hard stop.
   maxSearches?: number;
+  maxFetches?: number;
   maxTurns?: number;
   // The prompt's "today" (a test seam); defaults to the clock.
   now?: Date;
@@ -46,6 +47,7 @@ export async function researchAndSynthesize(
     CLI_RESEARCH_TOOLS,
     {
       maxSearches: opts.maxSearches,
+      maxFetches: opts.maxFetches,
     },
   );
   const out = await runClaude(prompt, {

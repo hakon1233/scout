@@ -85,9 +85,9 @@ test("a tick researches each claimed run and records its section and cost", asyn
   assert.equal(outcome.searches, 2);
   assert.ok(outcome.costUsd > 0.02, "the searches are priced in");
   assert.equal(outcome.error, undefined);
-  // The plan's searches_per_run caps the search tool.
+  // The doc names no sources: 2 searches, under the plan's ceiling of 3.
   const search = claude.requests[0].tools?.find((t) => t.name === "web_search");
-  assert.equal(search?.max_uses, 3);
+  assert.equal(search?.max_uses, 2);
 });
 
 test("a make run writes its piece with no web tools, its memory in the prompt", async () => {

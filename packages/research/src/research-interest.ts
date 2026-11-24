@@ -9,6 +9,7 @@ import {
   buildResearchPrompt,
   HAIKU_MODEL,
   makeSectionFromAnswer,
+  runLimits,
   sectionFromAnswer,
   type ResearchInterest,
   type TopicCoverage,
@@ -26,14 +27,12 @@ export const RESEARCH_MODEL = HAIKU_MODEL;
 // Room for adaptive thinking plus a long (~1100-word) section.
 const MAX_TOKENS = 16_000;
 // The lean run, tested 20 Nov 2026 (plan/research/run-cost.md, section 7):
-// 3 searches and 2 fetches cut to 3,000 tokens keep the summed prompt under
-// the 100K line where Haiku's long-prompt rates (5x) start, so a run costs
-// about $0.03 instead of $0.05-0.09, with the same stories in 3 of 4 topics.
-// Effort stays at the API default: effort "low" gave up early and missed a
-// story. Change these here only.
+// pages cut to 3,000 tokens keep the summed prompt under the 100K line where
+// Haiku's long-prompt rates (5x) start. How many searches and fetches a run
+// gets is core's runLimits(doc): 1 search and 4 fetches when the intent doc
+// names "Sources, check first", else 2 and 2. Effort stays at the API
+// default: effort "low" gave up early and missed a story.
 export const LEAN_RUN = {
-  maxSearches: 3,
-  maxFetches: 2,
   maxFetchContentTokens: 3000,
 } as const;
 // The whole call, across every pause_turn continuation.
@@ -52,7 +51,7 @@ export type ResearchDeps = {
   claude: ClaudeClient;
   now?: Date;
   // The plan's searches_per_run. A ceiling: a run never searches more than
-  // LEAN_RUN allows.
+  // runLimits(doc) allows.
   maxSearches?: number;
   maxFetches?: number;
   timeoutMs?: number;
@@ -157,14 +156,12 @@ export async function researchInterest(
       },
     ],
   };
+  const limits = runLimits(interest.doc);
   const tools = make
     ? undefined
     : webTools(
-        Math.min(
-          deps.maxSearches ?? LEAN_RUN.maxSearches,
-          LEAN_RUN.maxSearches,
-        ),
-        Math.min(deps.maxFetches ?? LEAN_RUN.maxFetches, LEAN_RUN.maxFetches),
+        Math.min(deps.maxSearches ?? Infinity, limits.maxSearches),
+        Math.min(deps.maxFetches ?? Infinity, limits.maxFetches),
         interest.settings?.searchLocale ?? null,
       );
 

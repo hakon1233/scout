@@ -78,14 +78,15 @@ test("a paused run resumes and returns the topic's section, newest first", async
 
 test("the request: Haiku, lean web tools, cached prompt, resumed turn sent back unchanged", async () => {
   const claude = recordedClient(pausedRun);
-  // The free plan's searches_per_run is 5; the lean run caps it at 3.
+  // The free plan's searches_per_run is 5; a doc without sources caps it at
+  // 2 searches and 2 fetches (runLimits).
   await researchInterest(INTEREST, { claude, now: NOW, maxSearches: 5 });
 
   assert.equal(claude.requests.length, 2);
   const [first, second] = claude.requests;
   assert.equal(first.model, "claude-haiku-5-5");
   assert.deepEqual(first.tools, [
-    { type: "web_search_20250305", name: "web_search", max_uses: 3 },
+    { type: "web_search_20250305", name: "web_search", max_uses: 2 },
     {
       type: "web_fetch_20250910",
       name: "web_fetch",
@@ -112,6 +113,34 @@ test("the request: Haiku, lean web tools, cached prompt, resumed turn sent back 
     first.messages[0],
     { role: "assistant", content: pausedRun[0].content },
   ]);
+});
+
+test("a doc naming its sources gets 1 search and 4 fetches", async () => {
+  const sourced = recordedClient([answer("No change since 2026-11-13.")]);
+  await researchInterest(
+    {
+      ...INTEREST,
+      doc: `${INTEREST.doc}\n\n## Sources, check first\n- https://example.org/news\n`,
+    },
+    { claude: sourced, now: NOW, maxSearches: 5 },
+  );
+  const uses = sourced.requests[0].tools?.map((t) => [t.name, t.max_uses]);
+  assert.deepEqual(uses, [
+    ["web_search", 1],
+    ["web_fetch", 4],
+  ]);
+
+  // The plan's ceiling still wins when it is lower.
+  const capped = recordedClient([answer("No change since 2026-11-13.")]);
+  await researchInterest(INTEREST, {
+    claude: capped,
+    now: NOW,
+    maxSearches: 1,
+  });
+  assert.equal(
+    capped.requests[0].tools?.find((t) => t.name === "web_search")?.max_uses,
+    1,
+  );
 });
 
 test("usage sums every response and prices it from the table", async () => {

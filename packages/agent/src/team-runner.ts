@@ -19,6 +19,7 @@ import {
   DEFAULT_BRIEF_SETTINGS,
   makeSectionFromAnswer,
   researchInterestOf,
+  runLimits,
   sectionFromAnswer,
   TEAM_PATHS,
   type TeamPicksClaim,
@@ -49,15 +50,14 @@ export type TeamRunnerDeps = {
 };
 
 const DEFAULT_TIMEOUT_MS = 8 * 60 * 1000;
-const DEFAULT_SEARCHES = 5;
 // A full run of the team's topics stops here, so a stuck queue can't loop.
 const DEFAULT_MAX_RUNS = 30;
 // --loop: one pass a minute, so a Run now starts within a minute.
 const DEFAULT_LOOP_INTERVAL_MS = 60 * 1000;
 
 // Each search and fetch takes a turn; two more to think and write.
-export function turnLimit(searches: number): number {
-  return 2 * searches + 2;
+export function turnLimit(searches: number, fetches: number): number {
+  return searches + fetches + 2;
 }
 
 // One topic's research, as the result /team/runs takes. Never throws.
@@ -68,8 +68,13 @@ export async function researchTeamRun(
   // The same input the Worker's cron gives researchInterest: settings, the
   // last sections ("already posted"), cadence and the last story's date.
   const interest = researchInterestOf(run);
+  // The same budget as a hosted run: core's runLimits(doc), under the
+  // plan's searches_per_run when that is lower.
+  const limits = runLimits(interest.doc);
   const searches =
-    run.searchesPerRun > 0 ? run.searchesPerRun : DEFAULT_SEARCHES;
+    run.searchesPerRun > 0
+      ? Math.min(run.searchesPerRun, limits.maxSearches)
+      : limits.maxSearches;
   const missing = (error: string): TeamRunResult => ({
     runId: run.runId,
     sectionMd: null,
@@ -95,7 +100,8 @@ export async function researchTeamRun(
       spawnFn: deps.spawnFn,
       timeoutMs: deps.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       maxSearches: searches,
-      maxTurns: turnLimit(searches),
+      maxFetches: limits.maxFetches,
+      maxTurns: turnLimit(searches, limits.maxFetches),
       now: deps.now?.(),
     });
     const usage = out.usage ?? undefined;

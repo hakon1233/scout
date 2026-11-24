@@ -109,6 +109,29 @@ export function reportedStories(
 // read before searching.
 const SOURCES_FIRST_RE = /^\s*(?:#{1,6}\s*|\*\*)\s*sources,?\s+check\s+first/im;
 
+// A run's web budget, decided by its intent doc alone ("Sources first",
+// 24 Nov 2026): a doc that names sources fetches them and searches only for
+// what they missed; one that names none searches more. Search carries a fee
+// ($0.01) and fetch does not, so this is where a run's cost is set. Every
+// research path reads it: the hosted run's tool max_uses, the Scout team
+// runner's stated budget. No per-site rules: the doc decides.
+export const RUN_LIMITS = {
+  withSources: { maxSearches: 1, maxFetches: 4 },
+  withoutSources: { maxSearches: 2, maxFetches: 2 },
+} as const;
+
+export type RunLimits = { maxSearches: number; maxFetches: number };
+
+export function hasSourcesFirst(doc: string): boolean {
+  return SOURCES_FIRST_RE.test(doc);
+}
+
+export function runLimits(doc: string): RunLimits {
+  return hasSourcesFirst(doc)
+    ? RUN_LIMITS.withSources
+    : RUN_LIMITS.withoutSources;
+}
+
 // Body paragraphs and the section's word cap per length setting.
 export const LENGTH_RULES: Record<
   BriefLength,
@@ -145,7 +168,7 @@ export function buildResearchPrompt(
   interest: ResearchInterest,
   now: Date = new Date(),
   tools: ResearchTools = CLI_RESEARCH_TOOLS,
-  limits: { maxSearches?: number } = {},
+  limits: Partial<RunLimits> = {},
 ): string {
   const today = [
     now.getFullYear(),
@@ -185,7 +208,7 @@ export function buildResearchPrompt(
   );
   lines.push("");
   // 4. How to search.
-  if (SOURCES_FIRST_RE.test(doc)) {
+  if (hasSourcesFirst(doc)) {
     lines.push(
       `The intent doc lists "Sources, check first". Use ${tools.fetch} on each of those`,
       `sources FIRST and report what is new there; then use ${tools.search} only for`,
@@ -217,7 +240,7 @@ export function buildResearchPrompt(
   // cap, so a capped CLI session is told its budget here.
   if (limits.maxSearches !== undefined) {
     lines.push(
-      `Use ${tools.search} at most ${limits.maxSearches} times and ${tools.fetch} at most ${limits.maxSearches} times.`,
+      `Use ${tools.search} at most ${limits.maxSearches} times and ${tools.fetch} at most ${limits.maxFetches ?? limits.maxSearches} times.`,
     );
   }
   lines.push("");

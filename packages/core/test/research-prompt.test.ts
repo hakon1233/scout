@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   API_RESEARCH_TOOLS,
   buildResearchPrompt,
+  runLimits,
 } from "../src/research-prompt.ts";
 import { SEARCH_SKILLS, STORY_DATE_RE } from "../src/search-skills.ts";
 import { DEFAULT_BRIEF_SETTINGS } from "../src/brief-settings.ts";
@@ -192,6 +193,39 @@ test("a doc with Sources, check first is read before searching", () => {
   const doc = "# ai\n\n## Sources, check first\n- https://example.org/news\n";
   const prompt = buildResearchPrompt({ topic: "ai", doc });
   assert.match(prompt, /Use WebFetch on each of those\s+sources FIRST/);
+});
+
+test("run limits: a doc naming sources fetches more and searches once", () => {
+  assert.deepEqual(
+    runLimits("# ai\n\n## Sources, check first\n- https://example.org/news\n"),
+    { maxSearches: 1, maxFetches: 4 },
+  );
+  assert.deepEqual(
+    runLimits("# ai\n\n**Sources check first**\n- example.org\n"),
+    { maxSearches: 1, maxFetches: 4 },
+  );
+  assert.deepEqual(runLimits("track ai"), { maxSearches: 2, maxFetches: 2 });
+  // A mention in running text is not the section.
+  assert.deepEqual(
+    runLimits("Tell me which sources, check first what is new."),
+    { maxSearches: 2, maxFetches: 2 },
+  );
+});
+
+test("a budgeted prompt states its search and fetch caps apart", () => {
+  const prompt = buildResearchPrompt(
+    { topic: "ai", doc: "x" },
+    undefined,
+    undefined,
+    {
+      maxSearches: 1,
+      maxFetches: 4,
+    },
+  );
+  assert.match(
+    prompt,
+    /Use WebSearch at most 1 times and WebFetch at most 4 times\./,
+  );
 });
 
 test("every prompt carries the shared relevance rules, the cadence and the silence", () => {

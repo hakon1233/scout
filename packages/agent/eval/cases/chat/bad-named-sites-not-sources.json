@@ -1,0 +1,13 @@
+{
+  "message": "Follow Trondheim city council decisions for me. Check trondheim.kommune.no and adressa.no first. Weekly.",
+  "interests": [],
+  "output": "{\"reply\": \"Created \\\"Trondheim city council\\\" — Weekly. Tell me what to change.\", \"changes\": [{\"op\": \"create\", \"topic\": \"Trondheim city council\", \"doc\": \"# Trondheim city council\\n\\nDecisions from Trondheim's city council that affect residents: zoning, schools, transport. Check trondheim.kommune.no and adressa.no.\", \"cadence\": \"weekly\"}]}",
+  "expect": {
+    "applied": [
+      "create:Trondheim city council"
+    ]
+  },
+  "expectFail": [
+    "named-sites-are-sources"
+  ]
+}

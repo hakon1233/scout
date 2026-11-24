@@ -2,9 +2,34 @@
 
 23 Nov 2026. Model: `claude-haiku-5-5` on the Anthropic API. Rate used: 1 USD = 9.7511 NOK.
 
+## Sources first (24 Nov 2026)
+
+A run's web budget now comes from its intent doc (core `runLimits`, used by the hosted run and the team runner):
+
+| Intent doc                           | Searches | Fetches | Cost per run (estimate) | Daily topic / month | Weekly topic / month |
+| ------------------------------------ | -------- | ------- | ----------------------- | ------------------- | -------------------- |
+| Has a "Sources, check first" section | 1        | 4       | **~$0.015** (0.15 kr)   | ~$0.45              | ~$0.065              |
+| Has none                             | 2        | 2       | **~$0.024** (0.23 kr)   | ~$0.72              | ~$0.10               |
+
+These are estimates: one search fee ($0.01) per search plus about $0.005 of tokens, from the token model below. Fetches carry no fee. All 25 catalog topics have the section, so the team catalog would cost about **$3.15 a month** on the API (210 runs), down from $7.30. A user with 1 daily + 4 weekly topics written without sources: about $1.13 a month (was $1.64).
+
+**Measured on Haiku 5.5, 24 Nov 2026**, four catalog topics, old limits (3 / 2) against new (1 / 4), one run each, same prompt:
+
+| Topic                       | Stories old → new | Cost old → new      | Input tokens old → new |
+| --------------------------- | ----------------- | ------------------- | ---------------------- |
+| Home Assistant breaking     | 3 → 4             | $0.026 → $0.017     | 59K → 64K              |
+| Bambu Lab firmware          | 3 → 1             | $0.027 → $0.005     | 60K → 58K              |
+| Trondheim council decisions | 1 (undated) → 0   | $0.042 → $0.015     | 104K (long rate) → 58K |
+| LLM releases (daily)        | 0 → 2             | $0.003 → $0.005     | 59K → 82K              |
+| **Total**                   | **7 → 7**         | **$0.098 → $0.043** |                        |
+
+Average cost fell from $0.024 to $0.011 a run (-57%). Story counts moved both ways; one run per side is too few to call quality equal or worse. Old runs often hit the fetch cap and searched instead; one crossed the 100K line. Fetches the API refused at `max_uses` still count in `web_fetch_requests`.
+
+The sections below are the 23 Nov analysis, made with the old 3 / 2 limits.
+
 ## Summary
 
-One hosted run today is a lean run: at most 3 web searches and 2 page fetches (pages cut to 3,000 tokens). Measured, not guessed: the typical figure is a real Haiku 5.5 run from 20 Nov 2026.
+One hosted run on 23 Nov was a lean run: at most 3 web searches and 2 page fetches (pages cut to 3,000 tokens). Measured, not guessed: the typical figure is a real Haiku 5.5 run from 20 Nov 2026.
 
 |                                             | Low        | Typical    | High                |
 | ------------------------------------------- | ---------- | ---------- | ------------------- |
@@ -40,12 +65,12 @@ No API call, `claude` run or database query was made for this note.
 
 ## How runs are made (from the code)
 
-| Path                                                           | Model                                                 | Tools and limits                                                                                                                                                                                                                                                                   | Who pays                                     |
-| -------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| Hosted cron run (`packages/research/src/research-interest.ts`) | `claude-haiku-5-5` (`HAIKU_MODEL`)                    | `web_search_20250305` `max_uses` 3, `web_fetch_20250910` `max_uses` 2, `max_content_tokens` 3,000. Plan `searches_per_run` (5) is a ceiling only; `LEAN_RUN` wins. `max_tokens` 16,000. Effort: API default (medium). Up to 3 `pause_turn` continuations. Per-run spend cap $0.25. | Us, per use                                  |
-| Team runner (`packages/agent/src/team-runner.ts`)              | The CLI's default, unless `SCOUT_CLAUDE_MODEL` is set | CLI `WebSearch,WebFetch`, `--max-turns` 25, search budget in the prompt                                                                                                                                                                                                            | Håkon's Claude plan                          |
-| Local companion (`claude-runner.ts`)                           | Same as above                                         | Same                                                                                                                                                                                                                                                                               | The reader's own Claude plan                 |
-| Chat (`hosted/src/chat.ts`), picks, publish check              | `claude-haiku-5-5`, no tools                          | Picks and publish at effort low                                                                                                                                                                                                                                                    | Us, about $0.0005, $0.001 and $0.0002 a call |
+| Path                                                           | Model                                                 | Tools and limits                                                                                                                                                                                                                                                                                                                                      | Who pays                                     |
+| -------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Hosted cron run (`packages/research/src/research-interest.ts`) | `claude-haiku-5-5` (`HAIKU_MODEL`)                    | `web_search_20250305` `max_uses` 1 with sources, else 2; `web_fetch_20250910` `max_uses` 4 with sources, else 2 (`runLimits`, since 24 Nov; 3 / 2 before); `max_content_tokens` 3,000. Plan `searches_per_run` (5) is a ceiling only. `max_tokens` 16,000. Effort: API default (medium). Up to 3 `pause_turn` continuations. Per-run spend cap $0.25. | Us, per use                                  |
+| Team runner (`packages/agent/src/team-runner.ts`)              | The CLI's default, unless `SCOUT_CLAUDE_MODEL` is set | CLI `WebSearch,WebFetch`, the same `runLimits` budget in the prompt, `--max-turns` searches + fetches + 2                                                                                                                                                                                                                                             | Håkon's Claude plan                          |
+| Local companion (`claude-runner.ts`)                           | Same as above                                         | CLI `WebSearch,WebFetch`, no budget (the reader pays)                                                                                                                                                                                                                                                                                                 | The reader's own Claude plan                 |
+| Chat (`hosted/src/chat.ts`), picks, publish check              | `claude-haiku-5-5`, no tools                          | Picks and publish at effort low                                                                                                                                                                                                                                                                                                                       | Us, about $0.0005, $0.001 and $0.0002 a call |
 
 Cache: the research prompt carries `cache_control: ephemeral` (5-minute cache). The API also caches growing context automatically, so a run shows about 10 uncached tokens and everything else as cache writes and reads.
 

@@ -282,11 +282,13 @@ test("a team session is capped: the search budget in the prompt and --max-turns"
   const [{ args, prompt }] = s.claude.spawns;
   assert.deepEqual(
     args.slice(args.indexOf("--max-turns"), args.indexOf("--max-turns") + 2),
-    ["--max-turns", "12"],
+    ["--max-turns", "6"],
   );
+  // The doc names no sources (runLimits): 2 searches and 2 fetches, under
+  // the plan's 5.
   assert.match(
     prompt,
-    /Use WebSearch at most 5 times and WebFetch at most 5 times\./,
+    /Use WebSearch at most 2 times and WebFetch at most 2 times\./,
   );
   assert.ok(args.includes("WebSearch,WebFetch"));
 });

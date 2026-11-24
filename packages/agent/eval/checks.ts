@@ -11,6 +11,7 @@ import {
   MAX_TAGS,
   cadenceInWords,
   feedbackOf,
+  hasSourcesFirst,
   normalizeTags,
   normalizeTopic,
   parseBrief,
@@ -232,6 +233,16 @@ function mentions(text: string, keywords: string[]): boolean {
   );
 }
 
+// The sites a chat message names ("nrk.no", "https://x.org/news"), lower
+// case, without scheme or "www.".
+function namedSites(message: string): string[] {
+  return [
+    ...message.matchAll(
+      /\b(?:https?:\/\/)?(?:www\.)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?:\/\S*)?/gi,
+    ),
+  ].map((m) => m[1].toLowerCase());
+}
+
 // One chat turn's output, applied to a throwaway copy of the interests.
 // The `page` the model wrote, before parsing drops one that isn't allowed.
 function rawPage(raw: string): unknown {
@@ -299,6 +310,18 @@ export async function checkChatOutput(
       .map((c) => c.topic ?? "");
     const madeSaysScoutWrites =
       made.length === 0 || /\bscout writes\b/i.test(output.reply);
+    // A doc saved on a turn whose message names sites lists every one of
+    // them under "Sources, check first", so its runs fetch before searching.
+    const sites = namedSites(opts.message ?? "");
+    const unsourced = output.changes.filter((c) => {
+      const doc = typeof c.doc === "string" ? c.doc : null;
+      return (
+        sites.length > 0 &&
+        doc !== null &&
+        (!hasSourcesFirst(doc) ||
+          !sites.every((s) => doc.toLowerCase().includes(s)))
+      );
+    });
     const subjects = opts.subjects ?? [];
     const mixed = output.changes.filter(
       (c) =>
@@ -369,6 +392,11 @@ export async function checkChatOutput(
         mixed.length > 0
           ? `mixes subjects: ${mixed.map((c) => c.topic ?? c.interestId).join(", ")}`
           : "saves nothing but never offers to split",
+      ),
+      check(
+        "named-sites-are-sources",
+        unsourced.length === 0,
+        `named ${JSON.stringify(sites)}; a saved doc must list them under "## Sources, check first"`,
       ),
       check(
         "make-or-news",
